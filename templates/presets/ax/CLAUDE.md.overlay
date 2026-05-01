@@ -1,0 +1,30 @@
+
+---
+
+## AX 프리셋 — 당근 AX팀 권장 룰
+
+> 이 섹션은 `--preset ax`로 init했을 때 자동 추가됨. 자기 프로젝트에 안 맞는 항목은 삭제·교체 OK.
+
+### 🔴 CRITICAL (당근 표준)
+
+1. **모듈 의존 방향 위반 금지** — 정해진 모듈 의존 방향(예: `Applications → Adapter → Event → Data → Core → Util`)을 거꾸로 import하지 않는다. `dependencies/circular_analysis.py` 등 정적 도구로 자동 검증.
+2. **DDL 변경에 마이그레이션 SQL 동반** — Entity/스키마 변경 PR에는 `migrations/V{UTC}__*.sql` 또는 동급 파일이 함께. SQL 없는 Entity 변경은 차단.
+3. **Secrets 코드 내 하드코딩 금지** — `.env`, AWS Secrets Manager, Vault 경유. 평문 password/api_key는 staged에서 검출 시 차단.
+4. **파괴적 명령 차단** — `rm -rf`, `git push --force`, `git reset --hard <protected>` 는 `pre-bash/block-destructive.sh`가 차단.
+5. **Integration test 태그 강제** — `@SpringBootTest`, `@DataJpaTest` 등 Spring 컨텍스트 로드 테스트는 `@Tags("Integration")` 필수.
+6. **보호 경로 임의 변경 금지** — `CLAUDE.md`, `.ax-first/`, `.github/`, `build-logic/`, 마이그레이션 디렉토리는 명시적 사용자 승인 후 변경.
+7. **트래픽 영향 도메인 변경 시 추정 필수** — config.yml의 risk≥L2 도메인 변경 PR은 트래픽 추정 결과 첨부.
+8. **테스트 가드 — 버그 수정 시 재현 테스트 필수** — bug fix PR에 reproduction test 없으면 차단.
+9. **Critical Signal 시그널 보존** — `🔴 CRITICAL` / `🟡 MANDATORY` / `🔵 CONVENTION` 이모지를 임의로 변경/제거 금지.
+
+### 🟡 MANDATORY (당근 표준)
+
+10. **신규 도메인 추가 시 ADR + spec 작성** — `docs/adr/NNN-*.md` + `spec/<domain>.md` 또는 동급 위치
+11. **Cross-domain 변경 시 architect 1인 승인**
+12. **17M 노출(또는 동급 트래픽) 도메인의 캐시 키 변경 시 영향 분석**
+
+### 🔵 CONVENTION (당근 표준)
+
+13. **한국어 commit / PR 제목** — type 접두사: `feat:`, `fix:`, `refactor:`, `docs:` 등
+14. **PR 템플릿** — `## 변경` / `## 이유` / `## 검증` / `## 위험·롤백` 4섹션
+15. **CodeRabbit 한국어 자동 리뷰 활성** — `.coderabbit.yaml` 의 `language: "ko-KR"`

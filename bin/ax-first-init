@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# ax-first init — 현재 프로젝트에 하네스 골격을 설치
+set -euo pipefail
+. "${AX_LIB:-$AX_ROOT/lib}/common.sh"
+AX_ROOT="${AX_ROOT:?run via ax-first}"
+
+PRESET="default"
+FORCE="0"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --preset) PRESET="$2"; shift 2 ;;
+        --force)  FORCE="1"; shift ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+PROJECT_ROOT="$(pwd)"
+say "프로젝트: $PROJECT_ROOT"
+say "프리셋: $PRESET"
+
+# ───────────────────────────────────────────────────────────
+# 1. 디렉토리 보장
+# ───────────────────────────────────────────────────────────
+mkdir -p "$PROJECT_ROOT"/.claude/{skills/global/{triage,critical-rules,steering-loop},skills/workflows/{adr-write,skill-audit},skills/personas,agents,hooks/{pre-bash,pre-edit,post-edit,pre-commit}}
+mkdir -p "$PROJECT_ROOT"/docs/adr
+mkdir -p "$PROJECT_ROOT"/.ax-first/mistakes
+
+# ───────────────────────────────────────────────────────────
+# 2. default 템플릿 복사 (덮어쓰지 않음 — 단 --force 제외)
+# ───────────────────────────────────────────────────────────
+copy_template() {
+    local src="$1" dst="$2"
+    if [ -e "$dst" ] && [ "$FORCE" != "1" ]; then
+        warn "skip (이미 존재): ${dst#$PROJECT_ROOT/}"
+        return
+    fi
+    mkdir -p "$(dirname "$dst")"
+    cp "$src" "$dst"
+    chmod +x "$dst" 2>/dev/null || true
+    say "+ ${dst#$PROJECT_ROOT/}"
+}
+
+# rsync가 없는 환경 대비해서 find + cp 루프
+copy_tree() {
+    local src_dir="$1" dst_dir="$2"
+    [ -d "$src_dir" ] || return
+    while IFS= read -r -d '' src_file; do
+        local rel="${src_file#$src_dir/}"
+        copy_template "$src_file" "$dst_dir/$rel"
+    done < <(find "$src_dir" -type f -print0)
+}
+
+DEFAULT_DIR="$AX_TEMPLATES/default"
+[ -d "$DEFAULT_DIR" ] || die "default 템플릿이 없음: $DEFAULT_DIR"
+copy_tree "$DEFAULT_DIR" "$PROJECT_ROOT"
+
+# CLAUDE.md.template → CLAUDE.md (특수 처리: 이미 있으면 .ax-first/CLAUDE.md.suggested로)
+if [ -f "$PROJECT_ROOT/CLAUDE.md.template" ]; then
+    if [ -f "$PROJECT_ROOT/CLAUDE.md" ] && [ "$FORCE" != "1" ]; then
+        mv "$PROJECT_ROOT/CLAUDE.md.template" "$PROJECT_ROOT/.ax-first/CLAUDE.md.suggested"
+        warn "기존 CLAUDE.md가 있어 덮어쓰지 않음. 제안 내용은 .ax-first/CLAUDE.md.suggested 에 저장 — 수동 병합 필요."
+    else
+        mv "$PROJECT_ROOT/CLAUDE.md.template" "$PROJECT_ROOT/CLAUDE.md"
+        say "+ CLAUDE.md"
+    fi
+fi
+
+# settings.json.template → .claude/settings.json
+if [ -f "$PROJECT_ROOT/.claude/settings.json.template" ]; then
+    if [ -f "$PROJECT_ROOT/.claude/settings.json" ] && [ "$FORCE" != "1" ]; then
+        mv "$PROJECT_ROOT/.claude/settings.json.template" "$PROJECT_ROOT/.ax-first/settings.json.suggested"
+        warn "기존 .claude/settings.json 있어 덮어쓰지 않음. 제안 내용은 .ax-first/settings.json.suggested"
+    else
+        mv "$PROJECT_ROOT/.claude/settings.json.template" "$PROJECT_ROOT/.claude/settings.json"
+        say "+ .claude/settings.json"
+    fi
+fi
+
+# ───────────────────────────────────────────────────────────
+# 3. preset overlay
+# ───────────────────────────────────────────────────────────
+if [ "$PRESET" != "default" ]; then
+    PRESET_DIR="$AX_TEMPLATES/presets/$PRESET"
+    [ -d "$PRESET_DIR" ] || die "프리셋이 없음: $PRESET (사용 가능: $(ls "$AX_TEMPLATES/presets" 2>/dev/null | tr '\n' ' '))"
+    say "프리셋 overlay: $PRESET"
+    copy_tree "$PRESET_DIR" "$PROJECT_ROOT"
+
+    # CLAUDE.md.overlay → CLAUDE.md 끝에 append (있는 경우)
+    if [ -f "$PROJECT_ROOT/CLAUDE.md.overlay" ]; then
+        if [ -f "$PROJECT_ROOT/CLAUDE.md" ]; then
+            printf '\n\n<!-- ax-first preset:%s overlay -->\n' "$PRESET" >> "$PROJECT_ROOT/CLAUDE.md"
+            cat "$PROJECT_ROOT/CLAUDE.md.overlay" >> "$PROJECT_ROOT/CLAUDE.md"
+            rm "$PROJECT_ROOT/CLAUDE.md.overlay"
+            say "+ CLAUDE.md (preset overlay 병합)"
+        else
+            mv "$PROJECT_ROOT/CLAUDE.md.overlay" "$PROJECT_ROOT/CLAUDE.md"
+            say "+ CLAUDE.md (preset)"
+        fi
+    fi
+fi
+
+# ───────────────────────────────────────────────────────────
+# 4. 메타 정보 기록
+# ───────────────────────────────────────────────────────────
+cat > "$PROJECT_ROOT/.ax-first/version" <<EOF
+ax-first: $(cat "$AX_ROOT/VERSION" 2>/dev/null || echo unknown)
+preset: $PRESET
+installed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF
+
+# ───────────────────────────────────────────────────────────
+# 5. 다음 단계
+# ───────────────────────────────────────────────────────────
+cat <<EOF
+
+\033[32m✓ ax-first init 완료\033[0m
+
+다음 단계:
+  1. CLAUDE.md 검수 + 우리 팀에 맞지 않는 CRITICAL 룰 조정
+  2. .ax-first/config.yml 의 domain_risk 매트릭스 수정
+  3. .claude/hooks/post-edit/lint-changed.sh 의 lint 명령을 우리 스택으로 교체
+  4. ax-first doctor   ← 결손 검사
+  5. Claude Code에서 /triage <첫 작업> 실행
+
+문서: $AX_ROOT/docs/concepts.md
+EOF

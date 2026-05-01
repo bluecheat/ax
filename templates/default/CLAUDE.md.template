@@ -1,0 +1,61 @@
+# [PROJECT_NAME] — Constitution
+
+> 이 파일은 AI 에이전트(Claude 등)가 이 프로젝트에서 따라야 할 **비협상 룰**을 정의한다.
+> README가 아니라 system-level governance 문서다.
+> 4계층 하네스 인덱스: Layer 0 `/triage` → Layer 1 (이 파일) → Layer 2 모듈별 CLAUDE.md → Layer 3 `docs/adr/` + `spec/`.
+
+---
+
+## CRITICAL — 자동 검증 (Sensors가 막는다)
+
+> 위반 시 hooks가 작업을 멈춘다. 처음에는 warning-only, 안정화 후 fail로 전환.
+
+1. *(예시) 파괴적 명령 차단*: `rm -rf`, `git push --force`, `git reset --hard` — `pre-bash/block-destructive.sh`가 차단.
+2. *(예시) 보호 경로 변경 시 명시적 사용자 승인*: `CLAUDE.md`, `.ax-first/`, `.github/`, `build-logic/` 등.
+3. *(우리 팀 룰을 여기에 추가)*
+
+## MANDATORY — 사람 승인
+
+4. *(예시) 신규 도메인 추가 시 ADR 작성*: `docs/adr/NNN-*.md`
+5. *(예시) cross-domain 변경 시 staff/architect 1인 승인*
+
+## CONVENTION — 일반 가이드
+
+6. *(예시) 한국어 커밋 메시지*
+7. *(예시) 테스트 프레임워크 통일*
+
+---
+
+## 4계층 인덱스
+
+| Layer | 위치 | 역할 |
+|---|---|---|
+| 0 Triage | `.claude/skills/global/triage/SKILL.md` | 작업 진입 시 Size×Risk 분류 |
+| 1 Constitution | 이 파일 | 비협상 룰 |
+| 2 Module Rules | `<module>/CLAUDE.md` | 모듈/앱별 룰 |
+| 3 Spec / ADR | `docs/adr/`, `spec/` (있는 경우) | 결정 근거·도메인 진실 |
+| ─ Mistake Loop | `.ax-first/mistakes/` + `/steering-audit` | 같은 실수 반복 차단 |
+
+---
+
+## 빠른 명령
+
+빌드·테스트·실행 명령은 [`.ax-first/config.yml`](.ax-first/config.yml)의 `commands` 섹션에 기록한다.
+
+```bash
+ax-first triage "<작업>"   # 분류 + 권장 경로
+ax-first audit             # mistakes 심사
+ax-first doctor            # 하네스 상태 점검
+```
+
+---
+
+## 시그널 포맷
+
+마크다운에서 룰을 표시할 때 이모지로 등급을 구분한다 — Sensors가 grep 패턴으로 검출한다.
+
+```
+🔴 CRITICAL — 자동 차단 / 우회 불가
+🟡 MANDATORY — 사람 승인 필요
+🔵 CONVENTION — 일반 가이드
+```

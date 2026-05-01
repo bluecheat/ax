@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# ax-first audit — .ax-first/mistakes/ 스캔, 룰 승격 후보 제시
+set -euo pipefail
+. "${AX_LIB:-$AX_ROOT/lib}/common.sh"
+AX_ROOT="${AX_ROOT:?run via ax-first}"
+
+PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+MISTAKES_DIR="$PROJECT_ROOT/.ax-first/mistakes"
+
+[ -d "$MISTAKES_DIR" ] || die "$MISTAKES_DIR 없음 — 먼저 ax-first init 실행"
+
+count=$(find "$MISTAKES_DIR" -type f -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+
+if [ "$count" = "0" ]; then
+    say "캡처된 실수가 없음. 좋은 일 ✨"
+    exit 0
+fi
+
+say "캡처된 실수 $count건 분석 중…"
+echo
+
+# 카테고리 추출 (frontmatter category: 또는 ## Category)
+categorize() {
+    local file="$1"
+    grep -E '^(category:|## Category)' "$file" 2>/dev/null | head -1 | sed -E 's/^(category:|## Category)//I; s/^[[:space:]]*//' | tr -d '\n'
+}
+
+declare -A counts
+declare -A samples
+while IFS= read -r f; do
+    cat=$(categorize "$f")
+    [ -z "$cat" ] && cat="(uncategorized)"
+    counts["$cat"]=$((${counts["$cat"]:-0} + 1))
+    samples["$cat"]="${samples["$cat"]:-} ${f#$PROJECT_ROOT/}"
+done < <(find "$MISTAKES_DIR" -type f -name "*.md")
+
+echo "📊 카테고리별 발생 횟수:"
+echo
+printf '%-40s %5s   %s\n' "카테고리" "건수" "승격 권고"
+printf '%-40s %5s   %s\n' "----" "----" "----"
+for cat in "${!counts[@]}"; do
+    n=${counts["$cat"]}
+    if [ "$n" -ge 3 ]; then
+        rec="🔴 CRITICAL 승격 권고"
+    elif [ "$n" -ge 2 ]; then
+        rec="🟡 MANDATORY 후보"
+    else
+        rec="-"
+    fi
+    printf '%-40s %5d   %s\n' "$cat" "$n" "$rec"
+done | sort -k2 -rn
+
+echo
+echo "📁 샘플 파일:"
+for cat in "${!samples[@]}"; do
+    echo "  [$cat] →${samples[$cat]}"
+done
+
+cat <<EOF
+
+다음 액션:
+  - CRITICAL/MANDATORY 후보를 CLAUDE.md에 추가
+  - 결정 근거를 docs/adr/ 에 ADR로 기록
+  - 처리 완료한 mistakes 파일은 .ax-first/mistakes/_archive/ 로 이동
+EOF

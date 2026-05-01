@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# ax-first update — ax-first 자체를 최신 main으로 업데이트
+set -euo pipefail
+. "${AX_LIB:-$AX_ROOT/lib}/common.sh"
+AX_ROOT="${AX_ROOT:?run via ax-first}"
+
+if [ -d "$AX_ROOT/.git" ]; then
+    say "업데이트 중: $AX_ROOT"
+    git -C "$AX_ROOT" fetch --quiet origin
+    cur=$(git -C "$AX_ROOT" rev-parse HEAD)
+    git -C "$AX_ROOT" reset --hard origin/main
+    new=$(git -C "$AX_ROOT" rev-parse HEAD)
+    if [ "$cur" = "$new" ]; then
+        say "이미 최신"
+    else
+        say "업데이트 완료: ${cur:0:8} → ${new:0:8}"
+        git -C "$AX_ROOT" log --oneline "$cur..$new" | sed 's/^/    /'
+    fi
+else
+    die "$AX_ROOT는 git repo가 아님 — 수동 재설치 필요"
+fi

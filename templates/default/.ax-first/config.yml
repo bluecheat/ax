@@ -1,0 +1,52 @@
+# .ax-first/config.yml
+# ax-first triage / audit / hooks 가 참조하는 프로젝트 설정.
+# 자기 프로젝트에 맞게 수정해.
+
+# ───────────────────────────────────────────────────────────
+# 도메인 위험도 매트릭스 — /triage 가 키워드로 매칭
+# 키: 도메인 이름 또는 키워드 (정규식 OK), 값: L0|L1|L2|L3
+# ───────────────────────────────────────────────────────────
+default_risk: L0
+
+domain_risk:
+  # 예시 — 자기 프로젝트로 교체
+  payment: L3
+  결제: L3
+  order: L2
+  주문: L2
+  settlement: L2
+  정산: L2
+  product: L1
+  상품: L1
+  store: L1
+  bookmark: L0
+  search: L0
+  util: L0
+
+# ───────────────────────────────────────────────────────────
+# 빌드/테스트/린트 명령 — Sensors 와 doctor 가 참조
+# ───────────────────────────────────────────────────────────
+commands:
+  build: ""             # 예: pnpm build, ./gradlew build, cargo build
+  test: ""              # 예: pnpm test, ./gradlew test, cargo test
+  lint: ""              # 예: pnpm lint, ./gradlew ktlintCheck, ruff check
+  typecheck: ""         # 예: pnpm typecheck, ./gradlew compileKotlin
+
+# ───────────────────────────────────────────────────────────
+# Sensors — hooks 강도
+# ───────────────────────────────────────────────────────────
+sensors:
+  mode: warning         # warning | fail
+  block_destructive: true
+  protected_paths:
+    - CLAUDE.md
+    - .ax-first/
+    - .github/
+    - .claude/hooks/
+
+# ───────────────────────────────────────────────────────────
+# Mistake Loop
+# ───────────────────────────────────────────────────────────
+mistake_loop:
+  promotion_threshold: 3     # 같은 카테고리 N회 이상 → CRITICAL 승격 권고
+  audit_cadence_days: 7

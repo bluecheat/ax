@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# ax-first triage — 작업을 Size×Risk로 분류
+set -euo pipefail
+. "${AX_LIB:-$AX_ROOT/lib}/common.sh"
+AX_ROOT="${AX_ROOT:?run via ax-first}"
+. "$AX_LIB/classify.sh"
+
+if [ $# -eq 0 ]; then
+    cat <<'EOF'
+사용: ax-first triage "<작업 설명>"
+
+예시:
+  ax-first triage "북마크 정렬 옵션 추가"
+  ax-first triage "주문 환불 윈도우 7일에서 14일로 변경"
+  ax-first triage "Order 도메인 P0 DDD 리팩토링"
+EOF
+    exit 1
+fi
+
+DESCRIPTION="$*"
+PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+CONFIG="$PROJECT_ROOT/.ax-first/config.yml"
+
+[ -f "$CONFIG" ] || die "$CONFIG 없음 — 먼저 ax-first init 실행"
+
+# classify.sh의 함수 호출 (config.yml 기반 키워드 매칭으로 size/risk/domain/path 결정)
+classify "$DESCRIPTION" "$CONFIG"
