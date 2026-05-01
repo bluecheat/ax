@@ -104,6 +104,72 @@ if [ "$DRY_RUN" = "1" ]; then
     exit 0
 fi
 
+# ─────────────────────────────────────────────────────────────
+# Plan — Layer별로 무엇이 깔리는지 보여주기
+# ─────────────────────────────────────────────────────────────
+section "📐" "Plan — 4계층 + Cross-cut으로 깔릴 자산"
+
+CLAUDE_EXISTS=0
+[ -f "$PROJECT_ROOT/CLAUDE.md" ] && CLAUDE_EXISTS=1
+
+cat <<EOF
+  $(c_b 'Layer 0 — Triage')
+    .claude/skills/global/triage/                $(c_dim '— Size×Risk 자동 분류')
+    .claude/skills/global/critical-rules/        $(c_dim '— CRITICAL 시그널 인지')
+    .claude/skills/global/steering-loop/         $(c_dim '— Mistake → 룰 승격')
+
+  $(c_b 'Layer 1 — Constitution')
+EOF
+
+if [ "$CLAUDE_EXISTS" = "1" ]; then
+    printf "    %s   %s\n" "CLAUDE.md (기존 보존)" "$(c_dim '— 제안본은 .ax/CLAUDE.md.suggested 로')"
+    printf "    %s\n"   "$(c_ylw '⚠ 병합 가이드는 설치 후 안내됩니다')"
+else
+    printf "    %s\n" "CLAUDE.md (신규 생성)"
+fi
+
+cat <<EOF
+
+  $(c_b 'Layer 2 — Module Rules') $(c_dim '(빈 자리만 마련 — Module별 CLAUDE.md는 사용자가 작성)')
+    docs/adr/                                    $(c_dim '— ADR 0000-template 포함')
+    docs/spec/_templates/                        $(c_dim '— SDD 템플릿 10종')
+
+  $(c_b 'Cross-cut — Spirit')
+    .ax/spirit/values.md, tone.md, rules/        $(c_dim '— 모든 sub-agent 공통 가치/말투')
+
+  $(c_b 'Cross-cut — Mistake Loop')
+    .ax/mistakes/                                $(c_dim '— 실수 캡처')
+
+  $(c_b 'Sensors — Hooks')
+    .ax/hooks/{pre-bash, pre-edit, post-edit, pre-commit}/
+    .claude/settings.json                        $(c_dim '— Claude Code 자동 등록')
+
+EOF
+
+if [ "$is_brownfield" = "1" ]; then
+    cat <<EOF
+  $(c_b '추가 — brownfield onboarding (1회용)')
+    .claude/skills/global/goax-onboarding/       $(c_dim '— Claude가 도메인·위험도 매핑')
+    .ax/.onboarding-pending                      $(c_dim '— raw discovery 마커')
+    $(c_dim '⤷ "goax 도입 마무리해줘" 한 줄로 발동, 완료 후 자가 삭제')
+
+EOF
+fi
+
+# ─────────────────────────────────────────────────────────────
+# 단일 동의 프롬프트
+# ─────────────────────────────────────────────────────────────
+hr "═" 60
+printf "  %s 위 내용으로 설치할까요? %s: " \
+    "$(c_cyan '▸')" "$(c_dim '[Y/n]')"
+ans=""
+if read -r ans </dev/tty 2>/dev/null; then :; fi
+ans="${ans:-Y}"
+case "$ans" in
+    Y|y|YES|yes|네|ㅇ) : ;;
+    *) say "취소됨 — 변경된 파일 0"; exit 0 ;;
+esac
+
 # 골격 설치 (greenfield/brownfield 공통)
 section "📦" "골격 설치"
 bash "$GOAX_ROOT/bin/goax-init" --preset "$PRESET" $([ "$FORCE" = "1" ] && echo "--force") 2>&1 \
@@ -138,17 +204,41 @@ else
     printf "  onboarding skill·마커는 설치되지 않아 프로젝트에 잔재가 없어요.\n"
 fi
 
+# ─────────────────────────────────────────────────────────────
+# CLAUDE.md 병합 가이드 (기존 CLAUDE.md가 있었던 경우에만)
+# ─────────────────────────────────────────────────────────────
+if [ "$CLAUDE_EXISTS" = "1" ] && [ -f "$PROJECT_ROOT/.ax/CLAUDE.md.suggested" ]; then
+    section "📝" "CLAUDE.md 병합 가이드 (필독)"
+    printf "  기존 \033[1mCLAUDE.md\033[0m는 손대지 않았어요. 제안본은:\n\n"
+    printf "      \033[2m.ax/CLAUDE.md.suggested\033[0m\n\n"
+    printf "  병합 전략(권장 순서):\n\n"
+    printf "    \033[36m1.\033[0m \033[1m시그널 도입\033[0m — 기존 룰에 \033[31m🔴 CRITICAL\033[0m \033[33m🟡 MANDATORY\033[0m \033[34m🔵 CONVENTION\033[0m 라벨 부여\n"
+    printf "       \033[2m자동 차단할 룰 = CRITICAL, 사람 게이트 = MANDATORY, 가이드 = CONVENTION\033[0m\n\n"
+    printf "    \033[36m2.\033[0m \033[1m상위 3~5개만 root에\033[0m — Layer 1은 \"비협상 룰\"만. 나머지는 .ax/spirit/rules/ 카테고리로\n\n"
+    printf "    \033[36m3.\033[0m \033[1m4계층 인덱스 추가\033[0m — 제안본의 \"4계층 인덱스\" 표를 root CLAUDE.md 끝에 prepend/append\n\n"
+    printf "    \033[36m4.\033[0m \033[1m'goax 도입 마무리해줘'\033[0m — onboarding skill이 룰을 카테고리로 자동 분류 → adoption-plan.md\n\n"
+    printf "  비교(diff) 확인:\n"
+    printf "      \033[36mdiff CLAUDE.md .ax/CLAUDE.md.suggested\033[0m\n\n"
+    printf "  병합 끝나면:\n"
+    printf "      \033[36mrm .ax/CLAUDE.md.suggested\033[0m\n"
+fi
+
 # 마무리 메시지 — printf로 색상 안전하게
 printf "\n"
 printf "\033[1;32m✓ goax up 완료\033[0m\n\n"
 printf "\033[1m이후 흐름\033[0m\n"
 if [ "$is_brownfield" = "1" ]; then
-    printf "  1. \033[36m\"goax 도입 마무리해줘\"\033[0m   — Claude가 onboarding 진행\n"
-    printf "  2. \033[36mgoax doctor\033[0m                 — 결손 점검\n"
+    printf "  1. \033[36m\"goax 도입 마무리해줘\"\033[0m   — Claude가 onboarding 진행 (도메인·룰 자동 분류)\n"
+    if [ "$CLAUDE_EXISTS" = "1" ]; then
+        printf "  2. \033[36mCLAUDE.md 병합\033[0m              — 위 가이드대로 .suggested와 합치기\n"
+        printf "  3. \033[36mgoax doctor\033[0m                 — 결손 점검\n"
+    else
+        printf "  2. \033[36mgoax doctor\033[0m                 — 결손 점검\n"
+    fi
 else
     printf "  1. \033[36mgoax doctor\033[0m                 — spirit/persona/ADR 결손 점검\n"
 fi
-printf "  3. Claude Code에서 평소처럼 자연어로:\n"
+printf "  4. Claude Code에서 평소처럼 자연어로:\n"
 printf "       \033[2m\"결제 환불 정책 변경 작업 계획 세워줘\"\033[0m\n"
 printf "       → triage skill 자동 매칭, spirit/룰/페르소나 자동 주입\n"
 printf "\n"

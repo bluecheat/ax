@@ -4,7 +4,35 @@ set -euo pipefail
 . "${GOAX_LIB:-$GOAX_ROOT/lib}/common.sh"
 GOAX_ROOT="${GOAX_ROOT:?run via goax}"
 
-PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+# PROJECT_ROOT 감지 — git root 우선이 아니라 .ax/가 있는 가장 가까운 디렉토리
+find_ax_root() {
+    local d="$PWD"
+    # 1. 자기·조상에서 .ax/
+    while [ "$d" != "/" ]; do
+        if [ -d "$d/.ax" ]; then
+            echo "$d"; return 0
+        fi
+        d=$(dirname "$d")
+    done
+    # 2. 자식에서 .ax/ (1depth만)
+    while IFS= read -r found; do
+        echo "$(dirname "$found")"; return 0
+    done < <(find "$PWD" -mindepth 2 -maxdepth 4 -type d -name ".ax" 2>/dev/null | head -1)
+    return 1
+}
+
+if ax_dir=$(find_ax_root); then
+    if [ "$ax_dir" != "$PWD" ]; then
+        warn "$(printf "현재 디렉토리에 .ax/가 없어요. \033[1m%s\033[0m 의 goax 설치를 진단해요." "$ax_dir")"
+        warn "$(printf "정확히 거기서 실행하려면: \033[36mcd '%s' && goax doctor\033[0m" "$ax_dir")"
+    fi
+    PROJECT_ROOT="$ax_dir"
+else
+    PROJECT_ROOT="$PWD"
+    warn "$(printf "이 디렉토리·자식·조상 어디에도 .ax/가 없어요. 먼저 \033[36mgoax up\033[0m 을 실행해주세요.")"
+    exit 1
+fi
+
 score=0
 total=0
 NEXT_STEPS=()

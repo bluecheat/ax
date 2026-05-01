@@ -1,7 +1,7 @@
 # Concepts — goax의 핵심 개념 사전
 
-> 이 프로젝트는 *AI 에이전트 하네스(harness)*를 위한 작은 프레임워크예요.
-> 처음 보는 사람이 5분 안에 "goax가 무엇을 다루는가"를 파악할 수 있도록 핵심 개념을 모았어요.
+> *왜* 이렇게 만들었나를 14개 카드로 정리한 문서예요.
+> 설치·CLI·디렉토리 같은 *액션* 정보는 [`README.md`](README.md)에서 보세요.
 
 ---
 
@@ -181,143 +181,26 @@ Harness =  Guides(사전 지시)  +  Sensors(사후 검증)  +  Loop(피드백�
 
 ---
 
-## 3. Cheat Sheet
-
-### 룰 시그널
-
-```
-🔴 **`AX:CRITICAL:001`** 파괴적 명령 차단     ← Constitution (CLAUDE.md)
-🟡 **`AX:MANDATORY:002`** 신규 도메인 ADR
-🔵 **`AX:CONVENTION:003`** 한국어 commit
-```
-
-```
-## SP-SEC-001: Secrets는 환경변수      ← Spirit (.ax/spirit/rules/security.md)
-## SP-NAMING-001: kebab-case
-## SP-PR-002: commit prefix
-```
-
-### CLI 빠른 참조
-
-| 명령 | 역할 |
-|---|---|
-| `goax init [--preset starter]` | Greenfield 신규 설치 |
-| `goax up [--dry-run] [--auto a,a,a,a]` | Brownfield 도입 (4-phase) |
-| `goax triage "<작업>"` | Size×Risk 분류 + spirit_context 자동 주입 |
-| `goax rules [--source spirit\|constitution] [--level critical] [--category security]` | 룰 인덱스/검색 |
-| `goax find <token>` | ID로 단일 룰 + 본문 + ADR 링크 |
-| `goax spirit [add\|lint\|status]` | Spirit 디렉토리 관리 |
-| `goax spec [new\|check\|list]` | **SDD** — Spec-Driven Development (SSOT) |
-| `goax audit` | mistakes 심사 + 룰 승격 후보 |
-| `goax doctor` | 하네스 상태 진단 (점수) |
-| `goax update` | goax 자체 갱신 |
-
-### 디렉토리 한 화면 (v0.5)
-
-```
-your-project/
-├── CLAUDE.md                       # Layer 1 — 핵심 비협상 룰 3~5개만
-├── docs/
-│   ├── adr/                        # Architecture Decision Records
-│   │   ├── 0000-template.md        # 템플릿
-│   │   └── NNNN-*.md               # 실제 ADR
-│   └── spec/                       # SDD — Spec-Driven Development
-│       ├── _templates/             # 8 템플릿 (spec/plan/tasks/...)
-│       └── feature/
-│           └── NNN-<name>/         # 피처별 spec 디렉토리
-│               ├── spec.md         # SSOT — WHAT/WHY
-│               ├── plan.md         # HOW
-│               ├── tasks.md        # 작업 분해
-│               └── checklists/requirements.md   # 게이팅
-├── .claude/                        # Claude Code 표준 위치 (자동 로드)
-│   ├── skills/                     # 한 폴더 = 한 의도 패턴 — 한 폴더 = 한 의도
-│   │   ├── _index.md
-│   │   ├── global/                 # triage, critical-rules, steering-loop
-│   │   ├── personas/               # engineer-generalist (default 1) + 사용자 추가
-│   │   ├── workflows/              # adr-write
-│   │   └── meta/                   # skill-audit, skill-creator
-│   ├── agents/                     # sub-agents
-│   │   └── evaluator.md            # default 1 (architect는 starter)
-│   └── settings.json               # hooks 등록 entry point (.ax/hooks 호출)
-└── .ax/                            # goax 자체 자산
-    ├── spirit/                     # cross-cutting 행동 정체성
-    │   ├── values.md               # 핵심 가치
-    │   ├── tone.md                 # 협업 톤 (~해요 체)
-    │   └── rules/
-    │       ├── _TEMPLATE.md        # 새 카테고리 만들 때 표본
-    │       └── <category>.md       # 사용자 add/remove (starter는 7개 예시)
-    ├── hooks/                      # Sensors 자동화 (.claude/settings.json이 호출)
-    │   ├── pre-bash/               # default: block-destructive
-    │   ├── pre-edit/               # default: check-protected-paths
-    │   ├── post-edit/              # starter: lint-changed
-    │   └── pre-commit/             # default: critical-rule-grep
-    ├── mistakes/                   # Mistake Loop 캡처 슬롯
-    ├── config.yml                  # domain_risk · sensors mode · commands
-    └── version
-```
-
-> **`.claude/`** = Claude Code 표준 위치 (자동 로드 — slash command 매칭, sub-agent 인식)
-> **`.ax/`** = goax 자체 자산 (Claude Code 표준 외 — spirit, mistakes, hooks 스크립트, config)
-> 결정 근거: [`docs/adr/0002-claude-vs-ax-directory-split.md`](docs/adr/0002-claude-vs-ax-directory-split.md)
-
----
-
-## 4. 학습 경로 — 어떤 순서로 읽으면 좋은가
-
-### 5분 — 무엇인지만 보고 싶을 때
-
-1. 이 파일 §0 + §1 (다이어그램)
-2. [README.md](README.md) TL;DR
-
-### 30분 — 적용 결정을 내려야 할 때
-
-1. 이 파일 전체
-2. [`docs/concepts.md`](docs/concepts.md) — 깊이 있는 모델 설명
-3. [`docs/up.md`](docs/up.md) — Brownfield 도입 가이드
-4. [`docs/spirit.md`](docs/spirit.md) — Spirit 작성법
-
-### 1시간 — 실제 도입 + 자기 룰 채우기
-
-1. 위 30분 + 실행:
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/bluecheat/ax/main/install.sh | bash
-   cd <자기 프로젝트>
-   goax up                      # Brownfield면
-   goax up --preset starter   # Greenfield면
-   goax doctor
-   goax triage "<첫 작업>"
-   ```
-2. [`docs/customization.md`](docs/customization.md) — 자기 프로젝트 맞춤화
-3. [`docs/reference/rules-tokens.md`](docs/reference/rules-tokens.md) — 룰 작성 양식
-4. [`.ax/spirit/values.md`](templates/default/.ax/spirit/values.md) 검토 — 우리 팀 가치로 교체
-
-### 깊이 더 들어갈 때
-
-- [`docs/reference/critical-rules.md`](docs/reference/critical-rules.md) — 룰 카테고리별 자동화 가능 여부
-- [`docs/reference/triage-matrix.md`](docs/reference/triage-matrix.md) — Size×Risk 매트릭스
-- [`docs/reference/glossary.md`](docs/reference/glossary.md) — 용어 사전
-- [CHANGELOG.md](CHANGELOG.md) — 버전별 변경
-
----
-
-## 5. 안 다루는 것 (Out of scope)
+## 3. 안 다루는 것 (Out of scope)
 
 - **모델 fine-tuning** — goax는 사용 모델에 무관
-- **prompt engineering** — *환경*을 다룸 (환경 엔지니어링의 핵심 메시지)
-- **에이전트 오케스트레이션 엔진** — task-machine / swarm 같은 건 별도
-- **CI/CD 자체** — hooks·sensors는 GitHub Actions 등 외부와 통합 가능하지만 goax가 직접 CI 시스템은 아님
+- **prompt engineering** — goax는 *환경 엔지니어링*. 프롬프트 자체는 다루지 않음
+- **에이전트 오케스트레이션 엔진** — task-machine / swarm 같은 건 별도 도구
+- **CI/CD 자체** — hooks·sensors는 GitHub Actions 등 외부와 통합 가능하지만, goax가 직접 CI 시스템은 아님
 
 ---
 
-## 6. 한 줄로 goax가 무엇이라 답할까
+## 4. 한 줄로 goax가 무엇이라 답할까
 
-> "어떤 프로젝트든 1분 안에 4계층 하네스(Constitution/Module/Spec/Spirit) + 자동 검증(Sensors) + 실수 반복 차단(Mistake Loop)을 깔아주는 작은 bash 프레임워크. AI 에이전트의 결과 일관성을 *환경* 차원에서 통제해요."
+> *"어떤 프로젝트든 1분 안에 4계층 하네스(Triage/Constitution/Module/Spec) + 2 cross-cut(Spirit/Mistake Loop)을 깔아주는 작은 bash 프레임워크. AI 에이전트의 결과 일관성을 *환경*으로 통제해요."*
+
+---
+
+> **CLI 표·디렉토리 트리·설치·Preset** 같은 *액션* 정보는 [`README.md`](README.md)에 있어요. 본 문서는 *왜 그렇게 만들었나*만 다뤄요.
 
 ---
 
 ## 변경 이력
-
-본 문서는 goax의 핵심 개념을 한 곳에 정리한 마스터 인덱스예요. 개념 추가·재정의 시 동시에 이 파일도 갱신해주세요.
 
 - **v0.1.1**: `goax up` brownfield 재설계 — bash 휴리스틱 제거, Claude onboarding skill 위임. Spirit §8 자가 점수
 - **v0.1.0**: 정식 초기 릴리스 — 4계층 + 2 cross-cut, SDD, Spirit, Brownfield `goax up`, 룰 토큰, CONCEPTS.md 마스터 인덱스. 기존 `ax-first` 프로토타입을 `goax`로 rebrand
