@@ -189,25 +189,43 @@ fi
 
 
 # ───────────────────────────────────────────────────────────
-section "8. goax up (v0.4) — discover + plan dry-run"
+section "8. goax up (v0.1.1) — discover + brownfield onboarding 위임"
 # ───────────────────────────────────────────────────────────
 INIT5="$TMP/proj5"
 mkdir -p "$INIT5/apps/api/src" "$INIT5/apps/web/src"
 cd "$INIT5"
-# 가짜 CLAUDE.md
+# 가짜 CLAUDE.md (brownfield 트리거)
 cat > CLAUDE.md <<'FAKE'
 # Test
 - NEVER hardcode passwords
 - naming: kebab-case
 FAKE
 
-# dry-run으로 discover + plan만 (apply 안 됨)
+# (a) dry-run — 설치 안 함, 분석만
 out=$(GOAX_ROOT="$REPO" GOAX_LIB="$REPO/lib" GOAX_TEMPLATES="$REPO/templates" \
-    bash "$REPO/bin/goax-up" --dry-run --auto a,a,a,a 2>&1 || true)
+    bash "$REPO/bin/goax-up" --dry-run 2>&1 || true)
 if echo "$out" | grep -qE "Discover|프로젝트 분석"; then pass "up Discover 동작"; else fail "Discover 누락"; fi
-if echo "$out" | grep -qE "결정 4개|Plan"; then pass "up Plan 동작"; else fail "Plan 누락"; fi
 if echo "$out" | grep -qE "모노레포|싱글"; then pass "discover 레포 형태 감지"; else fail "레포 형태 감지 실패"; fi
-if echo "$out" | grep -q "DRY-RUN"; then pass "dry-run 모드 — apply 안 함"; else fail "dry-run 미작동"; fi
+if echo "$out" | grep -q "DRY-RUN"; then pass "dry-run 모드 — 설치 안 함"; else fail "dry-run 미작동"; fi
+if [ ! -d "$INIT5/.ax" ]; then pass "dry-run — .ax 안 만듦"; else fail "dry-run인데 .ax 생김"; fi
+
+# (b) 실제 brownfield up — 마커 + 임시 onboarding skill 설치 확인
+out2=$(GOAX_ROOT="$REPO" GOAX_LIB="$REPO/lib" GOAX_TEMPLATES="$REPO/templates" \
+    bash "$REPO/bin/goax-up" 2>&1 || true)
+if echo "$out2" | grep -q "Claude에게 분석 위임"; then pass "brownfield onboarding 메시지"; else fail "onboarding 메시지 없음"; fi
+if [ -f "$INIT5/.ax/.onboarding-pending" ]; then pass "onboarding 마커 작성"; else fail "마커 누락"; fi
+if [ -f "$INIT5/.claude/skills/global/goax-onboarding/SKILL.md" ]; then pass "임시 onboarding skill 설치"; else fail "임시 skill 누락"; fi
+if grep -q "claude_md_lines=" "$INIT5/.ax/.onboarding-pending" 2>/dev/null; then pass "마커에 raw discovery 기록"; else fail "마커 내용 비정상"; fi
+
+# (c) greenfield — 마커·skill 설치 안 됨
+INIT6="$TMP/proj6_green"
+mkdir -p "$INIT6"
+cd "$INIT6"
+out3=$(GOAX_ROOT="$REPO" GOAX_LIB="$REPO/lib" GOAX_TEMPLATES="$REPO/templates" \
+    bash "$REPO/bin/goax-up" 2>&1 || true)
+if echo "$out3" | grep -q "greenfield"; then pass "greenfield 감지"; else fail "greenfield 미감지"; fi
+if [ ! -f "$INIT6/.ax/.onboarding-pending" ]; then pass "greenfield — 마커 없음"; else fail "greenfield인데 마커 생김"; fi
+if [ ! -d "$INIT6/.claude/skills/global/goax-onboarding" ]; then pass "greenfield — onboarding skill 없음"; else fail "greenfield인데 skill 설치"; fi
 
 
 # ───────────────────────────────────────────────────────────

@@ -70,7 +70,7 @@ Harness =  Guides(사전 지시)  +  Sensors(사후 검증)  +  Loop(피드백�
 - **왜 필요한가**: 사람 리뷰는 시간이 걸리고 누락도 많아요. lint·typecheck 같은 결정론적 검증, 모듈 의존 위반 같은 구조적 검증, "엣지 케이스 누락" 같은 인페런셜 검증을 자동으로 돌리면 같은 실수가 반복되지 않아요
 - **goax**:
   - Computational: `.ax/hooks/{pre-bash, pre-edit, post-edit, pre-commit}` — 결정론적
-  - Inferential: `.claude/agents/architect.md`, `.claude/agents/evaluator.md` — AI-led
+  - Inferential: `.claude/agents/evaluator.md` *(default)*, `.claude/agents/architect.md` *(starter)* — AI-led
   - Structural: 자기 프로젝트의 의존 분석 스크립트(예: `circular_analysis.py`)를 hooks에 연결
   - Functional: TDD 강제 (자기 프로젝트로 확장)
 - **더**: [`docs/reference/critical-rules.md`](docs/reference/critical-rules.md)
@@ -165,19 +165,18 @@ Harness =  Guides(사전 지시)  +  Sensors(사후 검증)  +  Loop(피드백�
 - **왜 필요한가**: 같은 세션에서 자기 결과를 평가하면 "잘 됐어요"라고 답하는 self-praise bias가 있어요. 별도 세션의 evaluator가 docs·spec·ADR만 보고 비평하면 객관성이 회복돼요
 - **goax**:
   - Generator: 메인 persona (engineer-generalist, refactorer 등)
-  - Evaluator: `.claude/agents/evaluator.md` (별도 sub-agent, docs/spec/ADR만 보고 비평)
-  - Architect: `.claude/agents/architect.md` (구조 위반 검토)
+  - Evaluator: `.claude/agents/evaluator.md` *(default — 별도 sub-agent, docs/spec/ADR만 보고 비평)*
+  - Architect: `.claude/agents/architect.md` *(starter — 구조 위반 검토)*
 - **더**: `.claude/agents/`
 
 ### 2.14 Brownfield 도입 (`goax up`)
 
 - **무엇**: 이미 운영 중인 프로젝트에 점진적으로 goax 도입
 - **왜 필요한가**: 빈 프로젝트에 goax를 까는 건 쉬워요. 어려운 건 이미 운영 중인 모노레포에 충돌 없이 점진 도입하는 것. 기존 자산(CLAUDE.md / 외부 spec / hooks / AI 리뷰 도구)을 자동 스캔하고 사용자 결정을 받아 단계별로 도입해야 안전해요. 첫날부터 fail 모드로 모든 PR을 막으면 팀 반발로 도입 자체가 실패해요
-- **goax**: `goax up` 한 명령으로 4-phase
-  - Phase 1 Discover (자동 스캔)
-  - Phase 2 Plan (결정 4개 plan-mode)
-  - Phase 3 Apply
-  - Phase 4 Next
+- **goax**: `goax up`이 greenfield/brownfield를 자동 감지
+  - **greenfield** → 즉시 골격 설치 + `goax doctor` 안내
+  - **brownfield** → 골격 설치 + `.claude/skills/global/goax-onboarding/` 임시 skill 설치 + `.ax/.onboarding-pending` 마커. Claude Code에서 *"goax 도입 마무리해줘"* 한 줄로 skill 발동, 코드를 실제로 읽고 도메인·위험도·룰 분류를 사용자와 대화하며 진행. 끝나면 skill·마커 자가 삭제 — 잔재 0
+  - bash 휴리스틱(정규식 도메인 추정, Q1~Q4 인터랙티브)은 v0.1.1에서 제거. Claude에게 위임하는 게 정확도가 압도적으로 높아요
 - **더**: [`docs/up.md`](docs/up.md)
 
 ---
@@ -320,7 +319,5 @@ your-project/
 
 본 문서는 goax의 핵심 개념을 한 곳에 정리한 마스터 인덱스예요. 개념 추가·재정의 시 동시에 이 파일도 갱신해주세요.
 
-- v0.4 (이번): Brownfield 도입(`goax up`) + Concepts 사전 신설
-- v0.3: Spirit 레이어 추가
-- v0.2: Personas + 룰 토큰 + rules CLI
-- v0.1: 4계층 골격 + Triage + Hooks
+- **v0.1.1**: `goax up` brownfield 재설계 — bash 휴리스틱 제거, Claude onboarding skill 위임. Spirit §8 자가 점수
+- **v0.1.0**: 정식 초기 릴리스 — 4계층 + 2 cross-cut, SDD, Spirit, Brownfield `goax up`, 룰 토큰, CONCEPTS.md 마스터 인덱스. 기존 `ax-first` 프로토타입을 `goax`로 rebrand

@@ -116,19 +116,6 @@ if [ ! -f "$PROJECT_ROOT/.ax/spirit/values.md" ] || [ ! -f "$PROJECT_ROOT/.ax/sp
     warn ".ax/spirit/{values.md, tone.md} 누락 — goax triage가 fail해요. --force 로 재설치하거나 직접 작성해주세요."
 fi
 
-cat <<DONE
-
-\033[32m✓ goax up 완료\033[0m
-
-다음 단계:
-  1. CLAUDE.md 검수 — 핵심 3~5 CRITICAL만 root에 박아두기 (나머지는 spirit/rules)
-  2. .ax/spirit/values.md, tone.md 검토 — 우리 팀 가치/말투 반영
-  3. .ax/spirit/rules/ 의 7개 카테고리 검토 + 자기 룰 추가
-  4. .ax/config.yml 의 domain_risk 매트릭스를 우리 도메인으로 수정
-  5. .ax/hooks/post-edit/lint-changed.sh 의 lint 명령을 우리 스택으로 교체
-  6. goax doctor   ← 결손 검사
-  7. goax spirit   ← spirit 상태 확인
-  8. Claude Code에서 /triage <첫 작업> 실행
-
-문서: $GOAX_ROOT/docs/spirit.md  (Spirit 개념·작성법·적용법)
-DONE
+# goax-init은 'goax up'에 의해 호출되므로 자체 종료 메시지 불필요.
+# 사용자 안내는 goax-up이 일괄 출력해요.
+say "골격 설치 완료 (preset: $PRESET)"

@@ -46,7 +46,7 @@ discover_repo_shape() {
         DISCOVER_REPO_SHAPE="싱글"
     fi
 
-    # 모듈 디렉토리 추정
+    # 모듈 디렉토리 추정 (apps/packages/projects/modules)
     for d in apps packages projects modules; do
         [ -d "$root/$d" ] || continue
         for sub in "$root/$d"/*/; do
@@ -56,7 +56,28 @@ discover_repo_shape() {
             DISCOVER_MODULE_COUNT=$((DISCOVER_MODULE_COUNT + 1))
         done
     done
-    DISCOVER_MODULES="$(echo "$module_dirs" | sed 's/^ //; s/  / /g')"
+
+    # Gradle multi-module: settings.gradle(.kts)에서 include(":xxx") 파싱
+    if [ -f "$root/settings.gradle.kts" ] || [ -f "$root/settings.gradle" ]; then
+        local settings
+        for f in "$root/settings.gradle.kts" "$root/settings.gradle"; do
+            [ -f "$f" ] && settings="$f" && break
+        done
+        if [ -n "${settings:-}" ]; then
+            local gradle_modules
+            gradle_modules=$(grep -oE 'include\s*\(?\s*"[^"]+"' "$settings" 2>/dev/null \
+                | sed -E 's/.*"([^"]+)".*/\1/' \
+                | sed 's|^:||; s|:|/|g' \
+                | awk -F/ '{print $NF}' \
+                | sort -u)
+            for m in $gradle_modules; do
+                module_dirs="$module_dirs $m"
+                DISCOVER_MODULE_COUNT=$((DISCOVER_MODULE_COUNT + 1))
+            done
+        fi
+    fi
+
+    DISCOVER_MODULES="$( { echo "$module_dirs" | tr ' ' '\n' | grep -v '^$' || true; } | sort -u | tr '\n' ' ' | sed 's/ $//')"
 }
 
 # 2. CLAUDE.md 분석 + 룰 추출
@@ -149,33 +170,46 @@ discover_domain_keywords() {
         domains="$domains $clean"
     done
 
-    # commerce-monorepo 류: 디렉토리 내부도 스캔
-    for cand in "$root"/commerce-core/src/main/kotlin/com/*/commerce/* \
-                "$root"/projects/*/commerce-core/src/main/kotlin/com/*/commerce/* \
+    # 모노레포의 흔한 도메인 디렉토리 스캔
+    for cand in "$root"/projects/*/src/main/kotlin/com/*/*/* \
                 "$root"/src/main/kotlin/com/*/* \
                 "$root"/apps/api/src/* \
-                "$root"/src/services/*; do
+                "$root"/src/services/* \
+                "$root"/src/domain/* \
+                "$root"/internal/*; do
         [ -d "$cand" ] || continue
-        local name=$(basename "$cand")
-        # 흔한 비도메인 이름 제외
-        case "$name" in
-            common|util|utils|helper|shared|lib|infra|config|test) continue ;;
-        esac
-        domains="$domains $name"
+        domains="$domains $(basename "$cand")"
     done
 
-    # 중복 제거 + 정렬
-    DISCOVER_DOMAINS="$(echo "$domains" | tr ' ' '\n' | grep -v '^$' | sort -u | head -10 | tr '\n' ' ' | sed 's/ $//')"
+    # noise 필터: 길이 < 4, 흔한 비도메인 키워드, 너무 일반적인 영어 단어
+    # grep -v가 매칭 0개일 때 exit 1 → || true 로 흡수 (set -e 안전)
+    local cleaned
+    cleaned=$( { echo "$domains" \
+        | tr ' ' '\n' \
+        | grep -v '^$' \
+        | awk 'length($0) >= 4' \
+        | grep -ivxE '^(common|core|util|utils|helper|shared|lib|libs|infra|config|configuration|test|tests|spec|specs|main|impl|model|models|dto|dtos|entity|entities|api|web|app|apps|admin|client|server|service|services|module|modules|component|components|controller|controllers|repository|repositories|public|private|internal|external|static|build|src|target|dist|node_modules|vendor)$' \
+        || true; } \
+        | sort -u \
+        | head -10 \
+        | tr '\n' ' ' \
+        | sed 's/ $//')
+
+    DISCOVER_DOMAINS="$cleaned"
 }
 
-# 결과 출력 (보기용)
+# 결과 출력 (보기용) — 헤더는 호출자가 책임
 discover_print() {
+    local claude_md
+    if [ "$DISCOVER_CLAUDE_MD_LINES" -gt 0 ]; then
+        claude_md="${DISCOVER_CLAUDE_MD_LINES}줄, 룰 ~${DISCOVER_CLAUDE_MD_RULES}개 추정"
+    else
+        claude_md="(없음)"
+    fi
     cat <<EOF
-🔍 Discover
-
   레포 형태:        ${DISCOVER_REPO_SHAPE:-(미상)}
   모듈:             ${DISCOVER_MODULE_COUNT}개${DISCOVER_MODULES:+ — $DISCOVER_MODULES}
-  CLAUDE.md:        $([ "$DISCOVER_CLAUDE_MD_LINES" -gt 0 ] && echo "${DISCOVER_CLAUDE_MD_LINES}줄, 룰 \~${DISCOVER_CLAUDE_MD_RULES}개 추정" || echo "(없음)")
+  CLAUDE.md:        $claude_md
   외부 spec:        ${DISCOVER_EXTERNAL_SPECS:-(없음)}
   활성 hooks:       ${DISCOVER_ACTIVE_HOOKS:-(없음)}
   AI 리뷰:          ${DISCOVER_AI_REVIEW:-(없음)}
