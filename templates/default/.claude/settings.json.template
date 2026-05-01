@@ -1,22 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "_comment": "ax-first가 생성한 settings — hooks 등록은 자동, 나머지는 자기 환경에 맞게",
+  "_comment": "goax가 생성한 settings — Claude Code는 .claude/settings.json을 자동 로드. goax 자산은 .ax/ 안에.",
   "hooks": {
     "preToolUse": [
-      {
-        "matcher": "Bash",
-        "command": ".claude/hooks/pre-bash/block-destructive.sh"
-      },
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "command": ".claude/hooks/pre-edit/check-protected-paths.sh"
-      }
+      { "matcher": "Bash", "command": ".ax/hooks/pre-bash/block-destructive.sh" },
+      { "matcher": "Edit|Write|MultiEdit", "command": ".ax/hooks/pre-edit/check-protected-paths.sh" },
+      { "matcher": "Edit|Write|MultiEdit", "command": ".ax/hooks/pre-edit/spirit-check.sh" }
     ],
     "postToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "command": ".claude/hooks/post-edit/lint-changed.sh"
-      }
+      { "matcher": "Edit|Write|MultiEdit", "command": ".ax/hooks/post-edit/lint-changed.sh" }
     ]
   }
 }

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# goax triage — 작업을 Size×Risk로 분류
+set -euo pipefail
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/common.sh"
+GOAX_ROOT="${GOAX_ROOT:?run via goax}"
+. "$GOAX_LIB/classify.sh"
+
+if [ $# -eq 0 ]; then
+    cat <<'EOF'
+사용: goax triage "<작업 설명>"
+
+예시:
+  goax triage "북마크 정렬 옵션 추가"
+  goax triage "주문 환불 윈도우 7일에서 14일로 변경"
+  goax triage "Order 도메인 P0 DDD 리팩토링"
+EOF
+    exit 1
+fi
+
+DESCRIPTION="$*"
+PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+CONFIG="$PROJECT_ROOT/.ax/config.yml"
+
+[ -f "$CONFIG" ] || die "$CONFIG 없음 — 먼저 goax up 실행"
+
+# classify.sh의 함수 호출 (config.yml 기반 키워드 매칭으로 size/risk/domain/path 결정)
+classify "$DESCRIPTION" "$CONFIG"

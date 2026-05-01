@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# goax rules — 룰 토큰 검색·인덱싱
+set -euo pipefail
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/common.sh"
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/rules.sh"
+GOAX_ROOT="${GOAX_ROOT:?run via goax}"
+
+usage() {
+    cat <<EOF
+goax rules — 룰 인덱스/검색
+
+사용:
+  goax rules                          모든 룰
+  goax rules --level <LEVEL>          CRITICAL | MANDATORY | CONVENTION 필터
+  goax rules --scope <scope>          scope 필터 (AX, api, payment, ...)
+  goax rules --module <path>          한 모듈만 (apps/api 등)
+  goax rules --json                   JSON 출력
+  goax rules --untokenized            토큰 없는 룰 찾기 (마이그레이션용)
+
+연관:
+  goax find <token>                   ID로 룰 1개 + 관련 ADR
+EOF
+}
+
+case "${1:-}" in
+    --untokenized) rules_find_untokenized ;;
+    --help|-h) usage ;;
+    *) rules_list "$@" ;;
+esac

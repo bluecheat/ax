@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# goax up — 현재 프로젝트에 하네스 골격을 설치
+# 모든 goax 자산은 .ax/ 디렉토리에 위치. .claude/settings.json은 hooks 등록을 위해 별도.
+set -euo pipefail
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/common.sh"
+GOAX_ROOT="${GOAX_ROOT:?run via goax}"
+
+PRESET="default"
+FORCE="0"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --preset) PRESET="$2"; shift 2 ;;
+        --force)  FORCE="1"; shift ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+PROJECT_ROOT="$(pwd)"
+say "프로젝트: $PROJECT_ROOT"
+say "프리셋: $PRESET"
+
+# ───────────────────────────────────────────────────────────
+# 1. 디렉토리 보장
+# ───────────────────────────────────────────────────────────
+mkdir -p "$PROJECT_ROOT"/.ax/{skills/global/{triage/references,critical-rules,steering-loop/references},skills/workflows/{adr-write},skills/meta/{skill-audit,skill-creator},skills/personas/{engineer-generalist,code-reviewer,bug-hunter,refactorer},agents,hooks/{pre-bash,pre-edit,post-edit,pre-commit},mistakes}
+mkdir -p "$PROJECT_ROOT"/.claude
+mkdir -p "$PROJECT_ROOT"/docs/adr
+
+# ───────────────────────────────────────────────────────────
+# 2. default 템플릿 복사 (덮어쓰지 않음 — 단 --force 제외)
+# ───────────────────────────────────────────────────────────
+copy_template() {
+    local src="$1" dst="$2"
+    if [ -e "$dst" ] && [ "$FORCE" != "1" ]; then
+        warn "skip (이미 존재): ${dst#$PROJECT_ROOT/}"
+        return
+    fi
+    mkdir -p "$(dirname "$dst")"
+    cp "$src" "$dst"
+    chmod +x "$dst" 2>/dev/null || true
+    say "+ ${dst#$PROJECT_ROOT/}"
+}
+
+copy_tree() {
+    local src_dir="$1" dst_dir="$2"
+    [ -d "$src_dir" ] || return
+    while IFS= read -r -d '' src_file; do
+        local rel="${src_file#$src_dir/}"
+        copy_template "$src_file" "$dst_dir/$rel"
+    done < <(find "$src_dir" -type f -print0)
+}
+
+DEFAULT_DIR="$GOAX_TEMPLATES/default"
+[ -d "$DEFAULT_DIR" ] || die "default 템플릿이 없음: $DEFAULT_DIR"
+copy_tree "$DEFAULT_DIR" "$PROJECT_ROOT"
+
+# CLAUDE.md.template → CLAUDE.md (이미 있으면 .ax/CLAUDE.md.suggested로)
+if [ -f "$PROJECT_ROOT/CLAUDE.md.template" ]; then
+    if [ -f "$PROJECT_ROOT/CLAUDE.md" ] && [ "$FORCE" != "1" ]; then
+        mv "$PROJECT_ROOT/CLAUDE.md.template" "$PROJECT_ROOT/.ax/CLAUDE.md.suggested"
+        warn "기존 CLAUDE.md가 있어 덮어쓰지 않음. 제안 내용은 .ax/CLAUDE.md.suggested 에 저장 — 수동 병합 필요."
+    else
+        mv "$PROJECT_ROOT/CLAUDE.md.template" "$PROJECT_ROOT/CLAUDE.md"
+        say "+ CLAUDE.md"
+    fi
+fi
+
+# .claude/settings.json.template → .claude/settings.json (Claude Code 호환)
+if [ -f "$PROJECT_ROOT/.claude/settings.json.template" ]; then
+    if [ -f "$PROJECT_ROOT/.claude/settings.json" ] && [ "$FORCE" != "1" ]; then
+        mv "$PROJECT_ROOT/.claude/settings.json.template" "$PROJECT_ROOT/.ax/settings.json.suggested"
+        warn "기존 .claude/settings.json 있어 덮어쓰지 않음. 제안 내용은 .ax/settings.json.suggested"
+    else
+        mv "$PROJECT_ROOT/.claude/settings.json.template" "$PROJECT_ROOT/.claude/settings.json"
+        say "+ .claude/settings.json (hooks 등록)"
+    fi
+fi
+
+# ───────────────────────────────────────────────────────────
+# 3. preset overlay
+# ───────────────────────────────────────────────────────────
+if [ "$PRESET" != "default" ]; then
+    PRESET_DIR="$GOAX_TEMPLATES/presets/$PRESET"
+    [ -d "$PRESET_DIR" ] || die "프리셋이 없음: $PRESET (사용 가능: $(ls "$GOAX_TEMPLATES/presets" 2>/dev/null | tr '\n' ' '))"
+    say "프리셋 overlay: $PRESET"
+    copy_tree "$PRESET_DIR" "$PROJECT_ROOT"
+
+    if [ -f "$PROJECT_ROOT/CLAUDE.md.overlay" ]; then
+        if [ -f "$PROJECT_ROOT/CLAUDE.md" ]; then
+            printf '\n\n<!-- goax preset:%s overlay -->\n' "$PRESET" >> "$PROJECT_ROOT/CLAUDE.md"
+            cat "$PROJECT_ROOT/CLAUDE.md.overlay" >> "$PROJECT_ROOT/CLAUDE.md"
+            rm "$PROJECT_ROOT/CLAUDE.md.overlay"
+            say "+ CLAUDE.md (preset overlay 병합)"
+        else
+            mv "$PROJECT_ROOT/CLAUDE.md.overlay" "$PROJECT_ROOT/CLAUDE.md"
+            say "+ CLAUDE.md (preset)"
+        fi
+    fi
+fi
+
+# ───────────────────────────────────────────────────────────
+# 4. 메타 정보 기록
+# ───────────────────────────────────────────────────────────
+cat > "$PROJECT_ROOT/.ax/version" <<META
+goax: $(cat "$GOAX_ROOT/VERSION" 2>/dev/null || echo unknown)
+preset: $PRESET
+installed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+META
+
+# ───────────────────────────────────────────────────────────
+# 5. 다음 단계
+# ───────────────────────────────────────────────────────────
+# spirit 검증 (옵션 4-B fail)
+if [ ! -f "$PROJECT_ROOT/.ax/spirit/values.md" ] || [ ! -f "$PROJECT_ROOT/.ax/spirit/tone.md" ]; then
+    warn ".ax/spirit/{values.md, tone.md} 누락 — goax triage가 fail해요. --force 로 재설치하거나 직접 작성해주세요."
+fi
+
+cat <<DONE
+
+\033[32m✓ goax up 완료\033[0m
+
+다음 단계:
+  1. CLAUDE.md 검수 — 핵심 3~5 CRITICAL만 root에 박아두기 (나머지는 spirit/rules)
+  2. .ax/spirit/values.md, tone.md 검토 — 우리 팀 가치/말투 반영
+  3. .ax/spirit/rules/ 의 7개 카테고리 검토 + 자기 룰 추가
+  4. .ax/config.yml 의 domain_risk 매트릭스를 우리 도메인으로 수정
+  5. .ax/hooks/post-edit/lint-changed.sh 의 lint 명령을 우리 스택으로 교체
+  6. goax doctor   ← 결손 검사
+  7. goax spirit   ← spirit 상태 확인
+  8. Claude Code에서 /triage <첫 작업> 실행
+
+문서: $GOAX_ROOT/docs/spirit.md  (Spirit 개념·작성법·적용법)
+DONE

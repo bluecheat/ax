@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# goax spirit — Spirit 디렉토리 관리 (add / lint / status)
+set -euo pipefail
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/common.sh"
+GOAX_ROOT="${GOAX_ROOT:?run via goax}"
+
+PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+SPIRIT_DIR="$PROJECT_ROOT/.ax/spirit"
+
+usage() {
+    cat <<EOF
+goax spirit — Spirit 디렉토리 관리
+
+사용:
+  goax spirit                       현재 spirit/ 상태 요약
+  goax spirit add <category>        새 룰 카테고리 파일 생성
+  goax spirit lint                  rules/* frontmatter + ID 일관성 검증
+
+예시:
+  goax spirit add observability
+  goax spirit add deployment
+
+연관:
+  goax rules --source spirit        spirit/rules만 인덱스
+  goax find SP-SEC-001              ID로 룰 검색
+EOF
+}
+
+cmd_status() {
+    [ -d "$SPIRIT_DIR" ] || die "$SPIRIT_DIR 없음 — goax up 먼저 실행"
+
+    echo "🌟 goax spirit — $SPIRIT_DIR"
+    echo ""
+
+    if [ -f "$SPIRIT_DIR/values.md" ]; then
+        local v_count=$(grep -cE '^## ' "$SPIRIT_DIR/values.md" 2>/dev/null || echo 0)
+        printf '  ✓ values.md  (%s개 가치)\n' "$v_count"
+    else
+        echo "  ✗ values.md 누락"
+    fi
+
+    if [ -f "$SPIRIT_DIR/tone.md" ]; then
+        echo "  ✓ tone.md"
+    else
+        echo "  ✗ tone.md 누락"
+    fi
+
+    echo ""
+    echo "  rules/:"
+    if [ -d "$SPIRIT_DIR/rules" ]; then
+        local total_rules=0
+        for f in "$SPIRIT_DIR/rules"/*.md; do
+            [ -f "$f" ] || continue
+            case "$(basename "$f")" in _*) continue ;; esac
+            local cat=$(basename "$f" .md)
+            local rule_count=$(grep -cE '^## SP-' "$f" 2>/dev/null || echo 0)
+            total_rules=$((total_rules + rule_count))
+            printf '    %-25s %s 룰\n' "$cat" "$rule_count"
+        done
+        echo ""
+        printf '  총 %s 룰 (전체 %s 카테고리)\n' "$total_rules" "$(ls "$SPIRIT_DIR/rules"/*.md 2>/dev/null | wc -l | tr -d ' ')"
+    else
+        echo "    (rules/ 디렉토리 없음)"
+    fi
+}
+
+cmd_add() {
+    local category="${1:-}"
+    [ -z "$category" ] && { echo "사용: goax spirit add <category>" >&2; exit 1; }
+
+    [ -d "$SPIRIT_DIR/rules" ] || die "$SPIRIT_DIR/rules 없음 — goax up 먼저 실행"
+
+    local file="$SPIRIT_DIR/rules/$category.md"
+    [ -f "$file" ] && die "이미 존재: $file"
+
+    # _TEMPLATE.md를 source of truth로 사용
+    local template="$SPIRIT_DIR/rules/_TEMPLATE.md"
+    if [ ! -f "$template" ]; then
+        # fallback: goax repo의 default 템플릿
+        template="$GOAX_TEMPLATES/default/.ax/spirit/rules/_TEMPLATE.md"
+    fi
+    [ -f "$template" ] || die "_TEMPLATE.md를 찾을 수 없음"
+
+    # 카테고리명 → ID prefix (대문자 + 처음 4자)
+    local prefix=$(echo "$category" | tr 'a-z' 'A-Z' | head -c 4)
+    local title=$(echo "$category" | sed -E 's/(^|-)([a-z])/\U\2/g; s/-/ /g')
+
+    # _TEMPLATE.md를 복사하면서 placeholder 치환
+    sed -e "s/__CATEGORY__/$category/g" \
+        -e "s/__PREFIX__/$prefix/g" \
+        -e "s/__Category Title__/$title/g" \
+        "$template" > "$file"
+
+    say "+ $file (템플릿: $template)"
+    say "본문 작성 후 \`goax spirit lint\`로 검증해."
+}
+
+cmd_lint() {
+    [ -d "$SPIRIT_DIR/rules" ] || die "$SPIRIT_DIR/rules 없음"
+
+    local errors=0
+    local seen_ids=""
+
+    for f in "$SPIRIT_DIR/rules"/*.md; do
+        [ -f "$f" ] || continue
+        # _TEMPLATE.md는 placeholder 파일이라 검증 제외
+        case "$(basename "$f")" in
+            _*) continue ;;
+        esac
+        local rel="${f#$PROJECT_ROOT/}"
+
+        # frontmatter 검증
+        if ! head -1 "$f" | grep -q '^---$'; then
+            echo "❌ $rel: frontmatter 시작 (---) 누락"
+            errors=$((errors + 1))
+        fi
+
+        if ! head -10 "$f" | grep -q '^category:'; then
+            echo "❌ $rel: frontmatter에 'category:' 누락"
+            errors=$((errors + 1))
+        fi
+
+        # 카테고리 = 파일명
+        local fname=$(basename "$f" .md)
+        local fcat=$(grep '^category:' "$f" | head -1 | awk '{print $2}')
+        if [ "$fname" != "$fcat" ]; then
+            echo "⚠ $rel: 파일명($fname) != category($fcat)"
+        fi
+
+        # ID 추출 + 중복 검사
+        while read -r id; do
+            [ -z "$id" ] && continue
+            if echo "$seen_ids" | grep -qw "$id"; then
+                echo "❌ $rel: ID 중복 — $id"
+                errors=$((errors + 1))
+            fi
+            seen_ids="$seen_ids $id"
+        done < <(grep -oE '^## SP-[A-Z]+-[0-9]{3}' "$f" | sed 's/^## //')
+    done
+
+    local total_files=$(ls "$SPIRIT_DIR/rules"/*.md 2>/dev/null | wc -l | tr -d ' ')
+    local total_ids=$(echo "$seen_ids" | wc -w | tr -d ' ')
+
+    echo ""
+    if [ "$errors" = "0" ]; then
+        printf '\033[32m✓ lint 통과\033[0m  파일 %s개 / 룰 %s개\n' "$total_files" "$total_ids"
+    else
+        printf '\033[31m✗ %s개 오류\033[0m\n' "$errors"
+        return 1
+    fi
+}
+
+cmd="${1:-status}"
+shift || true
+case "$cmd" in
+    add)    cmd_add "$@" ;;
+    lint)   cmd_lint ;;
+    status|"") cmd_status ;;
+    --help|-h) usage ;;
+    *) die "알 수 없는 서브명령: $cmd (goax spirit --help)" ;;
+esac

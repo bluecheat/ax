@@ -12,10 +12,10 @@
 | **ADR** | Architecture Decision Record. *왜* 이 결정이고 *무엇을* 거부했는가 |
 | **Spec / Policy** | 도메인 정의 / 비즈니스 정책 |
 | **Persona** | 도메인 전문가 skill (예: payment-engineer) |
-| **Generator / Evaluator** | PDF의 self-praise bias 제거 모델. 코드를 쓰는 세션 ≠ 평가하는 세션 |
+| **Generator / Evaluator** | Anthropic 모델 운영 사례에서 인용된 self-praise bias 제거 패턴 (하네스 엔지니어링 모델 Generator/Evaluator 분리). 코드를 쓰는 세션 ≠ 평가하는 세션 |
 | **Computational sensor** | 결정론적·빠름 — linter, typecheck |
 | **Inferential sensor** | AI-led 깊은 평가 — agent, CodeRabbit |
 | **Structural test** | 레이어/모듈 의존 방향 위반 자동 검출 |
 | **Circuit Breaker** | 무한 루프 차단 — 같은 명령 N회 실패 시 정지 |
-| **Mistake Loop** | `.ax-first/mistakes/` 캡처 → audit → 룰 승격 |
-| **Preset** | ax-first init의 옵션 — default, ax 등. 기본 위에 overlay |
+| **Mistake Loop** | `.ax/mistakes/` 캡처 → audit → 룰 승격 |
+| **Preset** | goax init의 옵션 — default, ax 등. 기본 위에 overlay |

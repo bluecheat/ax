@@ -1,6 +1,6 @@
 # Customization — 자기 프로젝트로 맞춤화
 
-`ax-first init` 직후 손봐야 할 것 5가지.
+`goax init` 직후 손봐야 할 것 5가지.
 
 ## 1. CLAUDE.md (Layer 1)
 
@@ -14,7 +14,7 @@
 - [ ] MANDATORY가 사람 승인 가능한 형태인가
 - [ ] 시그널 이모지(🔴🟡🔵) 보존
 
-## 2. `.ax-first/config.yml`
+## 2. `.ax/config.yml`
 
 Triage가 참조하는 핵심 설정.
 
@@ -33,7 +33,7 @@ sensors:
 
 ## 3. Hooks (Sensors)
 
-`.claude/hooks/post-edit/lint-changed.sh`의 lint 명령을 자기 스택으로:
+`.ax/hooks/post-edit/lint-changed.sh`의 lint 명령을 자기 스택으로:
 
 ```bash
 case "$TARGET_PATH" in
@@ -44,20 +44,20 @@ case "$TARGET_PATH" in
 esac
 ```
 
-`.claude/hooks/pre-commit/critical-rule-grep.sh`의 정적 패턴을 자기 CRITICAL 룰로 확장.
+`.ax/hooks/pre-commit/critical-rule-grep.sh`의 정적 패턴을 자기 CRITICAL 룰로 확장.
 
 ## 4. 모듈 CLAUDE.md (Layer 2)
 
 모노레포면 각 앱/모듈에:
 
 ```bash
-# 예: crou-mono
+# 예: 모노레포
 touch apps/api/CLAUDE.md
 touch apps/web/CLAUDE.md
 touch apps/mobile/CLAUDE.md
 
-# 예: commerce
-for m in commerce-core commerce-rest commerce-data ...; do
+# 예: 모듈 단위 sub-CLAUDE
+for m in module-a module-b module-c ...; do
   touch "$m/CLAUDE.md"
 done
 ```
@@ -66,7 +66,7 @@ done
 
 ## 5. Personas (선택)
 
-`.claude/skills/personas/<role>/SKILL.md` 신설. 트리거 키워드를 명확히:
+`.ax/skills/personas/<role>/SKILL.md` 신설. 트리거 키워드를 명확히:
 
 ```yaml
 ---
@@ -83,7 +83,7 @@ description: "결제·정산 도메인 전담. 멱등성·PG 연동·금액 흐�
 # .github/workflows/structural-check.yml
 - name: Module dependency check
   run: |
-    .claude/hooks/post-edit/structural-check.sh
+    .ax/hooks/post-edit/structural-check.sh
   continue-on-error: true   # warning 모드 (config.yml의 sensors.mode와 맞춤)
 ```
 
@@ -91,7 +91,7 @@ description: "결제·정산 도메인 전담. 멱등성·PG 연동·금액 흐�
 
 ## 안티 패턴
 
-- ax-first init 결과를 그대로 두고 사용 → 자기 프로젝트 컨텍스트 무시
+- goax up 결과를 그대로 두고 사용 → 자기 프로젝트 컨텍스트 무시
 - CLAUDE.md를 매주 새로 쓰기 → 같은 룰 재발 + 컨벤션 변동성 ↑
 - mode=fail 즉시 적용 → 팀이 동의 안 한 룰 강제 → 반발
 - preset에 의존 → preset 작성자의 가정이 우리 환경과 다를 수 있음 (preset은 출발점일 뿐)

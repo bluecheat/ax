@@ -33,7 +33,7 @@ CLAUDE.md (Layer 1 Constitution)에서 추출한 룰을 작업 흐름 안에서 
 ## CLI 연동
 
 ```bash
-.claude/hooks/pre-commit/critical-rule-grep.sh
+.ax/hooks/pre-commit/critical-rule-grep.sh
 ```
 
 ## 안티 패턴

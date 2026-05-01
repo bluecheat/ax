@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+# goax up — 한 명령으로 모든 셋업
+set -euo pipefail
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/common.sh"
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/discover.sh"
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/migrate.sh"
+GOAX_ROOT="${GOAX_ROOT:?run via goax}"
+
+DRY_RUN=0
+AUTO=""
+PRESET="default"
+FORCE=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --dry-run) DRY_RUN=1; shift ;;
+        --auto)    AUTO="$2"; shift 2 ;;
+        --preset)  PRESET="$2"; shift 2 ;;
+        --force)   FORCE=1; shift ;;
+        --help|-h)
+            cat <<HELP
+goax up — 프로젝트에 goax 설치/도입
+
+옵션:
+  --preset <name>    default | starter (default가 minimal)
+  --force            기존 .ax/ 있어도 재설치
+  --dry-run          plan만, apply 안 함
+  --auto a,a,a,a     brownfield Q1\~Q4 자동 응답
+HELP
+            exit 0 ;;
+        *) shift ;;
+    esac
+done
+
+PROJECT_ROOT="$(pwd)"
+
+# ─────────────────────────────────────────────────────────────
+# greenfield_flow — 즉시 골격 깔기
+# ─────────────────────────────────────────────────────────────
+greenfield_flow() {
+    say "신규/빈 프로젝트 — 즉시 골격 깔기 (preset: $PRESET)"
+    bash "$GOAX_ROOT/bin/goax-init" --preset "$PRESET" $([ "$FORCE" = "1" ] && echo "--force") 2>&1 | sed 's/^/  /'
+}
+
+# ─────────────────────────────────────────────────────────────
+# brownfield_flow — 4-phase 인터랙티브
+# ─────────────────────────────────────────────────────────────
+ask() {
+    local prompt="$1" default="$2" idx="$3"
+    local answer=""
+    if [ -n "$AUTO" ]; then
+        answer=$(echo "$AUTO" | cut -d, -f"$idx")
+    fi
+    if [ -z "$answer" ]; then
+        printf '%s [%s]: ' "$prompt" "$default"
+        read -r answer </dev/tty || answer="$default"
+        [ -z "$answer" ] && answer="$default"
+    else
+        printf '%s [%s] → %s (auto)\n' "$prompt" "$default" "$answer"
+    fi
+    echo "$answer"
+}
+
+brownfield_flow() {
+    printf '\033[1m📋 결정 4개 (Plan)\033[0m\n\n'
+
+    echo "[Q1] CLAUDE.md (${DISCOVER_CLAUDE_MD_LINES}줄, 룰 \~${DISCOVER_CLAUDE_MD_RULES}개) 처리?"
+    echo "  a) 자동 분류 → adoption-plan.md (권장)"
+    echo "  b) 수동"
+    echo "  c) 보류"
+    Q1=$(ask "선택" "a" 1)
+    echo ""
+
+    echo "[Q2] 도메인 위험도 (.ax/config.yml)"
+    echo "  추정: ${DISCOVER_DOMAINS:-(없음)}"
+    echo "  a) 추정값 채택 (권장)"
+    echo "  b) 빈 값"
+    Q2=$(ask "선택" "a" 2)
+    echo ""
+
+    echo "[Q3] hooks 강도"
+    [ -n "$DISCOVER_ACTIVE_HOOKS" ] && echo "  ⚠ 기존 hooks: $DISCOVER_ACTIVE_HOOKS"
+    echo "  a) warning (안전 — 권장)"
+    echo "  b) fail (강제 차단)"
+    echo "  c) 비활성"
+    Q3=$(ask "선택" "a" 3)
+    echo ""
+
+    if [ -n "$DISCOVER_EXTERNAL_SPECS" ]; then
+        echo "[Q4] 외부 spec: $DISCOVER_EXTERNAL_SPECS"
+        echo "  a) 링크만 (변경 0)"
+        echo "  b) 흡수 (mv)"
+        echo "  c) 무시"
+        Q4=$(ask "선택" "a" 4)
+    else
+        Q4="-"
+    fi
+    echo ""
+
+    if [ "$DRY_RUN" = "1" ]; then
+        say "DRY-RUN — Apply 안 함."
+        return 0
+    fi
+
+    final=$(ask "적용할까요? [Y/n]" "Y" 5)
+    [ "$final" != "Y" ] && [ "$final" != "y" ] && { say "취소됨"; return 0; }
+
+    # init 호출 (internal)
+    bash "$GOAX_ROOT/bin/goax-init" --preset "$PRESET" 2>&1 | sed 's/^/  /' || true
+
+    # Q1: adoption-plan.md
+    [ "$Q1" = "a" ] && {
+        local plan=$(migrate_emit_plan "$PROJECT_ROOT")
+        say "+ adoption-plan.md ($plan)"
+    }
+
+    # Q2: domain_risk
+    [ "$Q2" = "a" ] && [ -f "$PROJECT_ROOT/.ax/config.yml" ] && {
+        for d in $DISCOVER_DOMAINS; do
+            local lvl="L1"
+            case "$d" in payment|payments|billing|결제) lvl="L3";; order|orders|settlement|주문|정산) lvl="L2";; auth|보안|security) lvl="L2";; esac
+            grep -qE "^[[:space:]]+$d:" "$PROJECT_ROOT/.ax/config.yml" || \
+                sed -i "/^domain_risk:/a\\  $d: $lvl" "$PROJECT_ROOT/.ax/config.yml"
+        done
+    }
+
+    # Q3: hooks 강도
+    case "$Q3" in
+        a) sed -i 's|mode: fail|mode: warning|' "$PROJECT_ROOT/.ax/config.yml" 2>/dev/null || true ;;
+        b) sed -i 's|mode: warning|mode: fail|' "$PROJECT_ROOT/.ax/config.yml" 2>/dev/null || true ;;
+        c) [ -f "$PROJECT_ROOT/.claude/settings.json" ] && mv "$PROJECT_ROOT/.claude/settings.json" "$PROJECT_ROOT/.claude/settings.json.disabled" ;;
+    esac
+
+    # Q4: 외부 spec
+    [ "$Q4" = "a" ] && [ -n "$DISCOVER_EXTERNAL_SPECS" ] && [ -d "$PROJECT_ROOT/.ax/spirit" ] && {
+        cat >> "$PROJECT_ROOT/.ax/spirit/README.md" <<EOFL
+
+## 외부 reference
+
+- $DISCOVER_EXTERNAL_SPECS
+EOFL
+    }
+}
+
+# ─────────────────────────────────────────────────────────────
+# 자동 감지 + 분기
+# ─────────────────────────────────────────────────────────────
+say "프로젝트 분석: $PROJECT_ROOT"
+
+discover_run "$PROJECT_ROOT"
+
+is_brownfield=0
+[ "$DISCOVER_CLAUDE_MD_LINES" -gt 0 ] && is_brownfield=1
+[ -n "$DISCOVER_ACTIVE_HOOKS" ] && is_brownfield=1
+[ "$DISCOVER_MODULE_COUNT" -gt 1 ] && is_brownfield=1
+[ -n "$DISCOVER_EXTERNAL_SPECS" ] && is_brownfield=1
+
+# 이미 .ax 있으면 — 재설치는 --force 필요
+if [ -d "$PROJECT_ROOT/.ax" ] && [ "$FORCE" != "1" ]; then
+    warn "이미 goax 설치됨. \`goax doctor\` 로 상태 점검 / \`goax up --force\` 로 재설치"
+    exit 0
+fi
+
+if [ "$is_brownfield" = "1" ]; then
+    echo ""
+    discover_print
+    echo ""
+    brownfield_flow
+else
+    greenfield_flow
+fi
+
+cat <<DONE
+
+\033[32m✓ goax up 완료\033[0m
+
+다음 단계 (한 줄):
+  goax doctor
+
+doctor가 비어있는 spirit/values, persona, 첫 ADR 등을 짚고 어떤 템플릿으로 채울지 안내해요.
+
+이후 Claude Code에서 평소처럼 말하면 돼요:
+  "결제 환불 정책 변경 작업 계획 세워줘"
+  → triage skill이 자동 매칭, spirit·룰·페르소나가 자동 주입돼요.
+DONE

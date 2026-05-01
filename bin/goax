@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# goax — main CLI dispatcher
+# 메인 surface: up / doctor / update (3개)
+# Advanced: triage / rules / find / spec / spirit / audit
+set -euo pipefail
+
+VERSION="0.1.0"
+
+RESOLVED_BIN="$(readlink -f "$0" 2>/dev/null || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$0")"
+GOAX_ROOT="$(dirname "$(dirname "$RESOLVED_BIN")")"
+export GOAX_ROOT
+export GOAX_LIB="$GOAX_ROOT/lib"
+export GOAX_TEMPLATES="$GOAX_ROOT/templates"
+
+usage() {
+    cat <<EOF
+goax v$VERSION — AI Agent Harness Framework
+
+가장 자주 쓰는 명령 (3개):
+  up [--auto a,a,a,a]         프로젝트에 goax 설치/도입 (greenfield/brownfield 자동 감지)
+  doctor                       상태 진단 + 다음 단계 가이드 (어디 채울지 친절히 안내)
+  update                       goax 자체 업데이트
+
+자연어 우선:
+  설치 후 Claude Code에서 평소처럼 "X 구현해줘", "Y 작업 계획 세워줘" 라고 말하면
+  triage skill이 자동 매칭돼서 spirit·룰·페르소나가 자동 주입돼요.
+
+Advanced (필요할 때만 — doctor가 안내):
+  triage <설명>               작업을 Size×Risk로 분류
+  spec [new|check|list]       Spec-Driven Development (SSOT)
+  spirit [add|lint|status]    Spirit 디렉토리 관리 (.ax/spirit/)
+  rules [옵션]                룰 인덱스/검색
+  find <token>                ID로 룰 1개 + ADR 링크
+  audit                       mistakes 심사 + 룰 승격 후보
+
+Docs:
+  https://github.com/bluecheat/ax/blob/main/CONCEPTS.md
+EOF
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+    # 메인 3개
+    up)       exec "$GOAX_ROOT/bin/goax-up" "$@" ;;
+    doctor)   exec "$GOAX_ROOT/bin/goax-doctor" "$@" ;;
+    update)   exec "$GOAX_ROOT/bin/goax-update" "$@" ;;
+
+    # Advanced (숨겨진 게 아니라 도구로 노출 — 단 help에서 분리)
+    triage)   exec "$GOAX_ROOT/bin/goax-triage" "$@" ;;
+    spec)     exec "$GOAX_ROOT/bin/goax-spec" "$@" ;;
+    spirit)   exec "$GOAX_ROOT/bin/goax-spirit" "$@" ;;
+    rules)    exec "$GOAX_ROOT/bin/goax-rules" "$@" ;;
+    find)     exec "$GOAX_ROOT/bin/goax-find" "$@" ;;
+    audit)    exec "$GOAX_ROOT/bin/goax-audit" "$@" ;;
+
+    # init은 제거 — up이 흡수. internal로만 호출됨.
+    init)     printf '\033[33m[goax]\033[0m `goax init` 은 제거됐어요. `goax up` 을 사용해주세요 (greenfield/brownfield 자동 감지).\n' >&2; exit 1 ;;
+
+    version|--version|-v) echo "goax $VERSION" ;;
+    help|--help|-h) usage ;;
+    *) printf '\033[31m[goax]\033[0m 알 수 없는 명령: %s (goax help)\n' "$cmd" >&2; exit 1 ;;
+esac

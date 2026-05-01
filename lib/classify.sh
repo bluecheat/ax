@@ -1,4 +1,4 @@
-# ax-first classify — Size × Risk 분류 로직
+# goax classify — Size × Risk 분류 로직
 # config.yml에서 도메인별 위험도 매트릭스를 읽어 작업 설명을 분류
 
 # 키워드 매칭 헬퍼 (대소문자 무시, 한국어 OK)
@@ -87,9 +87,32 @@ classify() {
         L*L2|L*L3|XL*) gate="true" ;;
     esac
 
+    # ── spirit context 매칭 (v0.3)
+    local project_root
+    project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+    local spirit_dir="$project_root/.ax/spirit"
+    local spirit_status=""
+    local spirit_rules_matched=""
+
+    if [ ! -f "$spirit_dir/values.md" ] || [ ! -f "$spirit_dir/tone.md" ]; then
+        spirit_status="MISSING"
+    else
+        spirit_status="OK"
+        # rules/ 안에서 카테고리별 매칭 (간단 휴리스틱)
+        if [ -d "$spirit_dir/rules" ]; then
+            for rf in "$spirit_dir/rules"/*.md; do
+                [ -f "$rf" ] || continue
+                local cat
+                cat=$(basename "$rf" .md)
+                # 모든 룰 일단 포함 (matching은 v0.3.1에서 정교화)
+                spirit_rules_matched="$spirit_rules_matched .ax/spirit/rules/$cat.md"
+            done
+        fi
+    fi
+
     # ── 출력
     cat <<EOF
-🔍 ax-first triage
+🔍 goax triage
 
   설명:    $desc
   size:    $size
@@ -98,6 +121,7 @@ classify() {
   path:    $path
   sensors: $sensors
   human gate: $gate
+  spirit:  $spirit_status$([ -n "$spirit_rules_matched" ] && echo " (rules: $(echo $spirit_rules_matched | wc -w | tr -d " ")개 매칭)")
 
 권장 다음 단계:
 EOF
@@ -111,5 +135,31 @@ EOF
     if [ "$gate" = "true" ]; then
         echo
         echo "  ⚠ MANDATORY: 사람 architect 승인 필요한 작업"
+    fi
+
+    # size=L/XL 또는 risk=L2/L3 → spec 우선 작성 권장
+    case "$size" in
+        L|XL)
+            echo
+            echo "  📋 SPEC 우선 작성 권장 — \`goax spec new <name>\`"
+            echo "     (size $size: spec.md/plan.md 게이팅 후 implement)"
+            ;;
+    esac
+    case "$default_risk" in
+        L2|L3)
+            if [ "$size" != "L" ] && [ "$size" != "XL" ]; then
+                echo
+                echo "  📋 SPEC 우선 작성 권장 — \`goax spec new <name>\`"
+                echo "     (risk $default_risk: spec으로 의도 명문화)"
+            fi
+            ;;
+    esac
+
+    # spirit MISSING 시 강제 차단 (옵션 4-B fail)
+    if [ "$spirit_status" = "MISSING" ]; then
+        echo ""
+        echo "  ✗ \033[31m.ax/spirit/ 누락\033[0m — values.md 또는 tone.md 없음"
+        echo "    복구: goax up --force"
+        return 1
     fi
 }

@@ -5,7 +5,7 @@ description: "ADR (Architecture Decision Record) 작성 워크플로우. 새 결
 
 # ADR Write Workflow
 
-ADR는 PDF 4기둥 중 가장 중요 — 거부된 패턴을 기록함으로써 AI의 context drift를 막는다.
+ADR는 4기둥 docs 모델(PRD·Architecture·ADR·UI) 중 가장 중요 — 거부된 패턴을 기록함으로써 AI의 context drift를 막는다.
 
 ## When to use
 

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# goax update — goax 자체를 최신 main으로 업데이트
+set -euo pipefail
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/common.sh"
+GOAX_ROOT="${GOAX_ROOT:?run via goax}"
+
+if [ -d "$GOAX_ROOT/.git" ]; then
+    say "업데이트 중: $GOAX_ROOT"
+    git -C "$GOAX_ROOT" fetch --quiet origin
+    cur=$(git -C "$GOAX_ROOT" rev-parse HEAD)
+    git -C "$GOAX_ROOT" reset --hard origin/main
+    new=$(git -C "$GOAX_ROOT" rev-parse HEAD)
+    if [ "$cur" = "$new" ]; then
+        say "이미 최신"
+    else
+        say "업데이트 완료: ${cur:0:8} → ${new:0:8}"
+        git -C "$GOAX_ROOT" log --oneline "$cur..$new" | sed 's/^/    /'
+    fi
+else
+    die "$AX_ROOT는 git repo가 아님 — 수동 재설치 필요"
+fi

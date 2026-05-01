@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# goax spec — Spec-Driven Development (SDD) 워크플로우
+set -euo pipefail
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/common.sh"
+GOAX_ROOT="${GOAX_ROOT:?run via goax}"
+
+PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+SPEC_DIR="$PROJECT_ROOT/docs/spec/feature"
+TEMPLATES="$PROJECT_ROOT/docs/spec/_templates"
+
+usage() {
+    cat <<EOF
+goax spec — Spec-Driven Development
+
+사용:
+  goax spec new <name>         새 피처 spec 디렉토리 + 템플릿 복사
+  goax spec check [<spec-id>]  완성도 검증 (NEEDS CLARIFICATION 게이팅)
+  goax spec list               모든 spec 목록 (상태별)
+
+예시:
+  goax spec new payment-refund-window
+  goax spec check 001                  # spec ID로 검증
+  goax spec check                      # 모든 spec 검증
+
+SSOT 원칙:
+  spec.md가 단일 진실. plan/tasks는 spec을 입력으로 받음.
+  NEEDS CLARIFICATION 마커가 1개라도 남으면 'check' fail.
+EOF
+}
+
+next_spec_id() {
+    [ -d "$SPEC_DIR" ] || { echo "001"; return; }
+    local last=$(ls "$SPEC_DIR" 2>/dev/null | grep -oE '^[0-9]{3}' | sort -n | tail -1)
+    [ -z "$last" ] && { echo "001"; return; }
+    printf '%03d' $((10#$last + 1))
+}
+
+cmd_new() {
+    local name="${1:-}"
+    [ -z "$name" ] && { echo "사용: goax spec new <name>" >&2; exit 1; }
+
+    [ -d "$TEMPLATES" ] || die "$TEMPLATES 없음 — goax up 후 실행"
+
+    local id=$(next_spec_id)
+    local slug=$(echo "$name" | tr 'A-Z _' 'a-z--' | tr -cd 'a-z0-9-')
+    local target="$SPEC_DIR/$id-$slug"
+
+    [ -e "$target" ] && die "이미 존재: $target"
+
+    mkdir -p "$target/contracts" "$target/checklists"
+
+    # 필수 4 파일 복사
+    for f in spec.md plan.md tasks.md; do
+        cp "$TEMPLATES/$f" "$target/$f"
+    done
+    cp "$TEMPLATES/checklists/requirements.md" "$target/checklists/requirements.md"
+
+    # 선택 파일 — 사용자가 필요시 추가
+    say "+ docs/spec/feature/$id-$slug/"
+    say "  ├── spec.md            (필수, WHAT/WHY)"
+    say "  ├── plan.md            (필수, HOW)"
+    say "  ├── tasks.md           (필수, 작업 분해)"
+    say "  └── checklists/requirements.md   (게이팅)"
+    echo
+    say "선택 파일이 필요하면 \\$TEMPLATES 에서 복사:"
+    say "  - research.md / data-model.md / quickstart.md"
+    say "  - contracts/api.yaml / contracts/events.md"
+    echo
+    say "다음: spec.md 채우기 → goax spec check $id"
+}
+
+check_one_spec() {
+    local d="$1"
+    local id=$(basename "$d" | grep -oE '^[0-9]+')
+    local errors=0
+    local warnings=0
+
+    printf '\n📋 %s\n' "$(basename "$d")"
+
+    # spec.md 존재
+    if [ ! -f "$d/spec.md" ]; then
+        printf '  \033[31m✗\033[0m spec.md 누락\n'
+        errors=$((errors+1))
+        return $errors
+    fi
+
+    # NEEDS CLARIFICATION 마커
+    local needs=$(grep -c "NEEDS CLARIFICATION" "$d/spec.md" 2>/dev/null || echo 0)
+    if [ "$needs" -gt 0 ]; then
+        printf '  \033[31m✗\033[0m NEEDS CLARIFICATION 미해소: %s건\n' "$needs"
+        errors=$((errors+1))
+    else
+        printf '  \033[32m✓\033[0m NEEDS CLARIFICATION 해소됨\n'
+    fi
+
+    # checklists/requirements.md 미체크 항목
+    if [ -f "$d/checklists/requirements.md" ]; then
+        local unchecked=$(grep -c '^- \[ \]' "$d/checklists/requirements.md" 2>/dev/null || echo 0)
+        if [ "$unchecked" -gt 0 ]; then
+            printf '  \033[33m·\033[0m 체크리스트 미완료: %s건 (warning)\n' "$unchecked"
+            warnings=$((warnings+1))
+        else
+            printf '  \033[32m✓\033[0m 체크리스트 모두 완료\n'
+        fi
+    fi
+
+    # plan/tasks 존재 (warning — spec만 통과해도 OK)
+    [ -f "$d/plan.md" ] || { printf '  \033[33m·\033[0m plan.md 미작성\n'; warnings=$((warnings+1)); }
+    [ -f "$d/tasks.md" ] || { printf '  \033[33m·\033[0m tasks.md 미작성\n'; warnings=$((warnings+1)); }
+
+    if [ "$errors" -eq 0 ]; then
+        printf '  \033[32m→ check 통과 (warnings: %s)\033[0m\n' "$warnings"
+    else
+        printf '  \033[31m→ %s개 오류 — implement 단계 차단\033[0m\n' "$errors"
+    fi
+    return "$errors"
+}
+
+cmd_check() {
+    local spec_id="${1:-}"
+    [ -d "$SPEC_DIR" ] || die "$SPEC_DIR 없음 — goax spec new 로 첫 spec 작성"
+
+    local total_errors=0
+    if [ -n "$spec_id" ]; then
+        local target=$(ls -d "$SPEC_DIR"/${spec_id}-* 2>/dev/null | head -1)
+        [ -z "$target" ] && die "spec ID $spec_id 못 찾음"
+        check_one_spec "$target" || total_errors=$((total_errors + $?))
+    else
+        for d in "$SPEC_DIR"/*/; do
+            [ -d "$d" ] || continue
+            check_one_spec "$d" || total_errors=$((total_errors + $?))
+        done
+    fi
+
+    echo
+    if [ "$total_errors" -eq 0 ]; then
+        printf '\033[32m✓ 모든 spec 통과\033[0m\n'
+        return 0
+    else
+        printf '\033[31m✗ 총 %s개 오류\033[0m\n' "$total_errors"
+        return 1
+    fi
+}
+
+cmd_list() {
+    [ -d "$SPEC_DIR" ] || { echo "(spec 없음)"; return; }
+
+    printf '%-6s %-40s %-12s\n' "ID" "이름" "상태"
+    printf '%-6s %-40s %-12s\n' "----" "----" "----"
+
+    for d in "$SPEC_DIR"/*/; do
+        [ -d "$d" ] || continue
+        local name=$(basename "$d")
+        local id=$(echo "$name" | grep -oE '^[0-9]+')
+        local slug=$(echo "$name" | sed -E 's/^[0-9]+-//')
+
+        local status="초안"
+        if [ -f "$d/spec.md" ]; then
+            local needs=$(grep -c "NEEDS CLARIFICATION" "$d/spec.md" 2>/dev/null || echo 0)
+            local plan_ok=$([ -f "$d/plan.md" ] && echo 1 || echo 0)
+            local tasks_ok=$([ -f "$d/tasks.md" ] && echo 1 || echo 0)
+            if [ "$needs" -gt 0 ]; then
+                status="🔵 NEEDS"
+            elif [ "$plan_ok" = "1" ] && [ "$tasks_ok" = "1" ]; then
+                status="🟢 READY"
+            else
+                status="🟡 SPEC만"
+            fi
+        fi
+
+        printf '%-6s %-40s %-12s\n' "$id" "$slug" "$status"
+    done
+}
+
+cmd="${1:-list}"
+shift || true
+case "$cmd" in
+    new)    cmd_new "$@" ;;
+    check)  cmd_check "$@" ;;
+    list)   cmd_list ;;
+    --help|-h) usage ;;
+    *) die "알 수 없는 서브명령: $cmd (goax spec --help)" ;;
+esac

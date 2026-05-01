@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# goax find — 룰 ID로 검색
+set -euo pipefail
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/common.sh"
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/rules.sh"
+GOAX_ROOT="${GOAX_ROOT:?run via goax}"
+
+if [ $# -eq 0 ]; then
+    cat <<EOF
+사용: goax find <token>
+
+예시:
+  goax find AX:CRITICAL:001
+  goax find payment:MANDATORY:003
+EOF
+    exit 1
+fi
+
+rules_find_by_id "$1"

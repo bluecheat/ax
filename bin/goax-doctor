@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+# goax doctor — 상태 진단 + 친절한 다음 단계 가이드
+set -euo pipefail
+. "${GOAX_LIB:-$GOAX_ROOT/lib}/common.sh"
+GOAX_ROOT="${GOAX_ROOT:?run via goax}"
+
+PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+score=0
+total=0
+NEXT_STEPS=()
+
+check() {
+    local label="$1" path="$2" guide="${3:-}"
+    total=$((total+1))
+    if [ -e "$PROJECT_ROOT/$path" ]; then
+        printf '  \033[32m✓\033[0m %s\n' "$label"
+        score=$((score+1))
+    else
+        printf '  \033[31m✗\033[0m %s  → %s 없음\n' "$label" "$path"
+        [ -n "$guide" ] && NEXT_STEPS+=("$guide")
+    fi
+}
+
+soft_check() {
+    local label="$1" path="$2" guide="${3:-}"
+    total=$((total+1))
+    if [ -e "$PROJECT_ROOT/$path" ]; then
+        # 비어있는지 체크 (md 파일은 placeholder만 있을 수도)
+        if [ -f "$PROJECT_ROOT/$path" ] && [ ! -s "$PROJECT_ROOT/$path" ]; then
+            printf '  \033[33m·\033[0m %s  → 빈 파일\n' "$label"
+            [ -n "$guide" ] && NEXT_STEPS+=("$guide")
+        else
+            printf '  \033[32m✓\033[0m %s\n' "$label"
+            score=$((score+1))
+        fi
+    else
+        printf '  \033[33m·\033[0m %s  → %s (선택사항)\n' "$label" "$path"
+        [ -n "$guide" ] && NEXT_STEPS+=("$guide")
+    fi
+}
+
+content_check() {
+    # 파일이 placeholder 텍스트만 있는지 체크
+    local label="$1" path="$2" placeholder="$3" guide="$4"
+    total=$((total+1))
+    if [ ! -f "$PROJECT_ROOT/$path" ]; then
+        printf '  \033[31m✗\033[0m %s  → %s 없음\n' "$label" "$path"
+        NEXT_STEPS+=("$guide")
+        return
+    fi
+    if grep -q "$placeholder" "$PROJECT_ROOT/$path"; then
+        printf '  \033[33m·\033[0m %s  → placeholder 그대로 (사용자가 채워야 함)\n' "$label"
+        NEXT_STEPS+=("$guide")
+    else
+        printf '  \033[32m✓\033[0m %s  (사용자 정의됨)\n' "$label"
+        score=$((score+1))
+    fi
+}
+
+count_check() {
+    # 디렉토리 안 파일 수 체크
+    local label="$1" dir="$2" min="$3" guide="$4"
+    total=$((total+1))
+    local cnt=0
+    if [ -d "$PROJECT_ROOT/$dir" ]; then
+        cnt=$(find "$PROJECT_ROOT/$dir" -maxdepth 2 -type f -name "*.md" -not -name "_*" -not -name "0000-*" 2>/dev/null | wc -l | tr -d ' ')
+    fi
+    if [ "$cnt" -ge "$min" ]; then
+        printf '  \033[32m✓\033[0m %s (%s개)\n' "$label" "$cnt"
+        score=$((score+1))
+    else
+        printf '  \033[33m·\033[0m %s (%s개, %s+ 권장)\n' "$label" "$cnt" "$min"
+        NEXT_STEPS+=("$guide")
+    fi
+}
+
+echo "🩺 goax doctor — $PROJECT_ROOT"
+echo
+
+echo "Layer 1 — Constitution"
+content_check "CLAUDE.md (Constitution)" "CLAUDE.md" \
+    '\*(첫 번째 비협상 룰을 여기에' \
+    "CLAUDE.md 의 CRITICAL 자리에 우리 팀 비협상 룰 3\~5개 채우기 (예: AX:CRITICAL:001 형식)"
+
+echo
+echo "Layer 0 — Triage / 설정"
+check "config.yml" ".ax/config.yml" \
+    ".ax/config.yml — domain_risk 매트릭스를 우리 도메인으로 갱신"
+check "triage skill" ".claude/skills/global/triage/SKILL.md"
+
+echo
+echo "Cross-cut — Spirit"
+content_check "spirit/values.md" ".ax/spirit/values.md" \
+    '<여기에 본문' \
+    ".ax/spirit/values.md 검토 — 우리 팀 가치로 수정/확장 (긍정 편향 금지·비판적 사고·자가 점검 등이 default)"
+content_check "spirit/tone.md" ".ax/spirit/tone.md" \
+    '<자기 팀' \
+    ".ax/spirit/tone.md 검토 — ~해요 체 + 우리 팀 톤 (안티패턴 추가 권장)"
+count_check "spirit/rules/<카테고리>.md" ".ax/spirit/rules" 1 \
+    "spirit/rules/ 에 카테고리 추가 — 'goax spirit add <category>' (security/naming/pr/testing 등)"
+
+echo
+echo "Layer 2 — Module Rules (모노레포면 권장)"
+soft_check "모듈 sub-CLAUDE.md" "apps" \
+    "모노레포면 apps/<app>/CLAUDE.md 추가 (Layer 2 룰)"
+
+echo
+echo "Layer 3 — Spec / ADR"
+count_check "ADR (docs/adr/)" "docs/adr" 1 \
+    "첫 ADR 작성 — 현재 가장 큰 결정 1개를 docs/adr/0001-*.md (템플릿: docs/adr/0000-template.md)"
+soft_check "Spec templates (docs/spec/_templates/)" "docs/spec/_templates/spec.md" \
+    "spec 작성: 'goax spec new <feature-name>' — Triage L+ 시 자동 권장됨"
+
+echo
+echo "Personas (도메인별 사고법)"
+count_check "personas (도메인 추가)" ".claude/skills/personas" 2 \
+    "도메인 persona 추가 — cp .claude/skills/personas/engineer-generalist/SKILL.md → .claude/skills/personas/<your-domain>/SKILL.md"
+
+echo
+echo "Sensors — Hooks"
+check "pre-bash/block-destructive.sh" ".ax/hooks/pre-bash/block-destructive.sh"
+check "pre-commit/critical-rule-grep.sh" ".ax/hooks/pre-commit/critical-rule-grep.sh"
+check ".claude/settings.json (hooks 등록)" ".claude/settings.json"
+
+echo
+printf '점수: %d / %d\n' "$score" "$total"
+if [ "$score" = "$total" ]; then
+    printf '\033[32m✓ 완전\033[0m\n'
+elif [ "$score" -ge $((total * 7 / 10)) ]; then
+    printf '\033[33m· 양호 — 다음 단계로 보강 권장\033[0m\n'
+else
+    printf '\033[31m✗ 부족\033[0m\n'
+fi
+
+# 다음 단계 안내
+if [ ${#NEXT_STEPS[@]} -gt 0 ]; then
+    echo
+    printf '\033[1m📌 다음 단계 (우선순위 순):\033[0m\n\n'
+    i=1
+    for step in "${NEXT_STEPS[@]}"; do
+        printf '  %d. %s\n' "$i" "$step"
+        i=$((i+1))
+    done
+fi
+
+echo
+printf '\033[1m자연어로 시작:\033[0m\n'
+echo '  설치 후 Claude Code에서 "X 구현해줘" / "Y 작업 계획 세워줘" 라고 평소처럼 말하면'
+echo '  triage skill이 자동 매칭돼서 spirit/룰/페르소나가 자동 주입돼요.'
