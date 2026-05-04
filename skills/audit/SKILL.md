@@ -1,6 +1,6 @@
 ---
 name: audit
-description: "Mistake Loop **회고·승격** skill (read+aggregate, review phase). 누적된 .ax/mistakes/*.md 를 카테고리·빈도로 분석하고 룰 승격 후보 제시. 트리거: 'goax audit', '/audit', '실수 회고', '실수 패턴 분석', 'mistakes 정리', 'mistakes 점검', '재발', '같은 문제', '룰 승격', '룰 강화 후보', '또 그걸', '주간 회고'. **'회고'·'심사'·'정리'·'패턴'·'승격'·'재발' 같은 review 의도 키워드만 매칭** — '기록'·'캡처'·'남겨' 같은 capture 의도는 mistake skill 이 담당. 1건 새로 캡처하지 않음 (mistake skill 위임)."
+description: "Mistake Loop **회고·승격** skill (read+aggregate, review phase). 누적된 .ax/mistakes/*.md 를 카테고리·빈도로 분석하고 룰 승격 후보 제시. 트리거: 'goax audit', '/audit', '실수 회고', '실수 분석', '실수 패턴 분석', 'mistakes 정리', 'mistakes 점검', '재발', '같은 문제', '룰 승격', '룰 강화 후보', '또 그걸', '주간 회고'. **'회고'·'심사'·'정리'·'패턴'·'승격'·'재발' 같은 review 의도 키워드만 매칭** — '기록'·'캡처'·'남겨' 같은 capture 의도는 mistake skill 이 담당. 1건 새로 캡처하지 않음 (mistake skill 위임)."
 ---
 
 # goax audit — Mistake Loop (캡처 → 심사 → 승격)
@@ -68,29 +68,31 @@ find .ax/mistakes -name "*.md" -mtime -7 2>/dev/null | sort # 최근 7일
 
  [a] ✓ security → 🔴 CRITICAL     [권장 — 3회+]
   패턴 PG 키 평문 노출 2회 + DB 비번 로그 1회
-  제안 AX:CRITICAL:003 — 시크릿 hardcode 절대 금지
-  생성 CLAUDE.md 시그널 섹션에 룰 추가 + .ax/spirit/rules/<project>-security.md 신설 + @import 한 줄
-  ※ plugin shipped 파일(.ax/spirit/rules/security.md 등) 직접 append 금지 — project-specific 새 파일로
-   만들고 root CLAUDE.md CONVENTION 섹션에 @import. plugin 갱신 시 clobber 방지. (onboarding 절대 금지 #6 참조)
-  수정 mistake 파일 3개에 promoted_to 마킹
-  영향 파일 5개
+  제안 SP-SEC-NNN — 시크릿 hardcode 절대 금지 (frontmatter severity: critical, enforced_by: hook:...)
+  생성 .ax/spirit/rules/<project>-security.md 에 SP-SEC-NNN 추가 (없으면 신설)
+        frontmatter paths: ["**/*.kt", "**/*.kts", ...] 명시 — path-scoped hook 이 매 작업 inject
+  ※ plugin shipped 파일 (security.md, ops.md 등) 직접 append 금지 — project-specific 새 파일로 만들기
+        (onboarding 절대 금지 #6 참조). plugin 갱신 시 clobber 방지.
+  ※ CLAUDE.md 는 안 건드림 — 룰 본문은 spirit/rules 가 SSOT, hook 이 inject. CLAUDE.md 누적 = heavy
+  수정 mistake 파일 3개에 promoted_to 마킹 (promote-mistake.sh --apply)
+  영향 파일 1~2개 (spirit/rules + mistake 마킹)
 
  [b] data → 🔴 CRITICAL       [추천 — 2회]
   패턴 마이그레이션 down 누락 2회
-  제안 AX:CRITICAL:004 — 모든 migration은 down 포함
-  생성/수정/영향 (위와 동일 패턴)
+  제안 SP-DATA-NNN — 모든 migration 은 down 포함
+  생성/수정/영향 (위와 동일 패턴 — spirit/rules 만)
 
  [c] pr → 🟡 MANDATORY       [검토]
-  패턴 refactor + feature 한 PR로 묶음 4회
-  제안 AX:MANDATORY:002 — refactor + feature 한 PR 금지
-  생성/수정/영향
+  패턴 refactor + feature 한 PR 로 묶음 4회
+  제안 SP-PR-NNN — refactor + feature 한 PR 금지 (severity: mandatory, enforced_by: human:pr-review)
+  생성/수정/영향 (spirit/rules 만)
 
  [d] naming → 🔵 CONVENTION      [선택]
   패턴 파일명 underscore vs kebab 혼재 2회
-  제안 SP-NAMING-005 추가 (.ax/spirit/rules/naming.md)
-  생성/수정/영향
+  제안 SP-NAMING-NNN 추가 (.ax/spirit/rules/<project>-naming.md, severity: convention)
+  생성/수정/영향 (spirit/rules 만)
 
- [e] 모두 보류 — 다음 audit으로
+ [e] 모두 보류 — 다음 audit 으로
 
  ▸ 답해주세요 복수 가능: a,b / 또는 [e]
 ```
@@ -101,29 +103,56 @@ find .ax/mistakes -name "*.md" -mtime -7 2>/dev/null | sort # 최근 7일
 - 옵션은 카테고리 단위 — 사용자가 복수 선택 가능 (예: `a, b`)
 - 항상 마지막에 `[e]` 모두 보류 옵션
 
-## 4. 적용 — `promote-mistake.sh --apply` 
+## 4. 적용 — 두 단계 (스크립트 마킹 + LLM 룰 본문)
 
-사용자 승낙 후, 카테고리당 룰 토큰·본문을 결정해 스크립트로 적용:
+사용자 승낙 후, 카테고리당:
+
+### 4.1 mistake 마킹 — `promote-mistake.sh --apply`
 
 ```bash
-# CLAUDE.md 룰 추가 + 해당 카테고리 mistakes에 promoted_to 마킹
 RESULT=$(bash .ax/scripts/bash/promote-mistake.sh --apply --json \
-   --token AX:CRITICAL:003 \
-   --category security \
-   --rule-text "PG 키·시크릿 hardcode 절대 금지")
+   --token SP-SEC-001 \
+   --category security)
 MARKED=$(echo "$RESULT" | jq -r '.result.marked_count')
 ```
 
-스크립트가 자동:
-1. CLAUDE.md에 시그널 라벨로 룰 추가 (🔴/🟡/🔵 토큰으로 결정)
-2. 해당 카테고리의 미승격 mistake 파일들에 `promoted_to: <token>` frontmatter 추가
-3. (선택) hooks 패턴 추가 제안 — `.ax/hooks/pre-commit/critical-rule-grep.sh`에 grep 라인 (수동)
+스크립트가 하는 일 — **mistake 파일 frontmatter 에 `promoted_to: <token>` 추가만**.
+CLAUDE.md / spirit/rules 는 안 건드림 (룰 본문 작성은 LLM 책임).
 
-각 단계 ✓로 보고:
+### 4.2 룰 본문 — LLM 이 spirit/rules 에 직접 Edit
+
+`.ax/spirit/rules/<project>-<category>.md` 에 SP-<CAT>-NNN 추가:
+
+```markdown
+---
+category: security
+applies_to: [code, pr, review]
+keywords: [secret, api-key, password, ...]
+paths:
+  - "**/*.kt"
+  - "**/*.properties"
+  - "**/*.yaml"
+severity: critical
+enforced_by:
+  - hook:.ax/hooks/pre-commit/critical-rule-grep.sh
+enforced_kind: block
+---
+
+## SP-SEC-001: 시크릿·API 키·비번 hardcode 금지
+- 위반 예: `password = "..."`, `apiKey: "ghp_..."`, `private val pgKey = "rk_live_..."`
+- 대안: AWS Secrets Manager / Vault / 환경변수 (CI/CD secret store)
+- 검증: pre-commit grep `(password|secret|api[_-]?key|token).*=.*["']`
 ```
-✓ AX:CRITICAL:003 추가 — CLAUDE.md (security)
-✓ mistake 3건 promoted_to=AX:CRITICAL:003 마킹
-✓ pre-commit grep 패턴 추가 권장 (수동) — `secret_key|api_key|password\s*=`
+
+**왜 spirit/rules 만?**: path-scoped hook (`spirit-rules-inject.sh`) 이 매 작업마다 frontmatter `paths:` 매칭해서 자동 inject — 매 turn CLAUDE.md 에 누적할 필요 없음. CLAUDE.md 는 META 4원칙·핵심 가드 만 유지 (heavy 회피).
+
+**plugin shipped 파일 append 금지**: `security.md`, `ops.md` 같은 plugin 출고본에 직접 append X. project-specific 별도 파일 (`<project>-<category>.md`) 로 만들고, 같은 카테고리 룰이 누적되면 그 파일에 SP-<CAT>-NNN 만 추가.
+
+각 단계 ✓ 보고:
+```
+✓ mistake 3건 promoted_to=SP-SEC-001 마킹 (.ax/mistakes/)
+✓ SP-SEC-001 추가 — .ax/spirit/rules/<project>-security.md (frontmatter paths: 명시)
+✓ path-scoped hook 활성 — 매 .kt / .properties / .yaml 편집 시 SP-SEC-001 자동 inject
 ```
 
 ## 절대 금지

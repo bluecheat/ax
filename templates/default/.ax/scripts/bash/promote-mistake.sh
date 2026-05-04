@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# .ax/scripts/bash/promote-mistake.sh — mistake → CLAUDE.md/spirit 룰 승격
+# .ax/scripts/bash/promote-mistake.sh — mistake 승격 마킹 (룰 본문은 LLM 이 spirit/rules 에 직접 Edit)
 #
 # Usage:
 #   # 후보 조회 (dry-run 기본)
 #   bash promote-mistake.sh [--json] [--threshold N]
 #
-#   # 실제 적용 (사용자 동의 후)
-#   bash promote-mistake.sh --apply --token AX:CRITICAL:003 \
-#                            --category security --rule-text "PG 키 hardcode 금지" \
-#                            [--json]
+#   # 실제 적용 (사용자 동의 후) — mistake 에 promoted_to 마킹만
+#   bash promote-mistake.sh --apply --token AX:CRITICAL:003 --category security [--json]
 #
 # 후보 모드: 카테고리당 N건 이상 mistake → 룰 승격 후보 출력
-# 적용 모드: CLAUDE.md 시그널 섹션에 룰 추가 + mistake에 promoted_to 마킹
+# 적용 모드: mistake 에 promoted_to 마킹만. 룰 본문은 LLM 이 .ax/spirit/rules/<category>.md 에
+#           직접 작성 (path-scoped hook 이 매 작업 inject — CLAUDE.md 에 누적 X, heavy 회피).
 
 set -euo pipefail
 
@@ -25,7 +24,6 @@ APPLY=false
 THRESHOLD=2
 TOKEN=""
 CATEGORY=""
-RULE_TEXT=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -35,7 +33,6 @@ while [ $# -gt 0 ]; do
         --threshold) shift; THRESHOLD="${1:-2}" ;;
         --token)     shift; TOKEN="${1:-}" ;;
         --category)  shift; CATEGORY="${1:-}" ;;
-        --rule-text) shift; RULE_TEXT="${1:-}" ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;
     esac
     shift
@@ -55,36 +52,13 @@ if [ ! -d "$MIST_DIR" ]; then
     exit "$EXIT_SKIPPED"
 fi
 
-# ── 적용 모드 ──
+# ── 적용 모드 — mistake promoted_to 마킹만 ──
+# 룰 본문 작성은 LLM 책임 (audit SKILL 안에서 spirit/rules 직접 Edit). CLAUDE.md 안 건드림.
 if [ "$APPLY" = true ]; then
     [ -z "$TOKEN" ]    && { goax_error "--token required"; exit "$EXIT_ERROR"; }
     [ -z "$CATEGORY" ] && { goax_error "--category required"; exit "$EXIT_ERROR"; }
-    [ -z "$RULE_TEXT" ] && { goax_error "--rule-text required"; exit "$EXIT_ERROR"; }
 
-    # 시그널 결정 — TOKEN으로
-    case "$TOKEN" in
-        *:CRITICAL:*)  SIGNAL="🔴" ;;
-        *:MANDATORY:*) SIGNAL="🟡" ;;
-        *)             SIGNAL="🔵" ;;
-    esac
-
-    CLAUDE_MD="$PROJECT_ROOT/CLAUDE.md"
-    if [ ! -f "$CLAUDE_MD" ]; then
-        goax_error "CLAUDE.md not found in project root"
-        exit "$EXIT_ERROR"
-    fi
-
-    # CLAUDE.md에 룰 추가 (CRITICAL 섹션 직후)
-    NEW_RULE="${SIGNAL} **\`${TOKEN}\`** — ${RULE_TEXT} (category: ${CATEGORY})"
-    if grep -q "$TOKEN" "$CLAUDE_MD"; then
-        goax_warn "$TOKEN already exists in CLAUDE.md — skipping CLAUDE.md update"
-    else
-        # 끝에 append (정교한 섹션 삽입은 LLM이)
-        printf '\n%s\n' "$NEW_RULE" >> "$CLAUDE_MD"
-        goax_log "✓ added to CLAUDE.md: $TOKEN"
-    fi
-
-    # 해당 카테고리 mistake에 promoted_to 마킹
+    # 해당 카테고리 mistake 에 promoted_to 마킹 (frontmatter)
     MARKED=()
     while IFS= read -r f; do
         if grep -q "^promoted_to:" "$f" 2>/dev/null; then
@@ -105,9 +79,9 @@ if [ "$APPLY" = true ]; then
         [ "${#MARKED[@]}" -eq 0 ] && marked_json="[]"
         RESULT=$(printf '{"token":"%s","category":"%s","marked_count":%s,"marked":%s}' \
                         "$TOKEN" "$CATEGORY" "${#MARKED[@]}" "$marked_json")
-        json_output "ok" "$RESULT" "review CLAUDE.md and consider hooks/pre-commit grep pattern"
+        json_output "ok" "$RESULT" "edit .ax/spirit/rules/<category>.md — add SP-<CAT>-NNN with paths frontmatter (path-scoped hook 이 매 작업 inject)"
     else
-        goax_log "✓ marked ${#MARKED[@]} mistake(s) with promoted_to=$TOKEN"
+        goax_log "✓ marked ${#MARKED[@]} mistake(s) with promoted_to=$TOKEN — now edit spirit/rules/<category>.md"
     fi
     exit "$EXIT_OK"
 fi
@@ -153,7 +127,7 @@ if [ "$JSON_MODE" = true ]; then
     cand_json+="]"
     RESULT=$(printf '{"candidates":%s,"threshold":%s,"total_categories":%s}' \
                     "$cand_json" "$THRESHOLD" "$TOTAL_CATS")
-    json_output "ok" "$RESULT" "review candidates and run --apply with --token --category --rule-text"
+    json_output "ok" "$RESULT" "review candidates and run --apply with --token --category. then edit .ax/spirit/rules/<category>.md (LLM)"
 else
     if [ "${#CANDIDATES[@]:-0}" -eq 0 ]; then
         goax_log "no candidates over threshold $THRESHOLD"
