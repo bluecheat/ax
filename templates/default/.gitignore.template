@@ -1,0 +1,7 @@
+# goax — runtime/임시 산출물 (per-machine, per-session)
+.ax/state.json
+.ax/current-task.json
+
+# install/onboarding 시점 머지 임시본 (사용자가 처리 후 rm)
+.ax/*.suggested
+.ax/.onboarding-pending

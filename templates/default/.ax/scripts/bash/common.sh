@@ -41,6 +41,32 @@ goax_mode() {
     esac
 }
 
+# Hook 위반 보고 (non-exiting) — 배치 hook에서 사용 (여러 위반을 모은 뒤 한 번에 exit)
+# Usage:  goax_hook_report fail "메시지" "category" "details"
+# 동작:  stderr 경고 + capture-mistake 호출. 종료 결정은 caller가.
+# goax_hook_exit과 차이: 종료하지 않음. 배치 후 caller가 VIOLATIONS 누적 판단.
+goax_hook_report() {
+    local severity="${1:-warn}"
+    local message="${2:-}"
+    local category="${3:-uncategorized}"
+    local details="${4:-}"
+    [ -z "$message" ] && return 0
+
+    local mode
+    mode=$(goax_mode)
+    [ "$mode" = "off" ] && return 0
+
+    printf '\033[33m[goax hook]\033[0m %s\n' "$message" >&2
+
+    local root capture
+    root="${CLAUDE_PROJECT_DIR:-$(find_project_root 2>/dev/null || pwd)}"
+    capture="$root/.ax/scripts/bash/capture-mistake.sh"
+    if [ -f "$capture" ]; then
+        bash "$capture" "$category" "$message" "$details" >/dev/null 2>&1 || true
+    fi
+    return 0
+}
+
 # Hook 표준 종료 — severity와 mode 조합으로 결정론적 결정
 # Usage: goax_hook_exit fail "메시지" [category]
 #   severity=fail + mode=fail   → exit 2 (차단), capture-mistake 호출
@@ -72,6 +98,24 @@ goax_hook_exit() {
         exit 2
     fi
     exit 0
+}
+
+# Redact secrets in stdin, print redacted to stdout.
+# Strategy: known-prefix tokens (high confidence) + key=value with ≥12-char value (lower).
+# Designed for capture-mistake.sh DETAILS only — DO NOT apply to titles (signal loss).
+# Patterns chosen to be POSIX sed -E compatible (no \s, no case-flag — bracket classes).
+# Usage: REDACTED=$(printf '%s' "$x" | redact_secrets)
+redact_secrets() {
+    sed -E '
+        s/AKIA[A-Z0-9]{16,}/[REDACTED:aws]/g
+        s/gh[poshru]_[A-Za-z0-9]{20,}/[REDACTED:github]/g
+        s/xox[baprs]-[A-Za-z0-9-]{10,}/[REDACTED:slack]/g
+        s/(sk|pk|rk)_live_[A-Za-z0-9]{20,}/[REDACTED:stripe]/g
+        s/whsec_[A-Za-z0-9]{20,}/[REDACTED:stripe]/g
+        s/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/[REDACTED:jwt]/g
+        s/-----BEGIN[A-Z ]*PRIVATE KEY-----/[REDACTED:pem-begin]/g
+        s/([Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Tt][Oo][Kk][Ee][Nn]|[Bb][Ee][Aa][Rr][Ee][Rr]|[Pp][Gg][_-]?[Kk][Ee][Yy])([[:space:]]*[:=][[:space:]]*"?)([A-Za-z0-9+\/=_-]{12,})/\1\2[REDACTED]/g
+    '
 }
 
 # Find project root: nearest ancestor with .ax/

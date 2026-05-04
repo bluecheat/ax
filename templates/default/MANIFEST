@@ -9,8 +9,11 @@
 #
 # 조건부 복사 (기존 파일 있으면 .suggested로)는 installer SKILL.md에서
 # 별도 로직으로 처리. 여기엔 *조건 없는* 단순 복사 항목만.
-# - CLAUDE.md ← templates/default/CLAUDE.md.template
+# - CLAUDE.md             ← templates/default/CLAUDE.md.template
 # - .claude/settings.json ← templates/default/.claude/settings.json.template
+# - .ax/config.yml        ← templates/default/.ax/config.yml (사용자 customizations 보존)
+# - .ax/mistakes/README.md ← templates/default/.ax/mistakes/README.md (팀 정책 보존)
+# - .gitignore            ← templates/default/.gitignore.template (append-if-missing)
 
 # ─── .ax/ 디렉토리 (재귀 복사) ───
 .ax/spirit/
@@ -20,8 +23,6 @@
 .ax/scripts/
 
 # ─── .ax/ 단일 파일 ───
-.ax/config.yml
-.ax/mistakes/README.md
 .ax/hud/statusline.sh
 
 # ─── .template suffix → 실제 이름으로 rename 복사 ───

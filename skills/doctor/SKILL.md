@@ -111,6 +111,51 @@ DRIFT_FILES=$(echo "$RESULT" | jq -r '.result.drift_files | join(", ")')
 
 **원칙**: 사용자 수정은 *절대* 자동 덮어쓰기 X. 머지 결정은 사용자.
 
+### 3.6 0.1.8 마이그레이션 잔재 점검 (NEW)
+
+기존 v0.1.7 이하 install이 0.1.8 시점 신규 항목을 갖추지 못했을 때 안내.
+모두 수동 — 자동 수정 X (사용자 동의 후 별도 명령 또는 doctor 옵션 [a]/[b]/...).
+
+```bash
+# (1) .gitignore 누락 엔트리 — 0.1.8 신규
+NEED_GITIGNORE=()
+for line in ".ax/state.json" ".ax/current-task.json" ".ax/*.suggested" ".ax/.onboarding-pending"; do
+    if [ -f .gitignore ]; then
+        grep -qxF "$line" .gitignore || NEED_GITIGNORE+=("$line")
+    else
+        NEED_GITIGNORE+=("$line")
+    fi
+done
+
+# (2) spirit/rules/output-style.md 잔재 — 0.1.8에서 plugin 출고 제거 (plugin meta 였음)
+HAS_STALE_OUTPUT_STYLE=false
+[ -f .ax/spirit/rules/output-style.md ] && HAS_STALE_OUTPUT_STYLE=true
+
+# (3) 처리 안 한 .suggested 잔재
+SUGGESTED=$(find .ax -maxdepth 2 -name "*.suggested" 2>/dev/null)
+```
+
+보고 형식:
+- 누락/잔재 0건 → 출력 생략 (조용)
+- 누락 있으면 결과 §3 끝에 "0.1.8 마이그레이션" 섹션 추가:
+
+```
+ ─ 0.1.8 마이그레이션 ────────────────────────────────────
+ · .gitignore 누락 엔트리 — 4줄 (.ax/state.json, .ax/current-task.json, .ax/*.suggested, .ax/.onboarding-pending)
+ · .ax/spirit/rules/output-style.md — 0.1.8부터 plugin meta로 분류되어 출고에서 제거됨
+ · .ax/mistakes/README.md.suggested 미처리 — 머지 후 rm 권장
+```
+
+`다음 단계`에 옵션 추가:
+
+```
+ [m] ✓ 0.1.8 마이그레이션 처리             [추천]
+  명령 .gitignore에 4줄 추가 + output-style.md 제거 + .suggested 정리
+  이유 0.1.7 → 0.1.8 잔재 정리 (PR 노이즈 방지)
+```
+
+**원칙**: 자동 수정 X — 사용자가 [m] 선택해야 실행. output-style.md 제거는 git commit 영향 → 사용자 컨텍스트에서만.
+
 ## 3. 출력
 
 ```

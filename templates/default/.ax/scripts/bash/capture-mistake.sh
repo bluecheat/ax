@@ -45,20 +45,32 @@ SLUG=$(printf '%s' "$ONE_LINE" \
 [ -z "$SLUG" ] && SLUG="auto"
 
 # Idempotent 체크 — 같은 (date, category, slug)면 재발 라인만 append
+# Glob은 새 ID 포맷(${DATE}-${TS}-${CATEGORY}-${SLUG}.md)과 구 포맷(${DATE}-${NUM}-${CATEGORY}-${SLUG}.md)
+# 모두 매치 — 0.1.7→0.1.8 마이그레이션 호환.
 EXISTING=$(find "$MISTAKES" -maxdepth 1 -type f \
             -name "${DATE}-*-${CATEGORY}-${SLUG}.md" 2>/dev/null | head -1)
 
 if [ -n "$EXISTING" ]; then
+    # Sanitize DETAILS before append. ONE_LINE은 idempotent key라 이 경로엔 등장하지 않음.
+    DETAILS_SAFE=$(printf '%s' "${DETAILS}" | redact_secrets)
     printf -- '- 재발 %s%s\n' "$(date '+%H:%M:%S')" \
-        "${DETAILS:+ — $DETAILS}" >> "$EXISTING"
+        "${DETAILS_SAFE:+ — $DETAILS_SAFE}" >> "$EXISTING"
     exit "$EXIT_OK"
 fi
 
-# 새 파일 — 그날의 다음 번호
-NUM=$(find "$MISTAKES" -maxdepth 1 -type f -name "${DATE}-*.md" 2>/dev/null | wc -l | tr -d ' ')
-NUM=$((NUM + 1))
-NUM_PAD=$(printf '%03d' "$NUM")
-FILE="$MISTAKES/${DATE}-${NUM_PAD}-${CATEGORY}-${SLUG}.md"
+# 새 파일 — race-free ID: ms-timestamp + PID + random.
+# 구 포맷 ${NUM_PAD}는 동시성 race(find | wc -l)에 취약했음 — 0.1.8에서 제거.
+if EPOCH_MS=$(python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null); then
+    :
+else
+    EPOCH_MS="$(date +%s)000"
+fi
+TS="${EPOCH_MS}-$$-${RANDOM}"
+FILE="$MISTAKES/${DATE}-${TS}-${CATEGORY}-${SLUG}.md"
+
+# DETAILS만 sanitize. ONE_LINE은 신호 손실 방지를 위해 보존 — caller가
+# 시크릿을 직접 타이틀에 박지 않도록 hook 측에서 책임.
+DETAILS_SAFE=$(printf '%s' "${DETAILS}" | redact_secrets)
 
 cat > "$FILE" <<EOF
 ---
@@ -70,7 +82,7 @@ status: open
 
 # ${ONE_LINE}
 
-${DETAILS}
+${DETAILS_SAFE}
 
 ## 이력
 - 최초 캡처 $(date '+%H:%M:%S')

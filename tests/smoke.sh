@@ -64,7 +64,7 @@ for removed in skills/global skills/workflows \
 done
 
 # ───────────────────────────────────────────────────────────
-section "2.5 Slash commands (15개 — `goax-` prefix 컨벤션)"
+section "2.5 Slash commands (15개 — 'goax-' prefix 컨벤션)"
 # ───────────────────────────────────────────────────────────
 # commands는 `goax-<name>.md` 형태 + `goax.md` 인덱스 alias 1개
 for cmd in goax goax-install goax-onboarding goax-doctor goax-audit goax-rules goax-hud goax-spirit \
@@ -108,6 +108,7 @@ section "4. templates/default — installer가 사용자 프로젝트로 복사�
 for f in \
     templates/default/CLAUDE.md.template \
     templates/default/.claude/settings.json.template \
+    templates/default/.gitignore.template \
     templates/default/.ax/spirit/values.md \
     templates/default/.ax/spirit/tone.md \
     templates/default/.ax/docs/_templates/spirit/rule.md \
@@ -151,6 +152,21 @@ python3 -c "import json; json.load(open('$REPO/templates/default/.claude/setting
 python3 -c "import json; json.load(open('$REPO/templates/default/.ax/current-task.json.template'))" 2>/dev/null \
     && pass "current-task.json.template JSON valid" \
     || fail "current-task.json.template JSON invalid"
+
+# .gitignore.template — 0.1.8 신규. runtime 엔트리 4종 모두 포함하는지 검증.
+GI_TPL="$REPO/templates/default/.gitignore.template"
+if [ -f "$GI_TPL" ]; then
+    missing=0
+    for entry in ".ax/state.json" ".ax/current-task.json" ".ax/*.suggested" ".ax/.onboarding-pending"; do
+        grep -qxF "$entry" "$GI_TPL" || { fail ".gitignore.template 누락 엔트리: $entry"; missing=$((missing+1)); }
+    done
+    [ "$missing" -eq 0 ] && pass ".gitignore.template — runtime 엔트리 4종 모두 포함"
+fi
+
+# 0.1.8 잔재 검증 — spirit/rules/output-style.md (plugin meta로 분류되어 0.1.8에서 출고 제거)
+[ -f "$REPO/templates/default/.ax/spirit/rules/output-style.md" ] \
+    && fail "spirit/rules/output-style.md — 0.1.8에서 plugin 출고 제거됐어야 함 (plugin meta)" \
+    || pass "spirit/rules/output-style.md 출고 제거됨 (0.1.8)"
 
 # ───────────────────────────────────────────────────────────
 section "4.1 settings.json.template — 참조 hook 파일 실존"
@@ -326,6 +342,63 @@ mkdir -p "$TMP_E2E/.ax/mistakes"
     done
 )
 rm -rf "$TMP_E2E"
+
+# ───────────────────────────────────────────────────────────
+section "10. capture-mistake.sh 런타임 — race-free ID + redactor (NEW 0.1.8)"
+# ───────────────────────────────────────────────────────────
+# Plugin은 실제로 사용자 프로젝트에 설치되어 동작 → 임시 fixture에서 e2e.
+FIXTURE=$(mktemp -d)
+trap 'rm -rf "$FIXTURE"' EXIT
+
+mkdir -p "$FIXTURE/.ax"
+cp -R "$REPO/templates/default/.ax/scripts" "$FIXTURE/.ax/"
+cp -R "$REPO/templates/default/.ax/mistakes" "$FIXTURE/.ax/"
+cp "$REPO/templates/default/.ax/config.yml" "$FIXTURE/.ax/"
+( cd "$FIXTURE" && git init -q 2>/dev/null && git config user.email "smoke@local" && git config user.name "smoke" )
+
+# 10.1 race-free ID — 5병렬 호출 → 5개 고유 파일
+( cd "$FIXTURE" && \
+  for i in 1 2 3 4 5; do
+      CLAUDE_PROJECT_DIR=$FIXTURE bash .ax/scripts/bash/capture-mistake.sh "race-$i" "병렬 캡처 $i" "detail $i" >/dev/null 2>&1 &
+  done
+  wait )
+RACE_COUNT=$(find "$FIXTURE/.ax/mistakes" -maxdepth 1 -type f -name "*.md" ! -name "README.md" | wc -l | tr -d ' ')
+[ "$RACE_COUNT" -eq 5 ] && pass "race-free ID — 5병렬 호출 → 5개 파일" \
+                       || fail "race-free ID — 5병렬에 $RACE_COUNT 파일만 생성 (충돌)"
+
+# 10.2 redactor — DETAILS의 secret 패턴이 [REDACTED]로
+rm -f "$FIXTURE/.ax/mistakes"/2026-*.md "$FIXTURE/.ax/mistakes"/[0-9]*.md
+CLAUDE_PROJECT_DIR=$FIXTURE bash "$REPO/templates/default/.ax/scripts/bash/capture-mistake.sh" \
+    "secrets" "PG 키 누출 의심" "config: API_KEY=abcdef1234567890XYZ leaked" >/dev/null 2>&1
+LATEST=$(ls -t "$FIXTURE/.ax/mistakes"/*.md 2>/dev/null | grep -v README | head -1)
+if [ -n "$LATEST" ] && grep -q "API_KEY=\[REDACTED\]" "$LATEST" 2>/dev/null; then
+    pass "redactor — DETAILS의 API_KEY=... → [REDACTED]"
+else
+    fail "redactor — secret 미치환: $(grep API_KEY "$LATEST" 2>/dev/null || echo 'no match')"
+fi
+
+# 10.3 title 보존 — ONE_LINE은 redact되지 않아야 함 (시그널 손실 방지)
+if [ -n "$LATEST" ] && grep -q "^# PG 키 누출 의심" "$LATEST" 2>/dev/null; then
+    pass "title 보존 — ONE_LINE은 redact 미적용"
+else
+    fail "title 보존 실패: $(grep '^# ' "$LATEST" 2>/dev/null | head -1)"
+fi
+
+# 10.4 known-prefix tokens
+PREFIX_TEST=$(printf 'leak: AKIAIOSFODNN7EXAMPLE and ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789a here\n' \
+              | bash -c "source $REPO/templates/default/.ax/scripts/bash/common.sh && redact_secrets")
+echo "$PREFIX_TEST" | grep -q "\[REDACTED:aws\]" && echo "$PREFIX_TEST" | grep -q "\[REDACTED:github\]" \
+    && pass "redactor — AWS/GitHub known-prefix 치환" \
+    || fail "redactor — known-prefix 누락: $PREFIX_TEST"
+
+# 10.5 false positive guard — 짧은 값(<12자)이나 식별자는 보존
+FP_TEST=$(printf 'pw=ok123 and password_field stays\n' \
+          | bash -c "source $REPO/templates/default/.ax/scripts/bash/common.sh && redact_secrets")
+if echo "$FP_TEST" | grep -q "ok123" && echo "$FP_TEST" | grep -q "password_field"; then
+    pass "redactor — 짧은 값·식별자 false positive 없음"
+else
+    fail "redactor — false positive: $FP_TEST"
+fi
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"

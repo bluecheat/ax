@@ -157,6 +157,45 @@ else
     cp "$TPL/.claude/settings.json.template" .claude/settings.json
 fi
 
+# 6.5 .ax/config.yml — 조건부 (manifest 외, 사용자 customizations 보존)
+# 0.1.8부터 conditional 처리: 기존 .ax/config.yml의 domain_risk·commands·sensors 등
+# 사용자 변경을 plugin re-install이 clobber하지 않도록.
+if [ -f .ax/config.yml ]; then
+    cp "$TPL/.ax/config.yml" .ax/config.yml.suggested
+else
+    mkdir -p .ax
+    cp "$TPL/.ax/config.yml" .ax/config.yml
+fi
+
+# 6.7 .gitignore — append-if-missing (manifest 외)
+# runtime 파일(.ax/state.json, .ax/current-task.json)·임시본(.ax/*.suggested) 등이
+# PR diff에 들어가 노이즈가 되는 걸 방지. 기존 .gitignore가 있으면 누락된 줄만 추가.
+GITIGNORE_TPL="$TPL/.gitignore.template"
+if [ -f "$GITIGNORE_TPL" ]; then
+    if [ -f .gitignore ]; then
+        # 기존 .gitignore — 누락 entry만 append (idempotent)
+        added=0
+        while IFS= read -r line; do
+            case "$line" in ''|\#*) continue ;; esac
+            grep -qxF "$line" .gitignore || { printf '%s\n' "$line" >> .gitignore; added=$((added+1)); }
+        done < "$GITIGNORE_TPL"
+        [ "$added" -gt 0 ] && echo "✓ .gitignore: $added 줄 추가 (goax runtime 보호)"
+    else
+        cp "$GITIGNORE_TPL" .gitignore
+        echo "✓ .gitignore: 신규 생성"
+    fi
+fi
+
+# 6.8 .ax/mistakes/README.md — 조건부 (manifest 외, 사용자 팀 정책 보존)
+# 0.1.8부터 conditional: 사용자가 mistake 캡처/심사 정책을 README에 추가했을 때
+# plugin re-install이 clobber하지 않도록.
+mkdir -p .ax/mistakes
+if [ -f .ax/mistakes/README.md ]; then
+    cp "$TPL/.ax/mistakes/README.md" .ax/mistakes/README.md.suggested
+else
+    cp "$TPL/.ax/mistakes/README.md" .ax/mistakes/README.md
+fi
+
 # 7. 메타 정보
 cat > .ax/version <<META
 goax: $GOAX_VER
@@ -186,6 +225,11 @@ META
 
 ```
 🥳 goax 도입 완료.
+
+📂 .ax/ runtime — .gitignore 자동 처리됨
+ .ax/state.json, .ax/current-task.json — 매 호출마다 변경되는 상태 (per-machine)
+ .ax/*.suggested — install/onboarding 머지 임시본
+ → PR diff 노이즈 방지 위해 .gitignore에 자동 추가 (또는 기존 .gitignore에 누락 줄 append)
 
 다음에 시도해보세요:
  "결제 환불 정책 변경 작업 계획 세워줘"

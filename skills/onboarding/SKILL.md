@@ -834,6 +834,10 @@ rm -f .ax/.onboarding-pending
 
  .ax/docs/_templates/spec/  ← 템플릿 (도메인에 맞게 수정 가능, doctor가 drift 감지)
 
+📂 .ax/ runtime 파일은 .gitignore 자동 처리됨
+ .ax/state.json, .ax/current-task.json — per-machine 상태, PR에 들어가지 않음
+ → 0.1.7 이전 install이라면 doctor가 누락 entry를 안내해요.
+
 다음 한 줄을 시도해보세요:
 
  "결제 환불 정책 변경 작업 계획 세워줘"
