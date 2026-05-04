@@ -48,10 +48,16 @@ CRIT=0; MAND=0; CONV=0
 if [ -f "$WS/CLAUDE.md" ]; then
     CRIT=$(grep -E '^🔴 \*\*`' "$WS/CLAUDE.md" 2>/dev/null | wc -l | tr -d ' ')
     MAND=$(grep -E '^🟡 \*\*`' "$WS/CLAUDE.md" 2>/dev/null | wc -l | tr -d ' ')
+    # CLAUDE.md inline rule: 🔵 **`TOKEN`** 형식
     CONV_INLINE=$(grep -E '^🔵 \*\*`' "$WS/CLAUDE.md" 2>/dev/null | wc -l | tr -d ' ')
+
+    # spirit/rules/ — heading 형식 (## SP-CAT-NNN: text, plugin 컨벤션, 0.1.8+)
+    # + 옛 inline 형식 (^🔵 \*\*`) 합산해 0.1.7 호환 유지
     CONV_SPIRIT=0
     if [ -d "$WS/.ax/spirit/rules" ]; then
-        CONV_SPIRIT=$(grep -hE '^🔵 \*\*`' "$WS/.ax/spirit/rules/"*.md 2>/dev/null | wc -l | tr -d ' ')
+        CONV_SPIRIT_HEAD=$(grep -hE '^## SP-[A-Z]+-[0-9]{3}:' "$WS/.ax/spirit/rules/"*.md 2>/dev/null | wc -l | tr -d ' ')
+        CONV_SPIRIT_INLINE=$(grep -hE '^🔵 \*\*`' "$WS/.ax/spirit/rules/"*.md 2>/dev/null | wc -l | tr -d ' ')
+        CONV_SPIRIT=$((CONV_SPIRIT_HEAD + CONV_SPIRIT_INLINE))
     fi
     CONV=$((CONV_INLINE + CONV_SPIRIT))
 fi

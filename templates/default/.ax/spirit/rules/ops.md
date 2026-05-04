@@ -1,6 +1,12 @@
 ---
 category: ops
 applies_to: [code, pr, commit, review]
+# paths: (생략 — universal 룰. CLAUDE.md @import으로 전체 작업에 적용됨)
+# path-scoped 예시 (도메인 특화 룰의 경우):
+# paths:
+#   - "**/domain/**"
+#   - "**/*Entity*.kt"
+# → generate-rule-shims.sh가 .claude/rules/<name>.md shim 자동 생성
 ---
 
 # Ops — Universal Action Baseline

@@ -118,8 +118,15 @@ redact_secrets() {
     '
 }
 
-# Find project root: nearest ancestor with .ax/
+# Find project root: $CLAUDE_PROJECT_DIR if it has .ax/, else nearest ancestor with .ax/
+# CLAUDE_PROJECT_DIR is the Claude Code official env var pointing at the user's project root.
+# Honoring it lets scripts work even when invoked from a different cwd (e.g., smoke fixtures,
+# hooks running from a subdirectory, etc).
 find_project_root() {
+    if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "$CLAUDE_PROJECT_DIR/.ax" ]; then
+        printf '%s\n' "$CLAUDE_PROJECT_DIR"
+        return 0
+    fi
     local dir="${1:-$(pwd)}"
     while [ "$dir" != "/" ]; do
         if [ -d "$dir/.ax" ]; then
@@ -128,7 +135,7 @@ find_project_root() {
         fi
         dir="$(dirname "$dir")"
     done
-    goax_error "no .ax/ found in any ancestor of $(pwd)"
+    goax_error "no .ax/ found in any ancestor of $(pwd) (CLAUDE_PROJECT_DIR=${CLAUDE_PROJECT_DIR:-unset})"
     return 1
 }
 

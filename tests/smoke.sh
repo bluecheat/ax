@@ -401,6 +401,83 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────
+section "11. generate-rule-shims.sh — path-scoped rule shim (NEW 0.1.8)"
+# ───────────────────────────────────────────────────────────
+[ -f "$REPO/templates/default/.ax/scripts/bash/generate-rule-shims.sh" ] \
+    && pass "scripts/bash/generate-rule-shims.sh 존재" \
+    || fail "scripts/bash/generate-rule-shims.sh 누락"
+
+[ -x "$REPO/templates/default/.ax/scripts/bash/generate-rule-shims.sh" ] \
+    && pass "generate-rule-shims.sh 실행권한" \
+    || fail "generate-rule-shims.sh 실행권한 X"
+
+bash -n "$REPO/templates/default/.ax/scripts/bash/generate-rule-shims.sh" 2>/dev/null \
+    && pass "generate-rule-shims.sh 문법 OK" \
+    || fail "generate-rule-shims.sh 문법 오류"
+
+# 런타임 e2e — fixture에서 paths있는 rule + paths없는 rule 혼합
+SHIM_FX=$(mktemp -d)
+mkdir -p "$SHIM_FX/.ax/spirit/rules" "$SHIM_FX/.ax/scripts/bash" "$SHIM_FX/.claude/rules"
+cp -R "$REPO/templates/default/.ax/scripts/bash/." "$SHIM_FX/.ax/scripts/bash/"
+cat > "$SHIM_FX/.ax/spirit/rules/scoped.md" <<'MD'
+---
+category: domain
+paths:
+  - "**/domain/**"
+  - "**/*Entity*.kt"
+---
+# Scoped rule
+## SP-DOM-001: example
+MD
+cat > "$SHIM_FX/.ax/spirit/rules/universal.md" <<'MD'
+---
+category: ops
+applies_to: [code, pr]
+---
+# Universal rule
+## SP-OPS-001: example
+MD
+cat > "$SHIM_FX/.ax/spirit/rules/empty-paths.md" <<'MD'
+---
+category: misc
+paths: []
+---
+# No paths
+## SP-MISC-001: x
+MD
+
+CLAUDE_PROJECT_DIR=$SHIM_FX bash "$REPO/templates/default/.ax/scripts/bash/generate-rule-shims.sh" >/dev/null 2>&1
+
+[ -f "$SHIM_FX/.claude/rules/scoped.md" ] \
+    && pass "shim 생성 — paths있는 룰 → .claude/rules/scoped.md" \
+    || fail "shim 누락 — paths있는 룰이 shim 안 만들어짐"
+
+[ ! -f "$SHIM_FX/.claude/rules/universal.md" ] \
+    && pass "shim 생략 — paths없는 universal 룰" \
+    || fail "shim 잘못 생성 — paths없는 룰이 shim 만들어짐"
+
+[ ! -f "$SHIM_FX/.claude/rules/empty-paths.md" ] \
+    && pass "shim 생략 — paths: [] 빈 배열" \
+    || fail "shim 잘못 생성 — paths: [] 룰이 shim 만들어짐"
+
+# shim 내용 검증 — paths frontmatter + relative @-import
+SHIM_CONTENT=$(cat "$SHIM_FX/.claude/rules/scoped.md" 2>/dev/null)
+echo "$SHIM_CONTENT" | grep -q '"\*\*/domain/\*\*"' \
+    && echo "$SHIM_CONTENT" | grep -q '@\.\./\.\./\.ax/spirit/rules/scoped\.md' \
+    && pass "shim 내용 — paths 보존 + relative @-import" \
+    || fail "shim 내용 깨짐: $SHIM_CONTENT"
+
+# JSON 모드 — generated/skipped 분류
+JSON=$(CLAUDE_PROJECT_DIR=$SHIM_FX bash "$REPO/templates/default/.ax/scripts/bash/generate-rule-shims.sh" --json 2>&1)
+if echo "$JSON" | jq -e '.result.skipped | length >= 2' >/dev/null 2>&1; then
+    pass "JSON --json 모드 — generated/skipped 분류"
+else
+    fail "JSON 모드 출력 깨짐: $JSON"
+fi
+
+rm -rf "$SHIM_FX"
+
+# ───────────────────────────────────────────────────────────
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────
 if [ "$fail_count" -eq 0 ]; then

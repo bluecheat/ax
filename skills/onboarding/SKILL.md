@@ -695,8 +695,15 @@ Layer 1 — CLAUDE.md 시그널화:
  ---
  category: architecture
  description: 모듈 의존 방향, 레이어 분리 룰
+ # paths: (선택) — 특정 경로에서만 자동 로드되는 path-scoped 룰의 경우 선언.
+ # 빈 배열 또는 생략 시 universal — CLAUDE.md @import으로 모든 작업에 적용.
+ # paths:
+ #   - "**/domain/**"
+ #   - "**/*Entity*.kt"
  ---
  ```
+
+ > **path-scoped 룰**: 위 frontmatter의 `paths:`를 채우면, install / doctor가 `.claude/rules/<name>.md` shim을 자동 생성해 **해당 path 작업 시에만** 룰이 컨텍스트에 들어가요 (Claude Code 네이티브 path-scoped loading). universal 룰(ops/architecture/data/testing 류)은 paths 생략 — CLAUDE.md @import으로 매 turn 주입. 도메인·레이어 특화 룰(예: commerce-domain, commerce-presenter)은 paths를 채워 token cost·adherence 둘 다 개선.
 
 Layer 2 — 모듈 도메인 룰 stub 생성 (`.ax/modules/<name>/rules.md`):
 

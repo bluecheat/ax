@@ -196,6 +196,14 @@ else
     cp "$TPL/.ax/mistakes/README.md" .ax/mistakes/README.md
 fi
 
+# 6.9 .claude/rules/ shim 생성 (path-scoped rule loading)
+# 0.1.8부터 도입: spirit/rules/<name>.md의 frontmatter `paths:` 가 있는 룰만
+# .claude/rules/<name>.md 로 shim 생성 → Claude Code 네이티브 path-scoped loading.
+# paths 없으면 universal — CLAUDE.md @import 그대로 동작.
+mkdir -p .claude/rules
+bash .ax/scripts/bash/generate-rule-shims.sh 2>/dev/null || \
+    echo "ⓘ generate-rule-shims.sh — paths 선언된 spirit/rules가 아직 없음 (universal로 시작)"
+
 # 7. 메타 정보
 cat > .ax/version <<META
 goax: $GOAX_VER
