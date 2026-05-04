@@ -5,12 +5,16 @@
 #   bash init-spec-dir.sh --slug <kebab> --tier basic|standard|full \
 #                         [--num NNN] [--json] [--dry-run] [--help]
 #
-# Tier 산출물:
-#   basic     spec.md + README.md                             (2)
-#   standard  + plan.md + tasks.md                            (4)
-#   full      + research.md + data-model.md + quickstart.md
-#             + checklists/requirements.md
-#             + contracts/{api.yaml,events.md}                (9)
+# Tier 산출물 (slim default):
+#   basic     spec.md                                          (1)
+#   standard  + plan.md + tasks.md                             (3)
+#   full      + research.md + data-model.md + quickstart.md    (6, 단일 파일만)
+#
+# Lazy 생성 (필요 시 add-spec-files.sh):
+#   checklists/requirements.md          — `--add checklists`
+#   contracts/{api.yaml, events.md}     — `--add contracts`
+#
+# README.md 폐기 — spec.md 가 SSOT (What/Why), plan/tasks 가 본문. README 는 placeholder 였음.
 #
 # Output (--json):
 #   {"status":"ok","result":{"spec_dir":"...","spec_id":"005","tier":"full","files":[...]}}
@@ -92,19 +96,17 @@ if [ -e "$DEST" ]; then
     fi
 fi
 
-# Tier별 파일 목록
+# Tier별 파일 목록 — slim (README.md 폐기, 빈 dir 안 만듦)
+# checklists/, contracts/ 는 lazy — add-spec-files.sh --add checklists|contracts 로
 case "$TIER" in
     basic)
-        FILES=("spec.md" "README.md")
+        FILES=("spec.md")
         ;;
     standard)
-        FILES=("spec.md" "plan.md" "tasks.md" "README.md")
+        FILES=("spec.md" "plan.md" "tasks.md")
         ;;
     full)
-        FILES=("spec.md" "plan.md" "tasks.md" "research.md" "data-model.md" \
-               "quickstart.md" "README.md" \
-               "checklists/requirements.md" \
-               "contracts/api.yaml" "contracts/events.md")
+        FILES=("spec.md" "plan.md" "tasks.md" "research.md" "data-model.md" "quickstart.md")
         ;;
 esac
 
@@ -128,8 +130,8 @@ if [ "$DRY_RUN" = true ]; then
     exit "$EXIT_OK"
 fi
 
-# 실제 생성
-mkdir -p "$DEST" "$DEST/checklists" "$DEST/contracts"
+# 실제 생성 — spec dir 만. checklists/contracts 는 lazy (add-spec-files.sh).
+mkdir -p "$DEST"
 
 CREATED=()
 MISSING=()

@@ -36,13 +36,21 @@ MISTAKES="$ROOT/.ax/mistakes"
 
 [ -d "$MISTAKES" ] || mkdir -p "$MISTAKES"
 
-# slug 생성: 한글·영문 보존, 그 외 문자는 dash
+# slug 생성: 영숫자만 보존 (한글/특수문자 제외 — 파일시스템·grep 친화).
+# 한글 only 입력은 SLUG 가 빈 문자열이 되므로 hash fallback 으로 고유성 확보
+# (그렇지 않으면 같은 날 같은 카테고리의 다른 한글 mistake 가 idempotent key 로 묶여 재발 처리됨).
 DATE=$(date +%F)
 SLUG=$(printf '%s' "$ONE_LINE" \
         | tr '[:upper:]' '[:lower:]' \
-        | sed 's/[^a-z0-9가-힣]/-/g; s/--*/-/g; s/^-//; s/-$//' \
+        | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' \
         | cut -c1-40)
-[ -z "$SLUG" ] && SLUG="auto"
+if [ -z "$SLUG" ]; then
+    # ONE_LINE 의 hash 8자 — macOS(md5) / GNU(md5sum) / fallback shasum 순으로 시도.
+    SLUG=$(printf '%s' "$ONE_LINE" | md5 2>/dev/null | cut -c1-8 \
+        || printf '%s' "$ONE_LINE" | md5sum 2>/dev/null | cut -c1-8 \
+        || printf '%s' "$ONE_LINE" | shasum -a 1 2>/dev/null | cut -c1-8 \
+        || echo "auto")
+fi
 
 # Idempotent 체크 — 같은 (date, category, slug)면 재발 라인만 append
 # Glob은 새 ID 포맷(${DATE}-${TS}-${CATEGORY}-${SLUG}.md)과 구 포맷(${DATE}-${NUM}-${CATEGORY}-${SLUG}.md)
@@ -75,14 +83,35 @@ DETAILS_SAFE=$(printf '%s' "${DETAILS}" | redact_secrets)
 cat > "$FILE" <<EOF
 ---
 category: ${CATEGORY}
+severity: medium
+detected_by: hook
+context_link:
 captured_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 source: hook-auto
 status: open
 ---
 
-# ${ONE_LINE}
+# 무엇이 일어났나
+${ONE_LINE}
 
+# 어디서 (파일·모듈)
 ${DETAILS_SAFE}
+
+# 왜 발생 (5 Whys 기법)
+<!-- audit 시점에 채움. "왜?" 를 5번까지: 1. 왜 X? → A / 2. 왜 A? → B / ... / 5. → 근본 원인 -->
+
+# 어떻게 막을 수 있나 (사람 리뷰 / Sensor 자동화 / 룰 추가)
+<!-- audit 시점에 채움 -->
+
+# 영향 (Cost)
+즉시:
+- <!-- 변경 비용 / 사용자 turn 추가 등. audit 시점에 채움 -->
+
+잠재 후속 (정정 안 했을 경우):
+- <!-- 후속 비용 (CI 실패, rename 비용, 모듈 미검출 등). audit 시점에 채움 -->
+
+# audit 액션 제안
+<!-- 룰 승격 후보 / hook 작성 / 관측 보강 등. audit 시점에 채움 -->
 
 ## 이력
 - 최초 캡처 $(date '+%H:%M:%S')

@@ -39,7 +39,7 @@ bash 휴리스틱이 아니라 **Claude가 코드를 직접 읽어** 다음을 �
 - Stack 추정 (`build.gradle.kts`, `package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`)
 
 ### 1.3 도메인 후보
-모듈명·패키지 트리(`com.x.commerce.payment` 등)·디렉토리에서 의미 있는 도메인만 식별.
+모듈명·패키지 트리(`com.<org>.<project>.<domain>` 형태 등)·디렉토리에서 의미 있는 도메인만 식별.
 **짧은 prefix(`ad`, `ba`)나 일반 단어(`common`, `util`)는 제외**.
 
 ## 2. Plan 출력 — 사용자에게 보여주기
@@ -49,9 +49,9 @@ bash 휴리스틱이 아니라 **Claude가 코드를 직접 읽어** 다음을 �
 ```
 🔍 Discover
  레포 형태 : 모노레포 (Gradle multi-module)
- 모듈 :  N개 — commerce-core, commerce-rest, ...
+ 모듈 :  N개 — <module-1>, <module-2>, ...
  CLAUDE.md : X줄, 룰 ~Y개 추정 (또는 없음)
- 외부 spec : commerce-spec (또는 없음)
+ 외부 spec : <repo>-spec (또는 없음)
  활성 hooks : pre-commit-framework (또는 없음)
  Stack :  Kotlin/Gradle
  도메인 후보 : payment, order, catalog, ...
@@ -158,7 +158,7 @@ else
 fi
 
 # 6.5 .ax/config.yml — 조건부 (manifest 외, 사용자 customizations 보존)
-# 0.1.8부터 conditional 처리: 기존 .ax/config.yml의 domain_risk·commands·sensors 등
+# conditional 처리: 기존 .ax/config.yml의 domain_risk·commands·sensors 등
 # 사용자 변경을 plugin re-install이 clobber하지 않도록.
 if [ -f .ax/config.yml ]; then
     cp "$TPL/.ax/config.yml" .ax/config.yml.suggested
@@ -166,6 +166,16 @@ else
     mkdir -p .ax
     cp "$TPL/.ax/config.yml" .ax/config.yml
 fi
+
+# 6.6 plugin 메타 reference — cp from PLUGIN_ROOT/docs/reference
+# rules-tokens, critical-rules, glossary, triage-matrix, rule-enforcement 등.
+# CLAUDE.md / spirit/rules / modules/README.md 가 `.ax/docs/reference/*` 경로로 참조 →
+# 사용자 프로젝트에 깔려야 그 참조가 valid. 사용자 customize 안 하는 read-only 자료라
+# plugin 갱신 시 항상 덮어쓰기 OK (drift 위험 없음).
+# MANIFEST 에 안 박은 이유: docs/reference 는 plugin repo 루트의 SSOT (templates/default 외).
+mkdir -p .ax/docs
+cp -R "$PLUGIN_ROOT/docs/reference" .ax/docs/reference
+echo "✓ .ax/docs/reference: $(ls .ax/docs/reference | wc -l | tr -d ' ')개 reference 파일"
 
 # 6.7 .gitignore — append-if-missing (manifest 외)
 # runtime 파일(.ax/state.json, .ax/current-task.json)·임시본(.ax/*.suggested) 등이
@@ -187,7 +197,7 @@ if [ -f "$GITIGNORE_TPL" ]; then
 fi
 
 # 6.8 .ax/mistakes/README.md — 조건부 (manifest 외, 사용자 팀 정책 보존)
-# 0.1.8부터 conditional: 사용자가 mistake 캡처/심사 정책을 README에 추가했을 때
+# conditional: 사용자가 mistake 캡처/심사 정책을 README에 추가했을 때
 # plugin re-install이 clobber하지 않도록.
 mkdir -p .ax/mistakes
 if [ -f .ax/mistakes/README.md ]; then

@@ -7,7 +7,13 @@
 #
 # 동작:
 #   - 기존 파일 있으면 skip + 알림
-#   - tier 메모(.tier) 갱신 (basic→standard→full 자동 승급)
+#   - tier 메모(.tier) 갱신 (basic→standard→full 자동 승급, slim 정의)
+#
+# Slim tier 정의:
+#   basic     spec.md
+#   standard  + plan.md + tasks.md
+#   full      + research/data-model/quickstart 중 하나라도 (단일 파일)
+#   checklists/contracts 의 lazy 생성은 tier 와 무관 — 사용자 명시 추가만
 #
 # Output (--json):
 #   {"status":"ok","result":{"spec_dir":"...","added":[...],"skipped":[...],"new_tier":"standard"}}
@@ -111,9 +117,10 @@ if [ -f "$SPEC_DIR/plan.md" ] && [ -f "$SPEC_DIR/tasks.md" ]; then
     NEW_TIER="standard"
 fi
 if [ -f "$SPEC_DIR/research.md" ] || [ -f "$SPEC_DIR/data-model.md" ] || \
-   [ -f "$SPEC_DIR/contracts/api.yaml" ]; then
+   [ -f "$SPEC_DIR/quickstart.md" ]; then
     NEW_TIER="full"
 fi
+# 의도: checklists/contracts 의 lazy 추가는 tier 변경 X — 그건 사용자 명시 의제 (slim 정책)
 
 if [ "$DRY_RUN" = false ]; then
     {

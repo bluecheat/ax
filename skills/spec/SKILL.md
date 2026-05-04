@@ -19,13 +19,22 @@ description: "새 spec 디렉토리 생성 — 'spec 만들어줘', 'goax spec n
 > 처음부터 spec.md / plan.md / tasks.md / research / data-model / contracts / quickstart / checklists 9개 파일을 *전부* 만들지 않아요.
 > triage의 size×risk 결과로 **딱 필요한 만큼**만 만들고, 결정론적 부분(번호·디렉토리·cp)은 `.ax/scripts/bash/`에 위임.
 
-### Tier 매트릭스
+### Tier 매트릭스 (slim)
 
 | Tier | 산출물 | 적용 size×risk |
 |---|---|---|
-| **basic** | `spec.md` + `README.md` (2) | S/M × L0~L1 |
-| **standard** | + `plan.md` + `tasks.md` (4) | M × L2~L3 / L × L0~L2 |
-| **full** | + `research.md` + `data-model.md` + `contracts/*` + `quickstart.md` + `checklists/requirements.md` (9) | L × L3 / XL × * |
+| **basic** | `spec.md` (1) | S/M × L0~L1 |
+| **standard** | + `plan.md` + `tasks.md` (3) | M × L2~L3 / L × L0~L2 |
+| **full** | + `research.md` + `data-model.md` + `quickstart.md` (6, 단일 파일만) | L × L3 / XL × * |
+
+**Lazy 생성** — tier 와 무관, 필요 시 명시 추가:
+```bash
+add-spec-files.sh --spec <NNN-slug> --add checklists      # checklists/requirements.md
+add-spec-files.sh --spec <NNN-slug> --add contracts       # contracts/{api.yaml, events.md}
+```
+
+> README.md 폐기 — `spec.md` 가 SSOT(What/Why), `plan/tasks` 가 본문. README 는 placeholder 였음.
+> 빈 `checklists/`, `contracts/` 도 안 만듦 — 정말 쓸 때 lazy 생성.
 
 자연어 매핑:
 - "spec만", "스펙만 만들어줘" → `--tier basic`

@@ -7,7 +7,7 @@ applies_to: [code]                  # code | pr | commit | review (필요한 것
 # __Category Title__
 
 > 이 카테고리에 우리 팀의 룰을 추가하세요.
-> 룰 작성법: `docs/reference/rules-tokens.md`
+> 룰 작성법: `.ax/docs/reference/rules-tokens.md`
 
 <!--
 파일 사용법:

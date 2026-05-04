@@ -13,7 +13,7 @@
 
 심리적 부담은 다음 4가지 보호 장치로 낮춰요:
 
-1. **race-free ID** — `${DATE}-${EPOCH_MS}-${PID}-${RANDOM}-<slug>.md` (0.1.8+). 동시 캡처 충돌 0.
+1. **race-free ID** — `${DATE}-${EPOCH_MS}-${PID}-${RANDOM}-<slug>.md`. 동시 캡처 충돌 0.
 2. **자동 redaction** — `capture-mistake.sh` 가 write 직전 DETAILS의 secret 패턴(`AKIA*`, `ghp_*`, `password=*`, JWT, PEM 등)을 `[REDACTED]`로 치환. 타이틀(ONE_LINE)은 시그널 손실 방지를 위해 redact 미적용 — caller가 secret을 타이틀에 직접 박지 않을 책임.
 3. **bot author 컨벤션 (권장)** — 자동 commit 시 `git -c user.name=goax-bot` 사용. "내 실수가 commit log에 박힌다"의 심리적 비용 제거.
 4. **별도 commit 분리** — mistake 캡처는 feature commit과 절대 섞지 않음. 자동화로 작은 chore commit으로만 누적.

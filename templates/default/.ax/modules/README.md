@@ -70,7 +70,7 @@ $EDITOR .ax/modules/<module-name>/rules.md
 - Spirit rules (`.ax/spirit/rules/`): `SP-<CATEGORY>-<NNN>` (예: `SP-SEC-001`)
 - Module rules (`.ax/modules/`): `SP-<MODULE>-<NNN>` (예: `SP-PAY-001`)
 
-룰 토큰 컨벤션 전체: `docs/reference/rules-tokens.md` (goax repo)
+룰 토큰 컨벤션 전체: `.ax/docs/reference/rules-tokens.md`
 
 ## 자동 매칭 vs 수동 참조
 

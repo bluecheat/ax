@@ -70,7 +70,7 @@ ls .pre-commit-config.yaml .husky 2>/dev/null
 ls .coderabbit.yaml .coderabbit.yml .cursorrules .cursor 2>/dev/null
 
 # 도메인 키워드 후보 (Kotlin/Java 패키지에서)
-find . -type d -path "*/src/main/kotlin/com/*/commerce/*" 2>/dev/null \
+find . -type d -path "*/src/main/kotlin/com/*/<project>/*" 2>/dev/null \
  | sed 's|.*/||' | sort -u | head -30
 ```
 
@@ -83,13 +83,13 @@ find . -type d -path "*/src/main/kotlin/com/*/commerce/*" 2>/dev/null \
 - 모듈 간 의존을 적어도 표면적으로 파악 (build.gradle.kts의 `implementation(project(":x"))` 등)
 
 ### 2.2 도메인 식별
-- 모듈명·패키지 트리·도메인 디렉토리(`com.x.commerce.payment` 등)에서 **의미 있는 도메인 단어**만 추출
+- 모듈명·패키지 트리·도메인 디렉토리(`com.<org>.<project>.<domain>` 형태 등)에서 **의미 있는 도메인 단어**만 추출
 - 짧은 prefix(`ad`, `ba`)·일반 단어(`common`, `util`)는 제외
 - 5~12개 정도로 정리
 
 **큰 모노레포 (도메인 후보 50+개) 처리 규칙**:
 
-commerce-* 같은 큰 모노레포에선 패키지 200+개가 발견될 수 있어요. 모두 매핑 X — 다음 우선순위로 추리기:
+<project>-* 같은 큰 모노레포에선 패키지 200+개가 발견될 수 있어요. 모두 매핑 X — 다음 우선순위로 추리기:
 
 1. **돈 흐름이 직접 닿는 키워드 우선**: payment, billing, refund, settlement, balance → 자동으로 후보
 2. **사용자 자산·권한**: order, cart, auth, session, coupon, reward, delivery → 후보
@@ -162,9 +162,10 @@ CRITICAL로 분류하기 전에 **그 룰을 막는 hook 파일 경로**를 정�
 | ADR 작성 의무 | ❌ | 🟡 | 사람 판단 |
 
 **원칙**:
-1. CRITICAL 룰 옆엔 막는 hook 파일 경로를 주석으로라도 명시 — 예: `🔴 ... — '.ax/hooks/pre-commit/critical-rule-grep.sh'`
-2. hook 등록 안 된 룰은 CRITICAL로 박지 않아요. "나중에 등록할 거니까"는 거짓 약속.
-3. ArchUnit·Konsist·Modulith 같은 빌드 타임 검증이 이미 있으면 그 사실을 룰 옆에 명시하고 CRITICAL 가능. 없으면 MANDATORY + ADR로 "자동화 미도입" 기록.
+1. CRITICAL 룰 옆엔 `enforced_by: hook:.ax/hooks/<sub>/<name>.sh` (또는 `external:archunit` 등) inline 표기. schema: `.ax/docs/reference/rule-enforcement.md`
+2. hook 미등록 룰은 CRITICAL 금지 (I1) — "나중에 등록할 거니까"는 거짓 약속. 🟡 MANDATORY + `enforced_by: TODO:<deadline>` 로 시작 → hook 작성 후 🔴 승급.
+3. ArchUnit·Konsist·Modulith 같은 빌드 타임 검증이 이미 있으면 `enforced_by: external:archunit` 으로 명시하고 CRITICAL 가능. 없으면 MANDATORY + ADR로 "자동화 미도입" 기록.
+4. **deadline 절대화** (I2): `TODO:+4w` 같은 상대 형식은 onboarding 이 즉시 absolute date 로 변환해서 박음. doctor 가 동적 해석 안 함 (deadline 기준일 표류 차단).
 
 **🟡 MANDATORY 분류 가드 — "사람 승인 필요"가 진짜인가?**
 
@@ -187,22 +188,32 @@ MANDATORY는 **사람의 판단·승인·리뷰가 게이트로 들어가는 룰
 - No, 그냥 가이드 → CONVENTION
 - No, 실행 안내 → `## Commands` 또는 `.ax/config.yml`
 
-**adoption-plan.md에 분류 시 의무 기재**:
+**adoption-plan.md에 분류 시 의무 기재** (schema: `.ax/docs/reference/rule-enforcement.md`):
 ```yaml
 - id: COMMERCE:CRITICAL:001
   rule: DDL 파일명 V{타임스탬프}__*.sql
-  enforced_by: .ax/hooks/pre-commit/critical-rule-grep.sh
-  enforced_kind: grep
+  enforced_by: hook:.ax/hooks/pre-commit/critical-rule-grep.sh
+  enforced_kind: block
+
 - id: COMMERCE:MANDATORY:001
   rule: 모듈 의존 단방향
-  enforced_by: PR 리뷰 + (TODO) ArchUnit
-  enforced_kind: human + missing
+  enforced_by: human:pr-review
+  enforced_kind: human
+
+- id: COMMERCE:MANDATORY:002          # deferred 예시 — hook 작성 전까지
+  rule: ArchUnit 도입 후 자동 검증
+  enforced_by: TODO:2026-06-01        # absolute date 필수 (I2)
+  enforced_kind: missing
 ```
 
-`enforced_by`가 비어있는 CRITICAL은 자동으로 MANDATORY 강등 제안.
+**invariant** (doctor 가 매 호출 검증):
+- I1. 🔴 CRITICAL 의 `enforced_by` 는 `hook:*` / `external:*` 만. `TODO:*`/`human:*`/`script:*` 면 자동으로 🟡 MANDATORY 강등 제안.
+- I2. `TODO:*` 는 deadline (`YYYY-MM-DD` 또는 `+Nd/+Nw`) 필수. 상대 형식은 즉시 절대화.
+- I3. doctor 가 deadline 임박(≤7일)·초과를 보고. 초과는 강등 권장 (자동 X).
+- I5. `enforced_by: hook:<path>` 면 (a) 파일 실제 존재 (b) `.claude/settings.json` 에 등록. 둘 다 OK 여야 enforce 보장.
 
 ### 2.5 외부 spec
-sibling 디렉토리(`commerce-spec` 등)나 자기 안의 `spec/` `specs/` `governance/`가 의미 있는 결정 문서를 가지고 있으면 후보로 보여줘요.
+sibling 디렉토리(`<repo>-spec` 등)나 자기 안의 `spec/` `specs/` `governance/`가 의미 있는 결정 문서를 가지고 있으면 후보로 보여줘요.
 
 ## 3. 사용자와 4가지 결정
 
@@ -342,7 +353,7 @@ done
 [Q2/5] 도메인 위험도 매핑 (이전: Q1=a)
 
  📍 발견
-  도메인 N개 식별 (commerce-core 패키지 기준)
+  도메인 N개 식별 (<project> 패키지 기준)
   >15개면 핵심만 매핑 + default L1 정책 권장
 
  🎯 목표
@@ -428,7 +439,7 @@ done
 ```
 [Q4/5] 외부 spec 처리 (이전: Q1=a, Q2=a, Q3=a)
 
- 📍 발견 sibling 디렉토리: <name> (예: commerce-spec)
+ 📍 발견 sibling 디렉토리: <name> (예: <repo>-spec)
    specs/ N개, policies/ M개, adr/ K개
 
  🎯 목표 Layer 3 (Spec/ADR)에서 외부 spec을 어떻게 다룰지 결정
@@ -528,7 +539,7 @@ Layer 1 — CLAUDE.md 시그널화:
  ```
  # <PROJECT_NAME> — Constitution
 
- > AI 에이전트의 비협상 룰. 룰 토큰: `<scope>:<TIER>:<NNN>` — goax repo `docs/reference/rules-tokens.md` 참조.
+ > AI 에이전트의 비협상 룰. 룰 토큰: `<scope>:<TIER>:<NNN>` — `.ax/docs/reference/rules-tokens.md` 참조.
  ```
 
  **(b) META — 핵심 가드레일 4원칙 (항상 동일 문구)**:
@@ -582,9 +593,13 @@ Layer 1 — CLAUDE.md 시그널화:
  │           critical-rule-grep.sh에 패턴 추가 (LLM이 작성, 사용자 검토)
  │      ✓  enforced_by 채워짐, CRITICAL 진짜 효력
  │
- │  ○  [b]  나중에 — 룰만 박고 enforced_by: TODO
- │      📂 CLAUDE.md에 룰 박고 enforced_by 마커만
- │      ⚠  doctor가 매주 알림. 4주 안에 hook 미작성 시 MANDATORY 강등 제안
+ │  ○  [b]  나중에 — 🟡 MANDATORY 로 깔고 enforced_by: TODO:<deadline>   ✓ CRITICAL 보다 권장
+ │      📂 라벨을 🟡 MANDATORY 로 시작. CLAUDE.md 에 enforced_by: TODO:YYYY-MM-DD
+ │            (사용자 입력 — 기본 +4w = absolute date 로 즉시 변환, I2)
+ │      📋 ADR 0001 에 checklist 추가:
+ │            "- [ ] <YYYY-MM-DD> hook <name> 작성 또는 강등 (룰 ID: <scope>:MANDATORY:NNN)"
+ │      ✓  거짓 약속 차단 (🔴 + TODO 는 I1 위반). 작성 후 🔴 승급이 정직.
+ │      ⚠  doctor 가 매 호출마다 deadline 추적. 임박/초과 시 다음 단계 옵션 제시.
  │
  │  ○  [c]  CRITICAL 포기 — MANDATORY 또는 CONVENTION으로 강등
  │      📂 시그널만 바꿔서 prepend (사람 게이트로 충분)
@@ -600,9 +615,24 @@ Layer 1 — CLAUDE.md 시그널화:
  2. LLM이 `.ax/hooks/pre-commit/critical-rule-grep.sh`의 패턴 배열에 추가 또는 룰별 sensor 파일 신설
  3. 작성 후 사용자에게 diff 보여주고 적용 동의
 
- **[b] 나중 흐름**:
- - 룰에 `enforced_by: TODO` 메타데이터 추가
- - `.ax/mistakes/auto-todo-hooks.md` 트래킹 파일에 기록 (doctor가 읽음)
+ **[b] 나중 흐름** (deadline 강제 + ADR checklist):
+ 1. **deadline 입력 받기**: "언제까지 작성? (기본 +4w = `<absolute date YYYY-MM-DD>`)"
+    - 상대 형식(`+Nw`/`+Nd`) 입력 받으면 onboarding 이 즉시 absolute date 로 변환해서 박음 (I2 — doctor 가 나중에 동적 해석하지 않음)
+ 2. **라벨 강제 강등**: 사용자 의도가 🔴 였어도 hook 미작성이면 🟡 MANDATORY 로 박음 (I1 위반 차단). 사용자가 🔴 고집하면 ADR 에 거짓 약속 인지 섹션 자동 생성 — `## 거짓 약속 위험 인지` + 강등 트리거 명시.
+ 3. **CLAUDE.md inline 형식**:
+    ```
+    🟡 **`<scope>:MANDATORY:NNN`** *(deferred — hook 작성 전까지 임시)*
+    - enforced_by: TODO:<absolute-YYYY-MM-DD>
+    - enforced_kind: missing
+    - 해야 할 일: `.ax/hooks/pre-commit/<name>.sh` 작성 후 🔴 승급
+    ```
+ 4. **ADR 0001 checklist 항목 자동 추가**:
+    ```markdown
+    ## 4주 후 점검 checklist (자동 생성 — onboarding)
+    - [ ] <YYYY-MM-DD> hook <name>.sh 작성 또는 룰 강등 (<scope>:MANDATORY:NNN)
+    ```
+    doctor 가 ADR 의 `- [ ]` 라인을 grep + deadline 비교 → 임박/초과 보고.
+ 5. **`.ax/mistakes/auto-todo-hooks.md`** 도 갱신 (legacy 호환 — doctor 는 ADR checklist 우선).
 
  **[c] 강등 흐름**:
  - 시그널을 🟡 또는 🔵로 변경해서 prepend
@@ -703,7 +733,7 @@ Layer 1 — CLAUDE.md 시그널화:
  ---
  ```
 
- > **path-scoped 룰**: 위 frontmatter의 `paths:`를 채우면, install / doctor가 `.claude/rules/<name>.md` shim을 자동 생성해 **해당 path 작업 시에만** 룰이 컨텍스트에 들어가요 (Claude Code 네이티브 path-scoped loading). universal 룰(ops/architecture/data/testing 류)은 paths 생략 — CLAUDE.md @import으로 매 turn 주입. 도메인·레이어 특화 룰(예: commerce-domain, commerce-presenter)은 paths를 채워 token cost·adherence 둘 다 개선.
+ > **path-scoped 룰**: 위 frontmatter의 `paths:`를 채우면, install / doctor가 `.claude/rules/<name>.md` shim을 자동 생성해 **해당 path 작업 시에만** 룰이 컨텍스트에 들어가요 (Claude Code 네이티브 path-scoped loading). universal 룰(ops/architecture/data/testing 류)은 paths 생략 — CLAUDE.md @import으로 매 turn 주입. 도메인·레이어 특화 룰(예: <project>-domain, <project>-presenter)은 paths를 채워 token cost·adherence 둘 다 개선.
 
 Layer 2 — 모듈 도메인 룰 stub 생성 (`.ax/modules/<name>/rules.md`):
 
@@ -920,7 +950,7 @@ rm -f .ax/.onboarding-pending
   3. **`import static` 처리** — `^import[[:space:]]+(static[[:space:]]+)?org\.junit\.jupiter\.` regex. `Assertions.assertEquals` 같이 static import 로 들어오는 가장 흔한 형태도 catch.
   4. **`capture-mistake.sh` 호출** — `[ -f "$CAPTURE" ] && bash "$CAPTURE" ...` 식. Mistake Loop가 violation 추적. 호출 안 하면 audit이 추세 못 봄.
   5. **`set -uo pipefail` (no `-e`)** — `grep -qE` 가 no-match로 exit 1 리턴할 때 `set -e`가 hook 본체를 silent abort 하는 trap 회피. plugin shipped hooks도 동일 컨벤션.
-  6. **plugin shipped 파일 append 금지** — `ops.md` 같은 출고본에 commerce 룰 append X. 별도 파일(`.ax/spirit/rules/<project>-<category>.md`)로 만들고 root CLAUDE.md의 CONVENTION 섹션에 `@.ax/spirit/rules/<project>-<category>.md` import. plugin 갱신 시 clobber 방지.
+  6. **plugin shipped 파일 append 금지** — `ops.md` 같은 출고본에 사용자 프로젝트 룰 append X. 별도 파일(`.ax/spirit/rules/<project>-<category>.md`)로 만들고 root CLAUDE.md의 CONVENTION 섹션에 `@.ax/spirit/rules/<project>-<category>.md` import. plugin 갱신 시 clobber 방지.
 
 - **CONVENTION 형식은 한 가지로 통일.** 두 가지 옵션 중 하나 선택:
   - (a) **인라인 정의**: root CLAUDE.md에 `🔵 **\`<scope>:CONVENTION:NNN\`** ...` 형태로 박음 → grep/citation 용이, `update-state.sh`의 `^🔵 \*\*` 패턴이 카운트

@@ -10,7 +10,7 @@
 
 | 부분 | 의미 | 예 |
 |---|---|---|
-| `scope` | 적용 범위 | `AX` (전역), `api`, `web`, `payment`, `commerce-core`, `*` |
+| `scope` | 적용 범위 | `AX` (전역), `api`, `web`, `payment`, `<module>`, `*` |
 | `LEVEL` | 등급 (대문자) | `CRITICAL`, `MANDATORY`, `CONVENTION` |
 | `id` | 3자리 0-padded 순차 | `001`, `042`, `127` |
 
