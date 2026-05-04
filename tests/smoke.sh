@@ -473,6 +473,53 @@ echo "$OUT4" | grep -q 'spirit/rules/universal.md' \
 
 rm -rf "$HOOK_FX"
 
+# register-spirit-hook.sh — settings.json idempotent 머지
+REG_SCRIPT="$REPO/templates/default/.ax/scripts/bash/register-spirit-hook.sh"
+[ -f "$REG_SCRIPT" ] && pass "scripts/bash/register-spirit-hook.sh 존재" \
+                     || fail "scripts/bash/register-spirit-hook.sh 누락"
+[ -x "$REG_SCRIPT" ] && pass "register-spirit-hook.sh 실행권한" \
+                     || fail "register-spirit-hook.sh 실행권한 X"
+bash -n "$REG_SCRIPT" 2>/dev/null && pass "register-spirit-hook.sh 문법 OK" \
+                                  || fail "register-spirit-hook.sh 문법 오류"
+
+REG_FX=$(mktemp -d)
+mkdir -p "$REG_FX/.ax/scripts/bash" "$REG_FX/.claude"
+cp "$REG_SCRIPT" "$REPO/templates/default/.ax/scripts/bash/common.sh" "$REG_FX/.ax/scripts/bash/"
+
+# (1) PreToolUse 없는 settings.json — 신규 entry 추가
+echo '{"hooks":{"UserPromptSubmit":[]}}' > "$REG_FX/.claude/settings.json"
+CLAUDE_PROJECT_DIR=$REG_FX bash "$REG_FX/.ax/scripts/bash/register-spirit-hook.sh" >/dev/null 2>&1
+if grep -q 'spirit-rules-inject\.sh' "$REG_FX/.claude/settings.json"; then
+    pass "register — PreToolUse 없는 settings.json에 신규 entry 추가"
+else
+    fail "register — 신규 entry 추가 실패"
+fi
+
+# (2) idempotent — 재실행 시 중복 안 됨
+CLAUDE_PROJECT_DIR=$REG_FX bash "$REG_FX/.ax/scripts/bash/register-spirit-hook.sh" >/dev/null 2>&1
+COUNT=$(grep -c 'spirit-rules-inject\.sh' "$REG_FX/.claude/settings.json")
+[ "$COUNT" -eq 1 ] && pass "register — idempotent (재실행 시 중복 X)" \
+                  || fail "register — idempotent 실패 ($COUNT 회 등록)"
+
+# (3) 기존 Edit|Write|MultiEdit entry 보존하며 append
+echo '{"hooks":{"PreToolUse":[{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash existing.sh"}]}]}}' \
+    > "$REG_FX/.claude/settings.json"
+CLAUDE_PROJECT_DIR=$REG_FX bash "$REG_FX/.ax/scripts/bash/register-spirit-hook.sh" >/dev/null 2>&1
+EXIST_KEPT=$(grep -c "existing\.sh" "$REG_FX/.claude/settings.json")
+INJ_ADDED=$(grep -c "spirit-rules-inject\.sh" "$REG_FX/.claude/settings.json")
+if [ "$EXIST_KEPT" -eq 1 ] && [ "$INJ_ADDED" -eq 1 ]; then
+    pass "register — 기존 hook 보존 + spirit-rules-inject append"
+else
+    fail "register — 머지 실패 (existing=$EXIST_KEPT, inject=$INJ_ADDED)"
+fi
+
+# (4) 백업 파일 생성 검증
+BAK_COUNT=$(find "$REG_FX/.claude" -name "settings.json.bak.*" 2>/dev/null | wc -l | tr -d ' ')
+[ "$BAK_COUNT" -ge 1 ] && pass "register — settings.json 백업 자동 생성" \
+                       || fail "register — 백업 미생성"
+
+rm -rf "$REG_FX"
+
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────

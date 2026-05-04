@@ -195,11 +195,17 @@ HOOK_FILE="$ROOT/.ax/hooks/pre-edit/spirit-rules-inject.sh"
 
 ```
  [n] ✓ spirit lint 정리                 [추천]
-  명령 비표준 헤더 수정 + 중복 토큰 해소 (사용자) + settings.json hook 등록 확인
-  이유 spirit/SKILL.md:28-31 lint 통과 + path-scoped 룰이 자동 주입됨
+  명령 비표준 헤더 수정 + 중복 토큰 해소 (사용자)
+  이유 spirit/SKILL.md:28-31 lint 통과
+
+ [s] ✓ spirit-rules-inject.sh hook 자동 등록     [paths 룰 있고 hook 미등록 시 추천]
+  명령 bash .ax/scripts/bash/register-spirit-hook.sh
+  안전 idempotent (이미 등록되면 skip), 백업 자동 생성 (.claude/settings.json.bak.<TS>)
+  결과 PreToolUse(Edit|Write|MultiEdit)의 hooks 배열에 spirit-rules-inject.sh append
+  이유 path-scoped spirit 룰이 즉시 동작
 ```
 
-자동 적용 X — 헤더 수정/중복 해소는 의미상 LLM이 사용자와 함께. hook 등록 누락 시 settings.json 머지 가이드.
+[s]는 사용자 동의 후 실행 — 직접 수정이지만 idempotent + 백업이라 안전. 헤더 수정/중복 해소(`[n]`)는 의미상 LLM이 사용자와 함께.
 
 ## 3. 출력
 
