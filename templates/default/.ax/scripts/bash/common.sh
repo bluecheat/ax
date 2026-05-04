@@ -18,21 +18,22 @@ goax_log()   { printf '[goax] %s\n' "$*" >&2; }
 goax_warn()  { printf '[goax] WARN: %s\n' "$*" >&2; }
 goax_error() {
     if [ "${JSON_MODE:-false}" = "true" ]; then
-        json_output "error" "{}" "" "[]" "$(printf '%s' "$*" | _json_array_helper)"
+        local errs
+        errs=$(_goax_json_array "$*")
+        json_output "error" "{}" "" "[]" "$errs"
     else
         printf '[goax] ERROR: %s\n' "$*" >&2
     fi
 }
 
-# stdin 단일 메시지 → JSON 배열 한 원소로 안전 escape
-_json_array_helper() {
-    local msg
-    msg=$(cat)
+# 단일 문자열 → JSON array (잘 escape 된 1-element). arg-based, stdin 안 씀.
+# 다른 _goax_* helper와 명명 일관 + caller 호출이 깔끔.
+_goax_json_array() {
     if command -v jq >/dev/null 2>&1; then
-        jq -nc --arg m "$msg" '[$m]'
+        jq -nc --arg m "$1" '[$m]'
     else
         local esc
-        esc=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        esc=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')
         printf '["%s"]' "$esc"
     fi
 }
@@ -191,7 +192,7 @@ json_output() {
 json_error() {
     local msg="$1"
     local errors_json
-    errors_json=$(printf '%s' "$msg" | _json_array_helper)
+    errors_json=$(_goax_json_array "$msg")
     json_output "error" "{}" "" "[]" "$errors_json"
     exit "$EXIT_ERROR"
 }
@@ -200,7 +201,7 @@ json_error() {
 json_skip() {
     local msg="$1"
     local warnings_json
-    warnings_json=$(printf '%s' "$msg" | _json_array_helper)
+    warnings_json=$(_goax_json_array "$msg")
     json_output "skipped" "{}" "$msg" "$warnings_json" "[]"
     exit "$EXIT_SKIPPED"
 }

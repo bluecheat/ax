@@ -36,10 +36,11 @@ if [ -f "$COMMON" ]; then
 fi
 
 # 1) CATASTROPHIC — 복구 불가, mode 무관 항상 차단
-# `-[rRfF]*[rR][rRfF]*` — flag 안에 r/R 필수 (rm -fr, -rf, -Rf, -fRr 모두 매칭. -f 단독은 / 삭제 X라 제외)
+# rm 옵션 순서·조합·v 플래그·multi-chunk(`rm -r -f /`) 모두 매칭:
+#   `(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+` — 0회 이상 flag chunk + 마지막 chunk
 CATASTROPHIC_PATTERNS=(
-    'rm[[:space:]]+-[rRfF]*[rR][rRfF]*[[:space:]]+/[[:space:]]*$'      # rm -rf / (variants: -fr, -Rf, ...)
-    'rm[[:space:]]+-[rRfF]*[rR][rRfF]*[[:space:]]+/[[:space:]]'         # rm -rf / <something>
+    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+/[[:space:]]*$'  # rm -rf /
+    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+/[[:space:]]'    # rm -rf / <something>
     'mkfs\.'                                              # 디스크 포맷
     ':\(\)\{[[:space:]]*:\|:[[:space:]]*&[[:space:]]*\};:' # fork bomb
     'dd[[:space:]]+if=/dev/(zero|random|urandom).*of=/dev/' # 디바이스 덮어쓰기
@@ -49,9 +50,9 @@ CATASTROPHIC_PATTERNS=(
 # 2) RECOVERABLE — mode-aware
 # `--force([[:space:]]|$)` — EOL `git push --force`도 잡음. `--force-with-lease`는 `-` 가 와서 미매칭 (의도)
 RECOVERABLE_PATTERNS=(
-    'rm[[:space:]]+-[rRfF]*[rR][rRfF]*[[:space:]]+~'
-    'rm[[:space:]]+-[rRfF]*[rR][rRfF]*[[:space:]]+\$HOME'
-    'rm[[:space:]]+-[rRfF]*[rR][rRfF]*[[:space:]]+\.\.'
+    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+~'
+    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+\$HOME'
+    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+\.\.'
     'git[[:space:]]+push[[:space:]]+(--force([[:space:]]|$)|-f([[:space:]]|$))'
     'git[[:space:]]+push[[:space:]].*--force-with-lease'
     'git[[:space:]]+reset[[:space:]]+--hard[[:space:]]+(origin|HEAD~|main|master)'
