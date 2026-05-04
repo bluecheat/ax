@@ -196,13 +196,12 @@ else
     cp "$TPL/.ax/mistakes/README.md" .ax/mistakes/README.md
 fi
 
-# 6.9 .claude/rules/ shim 생성 (path-scoped rule loading)
-# 0.1.8부터 도입: spirit/rules/<name>.md의 frontmatter `paths:` 가 있는 룰만
-# .claude/rules/<name>.md 로 shim 생성 → Claude Code 네이티브 path-scoped loading.
-# paths 없으면 universal — CLAUDE.md @import 그대로 동작.
-mkdir -p .claude/rules
-bash .ax/scripts/bash/generate-rule-shims.sh 2>/dev/null || \
-    echo "ⓘ generate-rule-shims.sh — paths 선언된 spirit/rules가 아직 없음 (universal로 시작)"
+# 6.9 path-scoped rule injection (Design B, 0.1.8+)
+# spirit/rules/<name>.md 의 frontmatter `paths:` 와 편집 대상 파일 path를 매칭해
+# `.ax/hooks/pre-edit/spirit-rules-inject.sh` 가 hook 시점에 additionalContext로 안내.
+# .claude/rules/ shim 메커니즘은 0.1.8에서 폐기 — `.claude/`-only 의존성 회피.
+# settings.json.template 가 hook을 PreToolUse(Edit|Write|MultiEdit)에 자동 등록.
+echo "✓ path-scoped rule loading — .ax/hooks/pre-edit/spirit-rules-inject.sh"
 
 # 7. 메타 정보
 cat > .ax/version <<META

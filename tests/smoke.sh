@@ -401,81 +401,77 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────
-section "11. generate-rule-shims.sh — path-scoped rule shim (NEW 0.1.8)"
+section "11. spirit-rules-inject.sh — hook-based path-scoped (Design B, NEW 0.1.8)"
 # ───────────────────────────────────────────────────────────
-[ -f "$REPO/templates/default/.ax/scripts/bash/generate-rule-shims.sh" ] \
-    && pass "scripts/bash/generate-rule-shims.sh 존재" \
-    || fail "scripts/bash/generate-rule-shims.sh 누락"
+HOOK_PATH="$REPO/templates/default/.ax/hooks/pre-edit/spirit-rules-inject.sh"
+[ -f "$HOOK_PATH" ] && pass "hooks/pre-edit/spirit-rules-inject.sh 존재" \
+                   || fail "hooks/pre-edit/spirit-rules-inject.sh 누락"
 
-[ -x "$REPO/templates/default/.ax/scripts/bash/generate-rule-shims.sh" ] \
-    && pass "generate-rule-shims.sh 실행권한" \
-    || fail "generate-rule-shims.sh 실행권한 X"
+[ -x "$HOOK_PATH" ] && pass "spirit-rules-inject.sh 실행권한" \
+                    || fail "spirit-rules-inject.sh 실행권한 X"
 
-bash -n "$REPO/templates/default/.ax/scripts/bash/generate-rule-shims.sh" 2>/dev/null \
-    && pass "generate-rule-shims.sh 문법 OK" \
-    || fail "generate-rule-shims.sh 문법 오류"
+bash -n "$HOOK_PATH" 2>/dev/null && pass "spirit-rules-inject.sh 문법 OK" \
+                                 || fail "spirit-rules-inject.sh 문법 오류"
 
-# 런타임 e2e — fixture에서 paths있는 rule + paths없는 rule 혼합
-SHIM_FX=$(mktemp -d)
-mkdir -p "$SHIM_FX/.ax/spirit/rules" "$SHIM_FX/.ax/scripts/bash" "$SHIM_FX/.claude/rules"
-cp -R "$REPO/templates/default/.ax/scripts/bash/." "$SHIM_FX/.ax/scripts/bash/"
-cat > "$SHIM_FX/.ax/spirit/rules/scoped.md" <<'MD'
+# settings.json.template에 hook 등록됐는지
+grep -q 'spirit-rules-inject\.sh' "$REPO/templates/default/.claude/settings.json.template" \
+    && pass "settings.json.template에 hook 등록됨" \
+    || fail "settings.json.template에 spirit-rules-inject.sh 미등록"
+
+# 런타임 e2e — fixture에서 매칭/미매칭 검증
+HOOK_FX=$(mktemp -d)
+mkdir -p "$HOOK_FX/.ax/spirit/rules" "$HOOK_FX/.ax/hooks/pre-edit"
+cp "$HOOK_PATH" "$HOOK_FX/.ax/hooks/pre-edit/"
+cat > "$HOOK_FX/.ax/spirit/rules/scoped.md" <<'MD'
 ---
 category: domain
 paths:
   - "**/domain/**"
   - "**/*Entity*.kt"
 ---
-# Scoped rule
-## SP-DOM-001: example
+# Scoped
+## SP-DOM-001: x
 MD
-cat > "$SHIM_FX/.ax/spirit/rules/universal.md" <<'MD'
+cat > "$HOOK_FX/.ax/spirit/rules/universal.md" <<'MD'
 ---
 category: ops
-applies_to: [code, pr]
+applies_to: [code]
 ---
-# Universal rule
-## SP-OPS-001: example
-MD
-cat > "$SHIM_FX/.ax/spirit/rules/empty-paths.md" <<'MD'
----
-category: misc
-paths: []
----
-# No paths
-## SP-MISC-001: x
+# Universal
+## SP-OPS-001: x
 MD
 
-CLAUDE_PROJECT_DIR=$SHIM_FX bash "$REPO/templates/default/.ax/scripts/bash/generate-rule-shims.sh" >/dev/null 2>&1
-
-[ -f "$SHIM_FX/.claude/rules/scoped.md" ] \
-    && pass "shim 생성 — paths있는 룰 → .claude/rules/scoped.md" \
-    || fail "shim 누락 — paths있는 룰이 shim 안 만들어짐"
-
-[ ! -f "$SHIM_FX/.claude/rules/universal.md" ] \
-    && pass "shim 생략 — paths없는 universal 룰" \
-    || fail "shim 잘못 생성 — paths없는 룰이 shim 만들어짐"
-
-[ ! -f "$SHIM_FX/.claude/rules/empty-paths.md" ] \
-    && pass "shim 생략 — paths: [] 빈 배열" \
-    || fail "shim 잘못 생성 — paths: [] 룰이 shim 만들어짐"
-
-# shim 내용 검증 — paths frontmatter + relative @-import
-SHIM_CONTENT=$(cat "$SHIM_FX/.claude/rules/scoped.md" 2>/dev/null)
-echo "$SHIM_CONTENT" | grep -q '"\*\*/domain/\*\*"' \
-    && echo "$SHIM_CONTENT" | grep -q '@\.\./\.\./\.ax/spirit/rules/scoped\.md' \
-    && pass "shim 내용 — paths 보존 + relative @-import" \
-    || fail "shim 내용 깨짐: $SHIM_CONTENT"
-
-# JSON 모드 — generated/skipped 분류
-JSON=$(CLAUDE_PROJECT_DIR=$SHIM_FX bash "$REPO/templates/default/.ax/scripts/bash/generate-rule-shims.sh" --json 2>&1)
-if echo "$JSON" | jq -e '.result.skipped | length >= 2' >/dev/null 2>&1; then
-    pass "JSON --json 모드 — generated/skipped 분류"
+# (1) 매칭되는 path → additionalContext 출력
+OUT1=$(echo "{\"tool_input\":{\"file_path\":\"$HOOK_FX/some/domain/Order.kt\"}}" \
+       | CLAUDE_PROJECT_DIR=$HOOK_FX bash "$HOOK_FX/.ax/hooks/pre-edit/spirit-rules-inject.sh" 2>&1)
+if echo "$OUT1" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null 2>&1 \
+    && echo "$OUT1" | grep -q 'spirit/rules/scoped.md'; then
+    pass "hook 매칭 — domain path → scoped.md additionalContext"
 else
-    fail "JSON 모드 출력 깨짐: $JSON"
+    fail "hook 매칭 실패: $OUT1"
 fi
 
-rm -rf "$SHIM_FX"
+# (2) Entity 파일명 매칭
+OUT2=$(echo "{\"tool_input\":{\"file_path\":\"$HOOK_FX/x/UserEntity.kt\"}}" \
+       | CLAUDE_PROJECT_DIR=$HOOK_FX bash "$HOOK_FX/.ax/hooks/pre-edit/spirit-rules-inject.sh" 2>&1)
+echo "$OUT2" | grep -q 'spirit/rules/scoped.md' \
+    && pass "hook 매칭 — *Entity*.kt 파일명 패턴" \
+    || fail "hook 매칭 실패 (Entity): $OUT2"
+
+# (3) 매칭 없는 path → silent (빈 출력)
+OUT3=$(echo "{\"tool_input\":{\"file_path\":\"$HOOK_FX/random/Foo.txt\"}}" \
+       | CLAUDE_PROJECT_DIR=$HOOK_FX bash "$HOOK_FX/.ax/hooks/pre-edit/spirit-rules-inject.sh" 2>&1)
+[ -z "$OUT3" ] && pass "hook 비매칭 — silent 출력" \
+              || fail "hook 비매칭에 출력 발생: $OUT3"
+
+# (4) universal 룰(paths 없음)은 매칭 안 됨
+OUT4=$(echo "{\"tool_input\":{\"file_path\":\"$HOOK_FX/anywhere/file.kt\"}}" \
+       | CLAUDE_PROJECT_DIR=$HOOK_FX bash "$HOOK_FX/.ax/hooks/pre-edit/spirit-rules-inject.sh" 2>&1)
+echo "$OUT4" | grep -q 'spirit/rules/universal.md' \
+    && fail "universal 룰이 잘못 매칭됨: $OUT4" \
+    || pass "hook — paths 없는 universal 룰은 매칭 안 됨"
+
+rm -rf "$HOOK_FX"
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"

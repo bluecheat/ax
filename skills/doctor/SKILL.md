@@ -156,9 +156,9 @@ SUGGESTED=$(find .ax -maxdepth 2 -name "*.suggested" 2>/dev/null)
 
 **원칙**: 자동 수정 X — 사용자가 [m] 선택해야 실행. output-style.md 제거는 git commit 영향 → 사용자 컨텍스트에서만.
 
-### 3.7 spirit lint + .claude/rules/ shim drift (NEW 0.1.8+)
+### 3.7 spirit lint + path-scoped hook 등록 점검 (NEW 0.1.8+)
 
-`spirit/SKILL.md:28-31`이 mandate하는 `^## SP-CAT-NNN: text` 형식 검증 + `.claude/rules/` shim이 spirit/rules/와 동기화됐는지 확인.
+`spirit/SKILL.md:28-31`이 mandate하는 `^## SP-CAT-NNN: text` 형식 검증 + path-scoped 룰의 hook (`spirit-rules-inject.sh`) 이 settings.json에 등록됐는지 확인.
 
 ```bash
 # (1) spirit/rules/*.md 헤더 형식 검증 — 비표준 헤더 검출
@@ -174,31 +174,32 @@ DUPES=$(grep -hE '^## SP-[A-Z]+-[0-9]{3}:' "$ROOT/.ax/spirit/rules/"*.md 2>/dev/
     | sed -E 's/^## (SP-[A-Z]+-[0-9]{3}):.*/\1/' \
     | sort | uniq -d)
 
-# (3) shim drift — spirit/rules/*.md의 paths 변경 후 .claude/rules/ 미재생성 감지
-# generate-rule-shims.sh --dry-run 으로 변경 대상이 있으면 안내
-DRIFT_RESULT=$(bash "$ROOT/.ax/scripts/bash/generate-rule-shims.sh" --json --dry-run 2>/dev/null || true)
-DRIFT_GENERATED=$(echo "$DRIFT_RESULT" | jq -r '.result.generated | length' 2>/dev/null || echo 0)
+# (3) hook 등록 검증 — paths 선언된 spirit 룰이 있는데 spirit-rules-inject.sh가
+# settings.json에 등록 안 됐으면 path-scoped loading 미동작
+HAS_PATHS=$(grep -lE '^paths:[[:space:]]*$' "$ROOT/.ax/spirit/rules/"*.md 2>/dev/null | head -1)
+HOOK_REGISTERED=$(grep -c 'spirit-rules-inject\.sh' "$ROOT/.claude/settings.json" 2>/dev/null || echo 0)
+HOOK_FILE="$ROOT/.ax/hooks/pre-edit/spirit-rules-inject.sh"
 ```
 
 보고:
-- 비표준 헤더 / 중복 토큰 / shim drift 어느 하나 있으면 §3 출력에 "Spirit lint" 섹션 추가:
+- 비표준 헤더 / 중복 토큰 / hook 미등록 (paths 있는데 hook 없음) 어느 하나 있으면 §3 출력에 "Spirit lint" 섹션 추가:
 
 ```
  ─ Spirit lint ──────────────────────────────────────────
  · spirit/rules/commerce-presenter.md — 비표준 헤더 3개 (SP-CAT-NNN 형식 위배)
  · 중복 SP-DOM-008 — commerce-domain.md 2회 등장
- · .claude/rules/ drift — 4 파일 재생성 필요 (paths 변경 후 미반영)
+ · paths 선언 룰 N개 있는데 spirit-rules-inject.sh hook 미등록 — path-scoped loading 미동작
 ```
 
 `다음 단계`에 추가:
 
 ```
  [n] ✓ spirit lint 정리                 [추천]
-  명령 비표준 헤더 수정 + 중복 토큰 해소 (사용자) + generate-rule-shims.sh 실행
-  이유 spirit/SKILL.md:28-31 lint 통과 + Claude Code path-scoped 정상 동작
+  명령 비표준 헤더 수정 + 중복 토큰 해소 (사용자) + settings.json hook 등록 확인
+  이유 spirit/SKILL.md:28-31 lint 통과 + path-scoped 룰이 자동 주입됨
 ```
 
-자동 적용 X — 헤더 수정/중복 해소는 의미상 LLM이 사용자와 함께. shim 재생성만 자동 가능 (`bash .ax/scripts/bash/generate-rule-shims.sh`).
+자동 적용 X — 헤더 수정/중복 해소는 의미상 LLM이 사용자와 함께. hook 등록 누락 시 settings.json 머지 가이드.
 
 ## 3. 출력
 
