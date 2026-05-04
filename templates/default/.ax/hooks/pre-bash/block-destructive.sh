@@ -36,11 +36,11 @@ if [ -f "$COMMON" ]; then
 fi
 
 # 1) CATASTROPHIC — 복구 불가, mode 무관 항상 차단
-# rm 옵션 순서·조합·v 플래그·multi-chunk(`rm -r -f /`) 모두 매칭:
-#   `(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+` — 0회 이상 flag chunk + 마지막 chunk
+# rm 옵션 순서·조합·v 플래그·multi-chunk(`rm -r -f /`) + end-of-options sentinel(`rm -rf -- /`) 모두 매칭:
+#   `(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+(--[[:space:]]+)?` — 0회 이상 flag chunk + 마지막 chunk + 선택적 `--`
 CATASTROPHIC_PATTERNS=(
-    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+/[[:space:]]*$'  # rm -rf /
-    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+/[[:space:]]'    # rm -rf / <something>
+    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+(--[[:space:]]+)?/[[:space:]]*$'  # rm -rf /, rm -rf -- /
+    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+(--[[:space:]]+)?/[[:space:]]'    # rm -rf / <something>
     'mkfs\.'                                              # 디스크 포맷
     ':\(\)\{[[:space:]]*:\|:[[:space:]]*&[[:space:]]*\};:' # fork bomb
     'dd[[:space:]]+if=/dev/(zero|random|urandom).*of=/dev/' # 디바이스 덮어쓰기
@@ -48,12 +48,12 @@ CATASTROPHIC_PATTERNS=(
 )
 
 # 2) RECOVERABLE — mode-aware
-# `--force([[:space:]]|$)` — EOL `git push --force`도 잡음. `--force-with-lease`는 `-` 가 와서 미매칭 (의도)
+# `git push ... --force` — remote/ref가 사이에 와도 잡음. `--force-with-lease`는 별도 패턴 + 메인은 `force([[:space:]]|$)` 라 미매칭 (의도).
 RECOVERABLE_PATTERNS=(
-    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+~'
-    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+\$HOME'
-    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+\.\.'
-    'git[[:space:]]+push[[:space:]]+(--force([[:space:]]|$)|-f([[:space:]]|$))'
+    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+(--[[:space:]]+)?~'
+    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+(--[[:space:]]+)?\$HOME'
+    'rm[[:space:]]+(-[rRfFvV]+[[:space:]]+)*-[rRfFvV]+[[:space:]]+(--[[:space:]]+)?\.\.'
+    'git[[:space:]]+push[[:space:]].*(--force([[:space:]]|$)|-f([[:space:]]|$))'
     'git[[:space:]]+push[[:space:]].*--force-with-lease'
     'git[[:space:]]+reset[[:space:]]+--hard[[:space:]]+(origin|HEAD~|main|master)'
     'sudo[[:space:]]+rm'

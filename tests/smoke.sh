@@ -695,11 +695,14 @@ assert_blocked 'rm -fr /'    'rm -fr / variant (fr 순서)'
 assert_blocked 'rm -rfv /'   'rm -rfv / (verbose flag)'
 assert_blocked 'rm -fvR /'   'rm -fvR / (대소문자 혼합)'
 assert_blocked 'rm -r -f /'  'rm -r -f / (multi-chunk)'
+assert_blocked 'rm -rf -- /' 'rm -rf -- / (end-of-options sentinel)'
 assert_blocked 'mkfs.ext4 /dev/sda1' 'mkfs.* (디스크 포맷)'
 
 # RECOVERABLE — warning mode에선 통과 (exit 0)
-assert_passed 'git push --force'             'EOL --force (이전 미매칭)'
-assert_passed 'git push --force-with-lease'  '--force-with-lease (recoverable)'
+assert_passed 'git push --force'                      'EOL --force (이전 미매칭)'
+assert_passed 'git push --force-with-lease'           '--force-with-lease (recoverable)'
+assert_passed 'git push origin main --force'          'remote/ref 사이에 --force (이전 우회 케이스)'
+assert_passed 'git push origin -f'                    'remote 다음 -f'
 
 # 안전 명령 — 통과
 assert_passed 'rm /tmp/x'    'rm 단일 파일 (no -r)'
