@@ -522,6 +522,145 @@ BAK_COUNT=$(find "$REG_FX/.claude" -name "settings.json.bak.*" 2>/dev/null | wc 
 rm -rf "$REG_FX"
 
 # ───────────────────────────────────────────────────────────
+section "12. update-state.sh — state.json 시그널 카운트 정확성 (NEW 0.1.8)"
+# ───────────────────────────────────────────────────────────
+US_FX=$(mktemp -d)
+mkdir -p "$US_FX/.ax/spirit/rules" "$US_FX/.ax/scripts/bash" "$US_FX/.ax/modules" "$US_FX/.ax/docs/adr" "$US_FX/.ax/docs/spec"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,update-state.sh} "$US_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/hud/state.json.template" "$US_FX/.ax/state.json"
+cat > "$US_FX/CLAUDE.md" <<'MD'
+🔴 **`X:CRITICAL:001`** rule a
+🔴 **`X:CRITICAL:002`** rule b
+🟡 **`X:MANDATORY:001`** rule c
+🔵 **`X:CONVENTION:001`** rule d
+MD
+cat > "$US_FX/.ax/spirit/rules/foo.md" <<'MD'
+## SP-FOO-001: a
+## SP-FOO-002: b
+MD
+
+CLAUDE_PROJECT_DIR=$US_FX bash "$US_FX/.ax/scripts/bash/update-state.sh" >/dev/null 2>&1
+
+if command -v jq >/dev/null 2>&1; then
+    CRIT=$(jq -r '.layers.L1_constitution.signals.critical' "$US_FX/.ax/state.json")
+    MAND=$(jq -r '.layers.L1_constitution.signals.mandatory' "$US_FX/.ax/state.json")
+    CONV=$(jq -r '.layers.L1_constitution.signals.convention' "$US_FX/.ax/state.json")
+    L1_ACTIVE=$(jq -r '.layers.L1_constitution.active' "$US_FX/.ax/state.json")
+
+    [ "$CRIT" = "2" ] && pass "update-state — CRITICAL=2 (CLAUDE.md inline)" \
+                      || fail "update-state — CRITICAL=$CRIT (expected 2)"
+    [ "$MAND" = "1" ] && pass "update-state — MANDATORY=1" \
+                      || fail "update-state — MANDATORY=$MAND (expected 1)"
+    # CONV: inline 1 (CLAUDE.md) + spirit heading 2 = 3
+    [ "$CONV" = "3" ] && pass "update-state — CONVENTION=3 (1 inline + 2 spirit heading)" \
+                      || fail "update-state — CONVENTION=$CONV (expected 3, 0.1.8 heading 패턴 합산)"
+    [ "$L1_ACTIVE" = "true" ] && pass "update-state — L1 active (rules > 0)" \
+                              || fail "update-state — L1 active=$L1_ACTIVE"
+fi
+rm -rf "$US_FX"
+
+# ───────────────────────────────────────────────────────────
+section "13. check-templates-drift.sh — 3-state coverage (NEW 0.1.8)"
+# ───────────────────────────────────────────────────────────
+DR_FX=$(mktemp -d)
+mkdir -p "$DR_FX/.ax/_templates/spec/contracts" "$DR_FX/.ax/_templates/spec/checklists" "$DR_FX/.ax/scripts/bash"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,check-templates-drift.sh} "$DR_FX/.ax/scripts/bash/"
+# 최소 _templates 파일들 (sha 비교 대상)
+cp -R "$REPO/templates/default/.ax/_templates/spec/." "$DR_FX/.ax/_templates/spec/" 2>/dev/null
+
+# (1) origin_present=false 상태 — 새 install이라 .origin 없음
+OUT=$(CLAUDE_PROJECT_DIR=$DR_FX bash "$DR_FX/.ax/scripts/bash/check-templates-drift.sh" --json 2>&1)
+if echo "$OUT" | jq -e '.result.origin_present == false' >/dev/null 2>&1; then
+    pass "drift — .origin 부재 시 origin_present=false"
+else
+    fail "drift — origin_present 잘못: $OUT"
+fi
+
+# (2) pristine state — .origin 만들고 검사
+( cd "$DR_FX/.ax/_templates/spec" && \
+  find . -type f \( -name '*.md' -o -name '*.yaml' -o -name '*.yml' \) \
+    ! -name '.origin' ! -name '.tier' | sort | xargs shasum -a 256 2>/dev/null \
+) > "$DR_FX/.ax/_templates/spec/.origin"
+echo "# goax_version: 0.1.8" >> "$DR_FX/.ax/_templates/spec/.origin"
+
+OUT=$(CLAUDE_PROJECT_DIR=$DR_FX bash "$DR_FX/.ax/scripts/bash/check-templates-drift.sh" --json 2>&1)
+if echo "$OUT" | jq -e '.result.user_modified == false and .result.plugin_updated == false' >/dev/null 2>&1; then
+    pass "drift — pristine state (user_modified=false, plugin_updated=false)"
+else
+    fail "drift — pristine 검출 실패: $OUT"
+fi
+
+# (3) user-modified — 파일 한 개 수정 후 검사
+echo "USER MODIFIED" >> "$DR_FX/.ax/_templates/spec/spec.md"
+OUT=$(CLAUDE_PROJECT_DIR=$DR_FX bash "$DR_FX/.ax/scripts/bash/check-templates-drift.sh" --json 2>&1)
+if echo "$OUT" | jq -e '.result.user_modified == true' >/dev/null 2>&1; then
+    pass "drift — user-modified 검출"
+else
+    fail "drift — user-modified 검출 실패: $OUT"
+fi
+rm -rf "$DR_FX"
+
+# ───────────────────────────────────────────────────────────
+section "14. promote-mistake.sh — candidate + --apply (NEW 0.1.8)"
+# ───────────────────────────────────────────────────────────
+PM_FX=$(mktemp -d)
+mkdir -p "$PM_FX/.ax/mistakes" "$PM_FX/.ax/scripts/bash"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,promote-mistake.sh} "$PM_FX/.ax/scripts/bash/"
+cat > "$PM_FX/CLAUDE.md" <<'MD'
+# Test Constitution
+MD
+
+# (1) 빈 mistakes — candidates 0
+OUT=$(CLAUDE_PROJECT_DIR=$PM_FX bash "$PM_FX/.ax/scripts/bash/promote-mistake.sh" --json --threshold 2 2>&1)
+if echo "$OUT" | jq -e '.result.candidates | length == 0' >/dev/null 2>&1; then
+    pass "promote — 빈 mistakes에서 candidates=0"
+else
+    fail "promote — 빈 검출 실패: $OUT"
+fi
+
+# (2) 같은 카테고리 3개 → threshold=2면 candidate 1개
+for i in 1 2 3; do
+    cat > "$PM_FX/.ax/mistakes/2026-01-0$i-secrets.md" <<EOF
+---
+category: secrets
+severity: high
+---
+# Test $i
+EOF
+done
+OUT=$(CLAUDE_PROJECT_DIR=$PM_FX bash "$PM_FX/.ax/scripts/bash/promote-mistake.sh" --json --threshold 2 2>&1)
+CAND_CAT=$(echo "$OUT" | jq -r '.result.candidates[0].category' 2>/dev/null)
+CAND_CNT=$(echo "$OUT" | jq -r '.result.candidates[0].count' 2>/dev/null)
+if [ "$CAND_CAT" = "secrets" ] && [ "$CAND_CNT" = "3" ]; then
+    pass "promote — 3건 누적 → candidate (secrets:3)"
+else
+    fail "promote — candidate 검출 실패: cat=$CAND_CAT cnt=$CAND_CNT"
+fi
+
+# (3) --apply — CLAUDE.md 갱신 + mistake에 promoted_to 마킹.
+# stderr는 분리 — goax_log가 stdout JSON과 섞이면 jq 파싱 실패.
+OUT=$(CLAUDE_PROJECT_DIR=$PM_FX bash "$PM_FX/.ax/scripts/bash/promote-mistake.sh" \
+    --apply --json --token "TEST:CRITICAL:001" \
+    --category secrets --rule-text "no secrets" 2>/dev/null)
+MARKED=$(echo "$OUT" | jq -r '.result.marked_count' 2>/dev/null)
+if grep -q 'TEST:CRITICAL:001' "$PM_FX/CLAUDE.md" \
+    && [ "$MARKED" = "3" ] \
+    && grep -q '^promoted_to: TEST:CRITICAL:001' "$PM_FX/.ax/mistakes/2026-01-01-secrets.md"; then
+    pass "promote --apply — CLAUDE.md 룰 추가 + 3건 promoted_to 마킹"
+else
+    fail "promote --apply 결과 부정확: marked=$MARKED, claude.md=$(grep TEST $PM_FX/CLAUDE.md || echo none)"
+fi
+
+# (4) 재실행 — promoted_to 있는 mistake는 candidate에서 제외 (idempotent)
+OUT=$(CLAUDE_PROJECT_DIR=$PM_FX bash "$PM_FX/.ax/scripts/bash/promote-mistake.sh" --json --threshold 2 2>&1)
+if echo "$OUT" | jq -e '.result.candidates | length == 0' >/dev/null 2>&1; then
+    pass "promote — promoted_to 마킹된 mistake 재후보 제외 (idempotent)"
+else
+    fail "promote — idempotent 실패: $OUT"
+fi
+rm -rf "$PM_FX"
+
+# ───────────────────────────────────────────────────────────
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────
 if [ "$fail_count" -eq 0 ]; then

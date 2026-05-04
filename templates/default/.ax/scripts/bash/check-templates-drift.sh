@@ -75,11 +75,13 @@ if [ -f "$ORIGIN" ]; then
   EXPECTED=$(grep -v '^#' "$ORIGIN" || true)
   if [ "$ACTUAL" != "$EXPECTED" ]; then
     USER_MODIFIED=true
-    # diff 파일 목록
-    DRIFT_FILES=($(diff <(echo "$EXPECTED") <(echo "$ACTUAL") 2>/dev/null \
-            | grep -E '^[<>]' \
+    # diff 파일 목록 — diff exit-1 + pipefail이 set -e에 잡혀 죽지 않게 wrap
+    DRIFT_FILES=($(
+        { diff <(echo "$EXPECTED") <(echo "$ACTUAL") 2>/dev/null || true; } \
+            | { grep -E '^[<>]' || true; } \
             | awk '{print $NF}' \
-            | sort -u | head -20))
+            | sort -u | head -20
+    ))
   fi
 fi
 
