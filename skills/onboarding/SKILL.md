@@ -845,6 +845,12 @@ rm -f .ax/.onboarding-pending
  .ax/state.json, .ax/current-task.json — per-machine 상태, PR에 들어가지 않음
  → 0.1.7 이전 install이라면 doctor가 누락 entry를 안내해요.
 
+📋 Mistake Loop — 주 1회 audit 권장
+ hook 위반이 .ax/mistakes/에 자동 누적되며, audit_cadence_days=7 (config.yml)에 따라 주기적 회고 필요
+ 수동 호출: "goax audit"
+ 자동화 옵션: Claude Routine 등록 → fresh clone에서 weekly로 promote-mistake.sh 실행 → 후보 PR 생성
+ HUD ☄ 마커가 누적된 mistakes 카운트 표시
+
 다음 한 줄을 시도해보세요:
 
  "결제 환불 정책 변경 작업 계획 세워줘"

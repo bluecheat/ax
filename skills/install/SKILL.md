@@ -238,6 +238,12 @@ META
  .ax/*.suggested — install/onboarding 머지 임시본
  → PR diff 노이즈 방지 위해 .gitignore에 자동 추가 (또는 기존 .gitignore에 누락 줄 append)
 
+📋 Mistake Loop — 주기적 audit 권장
+ hook 위반·실수가 .ax/mistakes/에 자동 누적 (race-free + redact 보호)
+ audit_cadence_days=7 (.ax/config.yml) — 주 1회 회고 권장
+ 실행: "goax audit" 또는 "실수 회고" — 카테고리 N회 누적 시 CRITICAL/MANDATORY 룰 승격 후보 제시
+ 자동화: Claude Routine으로 weekly cron 등록하면 PR 형태로 audit 결과 받기 가능
+
 다음에 시도해보세요:
  "결제 환불 정책 변경 작업 계획 세워줘"
  → triage skill이 Size×Risk 분류 → spirit·룰·페르소나 자동 주입

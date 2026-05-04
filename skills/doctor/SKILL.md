@@ -111,6 +111,33 @@ DRIFT_FILES=$(echo "$RESULT" | jq -r '.result.drift_files | join(", ")')
 
 **원칙**: 사용자 수정은 *절대* 자동 덮어쓰기 X. 머지 결정은 사용자.
 
+### 3.5.5 Mistake audit 주기 점검 (NEW 0.1.8+)
+
+`config.yml`의 `audit_cadence_days` 와 `state.json`의 `cross_cut.mistakes.last_audit` 비교 → 임박/초과 시 안내.
+
+```bash
+CADENCE=$(grep -E '^[[:space:]]+audit_cadence_days:' "$ROOT/.ax/config.yml" 2>/dev/null \
+    | awk '{print $2}' || echo 7)
+LAST=$(jq -r '.cross_cut.mistakes.last_audit // "never"' "$ROOT/.ax/state.json" 2>/dev/null)
+DUE=$(jq -r '.cross_cut.mistakes.due_in_days // 0' "$ROOT/.ax/state.json" 2>/dev/null)
+COUNT=$(ls "$ROOT/.ax/mistakes/"*.md 2>/dev/null | grep -v README | wc -l | tr -d ' ')
+```
+
+보고:
+- `last_audit=never` + `count > 0` → "audit 한 번도 안 돈 상태, 누적 N건 — `goax audit` 권장"
+- `due <= 0` → "audit 주기 도래/초과 (N일 경과)"
+- `due > 0` → "audit 다음 주기까지 N일"
+
+`다음 단계`에 추가:
+
+```
+ [a] ✓ goax audit — N건 mistake 회고          [추천 — 주기 도래]
+  명령 "goax audit"
+  이유 audit_cadence_days=7 도래, mistakes N건 누적 — 카테고리 패턴 보일 수 있음
+```
+
+자동화 옵션은 안내에 한 줄: "주 1회 자동 audit 원하면 Claude Routine 등록 — `goax audit` 명령 + weekly cron".
+
 ### 3.6 0.1.8 마이그레이션 잔재 점검 (NEW)
 
 기존 v0.1.7 이하 install이 0.1.8 시점 신규 항목을 갖추지 못했을 때 안내.
