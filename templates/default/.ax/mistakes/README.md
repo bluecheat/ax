@@ -28,27 +28,9 @@
 
 ## 파일 템플릿
 
-```markdown
----
-category: <one-of: dependency-direction | hydration | n+1 | secrets-in-code | ...>
-severity: <low | medium | high>
-detected_by: <claude | reviewer | ci | self>
-context_link: <PR URL or commit SHA>
----
+`.ax/_templates/mistakes/mistake.md` 참조 (spec/adr/module/spirit과 동일 `_templates/` 컨벤션).
 
-# 무엇이 일어났나
-한 줄 요약.
-
-# 어디서
-파일/모듈/도메인.
-
-# 왜 발생
-원인 분석.
-
-# 어떻게 막을 수 있나
-- 사람 리뷰로 막을 수 있나? (No → Sensor로 자동화 후보)
-- 어떤 hook 또는 룰이 막아야 하나?
-```
+`capture-mistake.sh` 가 자동 작성하므로 수동 편집은 드뭄. 사람이 직접 작성할 땐 템플릿을 cp 후 frontmatter (category, severity, detected_by, context_link) + 본문 4섹션 (무엇/어디서/왜/어떻게 막을지) 채우기.
 
 ## 처리 후
 

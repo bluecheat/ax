@@ -113,6 +113,7 @@ for f in \
     templates/default/.ax/spirit/tone.md \
     templates/default/.ax/_templates/spirit/rule.md \
     templates/default/.ax/_templates/module/rules.md \
+    templates/default/.ax/_templates/mistakes/mistake.md \
     templates/default/.ax/config.yml \
     templates/default/.ax/mistakes/README.md \
     templates/default/.ax/hooks/pre-bash/block-destructive.sh \
