@@ -1,6 +1,6 @@
 ---
 name: audit
-description: "Mistake Loop 통합 — 실수 캡처(.ax/mistakes/ 작성)와 심사·승격(주기적 회고). 트리거: 'goax audit', '실수 회고', 'mistakes 점검', '실수', '재발', '같은 문제', '룰 승격', '피드백', '또 그걸'."
+description: "Mistake Loop **회고·승격** skill (read+aggregate, review phase). 누적된 .ax/mistakes/*.md 를 카테고리·빈도로 분석하고 룰 승격 후보 제시. 트리거: 'goax audit', '/audit', '실수 회고', '실수 패턴 분석', 'mistakes 정리', 'mistakes 점검', '재발', '같은 문제', '룰 승격', '룰 강화 후보', '또 그걸', '주간 회고'. **'회고'·'심사'·'정리'·'패턴'·'승격'·'재발' 같은 review 의도 키워드만 매칭** — '기록'·'캡처'·'남겨' 같은 capture 의도는 mistake skill 이 담당. 1건 새로 캡처하지 않음 (mistake skill 위임)."
 ---
 
 # goax audit — Mistake Loop (캡처 → 심사 → 승격)
@@ -13,42 +13,24 @@ description: "Mistake Loop 통합 — 실수 캡처(.ax/mistakes/ 작성)와 심
 ## 시작 전 필수
 `.ax/spirit/values.md`, `tone.md` 따라요.
 
-## 발동 트리거
+## 발동 트리거 — review 의도만
 
-**캡처 모드** (실수 발견 시 즉시):
-- 사용자/리뷰가 실수·오해·누락 지적
-- "또 그걸…", "같은 문제", "재발" 같은 표현
-- 같은 hook 5회 fail / 코드 리뷰 코멘트의 동일 카테고리 3회 이상
+audit 은 **누적된 mistakes 회고·승격 전용**. 새 mistake 캡처는 `mistake` skill 의 책임.
 
-**심사 모드** (회고):
-- 주 1회 정기 호출 권장 (또는 `mistake_loop.audit_cadence_days` 도래 시)
-- "goax audit", "실수 회고", "이번 주 mistakes 정리"
+- 주기 도래: `mistake_loop.audit_cadence_days` (config.yml) 임박/초과
+- 사용자 명시 호출: "goax audit", "/audit", "실수 회고", "이번 주 mistakes 정리", "주간 회고"
+- 패턴 의심: "또 그걸…", "같은 문제", "재발", "룰 승격 후보 보여줘"
 
-## 1. 캡처 — 실수 발견 즉시
+> **capture 의도와 구분**: 사용자가 "이거 mistake 로 박아줘", "방금 실수 기록" 같이 표현하면 audit 이 아니라 `mistake` skill 발동. audit 호출 시 사용자가 capture 의도라고 판단되면 짧게 묻기 — "audit (누적 회고) 인가요, mistake skill (1건 capture) 인가요?"
 
-`.ax/mistakes/YYYY-MM-DD-NNN-<slug>.md` 생성:
+## 1. 캡처 — `mistake` skill 에 위임
 
-```markdown
----
-category: <security | data | testing | pr | error-handling | concurrency | observability | architecture | naming | dependency-direction | hydration | n+1 | secrets-in-code | ...>
-severity: <low | medium | high>
-detected_by: <claude | reviewer | ci | self | user>
-context_link: <PR URL or commit SHA>
----
+캡처는 별도 skill (`mistake`) 의 책임. 사용자가 `audit` 호출했는데 새 mistake 가 있으면:
 
-# 무엇이 일어났나
-# 어디서 (파일·모듈)
-# 왜 발생 (근본 원인)
-# 어떻게 막을 수 있나 (사람 리뷰 / Sensor 자동화 / 룰 추가)
-```
+1. 사용자에게 짧게 묻기 — "이번에 캡처할 mistake 있나요? 있으면 `mistake` skill 로 먼저 1건씩 박고 audit 으로 돌아올게요."
+2. 사용자 confirm → `mistake` skill 발동 → capture 끝나면 audit 본 작업 (스캔·승격) 으로 돌아옴.
 
-캡처 후 한 줄 보고:
-```
-✓ .ax/mistakes/2026-05-02-001-pg-key-leak.md 생성 (category=security, severity=high)
- 다음 audit에서 승격 후보로 검토돼요.
-```
-
-캡처만 하고 끝낼 수 있고, 바로 심사로 이어갈 수도 있어요(사용자가 "audit까지 해줘"라고 하면).
+직접 capture 하지 마세요 — `init-mistake-file.sh` 호출도 mistake skill 의 책임. audit 은 누적된 `.ax/mistakes/*.md` 만 읽음.
 
 ## 2. .ax/mistakes/ 스캔 — `promote-mistake.sh` 위임 
 

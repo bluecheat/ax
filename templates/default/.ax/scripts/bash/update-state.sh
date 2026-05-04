@@ -51,7 +51,7 @@ if [ -f "$WS/CLAUDE.md" ]; then
     # CLAUDE.md inline rule: 🔵 **`TOKEN`** 형식
     CONV_INLINE=$(grep -E '^🔵 \*\*`' "$WS/CLAUDE.md" 2>/dev/null | wc -l | tr -d ' ')
 
-    # spirit/rules/ — heading 형식 (`## SP-`, plugin 컨벤션 0.1.8+) + 옛 inline 형식 (`^🔵 \*\*\``)
+    # spirit/rules/ — heading 형식 (`## SP-`, plugin 컨벤션) + 옛 inline 형식 (`^🔵 \*\*\``)
     # 단일 grep alternation으로 합산 — process 1회 (split 버전보다 빠름).
     CONV_SPIRIT=0
     if [ -d "$WS/.ax/spirit/rules" ]; then

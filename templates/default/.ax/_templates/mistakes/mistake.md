@@ -1,10 +1,21 @@
+<!--
+  init-mistake-file.sh 가 frontmatter 의 {{...}} placeholder 를 sed 치환해서 새 파일 생성.
+  수동 작성 시: placeholder 를 직접 채움 (category/severity/detected_by/context_link 값 박기).
+
+  값 enum:
+    category     dependency-direction | hydration | n+1 | secrets-in-code | testing | pr |
+                 error-handling | concurrency | observability | architecture | naming | data | ...
+    severity     low | medium | high
+    detected_by  claude | reviewer | ci | self | user
+    source       hook (자동 차단·경고 시점, 폐기 — skill 만 사용) | skill (사용자 명시 캡처)
+-->
 ---
-category: <dependency-direction | hydration | n+1 | secrets-in-code | testing | pr | error-handling | concurrency | observability | architecture | naming | data | ...>
-severity: <low | medium | high>
-detected_by: <claude | reviewer | ci | self | user>
-context_link: <PR URL or commit SHA>
-captured_at: <ISO 8601 — 예: 2026-05-05T01:26:55Z>
-source: manual
+category: {{CATEGORY}}
+severity: {{SEVERITY}}
+detected_by: {{DETECTED_BY}}
+context_link: {{CONTEXT_LINK}}
+captured_at: {{CAPTURED_AT}}
+source: {{SOURCE}}
 status: open
 ---
 

@@ -63,11 +63,11 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 - `user-prompt/triage-nudge.sh` — intent regex가 자기 프로젝트 어휘에 맞지 않으면 조정
 - 새 hook 추가 시 위 settings.json 형식 그대로
 
-## Mistake 자동 캡처
+## Mistake 캡처 — 사용자 명시 skill 만
 
-`pre-edit/check-protected-paths.sh`, `pre-commit/critical-rule-grep.sh`, `pre-bash/block-destructive.sh`가 위반을 감지하면 `.ax/scripts/bash/capture-mistake.sh`를 자동 호출해서 `.ax/mistakes/<날짜>-<번호>-<카테고리>-<slug>.md`로 기록해요. 같은 날·같은 카테고리·같은 slug면 새 파일을 만들지 않고 재발 라인만 append (idempotent).
+hook 들 (`pre-edit/check-protected-paths.sh`, `pre-commit/critical-rule-grep.sh`, `pre-bash/block-destructive.sh`) 은 차단/경고만. mistake 자동 capture 는 폐기 — 위반이 mistake 로 자동 박히면 일상 작업이 자기 자신을 신고하는 잡음 루프 + 본문 quality 가 placeholder.
 
-이 캡처가 Mistake Loop의 cold-start를 해소해요 — `.ax/mistakes/`가 평생 비어있는 일이 없어요.
+mistake 기록은 사용자 명시 `mistake` skill 호출로만 (`"실수 기록해줘"`, `/mistake`). 사용자가 의도적으로 capture 한 mistake 만 `.ax/mistakes/` 에 누적 → audit 시 의미있는 패턴 추출.
 
 ## Claude Code 외 환경
 

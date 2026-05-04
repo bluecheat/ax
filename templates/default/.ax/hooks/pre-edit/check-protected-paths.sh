@@ -31,7 +31,6 @@ PROTECTED=$(awk '/^[[:space:]]*protected_paths:/,/^[^[:space:]]/' "$CONFIG" 2>/d
 
 TARGET_REL="${TARGET_PATH#$PROJECT_ROOT/}"
 COMMON="$PROJECT_ROOT/.ax/scripts/bash/common.sh"
-CAPTURE="$PROJECT_ROOT/.ax/scripts/bash/capture-mistake.sh"
 
 for p in $PROTECTED; do
     if [[ "$TARGET_REL" == "$p" ]] || [[ "$TARGET_REL" == "$p"* ]]; then
@@ -47,12 +46,9 @@ for p in $PROTECTED; do
             SENSOR_MODE=$(grep -E '^[[:space:]]*mode:' "$CONFIG" | head -1 | awk '{print $2}' || echo warning)
         fi
 
-        # mistake 기록은 차단(fail)된 경우에만. warning 모드는 stderr 경고만 — 통과한 쓰기를
-        # mistake로 박으면 onboarding/일상 작업이 자기 자신을 신고하는 잡음 루프가 됨.
+        # mistake 자동 캡처는 폐기 — 사용자 명시 `mistake` skill 호출로만 기록.
+        # 이 hook 은 차단/경고만 (mode=fail → deny / 그 외 → 경고).
         if [ "$SENSOR_MODE" = "fail" ]; then
-            if [ -f "$CAPTURE" ]; then
-                bash "$CAPTURE" "protected-path" "보호 경로 변경 시도: $TARGET_REL" "mode=$SENSOR_MODE" >/dev/null 2>&1 || true
-            fi
             # Modern path: stdout JSON으로 permissionDecision="deny" + 이유를 surfacing.
             # Claude는 error가 아닌 정책적 거부로 인식 → reason을 사용자에게 깔끔히 전달.
             # jq 없는 환경(드뭄) fallback은 exit 2.

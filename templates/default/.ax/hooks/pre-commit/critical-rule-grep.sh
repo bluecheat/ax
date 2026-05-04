@@ -8,7 +8,7 @@
 # 위반 발견 시:
 #   - mode=fail   → exit 2 (차단)
 #   - mode=warn   → stderr 경고 + exit 0
-#   - 어느 모드든 capture-mistake.sh 자동 호출 (Mistake Loop cold-start 해소)
+# mistake 기록은 사용자 명시 `mistake` skill 호출로만 — hook 자동 capture 폐기.
 
 set -uo pipefail   # set -e 제거 — grep returning 1 (no match) 등이 hook 본체를 silent abort하지 않도록
 
@@ -18,7 +18,6 @@ set -uo pipefail   # set -e 제거 — grep returning 1 (no match) 등이 hook �
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 CONSTITUTION="$PROJECT_ROOT/CLAUDE.md"
 COMMON="$PROJECT_ROOT/.ax/scripts/bash/common.sh"
-CAPTURE="$PROJECT_ROOT/.ax/scripts/bash/capture-mistake.sh"
 
 [ -f "$CONSTITUTION" ] || { echo "[goax] CLAUDE.md 없음 — skip" >&2; exit 0; }
 
@@ -37,13 +36,10 @@ fi
 
 VIOLATIONS=0
 
-# 위반 보고 + capture
+# 위반 보고 (counter 증가만 — mistake 기록은 사용자 명시 mistake skill 로)
 report() {
     local category="$1"; local message="$2"; local detail="${3:-}"
     printf '  ⚠ %s\n' "$message" >&2
-    if [ -f "$CAPTURE" ]; then
-        bash "$CAPTURE" "$category" "$message" "$detail" >/dev/null 2>&1 || true
-    fi
     VIOLATIONS=$((VIOLATIONS + 1))
 }
 
@@ -97,7 +93,7 @@ if [ "$VIOLATIONS" -gt 0 ]; then
         echo "[goax] ✗ CRITICAL 위반 ${VIOLATIONS}건 — 차단 (mode=fail)" >&2
         exit 2
     fi
-    echo "[goax] ⚠ CRITICAL 위반 ${VIOLATIONS}건 — 경고만 (mode=$SENSOR_MODE). .ax/mistakes/에 캡처됨" >&2
+    echo "[goax] ⚠ CRITICAL 위반 ${VIOLATIONS}건 — 경고만 (mode=$SENSOR_MODE). 기록 원하면 mistake skill 호출" >&2
     exit 0
 fi
 

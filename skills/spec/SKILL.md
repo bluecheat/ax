@@ -11,8 +11,7 @@ description: "새 spec 디렉토리 생성 — 'spec 만들어줘', 'goax spec n
 ## 발동
 - "spec 만들어줘 — payment-refund"
 - "goax spec new payment-refund"
-- "결제 환불 spec 작성하자"
-- triage가 [a] 옵션으로 위임
+- "결제 환불 spec(스펙) 작성하자"
 
 ## 핵심 원칙 — tier-aware + script-backed
 

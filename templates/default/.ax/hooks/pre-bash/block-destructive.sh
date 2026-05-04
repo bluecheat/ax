@@ -6,7 +6,7 @@
 #
 # 두 단계:
 #   1. CATASTROPHIC — mode 무관 항상 차단 (안전망)
-#   2. RECOVERABLE  — mode-aware (warning: 경고+capture, fail: 차단)
+#   2. RECOVERABLE  — mode-aware (warning: 경고, fail: 차단)
 
 set -uo pipefail   # set -e 제거 — grep returning 1 (no match) 등이 hook 본체를 silent abort하지 않도록
 
@@ -26,7 +26,6 @@ CMD="${CMD:-${CLAUDE_BASH_COMMAND:-${1:-}}}"
 SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/../../.." 2>/dev/null && pwd || pwd)}"
 COMMON="$PROJECT_ROOT/.ax/scripts/bash/common.sh"
-CAPTURE="$PROJECT_ROOT/.ax/scripts/bash/capture-mistake.sh"
 
 SENSOR_MODE="warning"
 if [ -f "$COMMON" ]; then
@@ -59,18 +58,10 @@ RECOVERABLE_PATTERNS=(
     'sudo[[:space:]]+rm'
 )
 
-capture() {
-    local cat="$1"; local msg="$2"
-    if [ -f "$CAPTURE" ]; then
-        bash "$CAPTURE" "$cat" "$msg" "$CMD" >/dev/null 2>&1 || true
-    fi
-}
-
 for pattern in "${CATASTROPHIC_PATTERNS[@]}"; do
     if printf '%s' "$CMD" | grep -qE "$pattern"; then
         printf '\033[31m[goax hook]\033[0m 🚨 CATASTROPHIC 명령 차단 (mode 무관): %s\n' "$pattern" >&2
         printf '명령: %s\n' "$CMD" >&2
-        capture "destructive-catastrophic" "차단된 catastrophic 패턴: $pattern"
         exit 2
     fi
 done
@@ -83,12 +74,10 @@ for pattern in "${RECOVERABLE_PATTERNS[@]}"; do
             printf '\033[31m[goax hook]\033[0m 차단된 파괴적 패턴 (mode=fail): %s\n' "$pattern" >&2
             printf '명령: %s\n' "$CMD" >&2
             printf '우회가 필요하면 사용자에게 명시적 승인을 받아 직접 실행해.\n' >&2
-            capture "destructive-recoverable" "mode=fail 차단: $pattern"
             exit 2
         else
             printf '\033[33m[goax hook]\033[0m ⚠ 파괴적 패턴 (mode=%s, 경고만): %s\n' "$SENSOR_MODE" "$pattern" >&2
             printf '명령: %s\n' "$CMD" >&2
-            capture "destructive-recoverable" "mode=$SENSOR_MODE 경고: $pattern"
             exit 0
         fi
     fi

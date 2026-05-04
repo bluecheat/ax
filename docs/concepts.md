@@ -65,7 +65,7 @@ goax가 어떤 프로젝트에든 깔아주는 골격.
 
 - **왜**: agent 실패 시 코드를 고치면 1번이지만 하네스(룰·sensor)를 고치면 영구적이에요. 같은 실수가 다른 PR에서 반복되는 건 시스템 결함이라 환경을 고쳐야 해결돼요.
 - **무엇**:
-  1. 캡처 — `.ax/mistakes/YYYY-MM-DD-NNN-<slug>.md`
+  1. 캡처 — `mistake` skill 호출 ("실수 기록해줘") → `.ax/mistakes/${DATE}-${EPOCH}-${RAND4}-<category>-<slug>.md`
   2. 심사 — `goax audit` (주 1회 또는 5건 누적 시)
   3. 승격 — Constitution / ADR / module CLAUDE / Sensor 추가
 

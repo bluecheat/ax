@@ -907,7 +907,6 @@ rm -f .ax/.onboarding-pending
 
   PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
   COMMON="$PROJECT_ROOT/.ax/scripts/bash/common.sh"
-  CAPTURE="$PROJECT_ROOT/.ax/scripts/bash/capture-mistake.sh"
 
   SENSOR_MODE="warning"
   [ -f "$COMMON" ] && { source "$COMMON"; SENSOR_MODE=$(goax_mode 2>/dev/null || echo warning); }
@@ -930,8 +929,6 @@ rm -f .ax/.onboarding-pending
           # Guard #3: import static 옵션 modifier 처리 — Assertions.assertEquals 같이 흔한 static import 형태 모두 catch
           if grep -qE '^import[[:space:]]+(static[[:space:]]+)?org\.junit\.jupiter\.' "$f" 2>/dev/null; then
               echo "  ⚠ $f: JUnit5 import 금지 — Kotest DescribeSpec 사용" >&2
-              # Guard #4: capture-mistake.sh 호출 — Mistake Loop violation 추적
-              [ -f "$CAPTURE" ] && bash "$CAPTURE" "junit-import" "$f: JUnit5 import" >/dev/null 2>&1 || true
               VIOLATIONS=$((VIOLATIONS + 1))
           fi
       fi
@@ -944,13 +941,14 @@ rm -f .ax/.onboarding-pending
   exit 0
   ```
 
-  6가지 가드 점검 (위 코드에 모두 박혀 있음):
+  5가지 가드 점검 (위 코드에 모두 박혀 있음):
   1. **헤더 마커** (line 2) — `# [project-specific]` 주석. drift 감지가 plugin 출고본과 헷갈리지 않게.
   2. **annotation class 화이트리스트** — `case "$f" in *test/context/*) continue ;; esac` 로 메타 어노테이션 정의 디렉토리 skip. 안 그러면 `annotation class CommerceMySqlDataJpaTest`가 false-positive.
   3. **`import static` 처리** — `^import[[:space:]]+(static[[:space:]]+)?org\.junit\.jupiter\.` regex. `Assertions.assertEquals` 같이 static import 로 들어오는 가장 흔한 형태도 catch.
-  4. **`capture-mistake.sh` 호출** — `[ -f "$CAPTURE" ] && bash "$CAPTURE" ...` 식. Mistake Loop가 violation 추적. 호출 안 하면 audit이 추세 못 봄.
-  5. **`set -uo pipefail` (no `-e`)** — `grep -qE` 가 no-match로 exit 1 리턴할 때 `set -e`가 hook 본체를 silent abort 하는 trap 회피. plugin shipped hooks도 동일 컨벤션.
-  6. **plugin shipped 파일 append 금지** — `ops.md` 같은 출고본에 사용자 프로젝트 룰 append X. 별도 파일(`.ax/spirit/rules/<project>-<category>.md`)로 만들고 root CLAUDE.md의 CONVENTION 섹션에 `@.ax/spirit/rules/<project>-<category>.md` import. plugin 갱신 시 clobber 방지.
+  4. **`set -uo pipefail` (no `-e`)** — `grep -qE` 가 no-match로 exit 1 리턴할 때 `set -e`가 hook 본체를 silent abort 하는 trap 회피. plugin shipped hooks도 동일 컨벤션.
+  5. **plugin shipped 파일 append 금지** — `ops.md` 같은 출고본에 사용자 프로젝트 룰 append X. 별도 파일(`.ax/spirit/rules/<project>-<category>.md`)로 만들고 root CLAUDE.md의 CONVENTION 섹션에 `@.ax/spirit/rules/<project>-<category>.md` import. plugin 갱신 시 clobber 방지.
+
+  > Mistake 기록은 hook 자동 capture 가 아니라 사용자 명시 `mistake` skill 호출로만. hook 은 차단/경고만, 위반 패턴 기록은 사용자 의도적 capture.
 
 - **CONVENTION 형식은 한 가지로 통일.** 두 가지 옵션 중 하나 선택:
   - (a) **인라인 정의**: root CLAUDE.md에 `🔵 **\`<scope>:CONVENTION:NNN\`** ...` 형태로 박음 → grep/citation 용이, `update-state.sh`의 `^🔵 \*\*` 패턴이 카운트

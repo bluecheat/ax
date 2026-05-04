@@ -65,8 +65,8 @@ goax_mode() {
 
 # Hook 위반 보고 (non-exiting) — 배치 hook에서 사용 (여러 위반을 모은 뒤 한 번에 exit)
 # Usage:  goax_hook_report fail "메시지" "category" "details"
-# 동작:  stderr 경고 + capture-mistake 호출. 종료 결정은 caller가.
-# goax_hook_exit과 차이: 종료하지 않음. 배치 후 caller가 VIOLATIONS 누적 판단.
+# 동작:  stderr 경고만. 종료 결정은 caller가.
+# mistake 기록은 사용자 명시 `mistake` skill 호출로 — hook 자동 capture 폐기 (의도된 capture 만).
 goax_hook_report() {
     local severity="${1:-warn}"
     local message="${2:-}"
@@ -79,22 +79,16 @@ goax_hook_report() {
     [ "$mode" = "off" ] && return 0
 
     printf '\033[33m[goax hook]\033[0m %s\n' "$message" >&2
-
-    local root capture
-    root="${CLAUDE_PROJECT_DIR:-$(find_project_root 2>/dev/null || pwd)}"
-    capture="$root/.ax/scripts/bash/capture-mistake.sh"
-    if [ -f "$capture" ]; then
-        bash "$capture" "$category" "$message" "$details" >/dev/null 2>&1 || true
-    fi
     return 0
 }
 
 # Hook 표준 종료 — severity와 mode 조합으로 결정론적 결정
 # Usage: goax_hook_exit fail "메시지" [category]
-#   severity=fail + mode=fail   → exit 2 (차단), capture-mistake 호출
-#   severity=fail + mode=warning → exit 0 + 경고, capture-mistake 호출
-#   severity=fail + mode=off    → exit 0 (조용)
-#   severity=warn               → exit 0 + 경고
+#   severity=fail + mode=fail    → exit 2 (차단)
+#   severity=fail + mode=warning → exit 0 + 경고
+#   severity=fail + mode=off     → exit 0 (조용)
+#   severity=warn                → exit 0 + 경고
+# mistake 기록은 사용자 명시 `mistake` skill 호출로 — hook 자동 capture 폐기 (의도된 capture 만).
 goax_hook_exit() {
     local severity="${1:-warn}"
     local message="${2:-}"
@@ -108,14 +102,6 @@ goax_hook_exit() {
         printf '\033[33m[goax hook]\033[0m %s\n' "$message" >&2
     fi
 
-    # capture-mistake 자동 호출 (있을 때만)
-    local root capture
-    root="${CLAUDE_PROJECT_DIR:-$(find_project_root 2>/dev/null || pwd)}"
-    capture="$root/.ax/scripts/bash/capture-mistake.sh"
-    if [ -f "$capture" ] && [ -n "$message" ]; then
-        bash "$capture" "$category" "$message" >/dev/null 2>&1 || true
-    fi
-
     if [ "$severity" = "fail" ] && [ "$mode" = "fail" ]; then
         exit 2
     fi
@@ -124,7 +110,7 @@ goax_hook_exit() {
 
 # Redact secrets in stdin, print redacted to stdout.
 # Strategy: known-prefix tokens (high confidence) + key=value with ≥12-char value (lower).
-# Designed for capture-mistake.sh DETAILS only — DO NOT apply to titles (signal loss).
+# Designed for init-mistake-file.sh / mistake skill DETAILS only — DO NOT apply to titles (signal loss).
 # Patterns chosen to be POSIX sed -E compatible (no \s, no case-flag — bracket classes).
 # Usage: REDACTED=$(printf '%s' "$x" | redact_secrets)
 redact_secrets() {

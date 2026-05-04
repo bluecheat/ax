@@ -206,10 +206,9 @@ else
     cp "$TPL/.ax/mistakes/README.md" .ax/mistakes/README.md
 fi
 
-# 6.9 path-scoped rule injection (Design B, 0.1.8+)
+# 6.9 path-scoped rule injection
 # spirit/rules/<name>.md 의 frontmatter `paths:` 와 편집 대상 파일 path를 매칭해
 # `.ax/hooks/pre-edit/spirit-rules-inject.sh` 가 hook 시점에 additionalContext로 안내.
-# .claude/rules/ shim 메커니즘은 0.1.8에서 폐기 — `.claude/`-only 의존성 회피.
 # settings.json.template 가 hook을 PreToolUse(Edit|Write|MultiEdit)에 자동 등록.
 echo "✓ path-scoped rule loading — .ax/hooks/pre-edit/spirit-rules-inject.sh"
 

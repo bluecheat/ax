@@ -13,24 +13,42 @@
 
 심리적 부담은 다음 4가지 보호 장치로 낮춰요:
 
-1. **race-free ID** — `${DATE}-${EPOCH_MS}-${PID}-${RANDOM}-<slug>.md`. 동시 캡처 충돌 0.
-2. **자동 redaction** — `capture-mistake.sh` 가 write 직전 DETAILS의 secret 패턴(`AKIA*`, `ghp_*`, `password=*`, JWT, PEM 등)을 `[REDACTED]`로 치환. 타이틀(ONE_LINE)은 시그널 손실 방지를 위해 redact 미적용 — caller가 secret을 타이틀에 직접 박지 않을 책임.
+1. **race-free ID** — `${DATE}-${EPOCH}-${RAND4}-<category>-<slug>.md` (15자 ID + 짧은 slug). 동시 캡처 충돌 사실상 0 (같은 초 + 같은 4-hex random = 1/65536).
+2. **자동 redaction** — `redact_secrets` 헬퍼 (`common.sh`) 가 write 직전 DETAILS의 secret 패턴(`AKIA*`, `ghp_*`, `password=*`, JWT, PEM 등)을 `[REDACTED]`로 치환. 타이틀(ONE_LINE)은 시그널 손실 방지를 위해 redact 미적용 — caller가 secret을 타이틀에 직접 박지 않을 책임.
 3. **bot author 컨벤션 (권장)** — 자동 commit 시 `git -c user.name=goax-bot` 사용. "내 실수가 commit log에 박힌다"의 심리적 비용 제거.
 4. **별도 commit 분리** — mistake 캡처는 feature commit과 절대 섞지 않음. 자동화로 작은 chore commit으로만 누적.
 
-## 파일 컨벤션
+## 파일 컨벤션 (단일)
 
 ```
 .ax/mistakes/
-└── YYYY-MM-DD-EPOCH_MS-PID-RANDOM-<category>-<short-slug>.md   # 0.1.8+
-└── YYYY-MM-DD-NNN-<category>-<short-slug>.md                    # 0.1.7 호환
+└── YYYY-MM-DD-EPOCH-RAND4-<category>-<short-slug>.md
+```
+
+예: `2026-05-05-1777914582-1a94-secrets-pg-key-hardcoded.md`
+
+- `EPOCH` = Unix timestamp 초 (10자)
+- `RAND4` = 4-hex random (`$RANDOM` → `printf '%04x'`)
+- `category` = frontmatter `category` 와 동일
+- `slug` = ONE_LINE 영숫자 정규화 (cut 30 + trailing dash 제거). 한글 only → md5 hash 8자 fallback.
+
+## 캡처 경로 — `mistake` skill 만
+
+mistake 캡처는 사용자 명시 `mistake` skill 호출로만. hook 자동 capture 는 폐기 — 위반이 mistake 로 자동 박히면 일상 작업이 자기 자신을 신고하는 잡음 루프 + 본문 quality 가 placeholder.
+
+```
+"실수 기록해줘"  /mistake  "이번 mistake 캡처"
+   ↓
+mistake skill — 인터뷰 (category/severity/detected_by/context_link/ONE_LINE)
+   ↓
+init-mistake-file.sh — frontmatter sed 치환 + 파일 생성 (idempotent)
+   ↓
+LLM Edit tool — 본문 (5 Whys / 영향 / audit 액션) 작성
 ```
 
 ## 파일 템플릿
 
-`.ax/_templates/mistakes/mistake.md` 참조 (spec/adr/module/spirit과 동일 `_templates/` 컨벤션).
-
-`capture-mistake.sh` 가 자동 작성하므로 수동 편집은 드뭄. 사람이 직접 작성할 땐 템플릿을 cp 후 frontmatter (category, severity, detected_by, context_link) + 본문 4섹션 (무엇/어디서/왜/어떻게 막을지) 채우기.
+`.ax/_templates/mistakes/mistake.md` (spec/adr/module/spirit과 동일 `_templates/` 컨벤션). frontmatter 는 `{{...}}` placeholder 형식 — `init-mistake-file.sh` 가 sed 치환. 수동 작성 시 placeholder 직접 채움.
 
 ## 처리 후
 
