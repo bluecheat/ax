@@ -661,6 +661,136 @@ fi
 rm -rf "$PM_FX"
 
 # ───────────────────────────────────────────────────────────
+section "15. PR #1085 review fixes — security/correctness/escape (NEW 0.1.8)"
+# ───────────────────────────────────────────────────────────
+
+# 15.1 block-destructive — rm variants + git push variants
+BD_FX=$(mktemp -d)
+mkdir -p "$BD_FX/.ax/scripts/bash" "$BD_FX/.ax/hooks/pre-bash"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,capture-mistake.sh} "$BD_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/hooks/pre-bash/block-destructive.sh" "$BD_FX/.ax/hooks/pre-bash/"
+
+assert_blocked() {
+    local cmd="$1"; local label="$2"
+    local exit_code
+    echo "{\"tool_input\":{\"command\":\"$cmd\"}}" \
+        | CLAUDE_PROJECT_DIR=$BD_FX bash "$BD_FX/.ax/hooks/pre-bash/block-destructive.sh" >/dev/null 2>&1
+    exit_code=$?
+    if [ "$exit_code" -eq 2 ]; then pass "block-destructive 차단: $label ('$cmd')"
+    else fail "block-destructive 미차단 (exit=$exit_code): $label ('$cmd')"; fi
+}
+assert_passed() {
+    local cmd="$1"; local label="$2"
+    local exit_code
+    echo "{\"tool_input\":{\"command\":\"$cmd\"}}" \
+        | CLAUDE_PROJECT_DIR=$BD_FX bash "$BD_FX/.ax/hooks/pre-bash/block-destructive.sh" >/dev/null 2>&1
+    exit_code=$?
+    if [ "$exit_code" -eq 0 ]; then pass "block-destructive 통과: $label ('$cmd')"
+    else fail "block-destructive 잘못 차단 (exit=$exit_code): $label ('$cmd')"; fi
+}
+
+# CATASTROPHIC — 항상 차단
+assert_blocked 'rm -rf /'    'rm -rf /'
+assert_blocked 'rm -fr /'    'rm -fr / variant (fr 순서)'
+assert_blocked 'rm -rfv /'   'rm -rfv / (verbose flag)'
+assert_blocked 'rm -fvR /'   'rm -fvR / (대소문자 혼합)'
+assert_blocked 'rm -r -f /'  'rm -r -f / (multi-chunk)'
+assert_blocked 'mkfs.ext4 /dev/sda1' 'mkfs.* (디스크 포맷)'
+
+# RECOVERABLE — warning mode에선 통과 (exit 0)
+assert_passed 'git push --force'             'EOL --force (이전 미매칭)'
+assert_passed 'git push --force-with-lease'  '--force-with-lease (recoverable)'
+
+# 안전 명령 — 통과
+assert_passed 'rm /tmp/x'    'rm 단일 파일 (no -r)'
+assert_passed 'rm -v /tmp/x' 'rm -v 단일 파일 (verbose only)'
+assert_passed 'ls -la'       'ls (무관)'
+
+rm -rf "$BD_FX"
+
+# 15.2 common.sh _goax_json_array — special char escape
+COM_FX=$(mktemp -d)
+mkdir -p "$COM_FX/.ax/scripts/bash"
+cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$COM_FX/.ax/scripts/bash/"
+
+JSON_OUT=$(bash -c "
+source $COM_FX/.ax/scripts/bash/common.sh
+JSON_MODE=true
+goax_error 'msg with \"q\" and \\\\b'
+" 2>&1)
+if echo "$JSON_OUT" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+    pass "_goax_json_array — quote/backslash 안전 escape"
+else
+    fail "_goax_json_array — JSON 깨짐: $JSON_OUT"
+fi
+
+# json_error/json_skip도 동일 보장
+ERR_OUT=$(bash -c "
+source $COM_FX/.ax/scripts/bash/common.sh
+json_error 'err with \"x\" \\\\y'
+" 2>&1)
+echo "$ERR_OUT" | python3 -c "import sys,json; json.load(sys.stdin)" >/dev/null 2>&1 \
+    && pass "json_error — special char 안전" \
+    || fail "json_error JSON 깨짐: $ERR_OUT"
+
+rm -rf "$COM_FX"
+
+# 15.3 next-spec-num — 999 overflow
+NS_FX=$(mktemp -d)
+mkdir -p "$NS_FX/.ax/scripts/bash" "$NS_FX/.ax/docs/spec/999-existing"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_FX/.ax/scripts/bash/"
+
+OUT=$(CLAUDE_PROJECT_DIR=$NS_FX bash "$NS_FX/.ax/scripts/bash/next-spec-num.sh" --json 2>&1)
+EXIT=$?
+if [ "$EXIT" -eq 1 ] && echo "$OUT" | jq -e '.status == "error"' >/dev/null 2>&1; then
+    pass "next-spec-num — 999 overflow → JSON error + exit 1"
+else
+    fail "next-spec-num — overflow 처리 부정확 (exit=$EXIT, out=$OUT)"
+fi
+
+# 정상 케이스 — 998이면 999 반환
+mv "$NS_FX/.ax/docs/spec/999-existing" "$NS_FX/.ax/docs/spec/998-existing"
+NEXT=$(CLAUDE_PROJECT_DIR=$NS_FX bash "$NS_FX/.ax/scripts/bash/next-spec-num.sh" 2>&1)
+[ "$NEXT" = "999" ] && pass "next-spec-num — 998 → 999 정상" \
+                    || fail "next-spec-num — 998 다음이 999 아님: $NEXT"
+
+rm -rf "$NS_FX"
+
+# 15.4 init-spec-dir — mandatory templates 누락 시 fail
+IS_FX=$(mktemp -d)
+mkdir -p "$IS_FX/.ax/scripts/bash" "$IS_FX/.ax/_templates/spec/checklists" "$IS_FX/.ax/_templates/spec/contracts" "$IS_FX/.ax/docs/spec"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,init-spec-dir,slug-from-text}.sh "$IS_FX/.ax/scripts/bash/"
+# 의도적으로 template 안 채움 (basic은 spec.md 1개 필수)
+
+OUT=$(CLAUDE_PROJECT_DIR=$IS_FX bash "$IS_FX/.ax/scripts/bash/init-spec-dir.sh" \
+    --json --tier basic --slug missing-tpl 2>&1)
+EXIT=$?
+if [ "$EXIT" -ne 0 ] && echo "$OUT" | jq -e '.errors[0] | contains("mandatory")' >/dev/null 2>&1; then
+    pass "init-spec-dir — mandatory template 누락 시 JSON error + exit ≠0"
+else
+    fail "init-spec-dir — silent continue 발생 (exit=$EXIT, out=${OUT:0:100})"
+fi
+
+rm -rf "$IS_FX"
+
+# 15.5 slug-from-text — JSON escape
+SL_FX=$(mktemp -d)
+mkdir -p "$SL_FX/.ax/scripts/bash"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,slug-from-text}.sh "$SL_FX/.ax/scripts/bash/"
+
+# 입력에 quote, backslash, newline 포함
+INPUT_TEXT='Order with "Refund" and \backslash and newline'
+OUT=$(CLAUDE_PROJECT_DIR=$SL_FX bash "$SL_FX/.ax/scripts/bash/slug-from-text.sh" \
+    --json "$INPUT_TEXT" 2>&1)
+if echo "$OUT" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'original' in d.get('result',{})" 2>/dev/null; then
+    pass "slug-from-text — JSON escape (quote/backslash 포함 input → valid JSON)"
+else
+    fail "slug-from-text — JSON 깨짐: $OUT"
+fi
+
+rm -rf "$SL_FX"
+
+# ───────────────────────────────────────────────────────────
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────
 if [ "$fail_count" -eq 0 ]; then
