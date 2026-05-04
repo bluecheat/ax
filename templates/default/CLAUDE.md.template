@@ -34,7 +34,14 @@
 
 ## CONVENTION — 일반 가이드
 
-> 핵심 컨벤션은 `.ax/spirit/rules/`에 카테고리별로 있어요. import로 자동 로드:
+> Spirit (가치·톤) — **모든 turn에 보존**. ad-hoc 질문이든 skill-driven 작업이든 일관된 태도/말투를 위해 직접 @import.
+
+```
+@.ax/spirit/values.md
+@.ax/spirit/tone.md
+```
+
+> 핵심 컨벤션 룰은 `.ax/spirit/rules/`에 카테고리별로 있어요. universal 룰은 직접 @import, path-scoped 룰은 `.ax/hooks/pre-edit/spirit-rules-inject.sh` 가 매칭 시 안내.
 
 ```
 @.ax/spirit/rules/architecture.md
