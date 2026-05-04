@@ -207,6 +207,63 @@ HOOK_FILE="$ROOT/.ax/hooks/pre-edit/spirit-rules-inject.sh"
 
 [s]는 사용자 동의 후 실행 — 직접 수정이지만 idempotent + 백업이라 안전. 헤더 수정/중복 해소(`[n]`)는 의미상 LLM이 사용자와 함께.
 
+### 3.8 CLAUDE.md ↔ 실제 메커니즘 일치 검증 (NEW 0.1.8+)
+
+CLAUDE.md가 path-scoped 메커니즘을 어떻게 *설명하는지* 와 실제 설치 상태가 일치하는지 검증. 다른 Claude 세션이 stale 컨텍스트로 작업하거나 design generation 마이그레이션을 누락했을 때 문서·실제 drift가 silent하게 누적되는 걸 차단.
+
+```bash
+CLAUDE_MD="$ROOT/CLAUDE.md"
+SETTINGS="$ROOT/.claude/settings.json"
+
+# CLAUDE.md가 명시하는 메커니즘
+DESC_HOOK=0
+DESC_SHIM=0
+grep -q 'spirit-rules-inject\.sh' "$CLAUDE_MD" 2>/dev/null && DESC_HOOK=1
+grep -q 'generate-rule-shims\.sh\|\.claude/rules/.*shim' "$CLAUDE_MD" 2>/dev/null && DESC_SHIM=1
+
+# 실제 설치 상태
+INST_HOOK=0
+INST_SHIM=0
+[ -f "$ROOT/.ax/hooks/pre-edit/spirit-rules-inject.sh" ] \
+    && grep -q 'spirit-rules-inject\.sh' "$SETTINGS" 2>/dev/null \
+    && INST_HOOK=1
+[ -f "$ROOT/.ax/scripts/bash/generate-rule-shims.sh" ] && INST_SHIM=1
+
+# 4가지 mismatch
+MISMATCHES=()
+[ "$DESC_HOOK" -eq 1 ] && [ "$INST_HOOK" -eq 0 ] \
+    && MISMATCHES+=("CLAUDE.md는 hook 메커니즘 명시 — 실제 미설치/미등록")
+[ "$DESC_SHIM" -eq 1 ] && [ "$INST_SHIM" -eq 0 ] \
+    && MISMATCHES+=("CLAUDE.md는 shim 메커니즘 명시 — 0.1.8에서 폐기됨 (generate-rule-shims.sh 없음)")
+[ "$DESC_HOOK" -eq 1 ] && [ "$DESC_SHIM" -eq 1 ] \
+    && MISMATCHES+=("CLAUDE.md가 두 메커니즘 동시 명시 — 모순")
+[ "$INST_HOOK" -eq 1 ] && [ "$DESC_HOOK" -eq 0 ] && [ "$DESC_SHIM" -eq 0 ] \
+    && MISMATCHES+=("hook 활성됐지만 CLAUDE.md path-scoped 설명 누락")
+```
+
+보고:
+- mismatch 없으면 출력 생략 (조용)
+- 있으면 §3 끝에 "문서 ↔ 실제 일치" 섹션 추가:
+
+```
+ ─ 문서 ↔ 실제 일치 ─────────────────────────────────────
+ ⚠ CLAUDE.md는 shim 메커니즘 명시 — 0.1.8에서 폐기됨 (generate-rule-shims.sh 없음)
+ ⚠ CLAUDE.md가 두 메커니즘 동시 명시 — 모순
+```
+
+`다음 단계`에 추가:
+
+```
+ [d] ✓ CLAUDE.md path-scoped 설명 갱신                 [추천]
+  명령 path-scoped 섹션을 현재 활성 메커니즘으로 갱신
+        (Design B → "PreToolUse hook이 자동 안내, .ax/hooks/pre-edit/spirit-rules-inject.sh")
+  이유 다른 세션이 stale 메커니즘 언어로 답변하는 위험 차단
+```
+
+자동 적용 X — 사용자 + LLM이 함께 path-scoped 섹션 본문을 작성. 이 검증 자체는 grep만 — 결정론.
+
+**왜 이 검증이 필요한가**: 세션마다 CLAUDE.md 컨텍스트가 다를 수 있어, 한 세션이 0.1.7 시점 design generation으로 작업하면 CLAUDE.md를 Design A 언어로 되돌리거나 두 메커니즘을 섞을 수 있음. 실제 hook은 Design B로 동작하지만 문서는 다른 메커니즘을 가리키면 신뢰 침식. 이 §3.8이 마지막 방어선.
+
 ## 3. 출력
 
 ```
