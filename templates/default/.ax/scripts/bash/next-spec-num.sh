@@ -53,6 +53,14 @@ PREV=$(ls -d "$SPEC_DIR"/[0-9][0-9][0-9]-* 2>/dev/null \
 PREV="${PREV:-000}"
 
 NEXT_NUM=$((10#${PREV} + 1))
+if [ "$NEXT_NUM" -gt 999 ]; then
+    if [ "$JSON_MODE" = true ]; then
+        json_error "spec number overflow: 999 초과 — NNN-* 3자리 규약 위반. spec 정리/아카이브 후 재시도."
+    else
+        goax_error "spec number overflow: 999 초과 — NNN-* 3자리 규약 위반"
+        exit "$EXIT_ERROR"
+    fi
+fi
 NEXT=$(printf "%03d" "$NEXT_NUM")
 
 EXISTING_COUNT=$(ls -d "$SPEC_DIR"/[0-9][0-9][0-9]-* 2>/dev/null | wc -l | tr -d ' ')

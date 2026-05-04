@@ -51,13 +51,11 @@ if [ -f "$WS/CLAUDE.md" ]; then
     # CLAUDE.md inline rule: 🔵 **`TOKEN`** 형식
     CONV_INLINE=$(grep -E '^🔵 \*\*`' "$WS/CLAUDE.md" 2>/dev/null | wc -l | tr -d ' ')
 
-    # spirit/rules/ — heading 형식 (## SP-CAT-NNN: text, plugin 컨벤션, 0.1.8+)
-    # + 옛 inline 형식 (^🔵 \*\*`) 합산해 0.1.7 호환 유지
+    # spirit/rules/ — heading 형식 (`## SP-`, plugin 컨벤션 0.1.8+) + 옛 inline 형식 (`^🔵 \*\*\``)
+    # 단일 grep alternation으로 합산 — process 1회 (split 버전보다 빠름).
     CONV_SPIRIT=0
     if [ -d "$WS/.ax/spirit/rules" ]; then
-        CONV_SPIRIT_HEAD=$(grep -hE '^## SP-[A-Z]+-[0-9]{3}:' "$WS/.ax/spirit/rules/"*.md 2>/dev/null | wc -l | tr -d ' ')
-        CONV_SPIRIT_INLINE=$(grep -hE '^🔵 \*\*`' "$WS/.ax/spirit/rules/"*.md 2>/dev/null | wc -l | tr -d ' ')
-        CONV_SPIRIT=$((CONV_SPIRIT_HEAD + CONV_SPIRIT_INLINE))
+        CONV_SPIRIT=$(grep -hE '^(🔵 \*\*`|## SP-)' "$WS/.ax/spirit/rules/"*.md 2>/dev/null | wc -l | tr -d ' ')
     fi
     CONV=$((CONV_INLINE + CONV_SPIRIT))
 fi
@@ -113,7 +111,10 @@ LAST_AUDIT_PIPE=""
 if [ -f "$WS/.ax/mistakes/.last-audit" ]; then
     LAST=$(cat "$WS/.ax/mistakes/.last-audit" 2>/dev/null | tr -d '\n ')
     if [ -n "$LAST" ]; then
-        ISO=$(date -u -r "$LAST" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")
+        # cross-platform: BSD `date -r EPOCH` (macOS) → GNU `date -d @EPOCH` (Linux)
+        ISO=$(date -u -r "$LAST" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+              || date -u -d "@$LAST" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+              || echo "")
         if [ -n "$ISO" ]; then
             NOW_SEC=$(date +%s)
             DIFF=$(( (LAST + 7*24*3600 - NOW_SEC) / 86400 ))

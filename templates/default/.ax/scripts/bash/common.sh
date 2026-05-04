@@ -12,9 +12,30 @@ EXIT_ERROR=1
 EXIT_SKIPPED=2
 
 # Logging — stderr only ([goax] prefix)
+# JSON_MODE=true 면 goax_error 는 stdout 에 json_output error 한 줄을 emit.
+# caller 의 exit 흐름은 보존 (이 함수는 exit 안 함). exit 까지 묶고 싶으면 'json_error'.
 goax_log()   { printf '[goax] %s\n' "$*" >&2; }
 goax_warn()  { printf '[goax] WARN: %s\n' "$*" >&2; }
-goax_error() { printf '[goax] ERROR: %s\n' "$*" >&2; }
+goax_error() {
+    if [ "${JSON_MODE:-false}" = "true" ]; then
+        json_output "error" "{}" "" "[]" "$(printf '%s' "$*" | _json_array_helper)"
+    else
+        printf '[goax] ERROR: %s\n' "$*" >&2
+    fi
+}
+
+# stdin 단일 메시지 → JSON 배열 한 원소로 안전 escape
+_json_array_helper() {
+    local msg
+    msg=$(cat)
+    if command -v jq >/dev/null 2>&1; then
+        jq -nc --arg m "$msg" '[$m]'
+    else
+        local esc
+        esc=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        printf '["%s"]' "$esc"
+    fi
+}
 
 # sensors.mode 통일 판독 — .ax/config.yml에서 mode 추출
 # 반환값: warning | fail | off (default: warning — 안전한 도입)
@@ -166,17 +187,21 @@ json_output() {
     fi
 }
 
-# JSON 에러 출력 + exit 1
+# JSON 에러 출력 + exit 1 — msg에 따옴표/역슬래시 있어도 jq로 안전 escape
 json_error() {
     local msg="$1"
-    json_output "error" "{}" "" "[]" "[\"$msg\"]"
+    local errors_json
+    errors_json=$(printf '%s' "$msg" | _json_array_helper)
+    json_output "error" "{}" "" "[]" "$errors_json"
     exit "$EXIT_ERROR"
 }
 
-# JSON skip 출력 + exit 2 (graceful degradation)
+# JSON skip 출력 + exit 2 (graceful degradation) — 동일하게 escape
 json_skip() {
     local msg="$1"
-    json_output "skipped" "{}" "$msg" "[\"$msg\"]" "[]"
+    local warnings_json
+    warnings_json=$(printf '%s' "$msg" | _json_array_helper)
+    json_output "skipped" "{}" "$msg" "$warnings_json" "[]"
     exit "$EXIT_SKIPPED"
 }
 

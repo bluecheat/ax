@@ -132,6 +132,7 @@ fi
 mkdir -p "$DEST" "$DEST/checklists" "$DEST/contracts"
 
 CREATED=()
+MISSING=()
 for f in "${FILES[@]}"; do
     src="$TEMPLATE_DIR/$f"
     dst="$DEST/$f"
@@ -140,9 +141,20 @@ for f in "${FILES[@]}"; do
         cp "$src" "$dst"
         CREATED+=("$f")
     else
-        goax_warn "template missing: $f"
+        MISSING+=("$f")
     fi
 done
+
+# Mandatory templates 누락 시 fail — silent continue로 빈 spec dir 생성하면
+# 후속 spec-plan/spec-tasks가 깨짐. 0.1.8 fix (PR review).
+if [ ${#MISSING[@]} -gt 0 ]; then
+    if [ "$JSON_MODE" = true ]; then
+        json_error "mandatory templates missing in $TEMPLATE_DIR: ${MISSING[*]}"
+    else
+        goax_error "mandatory templates missing in $TEMPLATE_DIR: ${MISSING[*]}"
+        exit "$EXIT_ERROR"
+    fi
+fi
 
 # .tier 메모
 {

@@ -28,6 +28,12 @@ JSON_MODE=false
 SHOW_HELP=false
 TEXT=""
 
+# JSON_MODE 플래그를 먼저 스캔 — error 출력을 일관되게 JSON 모드로 보내기 위해
+# (parse loop 진행 중 unknown option 에러 시점에 JSON_MODE 가 set 돼있어야 함)
+for arg in "$@"; do
+    [ "$arg" = "--json" ] && JSON_MODE=true && break
+done
+
 while [ $# -gt 0 ]; do
     case "$1" in
         --json)    JSON_MODE=true ;;
@@ -59,8 +65,17 @@ if [[ ! "$SLUG" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || [ -z "$SLUG" ]; then
 fi
 
 if [ "$JSON_MODE" = true ]; then
-    RESULT=$(printf '{"slug":"%s","valid":%s,"original":"%s"}' \
-                    "$SLUG" "$VALID" "$(printf '%s' "$TEXT" | sed 's/"/\\"/g')")
+    # jq로 안전 escape — backslash, quote, newline, CR, tab 모두 처리
+    if command -v jq >/dev/null 2>&1; then
+        RESULT=$(jq -nc --arg slug "$SLUG" --argjson valid "$VALID" --arg original "$TEXT" \
+                       '{slug:$slug, valid:$valid, original:$original}')
+    else
+        # jq 부재 fallback
+        ORIGINAL_ESCAPED=$(printf '%s' "$TEXT" \
+            | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
+            | awk 'BEGIN{ORS=""} {gsub(/\r/,"\\r"); gsub(/\t/,"\\t"); if(NR>1)printf "\\n"; print}')
+        RESULT=$(printf '{"slug":"%s","valid":%s,"original":"%s"}' "$SLUG" "$VALID" "$ORIGINAL_ESCAPED")
+    fi
     if [ "$VALID" = true ]; then
         json_output "ok" "$RESULT" "use --slug $SLUG"
     else
