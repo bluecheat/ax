@@ -188,16 +188,19 @@ SUGGESTED=$(find .ax -maxdepth 2 -name "*.suggested" 2>/dev/null)
 `spirit/SKILL.md:28-31`이 mandate하는 `^## SP-CAT-NNN: text` 형식 검증 + path-scoped 룰의 hook (`spirit-rules-inject.sh`) 이 settings.json에 등록됐는지 확인.
 
 ```bash
-# (1) spirit/rules/*.md 헤더 형식 검증 — 비표준 헤더 검출
+# (1) spirit/rules/*.md + modules/*/rules.md 헤더 형식 검증 — 비표준 헤더 검출
 SPIRIT_BAD=()
-for f in "$ROOT/.ax/spirit/rules/"*.md; do
+for f in "$ROOT/.ax/spirit/rules/"*.md "$ROOT/.ax/modules/"*/rules.md; do
     [ -f "$f" ] || continue
     bad=$(grep -nE '^## ' "$f" | grep -vE '^[0-9]+:## SP-[A-Z]+-[0-9]{3}: ')
     [ -n "$bad" ] && SPIRIT_BAD+=("$f")
 done
 
-# (2) SP-* 토큰 중복 검출 — 같은 prefix-NNN이 여러 헤더에 나오면 fail
-DUPES=$(grep -hE '^## SP-[A-Z]+-[0-9]{3}:' "$ROOT/.ax/spirit/rules/"*.md 2>/dev/null \
+# (2) SP-* 토큰 중복 검출 — spirit + modules 통합 (같은 prefix-NNN이 어디든 여러 번 나오면 충돌)
+DUPES=$(grep -hE '^## SP-[A-Z]+-[0-9]{3}:' \
+        "$ROOT/.ax/spirit/rules/"*.md \
+        "$ROOT/.ax/modules/"*/rules.md \
+        2>/dev/null \
     | sed -E 's/^## (SP-[A-Z]+-[0-9]{3}):.*/\1/' \
     | sort | uniq -d)
 

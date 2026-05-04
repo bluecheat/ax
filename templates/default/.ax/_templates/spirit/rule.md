@@ -1,7 +1,7 @@
 ---
 category: __CATEGORY__              # 파일명과 일치 (kebab-case)
 applies_to: [code]                  # code | pr | commit | review (필요한 것 다중 선택)
-# adr: docs/adr/NNNN-*.md           # 결정 근거 ADR (선택)
+# adr: .ax/docs/adr/NNNN-*.md           # 결정 근거 ADR (선택)
 ---
 
 # __Category Title__
@@ -15,8 +15,8 @@ applies_to: [code]                  # code | pr | commit | review (필요한 것
   2. ID는 카테고리 안에서 sequential (001, 002, ...)
   3. PREFIX는 카테고리 prefix 4자 이내 (예: SEC, NAMING, ERR)
   4. 자동 검출 가능하면 `검출 패턴:` 라인에 regex
-  5. 결정 근거 있으면 `<!-- adr: docs/adr/NNNN-*.md -->` 코멘트
-  6. goax spirit lint 로 검증 / goax rules --category __CATEGORY__ 로 인덱스
+  5. 결정 근거 있으면 `<!-- adr: .ax/docs/adr/NNNN-*.md -->` 코멘트
+  6. doctor §3.7 spirit lint 로 검증 (헤더 형식 + SP-* 토큰 중복)
 -->
 
 ## SP-__PREFIX__-001: <첫 번째 룰 제목>
@@ -27,7 +27,7 @@ applies_to: [code]                  # code | pr | commit | review (필요한 것
 ❌ <나쁜 예>
 
 <!-- 검출 패턴: <regex> -->
-<!-- adr: docs/adr/NNNN-*.md -->
+<!-- adr: .ax/docs/adr/NNNN-*.md -->
 
 ---
 
