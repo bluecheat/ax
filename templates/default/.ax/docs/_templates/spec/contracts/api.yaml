@@ -1,0 +1,37 @@
+openapi: 3.0.3
+info:
+  title: <feature> API
+  version: 0.1.0
+  description: <한 줄 설명>
+
+paths:
+  /v1/<resource>:
+    post:
+      summary: <목적>
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/<Schema>Request'
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/<Schema>Response'
+
+components:
+  schemas:
+    <Schema>Request:
+      type: object
+      required: [field1]
+      properties:
+        field1:
+          type: string
+    <Schema>Response:
+      type: object
+      properties:
+        id:
+          type: string

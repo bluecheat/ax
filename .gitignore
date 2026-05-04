@@ -1,0 +1,11 @@
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+node_modules/
+__pycache__/
+*.pyc
+.ax_write_test
+.omc/

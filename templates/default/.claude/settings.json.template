@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "goax가 생성한 settings — Claude Code 공식 hook 스키마: PreToolUse/PostToolUse(PascalCase) + hooks:[{type,command}] 중첩. ${CLAUDE_PROJECT_DIR}는 Claude Code가 자동 주입하는 사용자 프로젝트 루트.",
+  "_statusLine_hint": "HUD 활성하려면 /hud setup 실행 (기존 statusLine 자동 감지·합치기 안내).",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/user-prompt/triage-nudge.sh\"" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-bash/block-destructive.sh\"" },
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-bash/grep-on-commit.sh\"" }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-edit/check-protected-paths.sh\"" },
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-edit/spirit-check.sh\"" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/post-edit/lint-changed.sh\"" }
+        ]
+      }
+    ]
+  }
+}

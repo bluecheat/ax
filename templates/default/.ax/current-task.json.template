@@ -1,0 +1,14 @@
+{
+  "task_id": null,
+  "description": null,
+  "size": null,
+  "risk": null,
+  "domain": null,
+  "spec_id": null,
+  "spec_dir": null,
+  "spec_tier": null,
+  "started_at": null,
+  "updated_at": null,
+  "phase": "idle",
+  "blocked_by": []
+}

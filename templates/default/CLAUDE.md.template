@@ -1,0 +1,78 @@
+# [PROJECT_NAME] — Constitution
+
+> AI 에이전트의 비협상 룰. README가 아니라 system-level governance 문서.
+> 룰 토큰: `<scope>:<TIER>:<NNN>` — 작성법은 goax repo의 `docs/reference/rules-tokens.md` 참조.
+
+---
+
+## META — 핵심 가드레일 4원칙
+
+- **Think Before Coding** — 추측 금지. 모르면 질문.
+- **Simplicity First** — 50줄로 되면 200줄 쓰지 마. 추상화는 두 번째 호출자부터.
+- **Surgical Changes** — 요청 외 코드 X. 변경 한 줄도 요청에 trace.
+- **Goal-Driven** — 검증 없이 끝나지 마. 버그 고침 = 재현 테스트 통과.
+
+## 시그널 의미
+
+- 🔴 **CRITICAL** *(auto-enforce)* — hooks가 자동 차단. 우회 불가. 룰 옆에 hook 경로 명시.
+- 🟡 **MANDATORY** *(human-in-the-loop)* — 사람 승인 게이트. ADR·리뷰어 동의 필요.
+- 🔵 **CONVENTION** *(human-on-the-loop)* — 권장 가이드. 차단 X. PR 리뷰에서 인용용.
+
+---
+
+## CRITICAL — 자동 검증 (Sensors가 막는다)
+
+> 위반 시 hooks가 작업을 멈춘다. 처음엔 `warning`, 안정화 후 `fail`로 전환 (`.ax/config.yml` `sensors.mode`).
+
+🔴 **`AX:CRITICAL:001`** *(첫 번째 비협상 룰 — 동사 형태로)* — `<hook 파일 경로>`
+
+🔴 **`AX:CRITICAL:002`** *(두 번째)* — `<hook 파일 경로>`
+
+## MANDATORY — 사람 승인 필요
+
+🟡 **`AX:MANDATORY:001`** *(사람 게이트가 진짜 필요한 룰만 — ADR, cross-team, 보안 검토 등)*
+
+## CONVENTION — 일반 가이드
+
+> 핵심 컨벤션은 `.ax/spirit/rules/`에 카테고리별로 있어요. import로 자동 로드:
+
+```
+@.ax/spirit/rules/architecture.md
+@.ax/spirit/rules/data.md
+@.ax/spirit/rules/testing.md
+@.ax/spirit/rules/ops.md
+```
+
+> 특별히 인용 빈도가 높은 룰은 인라인 ID로:
+
+🔵 **`AX:CONVENTION:001`** *(인용 자주 되는 핵심 컨벤션)*
+
+---
+
+## 4계층 인덱스
+
+| Layer | 위치 | 역할 |
+|---|---|---|
+| 0 Triage | `.ax/skills/global/triage/SKILL.md` | 작업 진입 시 Size×Risk 분류 |
+| 1 Constitution | 이 파일 (META + CRITICAL/MANDATORY/CONVENTION) | 사고 가드 + 비협상 룰 |
+| 2 Module Rules | `.ax/modules/<name>/rules.md` | 모듈 도메인 룰 — triage가 keywords 매칭으로 자동 참조 |
+| 3 Spec / ADR | `.ax/docs/adr/` + `.ax/docs/spec/` | 결정 근거 |
+| ─ Spirit | `.ax/spirit/rules/` | 카테고리별 CONVENTION |
+| ─ Mistake Loop | `.ax/mistakes/` + `/audit` | 같은 실수 반복 차단 |
+
+---
+
+## 빠른 명령
+
+빌드·테스트·실행 명령은 [`.ax/config.yml`](.ax/config.yml)의 `commands` 섹션에 기록한다.
+
+```bash
+/rules                  # 전체 룰 인덱스
+/rules --level critical # CRITICAL만
+/audit                  # mistakes 심사
+/doctor                 # 하네스 상태 점검
+```
+
+---
+
+> 룰 토큰은 백틱(`` ` ``)으로 감싸 grep에서 인접 단어와 분리되도록 한다.

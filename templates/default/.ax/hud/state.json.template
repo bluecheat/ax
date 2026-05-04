@@ -1,0 +1,19 @@
+{
+  "goax_version": null,
+  "updated_at": null,
+  "hud_preset": "compact",
+  "sensors_mode": "warning",
+  "layers": {
+    "L0_triage":       { "active": true,  "skills": 3 },
+    "L1_constitution": { "active": false, "rules": 0, "signals": {"critical": 0, "mandatory": 0, "convention": 0} },
+    "L2_module":       { "active": false, "module_claude_count": 0 },
+    "L3_spec_adr":     { "active": false, "specs": 0, "adrs": 0 }
+  },
+  "cross_cut": {
+    "spirit":   { "active": false, "rules_count": 0, "values_filled": false },
+    "mistakes": { "active": false, "count": 0, "last_audit": null, "due_in_days": null }
+  },
+  "current_task": null,
+  "last_skill": null,
+  "skill_calls": 0
+}

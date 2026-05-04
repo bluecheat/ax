@@ -1,0 +1,28 @@
+
+---
+
+## starter 프리셋 — 어디에나 유용한 출발점 룰
+
+> `--preset starter`로 init했을 때 추가됨. 안 맞으면 삭제·교체 OK.
+
+### 🔴 CRITICAL
+
+🔴 **`starter:CRITICAL:001`** 파괴적 명령(`rm -rf /`, `git push --force`, `git reset --hard <protected>`) 자동 차단 — `pre-bash/block-destructive.sh`
+
+🔴 **`starter:CRITICAL:002`** Secrets 코드 내 하드코딩 금지 — `.env` / vault / secret manager 경유. 평문 password/api_key/token이 staged 파일에서 검출되면 차단 — `pre-commit/critical-rule-grep.sh`
+
+🔴 **`starter:CRITICAL:003`** 보호 경로 임의 변경 금지 — `CLAUDE.md`, `.ax/`, `.github/`, 빌드 설정 파일은 명시적 사용자 승인 후 변경 — `pre-edit/check-protected-paths.sh`
+
+### 🟡 MANDATORY
+
+🟡 **`starter:MANDATORY:001`** 신규 도메인/모듈 추가 시 ADR 작성 — `docs/adr/NNN-*.md`로 결정 근거 + 검토된 대안 기록
+
+🟡 **`starter:MANDATORY:002`** Cross-domain/cross-module 변경 시 두 번째 리뷰어 승인
+
+### 🔵 CONVENTION
+
+🔵 **`starter:CONVENTION:001`** commit 메시지 prefix — `feat:` / `fix:` / `refactor:` / `docs:` / `test:` / `chore:`
+
+🔵 **`starter:CONVENTION:002`** PR 템플릿 — `## 변경` / `## 이유` / `## 검증` / `## 위험·롤백` 4섹션
+
+🔵 **`starter:CONVENTION:003`** 테스트 프레임워크 통일 — README에 명시한 단일 프레임워크 사용

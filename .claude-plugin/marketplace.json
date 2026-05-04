@@ -1,0 +1,31 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "goax",
+  "description": "goax — AX 4-Layer 하네스 프레임워크. AI 에이전트 결과 일관성을 *환경*으로 통제.",
+  "owner": {
+    "name": "bluechat",
+    "email": "itsinil@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "goax",
+      "description": "4계층 하네스(Triage/Constitution/Module/Spec·ADR) + Spirit/Mistake Loop. installer/onboarding skill로 자연어 도입.",
+      "version": "0.1.7",
+      "author": {
+        "name": "bluechat",
+        "email": "itsinil@gmail.com"
+      },
+      "source": "./",
+      "category": "productivity",
+      "homepage": "https://github.com/bluecheat/ax",
+      "tags": [
+        "harness",
+        "4-layer",
+        "triage",
+        "spec-driven",
+        "korean"
+      ]
+    }
+  ],
+  "version": "0.1.7"
+}
