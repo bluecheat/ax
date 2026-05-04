@@ -71,7 +71,7 @@ grep -h "^category:" $ROOT/.ax/mistakes/*.md 2>/dev/null \
 | **Layer 0 / 설정** | `.ax/config.yml` (domain_risk 5+ 권장) + `.ax/version` |
 | **Cross-cut Spirit** | `values.md`/`tone.md` (placeholder 검사), `rules/<카테고리>.md` 1개+ |
 | **Cross-cut Mistake Loop** | `.ax/mistakes/` 디렉토리 존재 |
-| **Layer 3 / Spec·ADR** | `.ax/docs/adr/`, ADR 1개+ (0000-template 외), `.ax/docs/_templates/spec/` (`.origin` drift 비교 — 아래 §3.5) |
+| **Layer 3 / Spec·ADR** | `.ax/docs/adr/`, ADR 1개+ (0000-template 외), `.ax/_templates/spec/` (`.origin` drift 비교 — 아래 §3.5) |
 | **Layer 2 / Module Rules** | (선택) 모듈별 `<module>/CLAUDE.md` 카운트 |
 | **Sensors / Hooks** | `.ax/hooks/{pre-bash,pre-edit,post-edit,pre-commit}/` + `.claude/settings.json` |
 
@@ -79,7 +79,7 @@ grep -h "^category:" $ROOT/.ax/mistakes/*.md 2>/dev/null \
 
 스크립트 위임 — 결정론은 `check-templates-drift.sh`에. plugin 컨텍스트에서 실행되면 `${CLAUDE_SKILL_DIR}`(Claude Code 공식 변수)로 plugin root를 도출(`${CLAUDE_SKILL_DIR}/../..`). 사용자가 직접 bash로 호출했다면 비어있을 수 있어요(그때는 plugin_updated 검사가 skip 되고 user_modified만 보고).
 
-> ⚠ **drift 감지 범위 제한**: `check-templates-drift.sh`는 `.ax/docs/_templates/spec/` 만 커버. `.ax/spirit/rules/`, `.ax/docs/_templates/{adr,module,spirit}/` 의 사용자 변경은 *감지 안 됨* — plugin 갱신 시 silently 출고본으로 회귀 가능. 그래서 onboarding 절대 금지 항목에 plugin shipped spirit/rules 직접 append 금지가 박혀있음 — 프로젝트별 룰은 별도 파일(`<project>-<category>.md`) + @import 권장.
+> ⚠ **drift 감지 범위 제한**: `check-templates-drift.sh`는 `.ax/_templates/spec/` 만 커버. `.ax/spirit/rules/`, `.ax/_templates/{adr,module,spirit}/` 의 사용자 변경은 *감지 안 됨* — plugin 갱신 시 silently 출고본으로 회귀 가능. 그래서 onboarding 절대 금지 항목에 plugin shipped spirit/rules 직접 append 금지가 박혀있음 — 프로젝트별 룰은 별도 파일(`<project>-<category>.md`) + @import 권장.
 
 ```bash
 # plugin root 도출 — ${CLAUDE_SKILL_DIR} 우선, ${CLAUDE_PLUGIN_ROOT}는 호환용 fallback
@@ -106,8 +106,8 @@ DRIFT_FILES=$(echo "$RESULT" | jq -r '.result.drift_files | join(", ")')
 - `user_modified=true, plugin_updated=false` → `· _templates: 사용자 수정 감지 (정상 — 이게 SSOT). 변경: $DRIFT_FILES`
 - `user_modified=*, plugin_updated=true` → `⚠ plugin _templates 갱신됨` + 옵션 제시:
  - [a] ✓ 사용자 수정 유지 (권장 — 도메인 적응 결과)
- - [b] plugin 출고본을 `.ax/docs/_templates/spec.suggested/`로 떨어트려 사용자가 머지
- - [c] ⚠ 사용자 수정 백업(`.ax/docs/_templates/spec.bak/`) 후 plugin으로 덮어쓰기
+ - [b] plugin 출고본을 `.ax/_templates/spec.suggested/`로 떨어트려 사용자가 머지
+ - [c] ⚠ 사용자 수정 백업(`.ax/_templates/spec.bak/`) 후 plugin으로 덮어쓰기
 
 **원칙**: 사용자 수정은 *절대* 자동 덮어쓰기 X. 머지 결정은 사용자.
 

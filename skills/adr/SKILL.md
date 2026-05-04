@@ -12,7 +12,7 @@ description: "ADR (Architecture Decision Record) 작성 워크플로우. 새 결
 
 ## SSOT 템플릿
 
-ADR는 항상 `.ax/docs/_templates/adr/0000-template.md`를 base로 만들어요.
+ADR는 항상 `.ax/_templates/adr/0000-template.md`를 base로 만들어요.
 인라인 템플릿 사용 금지 — `onboarding`의 Q5 자동 ADR도 동일 template 사용해서 포맷 일관성 보장.
 
 template 구조 (요약):
@@ -83,7 +83,7 @@ grep -lE "^\| 상태 \|.*폐기|superseded" .ax/docs/adr/*.md 2>/dev/null
 [a] 응답 시:
 ```bash
 DEST=".ax/docs/adr/0006-payment-refund-strategy.md"
-cp .ax/docs/_templates/adr/0000-template.md "$DEST"
+cp .ax/_templates/adr/0000-template.md "$DEST"
 
 # 메타 자동 채움 (sed로)
 sed -i \

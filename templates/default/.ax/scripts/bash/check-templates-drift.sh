@@ -5,9 +5,9 @@
 #  bash check-templates-drift.sh [--json] [--plugin-dir <path>] [--help]
 #
 # 비교:
-#  1. .ax/docs/_templates/spec/.origin (installer 기록 출고본 sha)
-#  2. .ax/docs/_templates/spec/ 현재 sha
-#  3. (옵션) plugin templates/default/.ax/docs/_templates/spec/ 최신 출고본
+#  1. .ax/_templates/spec/.origin (installer 기록 출고본 sha)
+#  2. .ax/_templates/spec/ 현재 sha
+#  3. (옵션) plugin templates/default/.ax/_templates/spec/ 최신 출고본
 #
 # 결과:
 #  - user_modified: .origin과 현재 다르면 true (사용자 도메인 적응 — 정상)
@@ -43,7 +43,7 @@ if [ "$SHOW_HELP" = true ]; then
 fi
 
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
-TMPL_DIR="$PROJECT_ROOT/.ax/docs/_templates/spec"
+TMPL_DIR="$PROJECT_ROOT/.ax/_templates/spec"
 ORIGIN="$TMPL_DIR/.origin"
 
 if [ ! -d "$TMPL_DIR" ]; then
@@ -84,8 +84,8 @@ if [ -f "$ORIGIN" ]; then
 fi
 
 PLUGIN_UPDATED=false
-if [ -n "$PLUGIN_DIR" ] && [ -d "$PLUGIN_DIR/templates/default/.ax/docs/_templates/spec" ]; then
-  PLUGIN_SHA=$(compute_sha "$PLUGIN_DIR/templates/default/.ax/docs/_templates/spec")
+if [ -n "$PLUGIN_DIR" ] && [ -d "$PLUGIN_DIR/templates/default/.ax/_templates/spec" ]; then
+  PLUGIN_SHA=$(compute_sha "$PLUGIN_DIR/templates/default/.ax/_templates/spec")
   if [ "$ORIGIN_PRESENT" = true ] && [ "$EXPECTED" != "$PLUGIN_SHA" ]; then
     PLUGIN_UPDATED=true
   fi

@@ -20,6 +20,7 @@
 .ax/hooks/
 .ax/modules/
 .ax/docs/
+.ax/_templates/
 .ax/scripts/
 
 # ─── .ax/ 단일 파일 ───

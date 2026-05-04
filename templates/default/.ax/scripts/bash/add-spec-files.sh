@@ -45,7 +45,7 @@ fi
 [ -z "$ADD" ]  && { goax_error "--add required (comma-separated: plan,tasks,research,...)"; exit "$EXIT_ERROR"; }
 
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
-TEMPLATE_DIR="$PROJECT_ROOT/.ax/docs/_templates/spec"
+TEMPLATE_DIR="$PROJECT_ROOT/.ax/_templates/spec"
 
 # Spec 디렉토리 찾기
 SPEC_DIR="$PROJECT_ROOT/.ax/docs/spec/$SPEC"

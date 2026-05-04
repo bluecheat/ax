@@ -72,7 +72,7 @@ idle → triaged → spec → spec_checked
 
 ## 자기 프로젝트 맞춤화
 
-1. **`.ax/docs/_templates/spec/`** 도메인에 맞게 수정 — 이게 SSOT (drift는 `doctor`가 알려줘요)
+1. **`.ax/_templates/spec/`** 도메인에 맞게 수정 — 이게 SSOT (drift는 `doctor`가 알려줘요)
 2. **`.ax/spirit/rules/<카테고리>.md`** 추가 — 새 카테고리 룰
 3. **모듈별 `<module>/CLAUDE.md`** — Layer 2 스코프 룰
 4. **`.ax/scripts/bash/`** — 자기 프로젝트에 맞는 결정론 스크립트 추가 가능 (--json 표준 따르면 SKILL이 호출 가능)

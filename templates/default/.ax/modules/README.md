@@ -26,7 +26,7 @@
   └── ...
 ```
 
-> 모듈 룰의 **템플릿**은 인스턴스 디렉토리 안이 아니라 `.ax/docs/_templates/module/rules.md` 에 별도로 둬요 (`_templates/spec/`, `_templates/adr/` 와 동일한 패턴 — 인스턴스와 템플릿 분리).
+> 모듈 룰의 **템플릿**은 인스턴스 디렉토리 안이 아니라 `.ax/_templates/module/rules.md` 에 별도로 둬요 (`_templates/spec/`, `_templates/adr/` 와 동일한 패턴 — 인스턴스와 템플릿 분리).
 
 ## 파일 형식
 
@@ -60,7 +60,7 @@ applies_to: [code, pr, review]
 
 ```bash
 mkdir -p .ax/modules/<module-name>
-cp .ax/docs/_templates/module/rules.md .ax/modules/<module-name>/rules.md
+cp .ax/_templates/module/rules.md .ax/modules/<module-name>/rules.md
 $EDITOR .ax/modules/<module-name>/rules.md
 # frontmatter의 keywords를 grep 매칭 가능한 단어로 채우기
 ```

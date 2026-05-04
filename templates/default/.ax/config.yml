@@ -48,7 +48,7 @@ sensors:
     - .ax/scripts/
     - .ax/spirit/values.md
     - .ax/spirit/tone.md
-    - .ax/docs/_templates/
+    - .ax/_templates/
     - .claude/settings.json
     - .github/workflows/
 

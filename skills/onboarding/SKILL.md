@@ -710,7 +710,7 @@ Layer 2 — 모듈 도메인 룰 stub 생성 (`.ax/modules/<name>/rules.md`):
 5.5. Q2의 도메인 위험도 매핑에서 **L2/L3 위험도 도메인이면서 모듈로 식별된 항목**만 자동 stub. L0/L1 도메인은 stub 생성 X (모노레포 noise 방지).
 
  - 디렉토리: `.ax/modules/<module-name>/`
- - 파일: `.ax/docs/_templates/module/rules.md` cp 후 frontmatter만 채움 (본문은 비워둠)
+ - 파일: `.ax/_templates/module/rules.md` cp 후 frontmatter만 채움 (본문은 비워둠)
    ```yaml
    ---
    module: payment
@@ -721,13 +721,13 @@ Layer 2 — 모듈 도메인 룰 stub 생성 (`.ax/modules/<name>/rules.md`):
  - 본문은 사용자가 후속에 채우거나, `audit`이 mistakes N회 반복 카테고리를 자동 promote
  - **사용자에게 보고**: "L3/L2 도메인 N개에 stub 만들었어요. 룰은 비어있고 keywords만 채웠으니 triage가 매칭은 가능. 본문은 필요할 때 채우세요."
 
-> Layer 2 *자동 stub* 정책: **L2/L3 모듈 위험도면 stub, L0/L1은 X**. 사용자가 L0/L1에도 룰 필요하면 `.ax/docs/_templates/module/rules.md`를 cp해서 직접 추가. triage는 매 작업 진입 시 `.ax/modules/*/rules.md`의 `keywords:` frontmatter를 grep해 사용자 메시지와 매칭, 매칭 모듈 룰을 *Required reading*으로 자동 첨부.
+> Layer 2 *자동 stub* 정책: **L2/L3 모듈 위험도면 stub, L0/L1은 X**. 사용자가 L0/L1에도 룰 필요하면 `.ax/_templates/module/rules.md`를 cp해서 직접 추가. triage는 매 작업 진입 시 `.ax/modules/*/rules.md`의 `keywords:` frontmatter를 grep해 사용자 메시지와 매칭, 매칭 모듈 룰을 *Required reading*으로 자동 첨부.
 
 Layer 3 — 첫 ADR (0000-template.md 사용 — `adr`와 동일 양식):
 
 6. `.ax/docs/adr/0001-goax-adoption.md` 자동 작성:
  ```bash
- cp .ax/docs/_templates/adr/0000-template.md .ax/docs/adr/0001-goax-adoption.md
+ cp .ax/_templates/adr/0000-template.md .ax/docs/adr/0001-goax-adoption.md
  ```
  템플릿 구조 그대로 두고 메타·본문만 채움:
  - **메타**: ADR ID=0001, 작성일=오늘, 상태=승인, 관련 spec=(없음)
@@ -839,7 +839,7 @@ rm -f .ax/.onboarding-pending
  .ax/docs/spec/NNN-<slug>/  ← 작업 spec SSOT (spec-new가 여기에 생성)
                               spec.md / plan.md / tasks.md 인스턴스가 사는 곳
 
- .ax/docs/_templates/spec/  ← 템플릿 (도메인에 맞게 수정 가능, doctor가 drift 감지)
+ .ax/_templates/spec/  ← 템플릿 (도메인에 맞게 수정 가능, doctor가 drift 감지)
 
 📂 .ax/ runtime 파일은 .gitignore 자동 처리됨
  .ax/state.json, .ax/current-task.json — per-machine 상태, PR에 들어가지 않음

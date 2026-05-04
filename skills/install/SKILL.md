@@ -136,12 +136,12 @@ chmod +x .ax/hud/statusline.sh 2>/dev/null || true
 
 # 4. _templates 출고본 sha 기록 (drift 감지용 — doctor가 비교)
 (
-    cd .ax/docs/_templates/spec && \
+    cd .ax/_templates/spec && \
     find . -type f \( -name '*.md' -o -name '*.yaml' -o -name '*.yml' \) \
         ! -name '.origin' | sort | xargs shasum -a 256 2>/dev/null
-) > .ax/docs/_templates/spec/.origin
+) > .ax/_templates/spec/.origin
 GOAX_VER=$(cat "$PLUGIN_ROOT/VERSION" 2>/dev/null || echo "unknown")
-echo "# goax_version: $GOAX_VER" >> .ax/docs/_templates/spec/.origin
+echo "# goax_version: $GOAX_VER" >> .ax/_templates/spec/.origin
 
 # 5. CLAUDE.md — 조건부 (manifest 외)
 if [ -f CLAUDE.md ]; then

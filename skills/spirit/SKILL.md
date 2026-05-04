@@ -14,7 +14,7 @@ description: "Spirit 검증 — 'spirit 점검', 'goax spirit', '가치 룰 lint
 - `.ax/spirit/values.md` 존재 + non-empty
 - `.ax/spirit/tone.md` 존재 + non-empty
 - `.ax/spirit/rules/` 디렉토리 존재
-- `.ax/docs/_templates/spirit/rule.md` 존재 (rules 작성 템플릿 — 인스턴스 디렉토리와 분리)
+- `.ax/_templates/spirit/rule.md` 존재 (rules 작성 템플릿 — 인스턴스 디렉토리와 분리)
 
 ### 2. rules/*.md frontmatter
 각 rules/<category>.md 파일은 다음 frontmatter 필요:

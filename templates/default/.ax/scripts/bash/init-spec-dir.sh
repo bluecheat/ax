@@ -61,7 +61,7 @@ if ! [[ "$SLUG" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
 fi
 
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
-TEMPLATE_DIR="$PROJECT_ROOT/.ax/docs/_templates/spec"
+TEMPLATE_DIR="$PROJECT_ROOT/.ax/_templates/spec"
 
 if [ ! -d "$TEMPLATE_DIR" ]; then
     goax_error "_templates not found at $TEMPLATE_DIR"

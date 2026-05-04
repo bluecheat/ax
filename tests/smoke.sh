@@ -111,8 +111,8 @@ for f in \
     templates/default/.gitignore.template \
     templates/default/.ax/spirit/values.md \
     templates/default/.ax/spirit/tone.md \
-    templates/default/.ax/docs/_templates/spirit/rule.md \
-    templates/default/.ax/docs/_templates/module/rules.md \
+    templates/default/.ax/_templates/spirit/rule.md \
+    templates/default/.ax/_templates/module/rules.md \
     templates/default/.ax/config.yml \
     templates/default/.ax/mistakes/README.md \
     templates/default/.ax/hooks/pre-bash/block-destructive.sh \
@@ -120,17 +120,17 @@ for f in \
     templates/default/.ax/hooks/pre-edit/spirit-check.sh \
     templates/default/.ax/hooks/post-edit/lint-changed.sh \
     templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh \
-    templates/default/.ax/docs/_templates/adr/0000-template.md \
-    templates/default/.ax/docs/_templates/spec/spec.md \
-    templates/default/.ax/docs/_templates/spec/plan.md \
-    templates/default/.ax/docs/_templates/spec/tasks.md \
-    templates/default/.ax/docs/_templates/spec/checklists/requirements.md \
-    templates/default/.ax/docs/_templates/spec/research.md \
-    templates/default/.ax/docs/_templates/spec/data-model.md \
-    templates/default/.ax/docs/_templates/spec/contracts/api.yaml \
-    templates/default/.ax/docs/_templates/spec/contracts/events.md \
-    templates/default/.ax/docs/_templates/spec/quickstart.md \
-    templates/default/.ax/docs/_templates/spec/README.md \
+    templates/default/.ax/_templates/adr/0000-template.md \
+    templates/default/.ax/_templates/spec/spec.md \
+    templates/default/.ax/_templates/spec/plan.md \
+    templates/default/.ax/_templates/spec/tasks.md \
+    templates/default/.ax/_templates/spec/checklists/requirements.md \
+    templates/default/.ax/_templates/spec/research.md \
+    templates/default/.ax/_templates/spec/data-model.md \
+    templates/default/.ax/_templates/spec/contracts/api.yaml \
+    templates/default/.ax/_templates/spec/contracts/events.md \
+    templates/default/.ax/_templates/spec/quickstart.md \
+    templates/default/.ax/_templates/spec/README.md \
     templates/default/.ax/current-task.json.template \
     templates/default/.ax/scripts/bash/README.md \
     templates/default/.ax/scripts/bash/common.sh \
@@ -319,8 +319,8 @@ done
 
 # end-to-end JSON validity (임시 프로젝트에서)
 TMP_E2E=$(mktemp -d)
-mkdir -p "$TMP_E2E/.ax/docs/_templates/spec"
-cp -R "$REPO/templates/default/.ax/docs/_templates/spec/." "$TMP_E2E/.ax/docs/_templates/spec/" 2>/dev/null
+mkdir -p "$TMP_E2E/.ax/_templates/spec"
+cp -R "$REPO/templates/default/.ax/_templates/spec/." "$TMP_E2E/.ax/_templates/spec/" 2>/dev/null
 cp "$REPO/templates/default/.ax/current-task.json.template" "$TMP_E2E/.ax/current-task.json" 2>/dev/null
 mkdir -p "$TMP_E2E/.ax/mistakes"
 (
