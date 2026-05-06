@@ -4,6 +4,8 @@
 
 ## 버전
 
+- [0.1.9](0.1.9.md) — rule-enforcement 스키마 + mistake/audit 분리 + CLAUDE.md no-append
+- [0.1.8](0.1.8.md) — capture 안전성 + install upgrade-safe (mistake loop 기반 다지기)
 - [0.1.7](0.1.7.md) — hook bootstrap guard + CONVENTION 카운트 정확화 + onboarding Sub-Q5 codify
 - [0.1.6](0.1.6.md) — skill 명명 일관화 + null-guard + doctor disclosure + plugin perspective cleanup
 - [0.1.5](0.1.5.md) — hook `set -e` 일관 제거 + 신규 hook 가드 #5 #6

@@ -131,7 +131,6 @@ for f in \
     templates/default/.ax/_templates/spec/contracts/api.yaml \
     templates/default/.ax/_templates/spec/contracts/events.md \
     templates/default/.ax/_templates/spec/quickstart.md \
-    templates/default/.ax/_templates/spec/README.md \
     templates/default/.ax/current-task.json.template \
     templates/default/.ax/scripts/bash/README.md \
     templates/default/.ax/scripts/bash/common.sh \
@@ -206,7 +205,7 @@ while IFS= read -r f; do
     fi
 done < <(find "$REPO/skills" -name SKILL.md)
 pass "skill frontmatter ($ok_skills/$total_skills)"
-[ "$total_skills" -eq 14 ] && pass "skill 카운트 = 14" || fail "skill 카운트 $total_skills"
+[ "$total_skills" -eq 15 ] && pass "skill 카운트 = 15" || fail "skill 카운트 $total_skills"
 
 # ───────────────────────────────────────────────────────────
 section "6. HUD statusline 우주 이모지 + spec/ADR 진척 (팩트 기반)"
@@ -345,60 +344,62 @@ mkdir -p "$TMP_E2E/.ax/mistakes"
 rm -rf "$TMP_E2E"
 
 # ───────────────────────────────────────────────────────────
-section "10. capture-mistake.sh 런타임 — race-free ID + redactor (NEW 0.1.8)"
+section "10. init-mistake-file.sh 런타임 — race-free ID + idempotent + redactor"
 # ───────────────────────────────────────────────────────────
 # Plugin은 실제로 사용자 프로젝트에 설치되어 동작 → 임시 fixture에서 e2e.
 FIXTURE=$(mktemp -d)
 trap 'rm -rf "$FIXTURE"' EXIT
 
-mkdir -p "$FIXTURE/.ax"
+mkdir -p "$FIXTURE/.ax/_templates/mistakes"
 cp -R "$REPO/templates/default/.ax/scripts" "$FIXTURE/.ax/"
 cp -R "$REPO/templates/default/.ax/mistakes" "$FIXTURE/.ax/"
+cp "$REPO/templates/default/.ax/_templates/mistakes/mistake.md" "$FIXTURE/.ax/_templates/mistakes/"
 cp "$REPO/templates/default/.ax/config.yml" "$FIXTURE/.ax/"
 ( cd "$FIXTURE" && git init -q 2>/dev/null && git config user.email "smoke@local" && git config user.name "smoke" )
 
-# 10.1 race-free ID — 5병렬 호출 → 5개 고유 파일
+# 10.1 race-free ID — 5병렬 호출 → 5개 고유 파일 (다른 카테고리)
 ( cd "$FIXTURE" && \
   for i in 1 2 3 4 5; do
-      CLAUDE_PROJECT_DIR=$FIXTURE bash .ax/scripts/bash/capture-mistake.sh "race-$i" "병렬 캡처 $i" "detail $i" >/dev/null 2>&1 &
+      CLAUDE_PROJECT_DIR=$FIXTURE bash .ax/scripts/bash/init-mistake-file.sh \
+          --category "race$i" --slug "parallel-$i" \
+          --severity medium --detected-by self --source skill \
+          --json >/dev/null 2>&1 &
   done
   wait )
 RACE_COUNT=$(find "$FIXTURE/.ax/mistakes" -maxdepth 1 -type f -name "*.md" ! -name "README.md" | wc -l | tr -d ' ')
 [ "$RACE_COUNT" -eq 5 ] && pass "race-free ID — 5병렬 호출 → 5개 파일" \
                        || fail "race-free ID — 5병렬에 $RACE_COUNT 파일만 생성 (충돌)"
 
-# 10.2 redactor — DETAILS의 secret 패턴이 [REDACTED]로
-rm -f "$FIXTURE/.ax/mistakes"/2026-*.md "$FIXTURE/.ax/mistakes"/[0-9]*.md
-CLAUDE_PROJECT_DIR=$FIXTURE bash "$REPO/templates/default/.ax/scripts/bash/capture-mistake.sh" \
-    "secrets" "PG 키 누출 의심" "config: API_KEY=abcdef1234567890XYZ leaked" >/dev/null 2>&1
-LATEST=$(ls -t "$FIXTURE/.ax/mistakes"/*.md 2>/dev/null | grep -v README | head -1)
-if [ -n "$LATEST" ] && grep -q "API_KEY=\[REDACTED\]" "$LATEST" 2>/dev/null; then
-    pass "redactor — DETAILS의 API_KEY=... → [REDACTED]"
+# 10.2 idempotent — 같은 (DATE, CATEGORY, SLUG) 재호출 → 새 파일 X, ## 이력 append
+rm -f "$FIXTURE/.ax/mistakes"/[0-9]*.md
+CLAUDE_PROJECT_DIR=$FIXTURE bash "$FIXTURE/.ax/scripts/bash/init-mistake-file.sh" \
+    --category secrets --slug pg-key-leak \
+    --severity high --detected-by reviewer --source skill --json >/dev/null 2>&1
+COUNT_BEFORE=$(find "$FIXTURE/.ax/mistakes" -maxdepth 1 -type f -name "*-secrets-*.md" | wc -l | tr -d ' ')
+CLAUDE_PROJECT_DIR=$FIXTURE bash "$FIXTURE/.ax/scripts/bash/init-mistake-file.sh" \
+    --category secrets --slug pg-key-leak \
+    --severity high --detected-by reviewer --source skill --json >/dev/null 2>&1
+COUNT_AFTER=$(find "$FIXTURE/.ax/mistakes" -maxdepth 1 -type f -name "*-secrets-*.md" | wc -l | tr -d ' ')
+if [ "$COUNT_BEFORE" = "1" ] && [ "$COUNT_AFTER" = "1" ]; then
+    pass "init-mistake-file — idempotent (재호출 시 새 파일 X)"
 else
-    fail "redactor — secret 미치환: $(grep API_KEY "$LATEST" 2>/dev/null || echo 'no match')"
+    fail "idempotent 실패: before=$COUNT_BEFORE after=$COUNT_AFTER"
 fi
 
-# 10.3 title 보존 — ONE_LINE은 redact되지 않아야 함 (시그널 손실 방지)
-if [ -n "$LATEST" ] && grep -q "^# PG 키 누출 의심" "$LATEST" 2>/dev/null; then
-    pass "title 보존 — ONE_LINE은 redact 미적용"
-else
-    fail "title 보존 실패: $(grep '^# ' "$LATEST" 2>/dev/null | head -1)"
-fi
-
-# 10.4 known-prefix tokens
+# 10.3 redact_secrets — known-prefix tokens (common.sh 함수 직접 검증)
 PREFIX_TEST=$(printf 'leak: AKIAIOSFODNN7EXAMPLE and ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789a here\n' \
               | bash -c "source $REPO/templates/default/.ax/scripts/bash/common.sh && redact_secrets")
 echo "$PREFIX_TEST" | grep -q "\[REDACTED:aws\]" && echo "$PREFIX_TEST" | grep -q "\[REDACTED:github\]" \
-    && pass "redactor — AWS/GitHub known-prefix 치환" \
-    || fail "redactor — known-prefix 누락: $PREFIX_TEST"
+    && pass "redact_secrets — AWS/GitHub known-prefix 치환" \
+    || fail "redact_secrets — known-prefix 누락: $PREFIX_TEST"
 
-# 10.5 false positive guard — 짧은 값(<12자)이나 식별자는 보존
+# 10.4 redact_secrets — 짧은 값(<12자)·식별자는 보존 (false positive guard)
 FP_TEST=$(printf 'pw=ok123 and password_field stays\n' \
           | bash -c "source $REPO/templates/default/.ax/scripts/bash/common.sh && redact_secrets")
 if echo "$FP_TEST" | grep -q "ok123" && echo "$FP_TEST" | grep -q "password_field"; then
-    pass "redactor — 짧은 값·식별자 false positive 없음"
+    pass "redact_secrets — 짧은 값·식별자 false positive 없음"
 else
-    fail "redactor — false positive: $FP_TEST"
+    fail "redact_secrets — false positive: $FP_TEST"
 fi
 
 # ───────────────────────────────────────────────────────────
@@ -601,7 +602,7 @@ fi
 rm -rf "$DR_FX"
 
 # ───────────────────────────────────────────────────────────
-section "14. promote-mistake.sh — candidate + --apply (NEW 0.1.8)"
+section "14. promote-mistake.sh — candidate + --apply (CLAUDE.md 무수정)"
 # ───────────────────────────────────────────────────────────
 PM_FX=$(mktemp -d)
 mkdir -p "$PM_FX/.ax/mistakes" "$PM_FX/.ax/scripts/bash"
@@ -637,18 +638,19 @@ else
     fail "promote — candidate 검출 실패: cat=$CAND_CAT cnt=$CAND_CNT"
 fi
 
-# (3) --apply — CLAUDE.md 갱신 + mistake에 promoted_to 마킹.
+# (3) --apply — mistake 에 promoted_to 마킹만, CLAUDE.md 는 건드리지 않음.
+# 룰 본문 작성은 LLM 책임 (audit SKILL 안에서 spirit/rules 직접 Edit).
 # stderr는 분리 — goax_log가 stdout JSON과 섞이면 jq 파싱 실패.
 OUT=$(CLAUDE_PROJECT_DIR=$PM_FX bash "$PM_FX/.ax/scripts/bash/promote-mistake.sh" \
     --apply --json --token "TEST:CRITICAL:001" \
-    --category secrets --rule-text "no secrets" 2>/dev/null)
+    --category secrets 2>/dev/null)
 MARKED=$(echo "$OUT" | jq -r '.result.marked_count' 2>/dev/null)
-if grep -q 'TEST:CRITICAL:001' "$PM_FX/CLAUDE.md" \
-    && [ "$MARKED" = "3" ] \
-    && grep -q '^promoted_to: TEST:CRITICAL:001' "$PM_FX/.ax/mistakes/2026-01-01-secrets.md"; then
-    pass "promote --apply — CLAUDE.md 룰 추가 + 3건 promoted_to 마킹"
+if [ "$MARKED" = "3" ] \
+    && grep -q '^promoted_to: TEST:CRITICAL:001' "$PM_FX/.ax/mistakes/2026-01-01-secrets.md" \
+    && ! grep -q 'TEST:CRITICAL:001' "$PM_FX/CLAUDE.md"; then
+    pass "promote --apply — 3건 promoted_to 마킹 + CLAUDE.md 무수정"
 else
-    fail "promote --apply 결과 부정확: marked=$MARKED, claude.md=$(grep TEST $PM_FX/CLAUDE.md || echo none)"
+    fail "promote --apply 결과 부정확: marked=$MARKED, claude.md_polluted=$(grep TEST $PM_FX/CLAUDE.md || echo no)"
 fi
 
 # (4) 재실행 — promoted_to 있는 mistake는 candidate에서 제외 (idempotent)
@@ -661,13 +663,14 @@ fi
 rm -rf "$PM_FX"
 
 # ───────────────────────────────────────────────────────────
-section "15. PR #1085 review fixes — security/correctness/escape (NEW 0.1.8)"
+section "15. PR #1085 review fixes — security/correctness/escape"
 # ───────────────────────────────────────────────────────────
 
 # 15.1 block-destructive — rm variants + git push variants
+# capture-mistake.sh 폐기 후 — block-destructive 가 더 이상 호출 안 함.
 BD_FX=$(mktemp -d)
 mkdir -p "$BD_FX/.ax/scripts/bash" "$BD_FX/.ax/hooks/pre-bash"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,capture-mistake.sh} "$BD_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$BD_FX/.ax/scripts/bash/"
 cp "$REPO/templates/default/.ax/hooks/pre-bash/block-destructive.sh" "$BD_FX/.ax/hooks/pre-bash/"
 
 assert_blocked() {
