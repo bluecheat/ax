@@ -77,21 +77,29 @@ fi
 - **idempotent**: 같은 (DATE, CATEGORY, SLUG) 파일 있으면 본문 재생성 X, `## 이력` 에 재발 라인만 append → `action: appended`
 - `--one-line` 받으면 `# 무엇이 일어났나` 섹션도 자동 채움
 
-## 3. 본문 작성 — Edit tool 로 LLM 직접
+## 3. 본문 작성 — Edit tool 로 LLM 직접 **(필수, 스킵 금지)**
 
 `action: created` 일 때만 (appended 면 본문 이미 있음 — 사용자에게 기존 파일 검토 권장).
 
-frontmatter + `# 무엇이 일어났나` 는 이미 채워진 상태. 나머지 4섹션 채우기:
+frontmatter + `# 무엇이 일어났나` 는 이미 채워진 상태. **나머지 5섹션 모두 placeholder 를 실제 내용으로 교체:**
 
-| 섹션 | 작성 방법 |
-|---|---|
-| `# 어디서 (파일·모듈)` | 사용자 컨텍스트에서 파일 경로·모듈명 추출. 없으면 사용자에게 짧게 묻기 |
-| `# 왜 발생 (5 Whys 기법)` | "왜?" 를 5번까지. 사용자와 같이 깊게 — placeholder (1. 왜 X? → A / ...) 를 실제 답으로 교체 |
-| `# 어떻게 막을 수 있나` | 사람 리뷰 vs Sensor 자동화 vs 룰 추가 — 어느 메커니즘이 적합한지 LLM 판단 + 사용자 검증 |
-| `# 영향 (Cost)` | 즉시 + 잠재 후속 — 변경 비용·후속 PR 비용·silent 영향 등. 모호하면 추정값 + `<예: ...>` 형태 유지 |
-| `# audit 액션 제안` | 룰 승격 후보 (`audit` skill 이 참고) / hook 작성 / 관측 보강 등 |
+| 섹션 | 교체 대상 placeholder | 작성 방법 |
+|---|---|---|
+| `# 어디서 (파일·모듈)` | `파일/모듈/도메인.` | 사용자 컨텍스트에서 파일 경로·모듈명 추출. 없으면 사용자에게 짧게 묻기 |
+| `# 왜 발생 (5 Whys 기법)` | `1. 왜 X? → A` … `5. 왜 D? → 근본 원인` | "왜?" 를 5번까지. 사용자와 같이 깊게 |
+| `# 어떻게 막을 수 있나` | `- 사람 리뷰로 막을 수 있나? (No → ...)` 등 가이드 라인 | 사람 리뷰 vs Sensor 자동화 vs 룰 추가 — 어느 메커니즘이 적합한지 LLM 판단 + 사용자 검증 |
+| `# 영향 (Cost)` | `<변경 비용 — 예: ...>`, `<예: CI 빌드 / 테스트 실패>` 등 `<...>` 마커 | 즉시 + 잠재 후속 — 변경 비용·후속 PR 비용·silent 영향. 추정값으로 채우되 `<...>` 마커는 모두 제거 |
+| `# audit 액션 제안` | (빈 섹션) | 룰 승격 후보 / hook 작성 / 관측 보강 등 1줄 이상 |
 
-**Edit tool 사용** — `init-mistake-file.sh` 가 만든 파일을 Read 후 각 섹션 placeholder 교체. 한 번에 4~5개 Edit 병렬 가능 (서로 독립 섹션).
+**Edit tool 사용** — `init-mistake-file.sh` 가 만든 파일을 Read 후 각 섹션 placeholder 교체. 한 번에 4~5개 Edit 병렬 가능.
+
+**완료 검증 (보고 직전 필수)** — 결과 보고하기 전에 파일을 다시 Read 또는 Grep 으로 다음 placeholder 마커가 모두 0 건인지 확인:
+- `파일/모듈/도메인\.` (어디서 미작성)
+- `1\. 왜 X\? → A` (5 Whys 미작성)
+- `<예: ` 또는 `<변경 비용 — 예:` (영향 미작성)
+- `# audit 액션 제안\n\n## 이력` (audit 액션 빈 채로)
+
+**1건이라도 남으면 추가 Edit. 사용자에게 "캡처 완료" 보고 금지** — placeholder 잔재 = 미완성 mistake = audit 시 의미 0.
 
 ## 4. 결과 보고 — 사용자 confirm
 
@@ -141,7 +149,7 @@ jq --arg file "$FILE" \
 ## 절대 금지
 
 - **자동 capture X** — hook 시점에 이 skill 호출 금지 (LLM 부재). hook 들은 차단/경고만, 사용자가 의도적으로 mistake skill 호출.
-- **본문 placeholder 그대로 두지 X** — 사용자가 5 Whys / 영향 / audit 액션 안 쓰겠다고 명시하면 모를까, 기본은 LLM 이 작성. placeholder 만 남기면 audit 시 의미 X.
+- **본문 placeholder 그대로 두지 X (검증 필수)** — `init-mistake-file.sh` 호출 후 Edit 으로 5섹션 (어디서/5 Whys/어떻게 막을 수 있나/영향/audit 액션) 채우고, 보고 직전 placeholder 마커 잔재 0 인지 Grep 검증. placeholder 남은 채로 "캡처 완료" 보고 금지. audit 시 의미 0.
 - **사용자 컨텍스트 추측만으로 본문 박지 X** — 5 Whys 의 깊은 원인은 사용자만 알 수 있음. 첫 1-2 단계는 LLM 이 추론, 그 다음은 사용자 인터뷰.
 - **secret 을 ONE_LINE 또는 본문에 직접 박지 X** — redact_secrets 가 보호하지만 caller 가 1차 책임.
 - **다른 mistake 와 합치지 X** — idempotent 는 같은 (날짜, category, slug) 만. 다른 카테고리는 새 파일.

@@ -187,8 +187,8 @@ printf -- '\n- 최초 캡처 %s\n' "$(date '+%H:%M:%S')" >> "$FILE"
 if [ "$JSON_MODE" = true ]; then
     json_output "ok" \
         "{\"file_path\":\"$REL\",\"action\":\"created\",\"slug\":\"$SLUG_NORM\",\"idempotent_key\":\"$IDEMPOTENT_KEY\"}" \
-        "edit $REL — fill 5 Whys / 영향 (Cost) / audit 액션"
+        "MANDATORY next: Edit $REL to replace 5 placeholder sections — '# 어디서', '# 왜 발생 (5 Whys)', '# 어떻게 막을 수 있나', '# 영향 (Cost)', '# audit 액션 제안'. Skill must NOT report success while any placeholder line ('파일/모듈/도메인.', '1. 왜 X? → A', '<예: ...>', '<변경 비용 — 예:', empty audit) remains."
 else
-    goax_log "✓ created $REL — edit 본문 (5 Whys / 영향 / audit 액션)"
+    goax_log "✓ created $REL — MANDATORY: edit 본문 5섹션 (어디서/왜 발생/어떻게 막을 수 있나/영향/audit 액션). placeholder 잔재 0 까지 채우고 보고."
 fi
 exit "$EXIT_OK"
