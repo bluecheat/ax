@@ -126,7 +126,7 @@ if [ -n "$EXISTING" ]; then
     fi
     DETAILS_SAFE=""
     [ -n "$ONE_LINE" ] && DETAILS_SAFE=$(printf '%s' "$ONE_LINE" | redact_secrets)
-    printf -- '- 재발 %s%s\n' "$(date '+%H:%M:%S')" \
+    printf -- '- 재발 %s%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" \
         "${DETAILS_SAFE:+ — $DETAILS_SAFE}" >> "$EXISTING"
     REL="${EXISTING#$PROJECT_ROOT/}"
     if [ "$JSON_MODE" = true ]; then
@@ -182,7 +182,7 @@ if [ -n "$ONE_LINE" ]; then
 fi
 
 # ## 이력 에 최초 캡처 라인 추가
-printf -- '\n- 최초 캡처 %s\n' "$(date '+%H:%M:%S')" >> "$FILE"
+printf -- '\n- 최초 캡처 %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" >> "$FILE"
 
 if [ "$JSON_MODE" = true ]; then
     json_output "ok" \
