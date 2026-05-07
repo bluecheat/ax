@@ -110,9 +110,11 @@ DRIFT_FILES=$(echo "$RESULT" | jq -r '.result.drift_files | join(", ")')
  - [b] plugin 출고본을 `.ax/_templates/spec.suggested/`로 떨어트려 사용자가 머지
  - [c] ⚠ 사용자 수정 백업(`.ax/_templates/spec.bak/`) 후 plugin으로 덮어쓰기
 
-### 3.5.1 plugin shipped 자산 drift (scripts/hooks/spirit-rules)
+### 3.5.1 plugin shipped 자산 drift (scripts/hooks)
 
-`_templates/spec/` 외에도 plugin 이 출고하는 자산 — `.ax/scripts/bash/*.sh`, `.ax/hooks/**/*.sh`, `.ax/spirit/rules/{architecture,data,testing,ops}.md` 등 — 도 사용자 프로젝트에 cp 됨. install 재실행 시 MANIFEST 의 디렉토리 cp -R 이 동명 파일을 덮어쓰므로, 사용자가 직접 수정한 plugin 파일은 **silent 회귀** 위험. 이 §3.5.1 이 그 위험을 가시화.
+`_templates/spec/` 외에도 plugin 이 출고하는 자산 — `.ax/scripts/bash/*.sh`, `.ax/hooks/**/*.sh` — 도 사용자 프로젝트에 cp 됨. install 재실행 시 MANIFEST 의 디렉토리 cp -R 이 동명 파일을 덮어쓰므로, 사용자가 직접 수정한 plugin 파일은 **silent 회귀** 위험. 이 §3.5.1 이 그 위험을 가시화.
+
+`spirit/rules/` 는 plugin 출고 X — 사용자 큐레이션 영역이라 drift 검증 대상이 아님 (`.ax/_templates/spirit/` 에 opt-in 샘플만 출고).
 
 ```bash
 # plugin 출고분 SHA 비교 — PLUGIN_ROOT 도출됐을 때만 (§3.5 와 같은 변수 재사용)
@@ -124,7 +126,7 @@ if [ -n "$PLUGIN_ROOT" ]; then
     PLUGIN_TPL="$PLUGIN_ROOT/templates/default"
     # 검증 대상: plugin 출고 파일만. find 가 plugin tpl 안만 보므로 사용자 추가 파일
     # (<project>-<category>.md 같은) 은 자동 제외.
-    for sub in '.ax/scripts/bash' '.ax/hooks' '.ax/spirit/rules'; do
+    for sub in '.ax/scripts/bash' '.ax/hooks'; do
         [ -d "$PLUGIN_TPL/$sub" ] || continue
         while IFS= read -r f; do
             rel="${f#$PLUGIN_TPL/}"
@@ -510,7 +512,7 @@ RE_I5R=$(echo "$RESULT" | jq -r '.result.i5_not_registered | length')
  ─ Cross-cut — Spirit ───────────────────────────────────
  ✓ spirit/values.md (사용자 정의됨)
  · spirit/tone.md → placeholder 그대로
- ✓ spirit/rules/ (4 카테고리: architecture, data, testing, ops)
+ ✓ spirit/rules/ (사용자 큐레이션 N 카테고리; opt-in 샘플은 .ax/_templates/spirit/)
 
  ─ Cross-cut — Mistake Loop ─────────────────────────────
  ✓ mistakes/ (3건 누적, 다음 audit: 2026-05-09)

@@ -60,14 +60,16 @@
 @.ax/spirit/tone.md
 ```
 
-> 핵심 컨벤션 룰은 `.ax/spirit/rules/`에 카테고리별로 있어요. universal 룰은 직접 @import, path-scoped 룰은 `.ax/hooks/pre-edit/spirit-rules-inject.sh` 가 매칭 시 안내.
+> 핵심 컨벤션 룰은 `.ax/spirit/rules/`에 카테고리별로 — 사용자 큐레이션 (plugin 출고 X). universal 룰은 직접 @import, path-scoped 룰은 `.ax/hooks/pre-edit/spirit-rules-inject.sh` 가 frontmatter `paths:` 매칭 시 안내. 예시 (실제 파일은 onboarding/audit 단계에서 생성):
 
 ```
-@.ax/spirit/rules/architecture.md
-@.ax/spirit/rules/data.md
-@.ax/spirit/rules/testing.md
-@.ax/spirit/rules/ops.md
+# @.ax/spirit/rules/<project>-architecture.md
+# @.ax/spirit/rules/<project>-data.md
+# @.ax/spirit/rules/<project>-testing.md
+# @.ax/spirit/rules/<project>-ops.md
 ```
+
+> opt-in baseline: `.ax/_templates/spirit/ops.md` 에 universal action baseline 샘플 — 필요 시 `.ax/spirit/rules/<project>-ops.md` 로 cp 후 @import.
 
 > 특별히 인용 빈도가 높은 룰은 인라인 ID로:
 
