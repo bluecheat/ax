@@ -660,6 +660,32 @@ if echo "$OUT" | jq -e '.result.candidates | length == 0' >/dev/null 2>&1; then
 else
     fail "promote — idempotent 실패: $OUT"
 fi
+
+# (5) --archive — SP 토큰이 spirit/rules 에 없으면 거부 (사전 검증)
+mkdir -p "$PM_FX/.ax/spirit/rules"
+OUT=$(CLAUDE_PROJECT_DIR=$PM_FX bash "$PM_FX/.ax/scripts/bash/promote-mistake.sh" \
+    --archive --json --token TEST:CRITICAL:001 2>/dev/null)
+if echo "$OUT" | jq -e '.status == "error"' >/dev/null 2>&1 \
+    && echo "$OUT" | jq -r '.errors[0]' | grep -q "not found in .ax/spirit/rules"; then
+    pass "promote --archive — SP 토큰 부재 시 거부 (사전 검증)"
+else
+    fail "promote --archive — SP 토큰 부재인데 진행: $OUT"
+fi
+
+# (6) --archive — SP 토큰 spirit/rules 에 추가 후 happy path
+echo "## TEST:CRITICAL:001: secrets" > "$PM_FX/.ax/spirit/rules/test-secrets.md"
+OUT=$(CLAUDE_PROJECT_DIR=$PM_FX bash "$PM_FX/.ax/scripts/bash/promote-mistake.sh" \
+    --archive --json --token TEST:CRITICAL:001 2>/dev/null)
+ARCHIVED=$(echo "$OUT" | jq -r '.result.archived_count' 2>/dev/null)
+ARCHIVE_DIR=$(echo "$OUT" | jq -r '.result.archive_dir' 2>/dev/null)
+ROOT_LEFT=$(find "$PM_FX/.ax/mistakes" -maxdepth 1 -name "*.md" ! -name "README.md" | wc -l | tr -d ' ')
+ARCH_FILES=$(find "$PM_FX/$ARCHIVE_DIR" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+if [ "$ARCHIVED" = "3" ] && [ "$ROOT_LEFT" = "0" ] && [ "$ARCH_FILES" = "3" ]; then
+    pass "promote --archive — 3건 mv → _archive/YYYY/MM/ + root 잔재 0"
+else
+    fail "promote --archive 결과: archived=$ARCHIVED root_left=$ROOT_LEFT arch_files=$ARCH_FILES"
+fi
+
 rm -rf "$PM_FX"
 
 # ───────────────────────────────────────────────────────────

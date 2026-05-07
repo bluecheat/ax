@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# .ax/scripts/bash/promote-mistake.sh — mistake 승격 마킹 (룰 본문은 LLM 이 spirit/rules 에 직접 Edit)
+# .ax/scripts/bash/promote-mistake.sh — mistake 승격 마킹 + archive (룰 본문은 LLM 이 spirit/rules 에 직접 Edit)
 #
 # Usage:
 #   # 후보 조회 (dry-run 기본)
 #   bash promote-mistake.sh [--json] [--threshold N]
 #
-#   # 실제 적용 (사용자 동의 후) — mistake 에 promoted_to 마킹만
+#   # 1단계 — mistake 에 promoted_to 마킹
 #   bash promote-mistake.sh --apply --token AX:CRITICAL:003 --category security [--json]
+#
+#   # 2단계 (LLM 이 spirit/rules 룰 본문 작성한 후) — archive 로 이동
+#   bash promote-mistake.sh --archive --token AX:CRITICAL:003 [--json]
 #
 # 후보 모드: 카테고리당 N건 이상 mistake → 룰 승격 후보 출력
 # 적용 모드: mistake 에 promoted_to 마킹만. 룰 본문은 LLM 이 .ax/spirit/rules/<category>.md 에
 #           직접 작성 (path-scoped hook 이 매 작업 inject — CLAUDE.md 에 누적 X, heavy 회피).
+# archive 모드: SP 토큰이 spirit/rules/*.md 에 존재하는지 검증 후, promoted_to=<token> 마킹된
+#               mistake 파일을 .ax/mistakes/_archive/<YYYY>/<MM>/ 로 이동. 검색 candidate 에서 제외.
 
 set -euo pipefail
 
@@ -21,6 +26,7 @@ source "$SCRIPT_DIR/common.sh"
 JSON_MODE=false
 SHOW_HELP=false
 APPLY=false
+ARCHIVE=false
 THRESHOLD=2
 TOKEN=""
 CATEGORY=""
@@ -30,6 +36,7 @@ while [ $# -gt 0 ]; do
         --json)      JSON_MODE=true ;;
         --help|-h)   SHOW_HELP=true ;;
         --apply)     APPLY=true ;;
+        --archive)   ARCHIVE=true ;;
         --threshold) shift; THRESHOLD="${1:-2}" ;;
         --token)     shift; TOKEN="${1:-}" ;;
         --category)  shift; CATEGORY="${1:-}" ;;
@@ -39,7 +46,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# //'
+    sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# //'
     exit "$EXIT_OK"
 fi
 
@@ -79,9 +86,49 @@ if [ "$APPLY" = true ]; then
         [ "${#MARKED[@]}" -eq 0 ] && marked_json="[]"
         RESULT=$(printf '{"token":"%s","category":"%s","marked_count":%s,"marked":%s}' \
                         "$TOKEN" "$CATEGORY" "${#MARKED[@]}" "$marked_json")
-        json_output "ok" "$RESULT" "edit .ax/spirit/rules/<category>.md — add SP-<CAT>-NNN with paths frontmatter (path-scoped hook 이 매 작업 inject)"
+        json_output "ok" "$RESULT" "MANDATORY 2 steps remain: (1) Edit .ax/spirit/rules/<project>-${CATEGORY}.md — add ${TOKEN} with frontmatter paths/severity/enforced_by (new file or append). (2) bash .ax/scripts/bash/promote-mistake.sh --archive --token ${TOKEN} — moves marked mistakes to _archive/YYYY/MM/. Skill must NOT report success until both done — mistake 가 .ax/mistakes/ root 에 promoted_to 마킹된 채 남아 있으면 미완료."
     else
-        goax_log "✓ marked ${#MARKED[@]} mistake(s) with promoted_to=$TOKEN — now edit spirit/rules/<category>.md"
+        goax_log "✓ marked ${#MARKED[@]} mistake(s) with promoted_to=$TOKEN — MANDATORY: (1) edit spirit/rules/<project>-${CATEGORY}.md add ${TOKEN}, (2) run --archive --token ${TOKEN}"
+    fi
+    exit "$EXIT_OK"
+fi
+
+# ── archive 모드 — promoted_to 마킹된 파일을 _archive/<YYYY>/<MM>/ 로 이동 ──
+# SP 토큰이 spirit/rules/*.md 에 존재하는지 사전 검증 (룰 본문 누락 방지)
+if [ "$ARCHIVE" = true ]; then
+    [ -z "$TOKEN" ] && { goax_error "--token required"; exit "$EXIT_ERROR"; }
+
+    # SP 토큰 존재 검증 — spirit/rules/*.md 어딘가에 있어야 archive 가능
+    SPIRIT_DIR="$PROJECT_ROOT/.ax/spirit/rules"
+    if [ ! -d "$SPIRIT_DIR" ] || ! grep -rqE "^## ${TOKEN}([[:space:]:]|$)" "$SPIRIT_DIR" 2>/dev/null; then
+        MSG="SP token '${TOKEN}' not found in .ax/spirit/rules/*.md (heading '## ${TOKEN}' or '## ${TOKEN}:'). 룰 본문 먼저 작성 후 다시 시도."
+        if [ "$JSON_MODE" = true ]; then json_error "$MSG"
+        else goax_error "$MSG"; fi
+        exit "$EXIT_ERROR"
+    fi
+
+    YEAR=$(date +%Y)
+    MONTH=$(date +%m)
+    ARCHIVE_DIR="$MIST_DIR/_archive/$YEAR/$MONTH"
+    mkdir -p "$ARCHIVE_DIR"
+
+    MOVED=()
+    while IFS= read -r f; do
+        if grep -qE "^promoted_to: ${TOKEN}([[:space:]]|$)" "$f" 2>/dev/null; then
+            mv "$f" "$ARCHIVE_DIR/"
+            MOVED+=("$(basename "$f")")
+        fi
+    done < <(find "$MIST_DIR" -maxdepth 1 -name "*.md" ! -name "README.md")
+
+    if [ "$JSON_MODE" = true ]; then
+        moved_json="[$(printf '"%s",' "${MOVED[@]:-}" | sed 's/,$//')]"
+        [ "${#MOVED[@]}" -eq 0 ] && moved_json="[]"
+        REL_ARCHIVE="${ARCHIVE_DIR#$PROJECT_ROOT/}"
+        RESULT=$(printf '{"token":"%s","archived_count":%s,"archived":%s,"archive_dir":"%s"}' \
+                        "$TOKEN" "${#MOVED[@]}" "$moved_json" "$REL_ARCHIVE")
+        json_output "ok" "$RESULT" "archived ${#MOVED[@]} mistake(s) to ${REL_ARCHIVE} — audit candidate 검색에서 자동 제외"
+    else
+        goax_log "✓ archived ${#MOVED[@]} mistake(s) → ${ARCHIVE_DIR#$PROJECT_ROOT/}"
     fi
     exit "$EXIT_OK"
 fi

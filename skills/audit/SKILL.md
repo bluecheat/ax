@@ -103,7 +103,9 @@ find .ax/mistakes -name "*.md" -mtime -7 2>/dev/null | sort # 최근 7일
 - 옵션은 카테고리 단위 — 사용자가 복수 선택 가능 (예: `a, b`)
 - 항상 마지막에 `[e]` 모두 보류 옵션
 
-## 4. 적용 — 두 단계 (스크립트 마킹 + LLM 룰 본문)
+## 4. 적용 — 3단계 강제 (마킹 → 룰 본문 → archive)
+
+**3단계 모두 완료해야 audit 종료.** 1·2단계만 하고 보고하면 mistake 가 `.ax/mistakes/` root 에 promoted_to 마킹된 채 누적됨 (시각적 잔재 + 후속 audit 노이즈). 3단계 archive 까지 강제.
 
 사용자 승낙 후, 카테고리당:
 
@@ -119,7 +121,7 @@ MARKED=$(echo "$RESULT" | jq -r '.result.marked_count')
 스크립트가 하는 일 — **mistake 파일 frontmatter 에 `promoted_to: <token>` 추가만**.
 CLAUDE.md / spirit/rules 는 안 건드림 (룰 본문 작성은 LLM 책임).
 
-### 4.2 룰 본문 — LLM 이 spirit/rules 에 직접 Edit
+### 4.2 룰 본문 — LLM 이 spirit/rules 에 직접 Edit (필수, 스킵 금지)
 
 `.ax/spirit/rules/<project>-<category>.md` 에 SP-<CAT>-NNN 추가:
 
@@ -148,19 +150,40 @@ enforced_kind: block
 
 **plugin shipped 파일 append 금지**: `security.md`, `ops.md` 같은 plugin 출고본에 직접 append X. project-specific 별도 파일 (`<project>-<category>.md`) 로 만들고, 같은 카테고리 룰이 누적되면 그 파일에 SP-<CAT>-NNN 만 추가.
 
+**완료 검증 (다음 단계 진입 전 필수)** — `grep '^## SP-SEC-001' .ax/spirit/rules/*.md` 가 1줄 이상 hit 해야 함. 0 hit 면 룰 본문 안 쓰인 것 — 추가 Edit 후 재검증. 0 hit 인 채로 4.3 시도하면 archive 스크립트가 `SP token not found` 에러로 거부.
+
+### 4.3 archive — `promote-mistake.sh --archive` (필수)
+
+룰 본문 작성·검증 완료 후 마킹된 mistake 들을 `_archive/<YYYY>/<MM>/` 로 이동:
+
+```bash
+RESULT=$(bash .ax/scripts/bash/promote-mistake.sh --archive --json --token SP-SEC-001)
+ARCHIVED=$(echo "$RESULT" | jq -r '.result.archived_count')
+```
+
+스크립트가 하는 일 — `promoted_to: <token>` 마킹된 mistake 를 `.ax/mistakes/_archive/<YYYY>/<MM>/` 로 mv. 사전 검증 — SP 토큰이 `spirit/rules/*.md` 에 `## <token>` 헤딩으로 존재해야만 진행 (없으면 `SP token not found` 에러).
+
+archived 파일은 maxdepth 1 scan 에서 자동 제외 — 후속 audit candidate · count · HUD state 모두 정확.
+
+**완료 검증 (보고 직전 필수)**:
+- `grep -rl "^promoted_to: SP-SEC-001" .ax/mistakes/ --max-depth 1` 결과 0줄 (root 에서 사라짐)
+- `ls .ax/mistakes/_archive/<YEAR>/<MONTH>/` 에 archived 파일 N개
+
 각 단계 ✓ 보고:
 ```
 ✓ mistake 3건 promoted_to=SP-SEC-001 마킹 (.ax/mistakes/)
 ✓ SP-SEC-001 추가 — .ax/spirit/rules/<project>-security.md (frontmatter paths: 명시)
+✓ archive 3건 → .ax/mistakes/_archive/2026/05/ (audit candidate 검색에서 제외됨)
 ✓ path-scoped hook 활성 — 매 .kt / .properties / .yaml 편집 시 SP-SEC-001 자동 inject
 ```
 
 ## 절대 금지
 
 - 사용자 동의 없이 룰을 자동 승격 X
-- mistakes 파일 삭제 X — 이력은 보존
+- mistakes 파일 삭제 X — 이력은 보존 (archive 는 mv 이지 rm 아님)
 - 1회만 있는 패턴은 승격 후보로 띄우지 않음 (소음)
 - 캡처만 하고 audit 안 함 → 누적만 됨 (주 1회는 회고)
+- **마킹 (4.1) 만 하고 룰 본문 (4.2) 또는 archive (4.3) 스킵 후 보고 X** — promoted_to 마킹된 mistake 가 `.ax/mistakes/` root 에 남아있으면 미완료. 4.3 archive 까지 끝낸 후 검증 (root 에 promoted_to 마킹 0건) 후 보고.
 
 ## state.json 갱신
 
