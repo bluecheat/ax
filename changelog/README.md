@@ -4,6 +4,7 @@
 
 ## 버전
 
+- [0.1.12](0.1.12.md) — ops.md opt-in 강등
 - [0.1.11](0.1.11.md) — audit 3단계 강제 + mistake archive
 - [0.1.10](0.1.10.md) — mistake skill 본문 작성 강제 + template 청소
 - [0.1.9](0.1.9.md) — rule-enforcement 스키마 + mistake/audit 분리 + CLAUDE.md no-append
