@@ -53,6 +53,28 @@ sensors:
     - .github/workflows/
 
 # ───────────────────────────────────────────────────────────
+# Confirmation Friction Policy
+# 사람 확인을 데이터로 결정 — 무차별 묻기·자동 둘 다 anti-pattern.
+# 정책 SSOT: .ax/docs/reference/confirmation-policy.md
+# ───────────────────────────────────────────────────────────
+confirmation:
+  # 기본 friction 모드 — spec-implement 의 task 루프 동작 결정
+  #   phase_gate  Phase 경계에서만 사람 확인 (권장)
+  #   per_task    매 task [y/n] (구버전 동작, 비권장)
+  #   autopilot   Phase 경계도 묻지 않음, 실패 시에만 halt
+  mode: phase_gate
+
+  # L3 도메인은 mode 불문 task 게이트 강제
+  #   per_task | phase_gate | off
+  l3_override: per_task
+
+  # 같은 카테고리 mistake 누적 ≥ N → 그 카테고리 task 자동 게이트 강화
+  mistake_threshold: 3
+
+  # SP-SEC-* / SP-DATA-* 매칭 task 는 risk≥L2 시 게이트 강제 (C5 룰)
+  spirit_severity_gate: true
+
+# ───────────────────────────────────────────────────────────
 # Mistake Loop
 # ───────────────────────────────────────────────────────────
 mistake_loop:

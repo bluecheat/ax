@@ -299,6 +299,39 @@ NEXT=$(bash .ax/scripts/bash/next-spec-num.sh --json | jq -r '.result.next')
 
 이 분리는 spec-kit의 디자인 패턴에서 영감을 받았어요. **결정론은 스크립트가, 판단은 LLM이.**
 
+### 5.7 Confirmation Friction Policy — 사람 확인은 데이터로 결정
+
+**문제**: 4계층 권한 위임 모델에서 상위 단계(triage → spec-validate → spec-tasks)가 게이트를 통과시키면 그 결정은 *계약*. 그런데 implement 단계에서 task 단위로 [y/n] 을 반복 묻는 건 같은 결정을 N회 재개봉하는 *double-gate*. 이는 SSOT 원칙(§5.4) 과 권한 위임 모델 둘 다 위반해요.
+
+동시에 무조건 자동 진행도 답이 아니에요. plan.md 작성 시점에 모르던 결정이 implement 시점에 발생할 수 있고(설계 이탈·task 간 의존 깨짐·도메인 위험 무감각), 메뉴 출력은 *결정 공간 명시화* 의 가치가 있어요.
+
+**해결**: confirmation 강도를 *데이터 함수* 로 결정해요. 무차별 묻기·무차별 자동 둘 다 anti-pattern.
+
+5개 결정 변수(이미 goax 안에 존재):
+
+| 변수 | 출처 | 역할 |
+|---|---|---|
+| size × risk | triage 분류 | 1차 friction 강도 |
+| spec_tier | basic / standard / full | tier 가 size×risk 흡수 |
+| sensors.mode | warning / fail | hooks 차단 강도 → LLM 추가 확인 redundancy |
+| mistake recurrence | 같은 카테고리 누적 | 동적 강화 신호 |
+| Spirit 매칭 | SP-SEC-* / SP-DATA-* | 위험 카테고리 식별 |
+
+이 변수들로 5개 Decision Rules(C1~C5) 를 구성. 자세한 의사결정 매트릭스는 `.ax/docs/reference/confirmation-policy.md`.
+
+**핵심 원칙 3가지**:
+
+1. **Phase Boundary Gate** — 사람 확인은 phase 전환점(triage → spec, spec → plan, Phase 1 → Phase 2)에서만. phase 내 진행은 Spirit + Sensors 가 통제. 같은 layer 내 반복 게이트는 계층 설계 위반.
+2. **Signal-Grade Proportionality** — 확인 강도는 시그널 등급에 비례. CRITICAL 접촉 task 만 halt, MANDATORY 는 phase 경계에서, CONVENTION 은 자동 진행. 3등급 시그널 체계(§5.1) 를 implement 단계에도 적용.
+3. **Mistake-as-Signal** — confirmation 을 줄이면 LLM 판단 오류가 mistakes 에 누적되고, 이게 환경 강화로 이어져요. "환경을 고친다"(§4.2) 의 자연스런 귀결. confirmation 의 *사전 차단* 과 Mistake Loop 의 *사후 교정* 은 역할 분담.
+
+**왜 외부 도구 패턴(Aider --yes, Cursor YOLO) 을 그대로 가져오면 안 되는가**: 그 도구들은 *zero-governance + 단일 세션* 컨텍스트. goax 는 *4계층 + 2 cross-cut 거버넌스* 를 깔아주는 컨텍스트. 두 컨텍스트의 confirmation 의미가 다르므로 패턴만 복사하면 mismatch. **goax 의 답은 "묻기 vs 자동" 이분법이 아니라 "어떤 데이터에 근거해 어느 강도로 묻는가"**.
+
+**보호장치 (critic 입장 흡수)**:
+- Default = `phase_gate` (supervised). `autopilot` 은 사용자가 의식적으로 선언해야 발동.
+- L3 도메인은 mode 불문 task 게이트 강제 (`l3_override`).
+- Phase 경계 confirmation 은 *형식적 [y/n] 이 아닌* 의사결정 컨텍스트 (이전 결과 + 다음 파일 + 룰 delta) 출력.
+
 ---
 
 ## 6. Brownfield Adoption — 점진 도입의 어려움

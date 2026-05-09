@@ -107,57 +107,105 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 
 **핵심**: triage가 size×risk에 따라 *spec tier 권장*을 함께 출력해요. spec-new는 이 tier 결과를 받아 *필요한 파일만* 생성해요. 처음부터 9개 다 깔지 않음.
 
-## 3단계 — 출력
+## 3단계 — 출력 (조건부 메뉴)
 
+분류 결과가 **매트릭스 코너 케이스**(결정 공간 명확) 면 메뉴 출력 X — 권장 1줄. **모호 영역**(결정 공간 진짜 존재) 만 `[a]/[b]/[c]/[d]` 메뉴.
+
+근거: `.ax/docs/reference/confirmation-policy.md` "메뉴 출력 룰" + `triage-matrix.md` 의 friction column.
+
+### 3.1 매트릭스 코너 케이스 — 메뉴 생략
+
+분류가 다음 중 하나면 *권장만 출력*하고 자동 진행 안내:
+
+| 분류 | 출력 |
+|---|---|
+| S × L0 | "즉시 작업으로 진행해요. 다른 경로 원하면 말씀." |
+| S × L1 | "즉시 + lint 로 진행해요. ADR 필요하면 말씀." |
+| L × L3 / XL × L3 | "spec + plan + tasks + ADR 풀 패키지로 진행해요. 축소 원하면 `--tier standard` 명시." |
+| 나머지 매트릭스 명백 셀 | 권장 1줄만 |
+
+출력 예 (S × L0):
+```
+🔬 Triage (입력: "<요약>")
+
+ 📍 분류  S × L0 — payment 도메인 외 (이력 로그 포맷 정리)
+ 🎯 권장  즉시 작업으로 진행해요. hooks (lint + 변경 파일 테스트) 만 작동.
+
+ ─ 자동 주입 ─────────────────────────────────────
+ spirit  values.md, tone.md
+ friction  autopilot (`.ax/docs/reference/confirmation-policy.md` C1)
+
+ ▸ 진행할게요. 다른 경로 원하면 말씀.
+```
+
+출력 예 (L × L3):
+```
+🔬 Triage (입력: "<요약>")
+
+ 📍 분류  L × L3 — payment 환불 정책 변경 (다중 모듈)
+ 🎯 권장  spec + plan + tasks + ADR 풀 패키지. evaluator + architect 게이트.
+
+ ─ 사전 검색 결과 ─────────────────────────────────
+ 관련 spec .ax/docs/spec/003-payment-coupon-stack/
+ 관련 ADR  .ax/docs/adr/0002-pg-multi-provider.md
+ 매칭 룰  AX:CRITICAL:003, AX:MANDATORY:001
+
+ ─ 자동 주입 ─────────────────────────────────────
+ friction  per_task (L3 + SP-SEC 매칭 → C5 적용)
+
+ ▸ tier=full 로 spec 만들기 시작할게요. 축소 원하면 `--tier standard` 또는 다른 경로 말씀.
+```
+
+### 3.2 모호 영역 — 메뉴 출력
+
+분류가 다음에 해당하면 기존 `[a]/[b]/[c]/[d]` 메뉴 유지:
+
+| 분류 | 이유 |
+|---|---|
+| M × L2 | tier basic / standard 둘 다 정당화 가능 |
+| L × L1 ~ L2 | ADR 동반 여부가 진짜 결정 |
+| 도메인 다중 매칭 | 어느 도메인 우선인지 사용자 결정 필요 |
+| domain_risk 미매핑 (default 적용) | 사용자 확인 필요 |
+
+출력 예 (M × L2):
 ```
 🔬 Triage (입력: "<요약>")
 
  📍 분류
-  Size  L (다중 모듈, 2~3일 추정)
-  Risk  L3 (payment 도메인 매칭 — config.yml)
-  도메인  payment
+  Size  M (단일 모듈, 1~2일)
+  Risk  L2 (order 도메인 매칭)
+  도메인  order
 
- 🎯 권장 경로 spec + ADR 동반, architect 게이트, evaluator 검토
+ 🎯 권장 경로  tier=standard (spec + plan + tasks)
 
  ─ 사전 검색 결과 ─────────────────────────────────
-
- 관련 spec .ax/docs/spec/003-payment-coupon-stack/ (참고)
- 관련 ADR  .ax/docs/adr/0002-pg-multi-provider.md
- 관련 mistakes .ax/mistakes/2026-04-15-002-pg-key-leak.md (3주 전)
- 매칭 룰  AX:CRITICAL:003 (시크릿 hardcode 금지)
-    AX:MANDATORY:001 (PG 변경 시 ADR 필수)
+ 관련 spec ...
+ 관련 mistakes ...
 
  ─ 자동 주입 ─────────────────────────────────────
-
- spirit  values.md, tone.md, rules/{security, data}.md
- persona  payment-engineer (도메인 매칭 시) | inline fallback
-     → Layer 1 + 모듈 CLAUDE.md 우선 로드
-     → 변경 1~2 파일이면 즉시 작업, 그 이상 task 분해
-     → commit 메시지: 한국어 + type 접두사 (feat/fix/refactor/docs)
- agent  evaluator (PR 직전), architect (설계 결정 시)
+ friction  phase_gate (Phase 경계에서만 사람 확인)
 
  ─ 다음 단계 ─────────────────────────────────────
 
- [a] ✓ spec 작성부터 시작 (tier=full)    [권장 — L×L3]
-  명령 "새 spec 만들어줘 — payment-refund-window-extension --tier full"
-  산출물 spec.md + plan.md + tasks.md
-    + research.md + data-model.md
-    + contracts/{api,events} + quickstart.md
-    + checklists/requirements.md + README.md (9개)
-  다음 spec.md 작성 → spec-validate 통과 → ADR 동반 → 구현
+ [a] ✓ tier=standard (권장)
+  산출물 spec.md + plan.md + tasks.md (4개)
+  명령 "새 spec 만들어줘 — <slug> --tier standard"
 
- [b] tier 다운그레이드 — standard (4개) 또는 basic (2개)
-  이유 L3 도메인이지만 변경 범위가 좁다고 판단 시
-  명령 "--tier standard" 또는 "--tier basic"
-  권장 L3는 standard 이상 권장, basic은 안티패턴 경고
+ [b] tier=basic 으로 축소 (변경 범위 좁다 판단 시)
+  산출물 spec.md + README.md (2개)
 
- [c] ADR 먼저 (architecture 결정이 큰 경우)
-  명령 "ADR 0006 작성해줘 — payment-refund-strategy"
+ [c] tier=full 로 확대 (ADR 동반)
 
- [d] 현재 분류 의심 — 재분류 요청
+ [d] 현재 분류 의심 — 재분류
 
- ▸ 답해주세요 [a] / [b] (tier 같이) / [c] / [d]
+ ▸ 답해주세요 [a] / [b] / [c] / [d]
 ```
+
+### 3.3 절대 금지
+
+- 매트릭스 코너 케이스 (S×L0, L×L3 등 명백) 에 메뉴 의례적 출력
+- "L3는 무조건 풀패키지" 같은 단정을 [a]/[b]/[c]/[d] 형태로 펼쳐 사용자 인지 부하 가중
+- 모호 영역 분류 결과를 1줄 권장으로 축약 (사용자의 결정권 박탈)
 
 ## Workflow
 
