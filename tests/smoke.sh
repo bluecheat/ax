@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/smoke.sh — goax Plugin 구조 검증
 # 검증: 파일 구조·JSON 유효성·skill frontmatter·shell 문법·jq syntax·hook 경로
-#       + scripts/bash/ 8개·current-task.json.template (NEW)
+#       + scripts/bash/ 9개·current-task.json.template (NEW)
 
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -140,6 +140,7 @@ for f in \
     templates/default/.ax/scripts/bash/add-spec-files.sh \
     templates/default/.ax/scripts/bash/slug-from-text.sh \
     templates/default/.ax/scripts/bash/check-templates-drift.sh \
+    templates/default/.ax/scripts/bash/check-manifest-install.sh \
     templates/default/.ax/scripts/bash/promote-mistake.sh
 do
     [ -f "$REPO/$f" ] && pass "$f" || fail "$f 누락"
@@ -297,11 +298,11 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────
-section "9. .ax/scripts/bash/ 8개 + --json + --help (NEW)"
+section "9. .ax/scripts/bash/ 9개 + --json + --help (NEW)"
 # ───────────────────────────────────────────────────────────
 SCRIPTS_DIR="$REPO/templates/default/.ax/scripts/bash"
 for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
-         slug-from-text check-templates-drift promote-mistake; do
+         slug-from-text check-templates-drift check-manifest-install promote-mistake; do
     f="$SCRIPTS_DIR/$s.sh"
     if [ -f "$f" ]; then
         # bash -n 통과
@@ -332,6 +333,7 @@ mkdir -p "$TMP_E2E/.ax/mistakes"
         "init-spec-dir.sh --json --tier basic --slug e2e-test --dry-run" \
         "slug-from-text.sh --json 'End To End Test'" \
         "check-templates-drift.sh --json" \
+        "check-manifest-install.sh --json --plugin-dir $REPO" \
         "promote-mistake.sh --json"; do
         out=$(bash "$REPO/templates/default/.ax/scripts/bash/"$cmd 2>/dev/null) || true
         if echo "$out" | jq -e '.status' >/dev/null 2>&1; then

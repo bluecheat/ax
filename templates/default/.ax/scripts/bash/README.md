@@ -14,6 +14,7 @@
 | `add-spec-files.sh` | 기존 spec에 plan/tasks/research 점진 추가 | `spec-{plan,tasks,implement}`, `spec --add` |
 | `slug-from-text.sh` | 영문 텍스트 → kebab-case 정규화·검증 | `spec` |
 | `check-templates-drift.sh` | `_templates/.origin` ↔ 현재 sha 비교 | `doctor` |
+| `check-manifest-install.sh` | MANIFEST 출고분 ↔ 사용자 프로젝트 파일 단위 비교 (missing + drift) | `doctor` |
 | `promote-mistake.sh` | mistake → CLAUDE.md 룰 승격 (후보·적용) | `audit` |
 
 ## 표준 (모든 스크립트 공통)

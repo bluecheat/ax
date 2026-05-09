@@ -80,7 +80,7 @@ grep -h "^category:" $ROOT/.ax/mistakes/*.md 2>/dev/null \
 
 스크립트 위임 — 결정론은 `check-templates-drift.sh`에. plugin 컨텍스트에서 실행되면 `${CLAUDE_SKILL_DIR}`(Claude Code 공식 변수)로 plugin root를 도출(`${CLAUDE_SKILL_DIR}/../..`). 사용자가 직접 bash로 호출했다면 비어있을 수 있어요(그때는 plugin_updated 검사가 skip 되고 user_modified만 보고).
 
-> ⚠ **drift 감지 범위 제한**: `check-templates-drift.sh`는 `.ax/_templates/spec/` 만 커버. `.ax/spirit/rules/`, `.ax/_templates/{adr,module,spirit}/` 의 사용자 변경은 *감지 안 됨* — plugin 갱신 시 silently 출고본으로 회귀 가능. 그래서 onboarding 절대 금지 항목에 plugin shipped spirit/rules 직접 append 금지가 박혀있음 — 프로젝트별 룰은 별도 파일(`<project>-<category>.md`) + @import 권장.
+> ⚠ **drift 감지 범위 제한**: `check-templates-drift.sh` 는 `.ax/_templates/spec/` 의 SHA snapshot 비교 한정. `_templates/{adr,module,spirit,mistakes}/` 와 `.ax/{hooks,scripts,modules,docs}/` 등 나머지 MANIFEST 출고분은 §3.5.1 의 `check-manifest-install.sh` 가 파일 단위로 커버해요 (missing + drift). `.ax/spirit/rules/` 는 plugin 출고 X 라 검증 대상 자체가 아니에요 — 그래서 onboarding 절대 금지 항목에 plugin shipped spirit/rules 직접 append 금지가 박혀있음. 프로젝트별 룰은 별도 파일(`<project>-<category>.md`) + @import 권장.
 
 ```bash
 # plugin root 도출 — ${CLAUDE_SKILL_DIR} 우선, ${CLAUDE_PLUGIN_ROOT}는 호환용 fallback
@@ -110,64 +110,47 @@ DRIFT_FILES=$(echo "$RESULT" | jq -r '.result.drift_files | join(", ")')
  - [b] plugin 출고본을 `.ax/_templates/spec.suggested/`로 떨어트려 사용자가 머지
  - [c] ⚠ 사용자 수정 백업(`.ax/_templates/spec.bak/`) 후 plugin으로 덮어쓰기
 
-### 3.5.1 plugin shipped 자산 drift (scripts/hooks)
+### 3.5.1 plugin shipped 자산 검증 — `check-manifest-install.sh` 위임
 
-`_templates/spec/` 외에도 plugin 이 출고하는 자산 — `.ax/scripts/bash/*.sh`, `.ax/hooks/**/*.sh` — 도 사용자 프로젝트에 cp 됨. install 재실행 시 MANIFEST 의 디렉토리 cp -R 이 동명 파일을 덮어쓰므로, 사용자가 직접 수정한 plugin 파일은 **silent 회귀** 위험. 이 §3.5.1 이 그 위험을 가시화.
+`_templates/spec/` SHA snapshot 비교 (§3.5) 와 별개로, MANIFEST 가 약속한 출고 디렉토리 (`.ax/{spirit,hooks,modules,docs,_templates,scripts}/`) 가 사용자 프로젝트에 **빠짐없이** 들어와 있는지 + 변경됐는지 파일 단위로 검증. install 미완(plugin 갱신 후 재install 안 함) 같은 케이스가 silently 누적되는 걸 차단. 결정론은 `check-manifest-install.sh` 가 SSOT — doctor 는 호출 + 보고만.
 
-`spirit/rules/` 는 plugin 출고 X — 사용자 큐레이션 영역이라 drift 검증 대상이 아님 (`.ax/_templates/spirit/` 에 opt-in 샘플만 출고).
+`spirit/rules/` 는 plugin 출고 X (사용자 큐레이션) — `.ax/_templates/spirit/` 의 opt-in 샘플만 검증 대상.
 
 ```bash
-# plugin 출고분 SHA 비교 — PLUGIN_ROOT 도출됐을 때만 (§3.5 와 같은 변수 재사용)
-SHIPPED_DRIFT=()
-SHIPPED_DELETED=()
-SHIPPED_SKIPPED=false
-
-if [ -n "$PLUGIN_ROOT" ]; then
-    PLUGIN_TPL="$PLUGIN_ROOT/templates/default"
-    # 검증 대상: plugin 출고 파일만. find 가 plugin tpl 안만 보므로 사용자 추가 파일
-    # (<project>-<category>.md 같은) 은 자동 제외.
-    for sub in '.ax/scripts/bash' '.ax/hooks'; do
-        [ -d "$PLUGIN_TPL/$sub" ] || continue
-        while IFS= read -r f; do
-            rel="${f#$PLUGIN_TPL/}"
-            user_f="$ROOT/$rel"
-            if [ ! -f "$user_f" ]; then
-                SHIPPED_DELETED+=("$rel")
-            elif ! cmp -s "$f" "$user_f"; then
-                SHIPPED_DRIFT+=("$rel")
-            fi
-        done < <(find "$PLUGIN_TPL/$sub" -type f \( -name '*.sh' -o -name '*.md' -o -name '*.yml' -o -name '*.yaml' \))
-    done
-else
-    SHIPPED_SKIPPED=true  # plugin root 미도출 — drift 검증 skip
-fi
+# PLUGIN_ROOT 는 §3.5 에서 이미 도출됨 — 없으면 스크립트가 status:skipped 로 응답
+RESULT=$(bash "$ROOT/.ax/scripts/bash/check-manifest-install.sh" --json \
+    ${PLUGIN_ROOT:+--plugin-dir "$PLUGIN_ROOT"} 2>/dev/null)
+MI_STATUS=$(echo "$RESULT" | jq -r '.status')
+MI_FILES=$(echo "$RESULT" | jq -r '.result.files_checked // 0')
+MI_MISSING_N=$(echo "$RESULT" | jq -r '.result.missing // [] | length')
+MI_DRIFT_N=$(echo "$RESULT" | jq -r '.result.drift // [] | length')
 ```
 
 보고:
-- 0 + 0 → 출력 생략 (조용)
-- `SHIPPED_DRIFT > 0` → 별도 섹션:
+- `status=ok` (`MI_MISSING_N=0` && `MI_DRIFT_N=0`) → 출력 생략 (조용)
+- `status=skipped` (PLUGIN_ROOT 미도출) → "plugin shipped 검증 skip — plugin 컨텍스트에서 doctor 실행 권장" 한 줄만
+- `status=warning` 이면 별도 섹션:
 
 ```
- ─ plugin shipped 자산 drift ────────────────────────────
- ⚠ plugin 출고 파일 N개 사용자 수정됨 — install 재실행 시 silent 회귀 위험:
-   <SHIPPED_DRIFT 한 줄씩>
- ⚠ plugin 출고 파일 K개 삭제됨 — install 재실행 시 자동 복구 또는 명시 의도 확인:
-   <SHIPPED_DELETED 한 줄씩>
- (PLUGIN_ROOT 미도출 시: "drift 검증 skip — plugin 컨텍스트에서 doctor 실행 권장")
+ ─ plugin shipped 자산 검증 ─────────────────────────────
+ ⚠ MANIFEST 누락 MI_MISSING_N개 — install 미완 또는 plugin 갱신 후 재install 안 함:
+   <missing[] 한 줄씩 (5개 cap, 더 있으면 "... and N more")>
+ ⚠ MANIFEST 변경 MI_DRIFT_N개 — install 재실행 시 silent 회귀 위험:
+   <drift[] 동상>
 ```
 
 `다음 단계` 옵션:
 
 ```
- [u] ✓ shipped 자산 drift 처리                         [추천 — drift 있을 때]
-   확인 LLM 이 사용자 수정 의도 인터뷰:
-         - "이 변경은 의도된 customization 인가요?" → [u-keep]
-         - "복원하고 싶으신가요?" → [u-restore]
+ [u] ✓ plugin shipped 자산 처리                         [추천 — missing/drift 있을 때]
+   missing → installer 재실행 (`goax 도입` 또는 `/install` skill)
+              기존 자산은 보존 + 누락분만 backfill (cp -R 이 idempotent)
+   drift   → LLM 이 사용자 수정 의도 인터뷰:
+              - "이 변경은 의도된 customization 인가요?" → [u-keep]
+              - "복원하고 싶으신가요?" → [u-restore]
    [u-keep]    backup ($ROOT/.ax/<rel>.user) + plugin 갱신 시 회귀 위험 명시 안내
-              + wrapper 패턴 권장 (custom 스크립트는 별도 파일로, plugin 출고는 그대로)
+                + wrapper 패턴 권장 (custom 스크립트는 별도 파일로, plugin 출고는 그대로)
    [u-restore] $ROOT/<rel>.bak.<TS> 백업 후 plugin 출고로 복원 (cp from PLUGIN_TPL/<rel>)
-   주의 deletion (SHIPPED_DELETED) 은 install 재실행 시 자동 복구 — 의도된 삭제면
-        wrapper 또는 사용자 정의 으로 대체 권장.
 ```
 
 **원칙**: 자동 수정 X — 사용자 customization 일 수 있어 항상 명시 의도 확인. plugin shipped 파일은 SSOT 가 plugin repo 라 사용자 수정은 본질적으로 fragile. 진짜 customization 은 wrapper 또는 별도 파일이 옳은 패턴.

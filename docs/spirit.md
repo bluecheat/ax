@@ -29,8 +29,10 @@ Spirit은 모든 sub-agent가 공유하는 *태도·문화·일하는 방식*이
 
 `.ax/spirit/rules/<카테고리>.md`에 새 카테고리 파일을 추가하면 자동 주입 대상에 포함돼요. 룰 토큰 컨벤션:
 
-- Spirit: `SP-<CAT>-NNN` (예: `SP-SEC-001`)
-- Constitution(CLAUDE.md): `<scope>:<LEVEL>:<id>` (예: `AX:CRITICAL:001`)
+- Spirit: `SP-<CAT>-<NNN>` (예: `SP-SEC-001`)
+- Constitution(CLAUDE.md): `<scope>:<TIER>:<NNN>` (예: `AX:CRITICAL:001`)
+
+자세히: [`docs/reference/rules-tokens.md`](reference/rules-tokens.md)
 
 ## 더 보기
 
