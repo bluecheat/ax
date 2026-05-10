@@ -9,13 +9,10 @@
 #   2. .ax/current-task.json 의 size/risk
 #   3. default standard
 #
-# 매트릭스:
-#   S × *           → basic
-#   M × L0~L1       → basic
-#   M × L2~L3       → standard
-#   L × L0~L2       → standard
-#   L × L3          → full
-#   XL × *          → full
+# 매트릭스 (0.1.16 — basic·plan 폐기, 2 단계):
+#   S/M/L × L0~L2   → standard (spec.md + tasks.md)
+#   L     × L3      → full     (+ research/data-model/quickstart + ADR)
+#   XL    × *       → full
 #
 # Output (--json):
 #   {"status":"ok","result":{"tier":"full","size":"L","risk":"L3","reason":"..."}}
@@ -123,12 +120,10 @@ elif [ -z "$SIZE" ] || [ -z "$RISK" ]; then
     RISK="${RISK:-L1}"
 fi
 
-# 매트릭스
+# 매트릭스 (0.1.16 — 2 단계로 슬림화)
 case "$SIZE-$RISK" in
-    S-*)            TIER="basic";    REASON="S size — minimal output" ;;
-    M-L0|M-L1)      TIER="basic";    REASON="M size, low risk — spec only" ;;
-    M-L2|M-L3)      TIER="standard"; REASON="M size, mid+ risk — spec + plan + tasks" ;;
-    L-L0|L-L1|L-L2) TIER="standard"; REASON="L size, low~mid risk — spec + plan + tasks" ;;
+    S-*|M-*)        TIER="standard"; REASON="S/M size — spec + tasks" ;;
+    L-L0|L-L1|L-L2) TIER="standard"; REASON="L size, low~mid risk — spec + tasks" ;;
     L-L3)           TIER="full";     REASON="L × L3 — full SDD + ADR" ;;
     XL-*)           TIER="full";     REASON="XL — full SDD + ADR" ;;
     *)              TIER="standard"; REASON="unknown — default standard" ;;

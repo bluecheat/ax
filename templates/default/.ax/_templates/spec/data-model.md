@@ -32,4 +32,4 @@
 - 트랜잭션 경계
 
 ## 5. 마이그레이션
-DDL 파일 위치 + 백필 전략은 plan.md 3️⃣ 참조.
+DDL 파일 위치 + 백필 전략은 spec.md §7.5 Technical Context + 관련 ADR 에 기록해요.

@@ -162,7 +162,7 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 
 | 분류 | 이유 |
 |---|---|
-| M × L2 | tier basic / standard 둘 다 정당화 가능 |
+| M × L2 | tier standard / full 둘 다 정당화 가능 (0.1.16 — basic 폐기) |
 | L × L1 ~ L2 | ADR 동반 여부가 진짜 결정 |
 | 도메인 다중 매칭 | 어느 도메인 우선인지 사용자 결정 필요 |
 | domain_risk 미매핑 (default 적용) | 사용자 확인 필요 |
@@ -188,17 +188,15 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
  ─ 다음 단계 ─────────────────────────────────────
 
  [a] ✓ tier=standard (권장)
-  산출물 spec.md + plan.md + tasks.md (4개)
+  산출물 spec.md + tasks.md (2 파일, 관련 ADR 별도)
   명령 "새 spec 만들어줘 — <slug> --tier standard"
 
- [b] tier=basic 으로 축소 (변경 범위 좁다 판단 시)
-  산출물 spec.md + README.md (2개)
+ [b] tier=full 로 확대 (L≥L3 또는 도메인 위험 시 — ADR 동반)
+  산출물 + research/data-model/quickstart + contracts/ + ADR
 
- [c] tier=full 로 확대 (ADR 동반)
+ [c] 현재 분류 의심 — 재분류
 
- [d] 현재 분류 의심 — 재분류
-
- ▸ 답해주세요 [a] / [b] / [c] / [d]
+ ▸ 답해주세요 [a] / [b] / [c]
 ```
 
 ### 3.3 절대 금지
@@ -217,7 +215,7 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 
 ## 3.5단계 — current-task.json 작성 
 
-분류 직후 `.ax/current-task.json`에 작업 컨텍스트를 기록해요. spec-new/spec-plan/spec-tasks/audit이 이 파일을 *입력*으로 받음 (LLM 재추론 X).
+분류 직후 `.ax/current-task.json`에 작업 컨텍스트를 기록해요. spec/spec-tasks/spec-implement/audit 이 이 파일을 *입력*으로 받음 (LLM 재추론 X).
 
 ```bash
 TASK_ID=$(date -u +%Y-%m-%d)-$(printf '%03d' $((RANDOM % 1000)))

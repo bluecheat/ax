@@ -252,30 +252,29 @@ Spirit:        SP-<CATEGORY>-<id>       (예: SP-SEC-001)
 
 **왜**: 코드는 *어떻게*를 말하지만 *무엇*과 *왜*를 말하지 않아요. Spec과 ADR이 그 자리를 채워요.
 
-**4 산출물**:
-- `spec.md` — 요구사항·수용 기준 (NEEDS CLARIFICATION 마커로 모호함 표시)
-- `plan.md` — 기술 컨텍스트·설계 결정·트레이드오프
-- `tasks.md` — dependency-ordered 체크리스트 (`[P]` 병렬 마커)
-- `research/data-model/contracts/quickstart` — 깊은 작업용 부가
+**산출물 (tier-aware)**:
+- `spec.md` — What/Why + 수용 기준 + Technical Context (§7.5 — 스택·영향 모듈·적용 룰·진입 ADR). NEEDS CLARIFICATION 마커로 모호함 표시.
+- `tasks.md` — dependency-ordered 체크리스트 (`[P]` 병렬 마커). spec 의 acceptance 와 1:1 매핑.
+- `research/data-model/quickstart/contracts` — full tier 부가 산출물.
+- ADR (`.ax/docs/adr/NNNN-*.md`) — 설계 결정·트레이드오프·거부된 대안 기록 (full tier 정규).
 
-**SSOT 원칙**: spec.md가 단일 진실. plan/tasks가 spec을 *입력*으로 받음.
-**게이팅**: NEEDS CLARIFICATION 1개라도 남으면 다음 단계 차단.
+**SSOT 원칙**: spec.md 가 단일 진실. tasks 가 spec 을 *입력*으로 받음. 설계 결정의 *근거* 는 ADR 이 단독 소유 (0.1.16 plan.md 폐기).
+**게이팅**: NEEDS CLARIFICATION · placeholder `<...>` · 빈 필수 섹션 어느 하나라도 남으면 다음 단계 차단 (`check-spec-clarity.sh`).
 
 ### 5.5 Tier-aware Spec — Over-engineering 방지
 
-**문제**: 한 줄 수정에 spec.md/plan.md/tasks.md/research/data-model/contracts 9개 파일을 다 만들면 의식(ritual)이 돼요.
+**문제**: 한 줄 수정에 spec / tasks / research / data-model / contracts / quickstart 다 만들면 의식(ritual) 이 돼요.
 
-**해결**: triage 결과(size × risk)로 *딱 필요한 만큼*:
+**해결**: triage 결과(size × risk)로 *딱 필요한 만큼* (0.1.16 — 2 단계로 슬림화):
 
 | Tier | 산출물 | 적용 |
 |---|---|---|
-| basic | spec.md + README.md (2) | S/M × L0~L1 |
-| standard | + plan.md + tasks.md (4) | M × L2~L3 / L × L0~L2 |
-| full | + research/data-model/contracts/quickstart/checklists (9) + ADR | L × L3 / XL |
+| standard | spec.md + tasks.md (2) | S/M/L × L0~L2 |
+| full | + research/data-model/quickstart + contracts/ + ADR | L × L3 / XL |
 
 빠른 길과 점진 길 둘 다 제공:
 - **빠른**: `/spec --tier full` (한 명령)
-- **점진**: `--tier basic` → `/spec-plan` → `/spec-tasks` → `/spec-implement`
+- **점진**: `--tier standard` → 필요시 `add-spec-files.sh --add research,data-model,...` → ADR 별도
 
 ### 5.6 Scripts vs LLM — 결정론과 판단의 분리
 
@@ -303,7 +302,7 @@ NEXT=$(bash .ax/scripts/bash/next-spec-num.sh --json | jq -r '.result.next')
 
 **문제**: 4계층 권한 위임 모델에서 상위 단계(triage → spec-validate → spec-tasks)가 게이트를 통과시키면 그 결정은 *계약*. 그런데 implement 단계에서 task 단위로 [y/n] 을 반복 묻는 건 같은 결정을 N회 재개봉하는 *double-gate*. 이는 SSOT 원칙(§5.4) 과 권한 위임 모델 둘 다 위반해요.
 
-동시에 무조건 자동 진행도 답이 아니에요. plan.md 작성 시점에 모르던 결정이 implement 시점에 발생할 수 있고(설계 이탈·task 간 의존 깨짐·도메인 위험 무감각), 메뉴 출력은 *결정 공간 명시화* 의 가치가 있어요.
+동시에 무조건 자동 진행도 답이 아니에요. spec / ADR 작성 시점에 모르던 결정이 implement 시점에 발생할 수 있고(설계 이탈·task 간 의존 깨짐·도메인 위험 무감각), 메뉴 출력은 *결정 공간 명시화* 의 가치가 있어요.
 
 **해결**: confirmation 강도를 *데이터 함수* 로 결정해요. 무차별 묻기·무차별 자동 둘 다 anti-pattern.
 
@@ -312,7 +311,7 @@ NEXT=$(bash .ax/scripts/bash/next-spec-num.sh --json | jq -r '.result.next')
 | 변수 | 출처 | 역할 |
 |---|---|---|
 | size × risk | triage 분류 | 1차 friction 강도 |
-| spec_tier | basic / standard / full | tier 가 size×risk 흡수 |
+| spec_tier | standard / full | tier 가 size×risk 흡수 |
 | sensors.mode | warning / fail | hooks 차단 강도 → LLM 추가 확인 redundancy |
 | mistake recurrence | 같은 카테고리 누적 | 동적 강화 신호 |
 | Spirit 매칭 | SP-SEC-* / SP-DATA-* | 위험 카테고리 식별 |
@@ -321,7 +320,7 @@ NEXT=$(bash .ax/scripts/bash/next-spec-num.sh --json | jq -r '.result.next')
 
 **핵심 원칙 3가지**:
 
-1. **Phase Boundary Gate** — 사람 확인은 phase 전환점(triage → spec, spec → plan, Phase 1 → Phase 2)에서만. phase 내 진행은 Spirit + Sensors 가 통제. 같은 layer 내 반복 게이트는 계층 설계 위반.
+1. **Phase Boundary Gate** — 사람 확인은 phase 전환점(triage → spec, spec → tasks, Phase 1 → Phase 2)에서만. phase 내 진행은 Spirit + Sensors 가 통제. 같은 layer 내 반복 게이트는 계층 설계 위반.
 2. **Signal-Grade Proportionality** — 확인 강도는 시그널 등급에 비례. CRITICAL 접촉 task 만 halt, MANDATORY 는 phase 경계에서, CONVENTION 은 자동 진행. 3등급 시그널 체계(§5.1) 를 implement 단계에도 적용.
 3. **Mistake-as-Signal** — confirmation 을 줄이면 LLM 판단 오류가 mistakes 에 누적되고, 이게 환경 강화로 이어져요. "환경을 고친다"(§4.2) 의 자연스런 귀결. confirmation 의 *사전 차단* 과 Mistake Loop 의 *사후 교정* 은 역할 분담.
 

@@ -104,9 +104,8 @@ goax가 깔아주는 것은 두 결로 나뉘어요:
 
 | Tier | 산출물 | 적용 size × risk |
 |---|---|---|
-| **basic** | `spec.md` + `README.md` (2) | S/M × L0–L1 |
-| **standard** | + `plan.md` + `tasks.md` (4) | M × L2–L3 / L × L0–L2 |
-| **full** | + `research / data-model / contracts / quickstart / checklists` (9) + ADR 동반 | L × L3 / XL × * |
+| **standard** | `spec.md` + `tasks.md` (2) | S/M/L × L0–L2 |
+| **full** | + `research / data-model / quickstart / contracts` + ADR 동반 | L × L3 / XL × * |
 
 ### Fast Path — Single Command
 
@@ -117,13 +116,13 @@ goax가 깔아주는 것은 두 결로 나뉘어요:
 ### Stepwise Path — Per-stage
 
 ```
-/spec --tier basic payment-refund     → spec.md
-/spec-plan                                  → + plan.md
-/spec-tasks                                 → + tasks.md  ([P] 병렬 마커)
+/spec --tier standard payment-refund  → spec.md + tasks.md
+/spec-tasks                                 → tasks 분해 ([P] 병렬 마커)
 /spec-implement                             → tasks.md 순차 실행 + - [x] 마킹
+# 설계 결정은 ADR (.ax/docs/adr/NNNN-*.md) 로
 ```
 
-자연어 override: `"spec만"` → basic · `"plan까지"` → standard · `"풀패키지"` → full.
+자연어 override: `"간단"` / `"tasks까지"` → standard · `"풀패키지"` → full. 설계 결정은 ADR (`.ax/docs/adr/NNNN-*.md`) 로 — 별도 plan 파일 X.
 
 ---
 
@@ -137,7 +136,6 @@ goax가 깔아주는 것은 두 결로 나뉘어요:
 | `/doctor` | 결손 진단 + `_templates` drift | "진단해줘" |
 | `/rules` | Constitution + Spirit + Module 통합 | "rules 보여줘" |
 | `/spec` | tier-aware spec 생성 (한 번에) | "spec 만들어줘 — <slug>" |
-| `/spec-plan` | plan.md 단계 | "plan 추가" |
 | `/spec-tasks` | tasks.md 단계 | "tasks 분해" |
 | `/spec-implement` | 순차 실행 + 체크리스트 마킹 | "구현 시작" |
 | `/spec-validate` | NEEDS CLARIFICATION 게이팅 | "spec 확인" |
@@ -159,7 +157,7 @@ goax가 깔아주는 것은 두 결로 나뉘어요:
 
 > **결정론적인 일은 스크립트가, 판단·인터랙션은 LLM이.**
 
-- **8 bash scripts** (`.ax/scripts/bash/`) — `--json --dry-run --help` 표준, `[goax]` stderr prefix, exit 0/1/2 (graceful degradation)
+- **10 bash scripts** (`.ax/scripts/bash/`) — `--json --dry-run --help` 표준, `[goax]` stderr prefix, exit 0/1/2 (graceful degradation)
 - **`current-task.json`** — triage → spec → audit 사이 작업 컨텍스트 SSOT (LLM 재추론 X)
 - **`_templates/.origin`** — 사용자 수정 vs plugin 출고본 sha 비교, drift는 doctor가 알려줘요. 자동 덮어쓰기 절대 X
 - **thin wrapper SKILL.md** — 결정론 부분 스크립트 위임. SKILL은 트리거·인터랙션·JSON 파싱만
@@ -192,7 +190,7 @@ your-project/
 │   └── docs/
 │       ├── _templates/                    # Layer 3 — 모든 template 한 곳
 │       │   ├── adr/0000-template.md
-│       │   └── spec/{spec, plan, tasks, ...}.md  + .origin (drift sha)
+│       │   └── spec/{spec, tasks, ...}.md  + .origin (drift sha)
 │       ├── adr/                           # 실제 ADR (onboarding이 0001-goax-adoption.md 자동 생성)
 │       └── spec/                          # 실제 spec 디렉토리 (NNN-<slug>/)
 └── .claude/
@@ -284,7 +282,7 @@ statusline은 *어시스턴트 메시지 후*에 자동 갱신 (Claude Code 사�
 - [`docs/skill-routing.md`](docs/skill-routing.md) — skill 라우팅 매트릭스
 - [`docs/up.md`](docs/up.md) — Brownfield 도입 흐름
 - [`changelog/0.1.0.md`](changelog/0.1.0.md) "설계 결정" — 거부된 대안 + 채택 이유 (옛 docs/adr/ 6건 통합)
-- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 8 스크립트 표준
+- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 10 스크립트 표준
 - [`changelog/`](changelog/README.md) — 릴리스 기록 (사용자는 굳이 X)
 
 ---

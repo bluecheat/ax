@@ -10,7 +10,7 @@
     {
       "name": "goax",
       "description": "4계층 하네스(Triage/Constitution/Module/Spec·ADR) + Spirit/Mistake Loop. installer/onboarding skill로 자연어 도입.",
-      "version": "0.1.15",
+      "version": "0.1.16",
       "author": {
         "name": "bluechat",
         "email": "itsinil@gmail.com"
@@ -27,5 +27,5 @@
       ]
     }
   ],
-  "version": "0.1.15"
+  "version": "0.1.16"
 }

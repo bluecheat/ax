@@ -867,7 +867,7 @@ rm -f .ax/.onboarding-pending
 
 📐 Spec 디렉토리 구조
  .ax/docs/spec/NNN-<slug>/  ← 작업 spec SSOT (spec-new가 여기에 생성)
-                              spec.md / plan.md / tasks.md 인스턴스가 사는 곳
+                              spec.md / tasks.md 인스턴스 (full tier 면 + research/data-model/...)
 
  .ax/_templates/spec/  ← 템플릿 (도메인에 맞게 수정 가능, doctor가 drift 감지)
 

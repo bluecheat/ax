@@ -1,6 +1,6 @@
 ---
 name: spec-implement
-description: "tasks.md의 - [ ] 항목을 순차 실행하고 완료 시 - [x]로 마킹 — '/spec-implement', '구현 시작', 'tasks 실행', 'task 진행'. 실패 시 halt+보고. spec.md/plan.md/tasks.md를 입력으로. friction 강도는 .ax/config.yml 의 confirmation 정책으로 결정."
+description: "tasks.md의 - [ ] 항목을 순차 실행하고 완료 시 - [x]로 마킹 — '/spec-implement', '구현 시작', 'tasks 실행', 'task 진행'. 실패 시 halt+보고. spec.md / tasks.md / 관련 ADR 을 입력으로. friction 강도는 .ax/config.yml 의 confirmation 정책으로 결정."
 ---
 
 # spec-implement — 구현 단계
@@ -20,8 +20,8 @@ description: "tasks.md의 - [ ] 항목을 순차 실행하고 완료 시 - [x]�
 SPEC=$(jq -r '.spec_dir | split("/") | .[-1]' .ax/current-task.json 2>/dev/null)
 SPEC_DIR=".ax/docs/spec/$SPEC"
 
-# 필수 파일 검증
-for f in spec.md plan.md tasks.md; do
+# 필수 파일 검증 (0.1.16 — plan.md 폐기, spec.md + tasks.md 만)
+for f in spec.md tasks.md; do
  [ ! -f "$SPEC_DIR/$f" ] && { echo "$f 누락 — 먼저 작성"; exit 1; }
 done
 
@@ -33,8 +33,8 @@ NEXT_TASK=$(grep -m1 '^- \[ \]' "$SPEC_DIR/tasks.md" || true)
 context로 로드:
 - `CLAUDE.md` (Layer 1)
 - `<영향 받는 모듈>/CLAUDE.md` (Layer 2)
-- `$SPEC_DIR/spec.md` (요구사항)
-- `$SPEC_DIR/plan.md` (설계)
+- `$SPEC_DIR/spec.md` (요구사항 + §7.5 Technical Context)
+- 관련 ADR `docs/adr/NNNN-*.md` (설계 결정 — spec.md §7.5 의 *진입 ADR* 인용)
 - `$SPEC_DIR/tasks.md` (체크리스트)
 
 ## 2. Friction 모드 결정 — Confirmation Friction Policy 적용
@@ -235,7 +235,7 @@ fi
 - **L3 + SP-SEC/DATA 매칭 task 자동 진행** — C5 우회는 거짓 약속 (invariant 위반)
 - 실패 / 범위이탈 / elevated 시 자동 우회
 - 완료 task 를 다시 - [ ] 로 되돌리기
-- spec.md / plan.md / tasks.md 없이 implement
+- spec.md / tasks.md 없이 implement
 - 모든 task 를 한 번에 *batch 실행* — 한 task 씩 진행하되, 정상 흐름은 silent (모드에 따라 결정)
 
 ## state.json 갱신

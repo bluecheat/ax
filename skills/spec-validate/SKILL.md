@@ -1,19 +1,19 @@
 ---
 name: spec-validate
-description: "spec NEEDS CLARIFICATION 게이팅 — 'spec 확인', 'goax spec check', '스펙 게이트'. 작성된 spec.md에서 'NEEDS CLARIFICATION' 마커를 검출해 진행 가능 여부 판단."
+description: "spec 명료성 게이팅 — 'spec 확인', 'goax spec check', '스펙 게이트'. spec.md 의 NEEDS CLARIFICATION + placeholder `<...>` + 빈 필수 섹션 3 항목을 check-spec-clarity.sh 로 검출해 진행 가능 여부 판단."
 ---
 
-# goax spec-validate — NEEDS CLARIFICATION 게이팅
+# goax spec-validate — 명료성 게이팅 (NEEDS / placeholder / 빈 섹션)
 
 ## 시작 전 필수
 `.ax/spirit/values.md`, `tone.md` 따라요.
 
 ## SSOT 원칙
-spec.md가 single source of truth. **NEEDS CLARIFICATION이 하나라도 남으면** plan/tasks 진행 금지.
+spec.md 가 single source of truth. **NEEDS CLARIFICATION · placeholder `<...>` · 빈 필수 섹션** 중 하나라도 남으면 tasks 진행 금지.
 
 ## 발동
 - "goax spec check"
-- "spec NEEDS CLARIFICATION 검사"
+- "spec 검사"
 - "이 스펙으로 다음 단계 가도 돼?"
 
 ## 1. spec 디렉토리 식별
@@ -21,11 +21,20 @@ spec.md가 single source of truth. **NEEDS CLARIFICATION이 하나라도 남으�
 - 사용자가 번호/slug 명시: `goax spec check 005`
 - 미명시: 가장 최근 수정된 `.ax/docs/spec/NNN-*/` 자동 선택, 사용자에게 "이 spec 맞아요?" 한 번 확인
 
-## 2. 스캔
+## 2. 검사 — `check-spec-clarity.sh` 위임
 
 ```bash
-grep -nH "NEEDS CLARIFICATION" .ax/docs/spec/${dir}/*.md
+RESULT=$(bash .ax/scripts/bash/check-spec-clarity.sh --json --spec "$SPEC")
+STATUS=$(echo "$RESULT" | jq -r '.status')
+NEEDS=$(echo "$RESULT" | jq -r '.result.needs_clarification')
+PLACE=$(echo "$RESULT" | jq -r '.result.placeholders')
+EMPTY=$(echo "$RESULT" | jq -r '.result.empty_sections | join(", ")')
 ```
+
+스크립트가 검사하는 것:
+- NEEDS CLARIFICATION 마커 잔존
+- placeholder `<...>` 본문 잔존 (표 셀·URL 화이트리스트)
+- 필수 섹션 (§1.1 한 줄 정의 / §3 성공 기준 / §4 사용자 시나리오) 본문 1 라인 이상
 
 ## 3. 출력
 
@@ -34,11 +43,11 @@ grep -nH "NEEDS CLARIFICATION" .ax/docs/spec/${dir}/*.md
 ```
 ✓ spec-validate 005-payment-refund-policy-change 통과
 
- 📍 발견 NEEDS CLARIFICATION 0건 (3개 파일 검사: spec.md, plan.md, contracts/api.yaml)
- 🎯 결과 plan/tasks 진행 가능
+ 📍 발견  NEEDS=0  placeholder=0  빈 섹션=0
+ 🎯 결과  tasks 진행 가능
 
  다음 단계
- plan.md 작성 → tasks.md → 구현
+ tasks.md 분해 → 구현 (/spec-tasks → /spec-implement)
  L3 도메인이라 ADR 동반 권장 — "ADR 0006 작성 도와줘"
 ```
 
@@ -47,13 +56,12 @@ grep -nH "NEEDS CLARIFICATION" .ax/docs/spec/${dir}/*.md
 ```
 ✗ spec-validate 005-payment-refund-policy-change 보류
 
- 📍 발견 NEEDS CLARIFICATION 3건
+ 📍 발견
+  NEEDS CLARIFICATION    3 건 — spec.md
+  placeholder `<...>`    2 건 — spec.md (§1.1, §7.5)
+  빈 섹션                §3 성공 기준
 
-  spec.md:42  환불 가능 기간 (7일? 14일?)
-  plan.md:18  PG사별 분기 처리 여부
-  contracts/api.yaml:31 부분 환불 지원?
-
- 🎯 게이팅 NEEDS CLARIFICATION 모두 해결 후 재검사 필요
+ 🎯 게이팅 모두 해결 후 재검사 필요
 
  ─ 다음 단계 ──────────────────────────────────────
 
@@ -72,7 +80,7 @@ grep -nH "NEEDS CLARIFICATION" .ax/docs/spec/${dir}/*.md
 
 ## 4. Triage 자동 게이팅 (참고)
 
-`.ax/config.yml`의 `domain_risk`가 L2/L3인 도메인 작업이면, 이 게이트 통과 없이는 `triage` 결과가 "spec 미통과 — 진행 금지"로 변해요. spec-validate가 통과해야 triage 흐름이 풀려요.
+`.ax/config.yml`의 `domain_risk`가 L2/L3인 도메인 작업이면, 이 게이트 통과 없이는 `triage` 결과가 "spec 미통과 — 진행 금지"로 변해요. spec-validate 가 통과해야 다음 skill (`/spec-tasks`, `/spec-implement`) 흐름이 풀려요.
 
 ## 절대 금지
 
@@ -92,7 +100,7 @@ jq '.last_skill = "spec-validate" | .skill_calls = ((.skill_calls // 0) + 1) | .
 
 ## current-task.json 갱신 
 
-NEEDS CLARIFICATION 통과 시 phase 진행, 미해소 시 blocked_by 기록 → 다음 skill(spec-plan/tasks/implement)이 phase 보고 차단:
+명료성 통과 시 phase 진행, 미해소 시 blocked_by 기록 → 다음 skill (`spec-tasks` / `spec-implement`) 이 phase 보고 차단:
 
 ```bash
 # 통과
@@ -100,8 +108,8 @@ jq '.phase = "spec_checked" | .blocked_by = [] | .updated_at = (now | todate)' \
  .ax/current-task.json \
  > .ax/current-task.json.tmp && mv .ax/current-task.json.tmp .ax/current-task.json
 
-# 미해소 — blocked_by에 NEEDS CLARIFICATION 위치 기록
-BLOCKED='["spec.md:42","plan.md:18"]'
+# 미해소 — blocked_by 에 위치/카테고리 기록
+BLOCKED='["spec.md:42 NEEDS","spec.md:18 placeholder"]'
 jq --argjson bb "$BLOCKED" \
  '.phase = "spec_blocked" | .blocked_by = $bb | .updated_at = (now | todate)' \
  .ax/current-task.json > .ax/current-task.json.tmp \

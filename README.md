@@ -104,9 +104,8 @@ Concept deep-dive: [`CONCEPTS.md`](CONCEPTS.md)
 
 | Tier | Outputs | Applies to size × risk |
 |---|---|---|
-| **basic** | `spec.md` + `README.md` (2) | S/M × L0–L1 |
-| **standard** | + `plan.md` + `tasks.md` (4) | M × L2–L3 / L × L0–L2 |
-| **full** | + `research / data-model / contracts / quickstart / checklists` (9) + paired ADR | L × L3 / XL × * |
+| **standard** | `spec.md` + `tasks.md` (2) | S/M/L × L0–L2 |
+| **full** | + `research / data-model / quickstart / contracts` + paired ADR | L × L3 / XL × * |
 
 ### Fast Path — Single Command
 
@@ -117,13 +116,13 @@ Concept deep-dive: [`CONCEPTS.md`](CONCEPTS.md)
 ### Stepwise Path — Per-stage
 
 ```
-/spec --tier basic payment-refund     → spec.md
-/spec-plan                                  → + plan.md
-/spec-tasks                                 → + tasks.md  ([P] parallel marker)
+/spec --tier standard payment-refund  → spec.md + tasks.md
+/spec-tasks                                 → tasks breakdown ([P] parallel marker)
 /spec-implement                             → run tasks.md sequentially + - [x] marking
+# Design decisions go to ADR (.ax/docs/adr/NNNN-*.md)
 ```
 
-Natural language overrides: `"spec only"` → basic · `"through plan"` → standard · `"full package"` → full.
+Natural language overrides: `"simple"` / `"spec + tasks"` → standard · `"full package"` → full. Design decisions live in ADR (`.ax/docs/adr/NNNN-*.md`), not a separate plan file.
 
 ---
 
@@ -137,7 +136,6 @@ Natural language overrides: `"spec only"` → basic · `"through plan"` → stan
 | `/doctor` | Gap diagnosis + `_templates` drift | "diagnose" |
 | `/rules` | Constitution + Spirit + Module aggregation | "show rules" |
 | `/spec` | Tier-aware spec generation (one-shot) | "create spec — <slug>" |
-| `/spec-plan` | plan.md stage | "add plan" |
 | `/spec-tasks` | tasks.md stage | "break into tasks" |
 | `/spec-implement` | Sequential execution + checklist marking | "start implementation" |
 | `/spec-validate` | NEEDS CLARIFICATION gating | "validate spec" |
@@ -159,7 +157,7 @@ Natural language overrides: `"spec only"` → basic · `"through plan"` → stan
 
 > **Deterministic work goes to scripts; judgment and interaction go to the LLM.**
 
-- **8 bash scripts** (`.ax/scripts/bash/`) — `--json --dry-run --help` standard, `[goax]` stderr prefix, exit 0/1/2 (graceful degradation)
+- **10 bash scripts** (`.ax/scripts/bash/`) — `--json --dry-run --help` standard, `[goax]` stderr prefix, exit 0/1/2 (graceful degradation)
 - **`current-task.json`** — task-context SSOT shared between triage → spec → audit (no LLM re-inference)
 - **`_templates/.origin`** — sha-compares user edits vs plugin shipped version; doctor surfaces drift. Never auto-overwrites.
 - **Thin-wrapper SKILL.md** — deterministic parts delegated to scripts. SKILL handles only triggers, interaction, and JSON parsing.
@@ -192,7 +190,7 @@ your-project/
 │   └── docs/
 │       ├── _templates/                    # Layer 3 — all templates in one place
 │       │   ├── adr/0000-template.md
-│       │   └── spec/{spec, plan, tasks, ...}.md  + .origin (drift sha)
+│       │   └── spec/{spec, tasks, ...}.md  + .origin (drift sha)
 │       ├── adr/                           # Real ADRs (onboarding auto-generates 0001-goax-adoption.md)
 │       └── spec/                          # Real spec directory (NNN-<slug>/)
 └── .claude/
@@ -284,7 +282,7 @@ That's all. Just stay on the latest.
 - [`docs/skill-routing.md`](docs/skill-routing.md) — Skill routing matrix
 - [`docs/up.md`](docs/up.md) — Brownfield adoption flow
 - [`changelog/0.1.0.md`](changelog/0.1.0.md) "Design decisions" — Rejected alternatives + adoption rationale (consolidated from old docs/adr/ × 6)
-- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 8-script standard
+- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 10-script standard
 - [`changelog/`](changelog/README.md) — Release notes (not strictly user-facing)
 
 ---

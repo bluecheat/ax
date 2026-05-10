@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# .ax/scripts/bash/add-spec-files.sh — 기존 spec에 plan/tasks/research 등 점진 추가
+# .ax/scripts/bash/add-spec-files.sh — 기존 spec에 tasks/research 등 점진 추가
 #
 # Usage:
-#   bash add-spec-files.sh --spec <NNN-slug> --add plan,tasks,... \
+#   bash add-spec-files.sh --spec <NNN-slug> --add tasks,research,... \
 #                          [--json] [--dry-run] [--help]
 #
 # 동작:
 #   - 기존 파일 있으면 skip + 알림
-#   - tier 메모(.tier) 갱신 (basic→standard→full 자동 승급, slim 정의)
+#   - tier 메모(.tier) 갱신 (standard→full 자동 승급, slim 정의)
 #
-# Slim tier 정의:
-#   basic     spec.md
-#   standard  + plan.md + tasks.md
+# Slim tier 정의 (0.1.16 — plan.md 폐기, basic 폐기):
+#   standard  spec.md + tasks.md
 #   full      + research/data-model/quickstart 중 하나라도 (단일 파일)
 #   checklists/contracts 의 lazy 생성은 tier 와 무관 — 사용자 명시 추가만
+#
+# 설계 결정 (아키텍처·트레이드오프) 은 ADR 로 기록.
 #
 # Output (--json):
 #   {"status":"ok","result":{"spec_dir":"...","added":[...],"skipped":[...],"new_tier":"standard"}}
@@ -73,7 +74,7 @@ IFS=',' read -ra REQUESTED <<< "$ADD"
 for item in "${REQUESTED[@]}"; do
     item="${item## }"; item="${item%% }"  # trim
     case "$item" in
-        plan)         TO_ADD+=("plan.md") ;;
+        plan)         goax_warn "'plan' 은 0.1.16 에서 폐기됐어요 — 설계 결정은 ADR 로 (skipped)" ;;
         tasks)        TO_ADD+=("tasks.md") ;;
         research)     TO_ADD+=("research.md") ;;
         data-model|data) TO_ADD+=("data-model.md") ;;
@@ -81,7 +82,7 @@ for item in "${REQUESTED[@]}"; do
         checklists|checklist) TO_ADD+=("checklists/requirements.md") ;;
         contracts|api) TO_ADD+=("contracts/api.yaml" "contracts/events.md") ;;
         full)
-            TO_ADD+=("plan.md" "tasks.md" "research.md" "data-model.md" \
+            TO_ADD+=("tasks.md" "research.md" "data-model.md" \
                      "quickstart.md" "checklists/requirements.md" \
                      "contracts/api.yaml" "contracts/events.md")
             ;;
@@ -111,11 +112,8 @@ for f in "${TO_ADD[@]}"; do
     fi
 done
 
-# Tier 갱신 — 추가된 파일에 따라 basic→standard→full 자동 승급
-NEW_TIER="basic"
-if [ -f "$SPEC_DIR/plan.md" ] && [ -f "$SPEC_DIR/tasks.md" ]; then
-    NEW_TIER="standard"
-fi
+# Tier 갱신 — 추가된 파일에 따라 standard→full 자동 승급 (0.1.16: basic·plan 폐기)
+NEW_TIER="standard"
 if [ -f "$SPEC_DIR/research.md" ] || [ -f "$SPEC_DIR/data-model.md" ] || \
    [ -f "$SPEC_DIR/quickstart.md" ]; then
     NEW_TIER="full"

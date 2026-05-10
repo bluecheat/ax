@@ -1,7 +1,7 @@
 # Requirements Checklist — <피처 이름>
 
-> spec → plan → implement 단계 진입 전 자가 검증.
-> 모든 항목 체크 + NEEDS CLARIFICATION 0건 → `goax spec check` 통과.
+> spec → tasks → implement 단계 진입 전 자가 검증.
+> 모든 항목 체크 + NEEDS CLARIFICATION 0건 + placeholder 0건 → `/spec-validate` 통과.
 
 ---
 
@@ -11,34 +11,30 @@
 - [ ] 1️⃣.2 사용자 가치 명확
 - [ ] 1️⃣.3 MVP 경계 (포함/NEEDS/제외) 분리
 - [ ] 1️⃣.3 모든 NEEDS CLARIFICATION 해소
-- [ ] 2️⃣ Why (문제 / 안 만들면 / 대안)
+- [ ] 2️⃣ Why (문제 / 안 만들면 / 대안 — 채택·거부 결정 근거는 ADR 로)
 - [ ] 3️⃣ 성공 기준 측정 가능한 형태
 - [ ] 3️⃣ 비기능 요구 4종 (성능·가용성·보안·호환성)
 - [ ] 4️⃣ 사용자 시나리오 ≥3개 (성공/엣지/실패)
 - [ ] 7️⃣ 의존성·영향 범위
+- [ ] 7️⃣.5 Technical Context (스택·영향 모듈·적용 룰·진입 ADR)
 - [ ] 8️⃣ Open Questions 모두 해소
 
-## Plan 단계 (spec 통과 후)
+## ADR (full tier 또는 L≥2 도메인)
 
-- [ ] 1️⃣ 아키텍처 결정 명확
-- [ ] 1️⃣.3 거부된 패턴 → ADR 작성
-- [ ] 2️⃣ 단계 분할 (Phase 1, 2, ...)
-- [ ] 3️⃣ 데이터 변경 + 롤백 전략
-- [ ] 4️⃣ 검증 전략 (acceptance criteria 매핑)
-- [ ] 5️⃣ 롤아웃 + feature flag
-- [ ] 6️⃣ 외부 영향
-- [ ] 8️⃣ 위험·완화
+- [ ] 핵심 설계 결정마다 ADR 1 건 — 채택 / 거부 / Trade-offs
+- [ ] CRITICAL 룰 접촉 결정은 ADR 의무
 
 ## Tasks 단계
 
 - [ ] 모든 task 1\~3 파일 변경 단위
 - [ ] 의존성 명시
 - [ ] 추정 시간
+- [ ] Phase 별 acceptance criteria 매핑 (spec.md §3 ↔ task)
 
 ## Implement 단계 (위 모두 통과 후)
 
 - [ ] 모든 task 완료
 - [ ] 모든 acceptance criteria 통과
 - [ ] hooks (lint·structural·security) 통과
-- [ ] PR description: spec.md / plan.md 링크 첨부
+- [ ] PR description: spec.md + 관련 ADR 링크 첨부
 - [ ] (risk≥L2) traffic estimation 첨부

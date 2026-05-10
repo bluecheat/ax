@@ -1,6 +1,6 @@
 ---
 name: spec-tasks
-description: "기존 spec에 tasks.md 추가 + 분해 가이드 — '/spec-tasks', 'tasks 분해', 'tasks.md 작성', '작업 분해', '체크리스트 만들어'. plan.md 기반. add-spec-files.sh로 selective cp."
+description: "기존 spec에 tasks.md 추가 + 분해 가이드 — '/spec-tasks', 'tasks 분해', 'tasks.md 작성', '작업 분해', '체크리스트 만들어'. spec.md (§3 acceptance + §7.5 Technical Context) + 관련 ADR 기반. add-spec-files.sh 로 selective cp."
 ---
 
 # spec-tasks — tasks.md 단계
@@ -14,18 +14,20 @@ description: "기존 spec에 tasks.md 추가 + 분해 가이드 — '/spec-tasks
 - "tasks.md 작성"
 - "체크리스트 만들어"
 
-## 1. spec_id 결정 + plan.md 검증
+## 1. spec_id 결정 + spec.md 검증
 
 ```bash
 SPEC=$(jq -r '.spec_dir | split("/") | .[-1]' .ax/current-task.json 2>/dev/null)
 [ -z "$SPEC" ] && goax_error "no spec in current-task.json — use /spec-tasks <NNN-slug>"
 
 SPEC_DIR=".ax/docs/spec/$SPEC"
-if [ ! -f "$SPEC_DIR/plan.md" ]; then
- echo "plan.md 먼저 작성 필요. /spec-plan 실행해주세요."
+if [ ! -f "$SPEC_DIR/spec.md" ]; then
+ echo "spec.md 먼저 작성 필요. /spec 실행해주세요."
  exit 1
 fi
 ```
+
+> 0.1.16 부터 plan.md 는 폐기됐어요 — spec.md §7.5 Technical Context 가 기술 컨텍스트, ADR 이 설계 결정.
 
 ## 2. 파일 추가
 
@@ -37,7 +39,7 @@ RESULT=$(bash .ax/scripts/bash/add-spec-files.sh --json --spec "$SPEC" --add tas
 
 ## 3. tasks.md 분해 가이드
 
-사용자에게 plan.md를 기반으로 dependency-ordered 작업 분해 안내:
+사용자에게 spec.md (§3 acceptance + §7.5 Technical Context + 관련 ADR) 를 기반으로 dependency-ordered 작업 분해 안내:
 
 ```markdown
 # Tasks: <feature>
@@ -89,17 +91,19 @@ jq '.phase = "tasks" | .updated_at = (now | todate)' .ax/current-task.json \
  ✓ phase 갱신: plan → tasks
 
  📍 다음
-  1. tasks.md를 plan.md 기반으로 분해
+  1. tasks.md 를 spec.md §3 acceptance + §7.5 Technical Context + ADR 기반으로 분해
   2. 각 task에 file path + [P] 마커
   3. 구현 단계로: "/spec-implement"
 ```
 
 ## 절대 금지
 
-- plan.md 없이 tasks 작성 — 먼저 plan 권유
+- spec.md 없이 tasks 작성 — 먼저 spec 권유
+- spec.md NEEDS CLARIFICATION 미해소 상태에서 tasks 작성 — `/spec-validate` 먼저
 - task에 file path 없이 작성 — 모호함
 - 한 task에 여러 책임 묶기 — 한 task = 한 일
 - 자동으로 task 본문 채우기 — 사용자가 도메인을 알아요
+- 환경 e2e·배포·모니터링 task 를 정상 phase 로 박지 않기 — 운영 활동은 spec 범위 밖
 
 ## state.json 갱신
 

@@ -2,55 +2,55 @@
 
 > Triage가 작업 분류 후 어떤 skill/agent를 호출할지 결정할 때 참조하는 라우팅 표.
 
-## 그룹 (14 skill)
+## 그룹 (14 skill — 0.1.16 spec-plan 폐기)
 
 | 그룹 | skill |
 |---|---|
-| 핵심 spec workflow | `spec`, `spec-plan`, `spec-tasks`, `spec-implement`, `spec-validate` |
+| 핵심 spec workflow | `spec`, `spec-validate`, `spec-tasks`, `spec-implement` |
 | 진단·관리 | `doctor`, `rules`, `audit`, `spirit`, `hud` |
 | 도입 | `install`, `onboarding` |
 | `global/` | `triage` |
-| `workflows/` | `adr` |
+| `workflows/` | `adr`, `mistake` |
 
-> 추가: `spec-plan`, `spec-tasks`, `spec-implement` (단계 길)
-> 제거: `global/goax-critical-rules` → `rules` 흡수, `global/goax-steering-loop` → `audit` 흡수, `personas/goax-engineer-generalist` → `triage` inline fallback, `meta/{skill-audit,skill-creator}` 제거
+> 0.1.16 변경: `spec-plan` 폐기 (설계 결정은 ADR 로). plan.md 템플릿·command 함께 제거.
 
 ## 라우팅 매트릭스 (size × risk × spec tier)
 
 | Size × Risk | 첫 호출 | spec tier | 권장 길 |
 |---|---|---|---|
 | S × L0~L1 | inline fallback | — | hooks만 → commit |
-| M × L0~L1 | inline fallback | basic (선택) | hooks + lint → commit |
-| M × L2~L3 | `spec` | **basic** | spec.md → spec-check → 구현 |
-| L × L0~L2 | `spec` | **standard** | spec → plan → tasks → 구현 |
-| L × L3 / XL × * | `adr` 먼저 | **full** | architect → spec-new --tier full → 단계별 → tester → evaluator |
+| M × L0~L1 | inline fallback | standard (선택) | hooks + lint → commit |
+| M × L2~L3 | `spec` | **standard** | spec → spec-check → tasks → 구현 |
+| L × L0~L2 | `spec` | **standard** | spec → tasks → 구현 (+ ADR 권장) |
+| L × L3 / XL × * | `adr` 먼저 | **full** | architect → spec --tier full → ADR → tasks → tester → evaluator |
 
 ## 두 가지 spec 길 
 
 ### 빠른 길 — tier-aware (한 명령으로)
 ```
 /spec --tier full payment-refund
- → spec.md + plan.md + tasks.md + research.md + data-model.md
-  + contracts/{api,events} + quickstart.md + checklists/requirements.md
-  + README.md (9 파일)
+ → spec.md + tasks.md + research.md + data-model.md
+  + contracts/{api,events} + quickstart.md (6 파일)
+  + ADR (.ax/docs/adr/NNNN-*.md) — 별도 작성
 ```
 
-### 점진 길 — 단계별 (basic부터 시작, 필요시 추가)
+### 점진 길 — 단계별 (standard 부터 시작, 필요시 추가)
 ```
-/spec --tier basic payment-refund   → spec.md + README.md (2)
-/spec-plan                 → + plan.md (3)
-/spec-tasks                 → + tasks.md (4)
-/spec-implement               → tasks.md 순차 실행
+/spec --tier standard payment-refund   → spec.md + tasks.md (2)
+add-spec-files.sh --add research,data-model  → 점진 확장
+/spec-tasks                                  → tasks 분해 가이드
+/spec-implement                              → tasks.md 순차 실행
+/adr                                         → 설계 결정 기록
 ```
 
-자연어 override: "spec만"/"plan까지"/"풀패키지" 모두 인식.
+자연어 override: "간단"/"tasks까지" → standard, "풀패키지" → full.
 
 ## Workflow phase (current-task.json)
 
 ```
 idle → triaged → spec → spec_checked
-           → spec_blocked (NEEDS CLARIFICATION 미해소)
-   → plan → tasks → implementing → done
+           → spec_blocked (명료성 게이트 — NEEDS / placeholder / 빈 섹션)
+   → tasks → implementing → done
    → blocked (사용자 결정 대기)
 ```
 
@@ -77,18 +77,18 @@ idle → triaged → spec → spec_checked
 3. **모듈별 `<module>/CLAUDE.md`** — Layer 2 스코프 룰
 4. **`.ax/scripts/bash/`** — 자기 프로젝트에 맞는 결정론 스크립트 추가 가능 (--json 표준 따르면 SKILL이 호출 가능)
 
-## 직접 호출 — 9 slash commands
+## 직접 호출 — slash commands (0.1.16 — 14개)
 
 ```
-/goax          도움말
-/doctor       진단 + _templates drift
-/rules       통합 인덱스
-/spec      tier-aware 생성 (한 번에)
-/spec-plan     plan.md 단계 (점진)
-/spec-tasks     tasks.md 단계 (점진)
-/spec-implement   구현 실행
-/spec-validate     게이팅
-/audit       Mistake Loop
+/goax              도움말
+/doctor            진단 + _templates drift
+/rules             통합 인덱스
+/spec              tier-aware 생성 (한 번에)
+/spec-tasks        tasks.md 단계 (점진)
+/spec-implement    구현 실행
+/spec-validate     명료성 게이팅 (NEEDS / placeholder / 빈 섹션)
+/audit             Mistake Loop
+/adr               설계 결정 기록
 ```
 
-자연어로 부르고 싶으면: "goax 도입해줘" / "spec 만들어줘 — payment-refund" / "plan 추가" / "tasks 분해" / "구현 시작" / "audit 실행" 등.
+자연어로 부르고 싶으면: "goax 도입해줘" / "spec 만들어줘 — payment-refund" / "tasks 분해" / "구현 시작" / "ADR 작성" / "audit 실행" 등.

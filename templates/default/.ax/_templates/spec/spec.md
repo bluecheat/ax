@@ -1,8 +1,9 @@
 # Spec — <피처 이름>
 
-> **이 문서가 SSOT (Single Source of Truth)예요.**
-> plan.md / tasks.md / 구현 단계는 이 문서를 입력으로 공유해요.
-> 코드와 spec이 다르면 spec이 맞다고 가정 — 코드를 spec에 맞춰요.
+> **이 문서가 SSOT (Single Source of Truth) 예요.**
+> tasks.md / 구현 단계는 이 문서 (+ 관련 ADR) 를 입력으로 공유해요.
+> 코드와 spec 이 다르면 spec 이 맞다고 가정 — 코드를 spec 에 맞춰요.
+> 설계 결정 (Trade-offs · 거부된 대안 근거) 은 ADR `.ax/docs/adr/NNNN-*.md` 가 단독 기록해요.
 
 ---
 
@@ -48,7 +49,7 @@
 - A: <대안 A> — Pros/Cons → 채택 여부
 - B: <대안 B> — Pros/Cons → 채택 여부
 
-→ 거부된 대안은 반드시 ADR로 기록해 미래에 재제안 방지.
+→ 채택된 대안과 거부된 대안의 *결정 근거* 는 ADR (`.ax/docs/adr/NNNN-*.md`) 로 기록해요. spec.md 는 *무엇·왜* 만, *어떻게/왜 그 길* 은 ADR.
 
 ---
 
@@ -118,6 +119,19 @@ API/이벤트가 있으면 [`contracts/`](contracts/) 디렉토리로:
 
 ---
 
+## 7.5 Technical Context
+
+| 항목 | 값 |
+|---|---|
+| 스택·언어 | <e.g. Kotlin 2.0 + Spring Boot 3.3 / TypeScript> |
+| 영향 모듈 | <module-a, module-b> |
+| 적용 룰 | <CRITICAL/MANDATORY 룰 토큰 — e.g. `AX:CRITICAL:003`, `SP-SEC-002`> |
+| 진입 ADR | <docs/adr/NNNN-*.md — 설계 결정 기록 위치> |
+
+> 짧게. 3~5 줄이면 충분. *어떻게* 의 디테일은 tasks.md 가, *왜 그 결정* 은 ADR 이 담당해요.
+
+---
+
 ## 8. 보류 (Open Questions)
 
 → NEEDS CLARIFICATION의 모음. 해소되면 1️⃣.3에서 체크.
@@ -133,10 +147,5 @@ API/이벤트가 있으면 [`contracts/`](contracts/) 디렉토리로:
 |---|---|---|
 | YYYY-MM-DD | 초안 | <이름> |
 
----
-
-## 다음 단계
-
-- [ ] 모든 NEEDS CLARIFICATION 해소
-- [ ] 검토자 승인
-- [ ] [`plan.md`](plan.md) 작성 (HOW)
+> 워크플로우 안내 (다음 단계) 는 `/spec-validate` · `/spec-tasks` skill 출력의 `📍 다음` 으로 제공돼요.
+> 환경 검증·배포·모니터링 같은 운영 활동은 이 문서 *범위 밖*. tasks.md 의 task 또는 ops 채널에 두세요.

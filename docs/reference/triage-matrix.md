@@ -39,14 +39,14 @@
 | 분류 | 출력 형식 |
 |---|---|
 | S × L0 | "즉시 작업으로 진행해요. 다른 경로 원하면 말씀." |
-| L × L3 / XL × L3 | "spec+plan+tasks+ADR 풀 패키지 진행. 축소 원하면 `--tier standard` 명시." |
+| L × L3 / XL × L3 | "spec + tasks + research/data-model/quickstart + ADR (full tier) 진행. 축소 원하면 `--tier standard` 명시." |
 | 기타 명확 (S×L1, M×L0 등) | 권장 1줄만, 메뉴 생략 |
 
 모호 영역에서만 `[a]/[b]/[c]/[d]` 메뉴:
 
 | 분류 | 이유 |
 |---|---|
-| M × L2 | tier basic / standard 둘 다 정당화 가능 |
+| M × L2 | tier standard / full 둘 다 정당화 가능 (0.1.16 — basic 폐기) |
 | L × L1~L2 | ADR 동반 여부가 진짜 결정 |
 | 도메인 다중 매칭 | 어느 도메인 우선인지 사용자 결정 필요 |
 

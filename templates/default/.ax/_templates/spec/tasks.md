@@ -1,12 +1,14 @@
 # Tasks — <피처 이름>
 
-> plan.md의 phases를 더 잘게 분해해요. 각 task는 1\~3 파일 변경, 1\~3시간.
-> 의존성 정렬되어 있어 순차/병렬 실행 가능.
+> spec.md (WHAT/WHY) 를 받아 *어떻게* 만들지 dependency-ordered 체크리스트로 분해해요.
+> 각 task 는 1\~3 파일 변경, 1\~3 시간. 의존성 정렬되어 순차/병렬 실행 가능.
+> 설계 결정의 *근거* 는 별도 ADR (`.ax/docs/adr/NNNN-*.md`) 로 기록.
 
 ---
 
 ## 0. 입력
-- [`spec.md`](spec.md), [`plan.md`](plan.md)
+- [`spec.md`](spec.md) — SSOT (What/Why + Technical Context §7.5)
+- 관련 ADR (있으면): `docs/adr/NNNN-*.md`
 
 ---
 
@@ -47,10 +49,5 @@ T002 ─ T004 ─ T006
 - 완료: <체크된 task 수> / <전체>
 - 차단됨 (block): <task ID + 사유>
 
----
-
-## 다음 단계
-
-- [ ] 모든 task 체크
-- [ ] [`spec.md` 3️⃣ acceptance criteria` 모두 통과
-- [ ] PR 생성
+> 워크플로우 안내 (다음 단계) 는 `/spec-implement` skill 출력의 `📍 다음` 으로 제공돼요.
+> 환경 검증·배포는 이 문서 범위 밖 — 별도 운영 채널.

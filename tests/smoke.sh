@@ -35,11 +35,11 @@ VER_MARKET=$(python3 -c "import json; d=json.load(open('$REPO/.claude-plugin/mar
 [ "$VER_FILE" = "$VER_MARKET" ] && pass "VERSION ↔ marketplace.json (=$VER_FILE)" || fail "VERSION/marketplace.json 불일치 ($VER_FILE vs $VER_MARKET)"
 
 # ───────────────────────────────────────────────────────────
-section "2. 핵심 skills (12개)"
+section "2. 핵심 skills (11개 — 0.1.16 spec-plan 폐기)"
 # ───────────────────────────────────────────────────────────
 for skill in install onboarding doctor rules \
              spec spec-validate audit spirit hud \
-             spec-plan spec-tasks spec-implement; do
+             spec-tasks spec-implement; do
     f="$REPO/skills/$skill/SKILL.md"
     if [ -f "$f" ]; then
         if head -5 "$f" | grep -qE "^name: $skill\$"; then
@@ -64,11 +64,11 @@ for removed in skills/global skills/workflows \
 done
 
 # ───────────────────────────────────────────────────────────
-section "2.5 Slash commands (15개 — 'goax-' prefix 컨벤션)"
+section "2.5 Slash commands (14개 — 'goax-' prefix 컨벤션, 0.1.16 spec-plan 폐기)"
 # ───────────────────────────────────────────────────────────
 # commands는 `goax-<name>.md` 형태 + `goax.md` 인덱스 alias 1개
 for cmd in goax goax-install goax-onboarding goax-doctor goax-audit goax-rules goax-hud goax-spirit \
-           goax-triage goax-adr goax-spec goax-spec-validate goax-spec-plan goax-spec-tasks goax-spec-implement; do
+           goax-triage goax-adr goax-spec goax-spec-validate goax-spec-tasks goax-spec-implement; do
     f="$REPO/commands/$cmd.md"
     if [ -f "$f" ]; then
         if head -5 "$f" | grep -qE "^name: $cmd\$"; then
@@ -123,7 +123,6 @@ for f in \
     templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh \
     templates/default/.ax/_templates/adr/0000-template.md \
     templates/default/.ax/_templates/spec/spec.md \
-    templates/default/.ax/_templates/spec/plan.md \
     templates/default/.ax/_templates/spec/tasks.md \
     templates/default/.ax/_templates/spec/checklists/requirements.md \
     templates/default/.ax/_templates/spec/research.md \
@@ -138,6 +137,7 @@ for f in \
     templates/default/.ax/scripts/bash/tier-from-state.sh \
     templates/default/.ax/scripts/bash/init-spec-dir.sh \
     templates/default/.ax/scripts/bash/add-spec-files.sh \
+    templates/default/.ax/scripts/bash/check-spec-clarity.sh \
     templates/default/.ax/scripts/bash/slug-from-text.sh \
     templates/default/.ax/scripts/bash/check-templates-drift.sh \
     templates/default/.ax/scripts/bash/check-manifest-install.sh \
@@ -206,7 +206,7 @@ while IFS= read -r f; do
     fi
 done < <(find "$REPO/skills" -name SKILL.md)
 pass "skill frontmatter ($ok_skills/$total_skills)"
-[ "$total_skills" -eq 15 ] && pass "skill 카운트 = 15" || fail "skill 카운트 $total_skills"
+[ "$total_skills" -eq 14 ] && pass "skill 카운트 = 14" || fail "skill 카운트 $total_skills"
 
 # ───────────────────────────────────────────────────────────
 section "6. HUD statusline 우주 이모지 + spec/ADR 진척 (팩트 기반)"
@@ -298,11 +298,11 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────
-section "9. .ax/scripts/bash/ 9개 + --json + --help (NEW)"
+section "9. .ax/scripts/bash/ 10개 + --json + --help (0.1.16 check-spec-clarity 추가)"
 # ───────────────────────────────────────────────────────────
 SCRIPTS_DIR="$REPO/templates/default/.ax/scripts/bash"
 for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
-         slug-from-text check-templates-drift check-manifest-install promote-mistake; do
+         check-spec-clarity slug-from-text check-templates-drift check-manifest-install promote-mistake; do
     f="$SCRIPTS_DIR/$s.sh"
     if [ -f "$f" ]; then
         # bash -n 통과
@@ -330,7 +330,7 @@ mkdir -p "$TMP_E2E/.ax/mistakes"
         "next-spec-num.sh --json" \
         "tier-from-state.sh --json" \
         "tier-from-state.sh --json --size L --risk L3" \
-        "init-spec-dir.sh --json --tier basic --slug e2e-test --dry-run" \
+        "init-spec-dir.sh --json --tier standard --slug e2e-test --dry-run" \
         "slug-from-text.sh --json 'End To End Test'" \
         "check-templates-drift.sh --json" \
         "check-manifest-install.sh --json --plugin-dir $REPO" \
@@ -794,10 +794,10 @@ rm -rf "$NS_FX"
 IS_FX=$(mktemp -d)
 mkdir -p "$IS_FX/.ax/scripts/bash" "$IS_FX/.ax/_templates/spec/checklists" "$IS_FX/.ax/_templates/spec/contracts" "$IS_FX/.ax/docs/spec"
 cp "$REPO/templates/default/.ax/scripts/bash/"{common,init-spec-dir,slug-from-text}.sh "$IS_FX/.ax/scripts/bash/"
-# 의도적으로 template 안 채움 (basic은 spec.md 1개 필수)
+# 의도적으로 template 안 채움 (standard 는 spec.md + tasks.md 필수)
 
 OUT=$(CLAUDE_PROJECT_DIR=$IS_FX bash "$IS_FX/.ax/scripts/bash/init-spec-dir.sh" \
-    --json --tier basic --slug missing-tpl 2>&1)
+    --json --tier standard --slug missing-tpl 2>&1)
 EXIT=$?
 if [ "$EXIT" -ne 0 ] && echo "$OUT" | jq -e '.errors[0] | contains("mandatory")' >/dev/null 2>&1; then
     pass "init-spec-dir — mandatory template 누락 시 JSON error + exit ≠0"

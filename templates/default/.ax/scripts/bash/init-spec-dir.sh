@@ -2,19 +2,18 @@
 # .ax/scripts/bash/init-spec-dir.sh — tier별 selective spec 디렉토리 생성
 #
 # Usage:
-#   bash init-spec-dir.sh --slug <kebab> --tier basic|standard|full \
+#   bash init-spec-dir.sh --slug <kebab> --tier standard|full \
 #                         [--num NNN] [--json] [--dry-run] [--help]
 #
-# Tier 산출물 (slim default):
-#   basic     spec.md                                          (1)
-#   standard  + plan.md + tasks.md                             (3)
-#   full      + research.md + data-model.md + quickstart.md    (6, 단일 파일만)
+# Tier 산출물:
+#   standard  spec.md + tasks.md                                          (2)
+#   full      + research.md + data-model.md + quickstart.md               (5, 단일 파일만)
 #
 # Lazy 생성 (필요 시 add-spec-files.sh):
 #   checklists/requirements.md          — `--add checklists`
 #   contracts/{api.yaml, events.md}     — `--add contracts`
 #
-# README.md 폐기 — spec.md 가 SSOT (What/Why), plan/tasks 가 본문. README 는 placeholder 였음.
+# 설계 결정 (아키텍처·트레이드오프) 은 ADR 로 기록. plan.md 는 0.1.16 폐기.
 #
 # Output (--json):
 #   {"status":"ok","result":{"spec_dir":"...","spec_id":"005","tier":"full","files":[...]}}
@@ -51,11 +50,12 @@ if [ "$SHOW_HELP" = true ]; then
 fi
 
 [ -z "$SLUG" ] && { goax_error "--slug required"; exit "$EXIT_ERROR"; }
-[ -z "$TIER" ] && { goax_error "--tier required (basic|standard|full)"; exit "$EXIT_ERROR"; }
+[ -z "$TIER" ] && { goax_error "--tier required (standard|full)"; exit "$EXIT_ERROR"; }
 
 case "$TIER" in
-    basic|standard|full) ;;
-    *) goax_error "invalid --tier: $TIER (basic|standard|full)"; exit "$EXIT_ERROR" ;;
+    standard|full) ;;
+    basic) goax_error "tier 'basic' 은 0.1.16 에서 폐기됐어요 — 'standard' 사용해주세요"; exit "$EXIT_ERROR" ;;
+    *) goax_error "invalid --tier: $TIER (standard|full)"; exit "$EXIT_ERROR" ;;
 esac
 
 # slug 검증 — kebab-case만
@@ -96,17 +96,14 @@ if [ -e "$DEST" ]; then
     fi
 fi
 
-# Tier별 파일 목록 — slim (README.md 폐기, 빈 dir 안 만듦)
+# Tier별 파일 목록 — slim (plan.md·README.md 폐기, 빈 dir 안 만듦)
 # checklists/, contracts/ 는 lazy — add-spec-files.sh --add checklists|contracts 로
 case "$TIER" in
-    basic)
-        FILES=("spec.md")
-        ;;
     standard)
-        FILES=("spec.md" "plan.md" "tasks.md")
+        FILES=("spec.md" "tasks.md")
         ;;
     full)
-        FILES=("spec.md" "plan.md" "tasks.md" "research.md" "data-model.md" "quickstart.md")
+        FILES=("spec.md" "tasks.md" "research.md" "data-model.md" "quickstart.md")
         ;;
 esac
 
@@ -148,7 +145,7 @@ for f in "${FILES[@]}"; do
 done
 
 # Mandatory templates 누락 시 fail — silent continue로 빈 spec dir 생성하면
-# 후속 spec-plan/spec-tasks가 깨짐. 0.1.8 fix (PR review).
+# 후속 spec-tasks/spec-implement 가 깨짐. 0.1.8 fix (PR review).
 if [ ${#MISSING[@]} -gt 0 ]; then
     if [ "$JSON_MODE" = true ]; then
         json_error "mandatory templates missing in $TEMPLATE_DIR: ${MISSING[*]}"
