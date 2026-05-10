@@ -63,7 +63,7 @@ grep -h "^category:" $ROOT/.ax/mistakes/*.md 2>/dev/null \
 
 ## 3. 4계층 + Cross-cut + Sensors 검사
 
-각 항목 ✓/·/✗ 표시 + 빈 placeholder 검출.
+각 항목 ✅ / ⚠️ / ❌ 표시 + 빈 placeholder 검출. 매핑은 본 문서 끝 "규칙" 섹션 참조.
 
 | Layer | 검사 |
 |---|---|
@@ -71,16 +71,23 @@ grep -h "^category:" $ROOT/.ax/mistakes/*.md 2>/dev/null \
 | **Layer 0 / 설정** | `.ax/config.yml` (domain_risk 5+ 권장) + `.ax/version` |
 | **Cross-cut Spirit** | `values.md`/`tone.md` (placeholder 검사), `rules/<카테고리>.md` 1개+ |
 | **Cross-cut Mistake Loop** | `.ax/mistakes/` 디렉토리 존재 |
-| **Layer 3 / Spec·ADR** | `.ax/docs/adr/`, ADR 1개+ (0000-template 외), `.ax/_templates/spec/` (`.origin` drift 비교 — 아래 §3.5) |
+| **Layer 3 / Spec·ADR** | `.ax/docs/adr/`, ADR 1개+ (0000-template 외), `.ax/_templates/spec/` (drift 비교는 "Plugin update 반영" 섹션 통합) |
 | **Layer 2 / Module Rules** | (선택) 모듈별 `<module>/CLAUDE.md` 카운트 |
-| **Sensors / Hooks** | `.ax/hooks/{pre-bash,pre-edit,post-edit,pre-commit}/` + `.claude/settings.json` + **template hook 전체가 settings.json 에 등록됐는지 (§3.7-(3), SSOT 기반)** |
-| **Rule Enforcement** | `enforced_by` schema invariant 검증 — `check-rule-enforcement.sh --json` 위임 (§3.9) |
+| **Sensors / Hooks** | `.ax/hooks/{pre-bash,pre-edit,post-edit,pre-commit}/` + `.claude/settings.json` + **template hook 전체가 settings.json 에 등록됐는지** (Spirit lint 섹션의 SSOT 기반 점검) |
+| **Rule Enforcement** | `enforced_by` schema invariant 검증 — `check-rule-enforcement.sh --json` 위임 ("Rule Enforcement invariant" 섹션) |
 
-### 3.5 _templates drift 체크 (script-backed)
+### 3.5 Plugin update 반영 — version + 출고 자산 신선도 (script-backed)
 
-스크립트 위임 — 결정론은 `check-templates-drift.sh`에. plugin 컨텍스트에서 실행되면 `${CLAUDE_SKILL_DIR}`(Claude Code 공식 변수)로 plugin root를 도출(`${CLAUDE_SKILL_DIR}/../..`). 사용자가 직접 bash로 호출했다면 비어있을 수 있어요(그때는 plugin_updated 검사가 skip 되고 user_modified만 보고).
+핵심 질문: **"현재 install 상태 == 최신 plugin 출고?"**
 
-> ⚠ **drift 감지 범위 제한**: `check-templates-drift.sh` 는 `.ax/_templates/spec/` 의 SHA snapshot 비교 한정. `_templates/{adr,module,spirit,mistakes}/` 와 `.ax/{hooks,scripts,modules,docs}/` 등 나머지 MANIFEST 출고분은 §3.5.1 의 `check-manifest-install.sh` 가 파일 단위로 커버해요 (missing + drift). `.ax/spirit/rules/` 는 plugin 출고 X 라 검증 대상 자체가 아니에요 — 그래서 onboarding 절대 금지 항목에 plugin shipped spirit/rules 직접 append 금지가 박혀있음. 프로젝트별 룰은 별도 파일(`<project>-<category>.md`) + @import 권장.
+3 가지 신호를 한꺼번에 감지하고 **단일 y/n** 으로 처리. 모두 "plugin 갱신 후 재install 안 함" 단일 원인 — 4 가지 결정을 따로 묻는 건 인지 부담만 키우고 답은 거의 항상 "yes 동기화".
+
+검사 신호:
+1. **version drift** — `.ax/version` ↔ `state.json:goax_version` ↔ plugin `VERSION` 3-way 비교
+2. **MANIFEST missing/drift** — `check-manifest-install.sh --json` (출고 디렉토리 파일 단위)
+3. **_templates plugin 갱신** — `check-templates-drift.sh --json` 의 `plugin_updated=true` 만 (user_modified 단독은 정상 — 정보성으로만 표시)
+
+> ⚠ **drift 감지 범위 제한**: `check-templates-drift.sh` 는 `.ax/_templates/spec/` SHA snapshot 비교 한정. 나머지 MANIFEST 출고분 (`hooks/`, `scripts/bash/*.sh`, `modules/`, `docs/`, `_templates/{adr,module,spirit,mistakes}/`) 은 `check-manifest-install.sh` 가 파일 단위로 커버 — installer 재실행 시 `cp -R` 로 전부 덮어씀 (idempotent). `.ax/spirit/rules/` 는 plugin 출고 X (사용자 큐레이션) — 검증 대상 아님 (`.ax/_templates/spirit/` opt-in 샘플만 검증).
 
 ```bash
 # plugin root 도출 — ${CLAUDE_SKILL_DIR} 우선, ${CLAUDE_PLUGIN_ROOT}는 호환용 fallback
@@ -92,97 +99,100 @@ else
     PLUGIN_ROOT=""
 fi
 
-if [ -n "$PLUGIN_ROOT" ]; then
- RESULT=$(bash .ax/scripts/bash/check-templates-drift.sh --json --plugin-dir "$PLUGIN_ROOT")
-else
- RESULT=$(bash .ax/scripts/bash/check-templates-drift.sh --json)
-fi
-USER_MOD=$(echo "$RESULT" | jq -r '.result.user_modified')
-PLUGIN_UPD=$(echo "$RESULT" | jq -r '.result.plugin_updated')
-DRIFT_FILES=$(echo "$RESULT" | jq -r '.result.drift_files | join(", ")')
-```
+# (1) 3-way version 비교
+INSTALLED_V=$(cat "$ROOT/.ax/version" 2>/dev/null | tr -d '[:space:]')
+STATE_V=$(jq -r '.goax_version // ""' "$ROOT/.ax/state.json" 2>/dev/null)
+PLUGIN_V=""
+[ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/VERSION" ] \
+    && PLUGIN_V=$(cat "$PLUGIN_ROOT/VERSION" | tr -d '[:space:]')
 
-상태별 보고:
-- `user_modified=false, plugin_updated=false` → `✓ _templates 출고본과 동일`
-- `user_modified=true, plugin_updated=false` → `· _templates: 사용자 수정 감지 (정상 — 이게 SSOT). 변경: $DRIFT_FILES`
-- `user_modified=*, plugin_updated=true` → `⚠ plugin _templates 갱신됨` + 옵션 제시:
- - [a] ✓ 사용자 수정 유지 (권장 — 도메인 적응 결과)
- - [b] plugin 출고본을 `.ax/_templates/spec.suggested/`로 떨어트려 사용자가 머지
- - [c] ⚠ 사용자 수정 백업(`.ax/_templates/spec.bak/`) 후 plugin으로 덮어쓰기
+VERSION_DRIFT=false
+[ -n "$PLUGIN_V" ] && [ "$INSTALLED_V" != "$PLUGIN_V" ] && VERSION_DRIFT=true
 
-### 3.5.1 plugin shipped 자산 검증 — `check-manifest-install.sh` 위임
-
-`_templates/spec/` SHA snapshot 비교 (§3.5) 와 별개로, MANIFEST 가 약속한 출고 디렉토리 (`.ax/{spirit,hooks,modules,docs,_templates,scripts}/`) 가 사용자 프로젝트에 **빠짐없이** 들어와 있는지 + 변경됐는지 파일 단위로 검증. install 미완(plugin 갱신 후 재install 안 함) 같은 케이스가 silently 누적되는 걸 차단. 결정론은 `check-manifest-install.sh` 가 SSOT — doctor 는 호출 + 보고만.
-
-`spirit/rules/` 는 plugin 출고 X (사용자 큐레이션) — `.ax/_templates/spirit/` 의 opt-in 샘플만 검증 대상.
-
-```bash
-# PLUGIN_ROOT 는 §3.5 에서 이미 도출됨 — 없으면 스크립트가 status:skipped 로 응답
-RESULT=$(bash "$ROOT/.ax/scripts/bash/check-manifest-install.sh" --json \
+# (2) _templates drift — plugin_updated 만 reinstall 신호 (user_modified 단독은 정상)
+RESULT_T=$(bash "$ROOT/.ax/scripts/bash/check-templates-drift.sh" --json \
     ${PLUGIN_ROOT:+--plugin-dir "$PLUGIN_ROOT"} 2>/dev/null)
-MI_STATUS=$(echo "$RESULT" | jq -r '.status')
-MI_FILES=$(echo "$RESULT" | jq -r '.result.files_checked // 0')
-MI_MISSING_N=$(echo "$RESULT" | jq -r '.result.missing // [] | length')
-MI_DRIFT_N=$(echo "$RESULT" | jq -r '.result.drift // [] | length')
+PLUGIN_UPD=$(echo "$RESULT_T" | jq -r '.result.plugin_updated // false')
+USER_MOD=$(echo "$RESULT_T" | jq -r '.result.user_modified // false')
+DRIFT_FILES=$(echo "$RESULT_T" | jq -r '.result.drift_files // [] | join(", ")')
+
+# (3) MANIFEST missing/drift
+RESULT_M=$(bash "$ROOT/.ax/scripts/bash/check-manifest-install.sh" --json \
+    ${PLUGIN_ROOT:+--plugin-dir "$PLUGIN_ROOT"} 2>/dev/null)
+MI_STATUS=$(echo "$RESULT_M" | jq -r '.status // "skipped"')
+MI_MISSING_N=$(echo "$RESULT_M" | jq -r '.result.missing // [] | length')
+MI_DRIFT_N=$(echo "$RESULT_M" | jq -r '.result.drift // [] | length')
+
+# 종합 판정 — 하나라도 yes 면 reinstall 권장
+NEEDS_REINSTALL=false
+[ "$VERSION_DRIFT" = "true" ] && NEEDS_REINSTALL=true
+[ "$PLUGIN_UPD" = "true" ] && NEEDS_REINSTALL=true
+[ "$MI_MISSING_N" -gt 0 ] && NEEDS_REINSTALL=true
+[ "$MI_DRIFT_N" -gt 0 ] && NEEDS_REINSTALL=true
+
+# (4) changelog 발췌 — INSTALLED_V <  ver  <= PLUGIN_V 사이 release notes title 만 수집
+#     사용자가 [y] 누르기 전에 "무엇이 바뀌는지" 한눈에 보이게
+CHANGELOG_LINES=()
+if [ "$VERSION_DRIFT" = "true" ] && [ -n "$PLUGIN_ROOT" ] && [ -d "$PLUGIN_ROOT/changelog" ]; then
+    while IFS= read -r f; do
+        ver=$(basename "$f" .md)
+        # ver > INSTALLED_V (sort -V tail = max)
+        max1=$(printf '%s\n%s\n' "$INSTALLED_V" "$ver" | sort -V | tail -1)
+        [ "$max1" = "$ver" ] && [ "$ver" != "$INSTALLED_V" ] || continue
+        # ver <= PLUGIN_V
+        max2=$(printf '%s\n%s\n' "$ver" "$PLUGIN_V" | sort -V | tail -1)
+        [ "$max2" = "$PLUGIN_V" ] || continue
+        # 첫 줄 `# X.Y.Z — title` 추출 (`# ` 제거)
+        title=$(head -1 "$f" | sed -E 's/^#[[:space:]]*//')
+        CHANGELOG_LINES+=("- $title")
+    done < <(ls "$PLUGIN_ROOT/changelog/"*.md 2>/dev/null | grep -vE '/README\.md$' | sort -V)
+fi
 ```
 
-보고:
-- `status=ok` (`MI_MISSING_N=0` && `MI_DRIFT_N=0`) → 출력 생략 (조용)
-- `status=skipped` (PLUGIN_ROOT 미도출) → "plugin shipped 검증 skip — plugin 컨텍스트에서 doctor 실행 권장" 한 줄만
-- `status=warning` 이면 별도 섹션:
+#### 보고
+
+- `NEEDS_REINSTALL=false && USER_MOD=false` → 출력 생략 (조용)
+- `NEEDS_REINSTALL=false && USER_MOD=true` → 한 줄 정보성: `ℹ️  _templates 사용자 수정 감지 (정상 — 도메인 적응): $DRIFT_FILES`
+- `MI_STATUS=skipped` (PLUGIN_ROOT 미도출) → 한 줄: `ℹ️  plugin shipped 검증 skip — plugin 컨텍스트에서 doctor 실행 권장`
+- `NEEDS_REINSTALL=true` → 별도 섹션:
 
 ```
- ─ plugin shipped 자산 검증 ─────────────────────────────
- ⚠ MANIFEST 누락 MI_MISSING_N개 — install 미완 또는 plugin 갱신 후 재install 안 함:
-   <missing[] 한 줄씩 (5개 cap, 더 있으면 "... and N more")>
- ⚠ MANIFEST 변경 MI_DRIFT_N개 — install 재실행 시 silent 회귀 위험:
-   <drift[] 동상>
+🔄  Plugin update 반영
+   ⚠️  신규 버전 출고 미반영 — installed $INSTALLED_V → plugin $PLUGIN_V
+
+   변경 내역 (changelog/<ver>.md 발췌):   (CHANGELOG_LINES 비어있지 않을 때만)
+   <CHANGELOG_LINES 한 줄씩 — 8개 cap, 더 있으면 "... and N more">
+
+   감지된 drift:
+   - version: .ax/version=$INSTALLED_V ↔ state=$STATE_V ↔ plugin=$PLUGIN_V   (VERSION_DRIFT=true 일 때만)
+   - MANIFEST 누락 $MI_MISSING_N개   (>0 일 때만; 5개 cap, 더 있으면 "... and N more")
+     - <missing[] 한 줄씩>
+   - MANIFEST drift $MI_DRIFT_N개   (>0 일 때만 — scripts/bash/*.sh 포함)
+     - <drift[] 한 줄씩>
+   - _templates 갱신: $DRIFT_FILES   (PLUGIN_UPD=true 일 때만)
 ```
 
-`다음 단계` 옵션:
+#### 다음 단계 — 단일 y/n
 
 ```
- [u] ✓ plugin shipped 자산 처리                         [추천 — missing/drift 있을 때]
-   missing → installer 재실행 (`goax 도입` 또는 `/install` skill)
-              기존 자산은 보존 + 누락분만 backfill (cp -R 이 idempotent)
-   drift   → LLM 이 사용자 수정 의도 인터뷰:
-              - "이 변경은 의도된 customization 인가요?" → [u-keep]
-              - "복원하고 싶으신가요?" → [u-restore]
-   [u-keep]    backup ($ROOT/.ax/<rel>.user) + plugin 갱신 시 회귀 위험 명시 안내
-                + wrapper 패턴 권장 (custom 스크립트는 별도 파일로, plugin 출고는 그대로)
-   [u-restore] $ROOT/<rel>.bak.<TS> 백업 후 plugin 출고로 복원 (cp from PLUGIN_TPL/<rel>)
+ [u] ✅ 전체 업데이트 파일 덮어쓰기                       [추천]
+   명령 "goax 도입" 또는 /install skill 호출
+   동작 installer 재실행 — MANIFEST 기반 `cp -R` 로 누락분 backfill +
+        drift 파일 덮어쓰기 + `chmod +x` 재적용 + `.ax/version` 갱신 (idempotent)
+   포함 자산:
+        scripts/bash/*.sh  ·  hooks/*.sh  ·  _templates/  ·  modules/  ·  docs/
+        (SSOT: templates/default/MANIFEST)
+   주의 사용자 수정한 _templates / MANIFEST 출고분은 덮어써짐.
+        installer 자체 backup 안 함 — 보존 원하면 먼저 git stash / git diff 로
+        사후 검토. 진짜 customization 은 wrapper 패턴 (별도 파일 + @import) 권장.
+
+ ▸ 답해주세요 [y/n]
 ```
 
-**원칙**: 자동 수정 X — 사용자 customization 일 수 있어 항상 명시 의도 확인. plugin shipped 파일은 SSOT 가 plugin repo 라 사용자 수정은 본질적으로 fragile. 진짜 customization 은 wrapper 또는 별도 파일이 옳은 패턴.
+`y` → installer 재실행 (또는 `/install` skill)
+`n` → 그대로 유지 (다음 doctor 에서 동일 안내)
 
-**원칙**: 사용자 수정은 *절대* 자동 덮어쓰기 X. 머지 결정은 사용자.
-
-### 3.5.5 Mistake audit 주기 점검
-
-`config.yml`의 `audit_cadence_days` 와 `state.json`의 `cross_cut.mistakes.last_audit` 비교 → 임박/초과 시 안내.
-
-```bash
-CADENCE=$(grep -E '^[[:space:]]+audit_cadence_days:' "$ROOT/.ax/config.yml" 2>/dev/null \
-    | awk '{print $2}' || echo 7)
-LAST=$(jq -r '.cross_cut.mistakes.last_audit // "never"' "$ROOT/.ax/state.json" 2>/dev/null)
-DUE=$(jq -r '.cross_cut.mistakes.due_in_days // 0' "$ROOT/.ax/state.json" 2>/dev/null)
-COUNT=$(ls "$ROOT/.ax/mistakes/"*.md 2>/dev/null | grep -v README | wc -l | tr -d ' ')
-```
-
-보고:
-- `last_audit=never` + `count > 0` → "audit 한 번도 안 돈 상태, 누적 N건 — `goax audit` 권장"
-- `due <= 0` → "audit 주기 도래/초과 (N일 경과)"
-- `due > 0` → "audit 다음 주기까지 N일"
-
-`다음 단계`에 추가:
-
-```
- [a] ✓ goax audit — N건 mistake 회고          [추천 — 주기 도래]
-  명령 "goax audit"
-  이유 audit_cadence_days=7 도래, mistakes N건 누적 — 카테고리 패턴 보일 수 있음
-```
-
-자동화 옵션은 안내에 한 줄: "주 1회 자동 audit 원하면 Claude Routine 등록 — `goax audit` 명령 + weekly cron".
+**원칙**: 자동 적용 X — 사용자 [y] 응답 후 LLM 이 installer 재실행. 옵션을 1 개로 좁힌 이유는 답이 거의 항상 "yes" 라서 — 사용자 수정 보호는 git 가 함, doctor 단계에서 분기로 다루지 않음.
 
 ### 3.6 마이그레이션 잔재 점검
 
@@ -224,23 +234,23 @@ done
 
 보고 형식:
 - 누락/잔재 0건 → 출력 생략 (조용)
-- 누락 있으면 결과 §3 끝에 "마이그레이션 잔재" 섹션 추가:
+- 누락 있으면 결과 본 표 끝에 "마이그레이션 잔재" 섹션 추가:
 
 ```
- ─ 마이그레이션 잔재 ────────────────────────────────────
- · .gitignore 누락 엔트리 — N줄 (예: .ax/state.json, .ax/current-task.json, ...)
- · .ax/spirit/rules/output-style.md — plugin meta 로 분류되어 출고에서 제거됨
- · .ax/mistakes/README.md.suggested 미처리 — 머지 후 rm 권장
- · spec README.md 잔재 N건 — slim 정책으로 폐기 (rm 권장):
-   <SPEC_README_STALE 한 줄씩>
- · spec 빈 dir K건 — lazy 생성 정책 (rmdir 권장):
-   <SPEC_EMPTY_DIRS 한 줄씩>
+🧹  마이그레이션 잔재
+   ⚠️ .gitignore 누락 엔트리 — N줄 (예: .ax/state.json, .ax/current-task.json, ...)
+   ⚠️ .ax/spirit/rules/output-style.md — plugin meta 로 분류되어 출고에서 제거됨
+   ⚠️ .ax/mistakes/README.md.suggested 미처리 — 머지 후 rm 권장
+   ⚠️ spec README.md 잔재 N건 — slim 정책으로 폐기 (rm 권장):
+      <SPEC_README_STALE 한 줄씩>
+   ⚠️ spec 빈 dir K건 — lazy 생성 정책 (rmdir 권장):
+      <SPEC_EMPTY_DIRS 한 줄씩>
 ```
 
 `다음 단계`에 옵션 추가:
 
 ```
- [m] ✓ 마이그레이션 잔재 처리                         [추천]
+ [m] ✅ 마이그레이션 잔재 처리                         [추천]
   명령 .gitignore 보강 + output-style.md 제거 + .suggested 정리 +
        spec README.md / 빈 checklists·contracts dir 정리 (slim 정책 부합)
   이유 잔재 정리 (PR 노이즈 방지 + slim spec 일관)
@@ -273,7 +283,7 @@ DUPES=$(grep -hE '^## SP-[A-Z]+-[0-9]{3}:' \
 # templates/default/.claude/settings.json.template 에서 .ax/hooks/*.sh 경로를 추출 →
 # 사용자 .claude/settings.json 에 basename grep 으로 등록 여부 판정.
 # template에 hook 추가/삭제되면 doctor가 자동으로 따라감 (hardcode 아님).
-# PLUGIN_ROOT는 §3.5에서 이미 도출됨 (없으면 SSOT 검증 skip — 결과는 path-scoped 1개만).
+# PLUGIN_ROOT는 "Plugin update 반영" 섹션에서 이미 도출됨 (없으면 SSOT 검증 skip — 결과는 path-scoped 1개만).
 TPL_SETTINGS="${PLUGIN_ROOT:-}/templates/default/.claude/settings.json.template"
 SETTINGS="$ROOT/.claude/settings.json"
 
@@ -309,37 +319,37 @@ HOOK_FILE="$ROOT/.ax/hooks/pre-edit/spirit-rules-inject.sh"
 ```
 
 보고:
-- (1)/(2) 결과(비표준 헤더 / 중복 토큰) 어느 하나라도 있으면 §3 출력에 "Spirit lint" 섹션 추가
-- (3) 결과는 별도 "Sensors — settings.json hook 등록" 섹션으로 분리. `MISS_HOOKS > 0` 일 때만 출력 (전부 등록이면 §3 본 표 row의 ✓ 만으로 충분).
+- (1)/(2) 결과(비표준 헤더 / 중복 토큰) 어느 하나라도 있으면 본 표 출력에 "Spirit lint" 섹션 추가
+- (3) 결과는 별도 "Sensors — settings.json hook 등록" 섹션으로 분리. `MISS_HOOKS > 0` 일 때만 출력 (전부 등록이면 본 표 row의 ✅ 만으로 충분).
   - `MISSING_HOOK_FILES` 가 비어있지 않으면 install 미완으로 별도 표기 — 등록 옵션 [s]만으로는 못 고침.
 
 ```
- ─ Spirit lint ──────────────────────────────────────────
- · spirit/rules/<project>-<category>.md — 비표준 헤더 3개 (SP-CAT-NNN 형식 위배)
- · 중복 SP-DOM-008 — <project>-domain.md 2회 등장
+🧪  Spirit lint
+   ⚠️ spirit/rules/<project>-<category>.md — 비표준 헤더 3개 (SP-CAT-NNN 형식 위배)
+   ⚠️ 중복 SP-DOM-008 — <project>-domain.md 2회 등장
 
- ─ Sensors — settings.json hook 등록 ────────────────────
- ⚠ template hook REG_HOOKS/TOTAL_HOOKS 등록 — MISS_HOOKS 개 미등록:
-   <MISSING_HOOKS 배열을 한 줄씩 echo — 아래는 형태 예시일 뿐, hook 이름·개수는 template SSOT 따라감>
-   - .ax/hooks/<sub>/<file>.sh
-   - .ax/hooks/<sub>/<file>.sh
-   ...
- · path-scoped loading 담당 hook 이 미등록 — paths 선언 룰 N개 있는데 동작 안 함
-   (HAS_PATHS && HOOK_REGISTERED == 0 일 때만 출력. 어떤 hook 이 그 역할인지는 template 이 정함)
- · install 미완 — .ax/hooks/ 안에 없는 항목 K개:  ← MISSING_HOOK_FILES 비었을 땐 출력 생략
-   <MISSING_HOOK_FILES 배열을 한 줄씩 echo — installer 재실행으로만 복원 가능>
+🪝  Sensors — settings.json hook 등록
+   ⚠️  template hook REG_HOOKS/TOTAL_HOOKS 등록 — MISS_HOOKS 개 미등록:
+      <MISSING_HOOKS 배열을 한 줄씩 echo — 아래는 형태 예시일 뿐, hook 이름·개수는 template SSOT 따라감>
+      - .ax/hooks/<sub>/<file>.sh
+      - .ax/hooks/<sub>/<file>.sh
+      ...
+   ⚠️ path-scoped loading 담당 hook 이 미등록 — paths 선언 룰 N개 있는데 동작 안 함
+      (HAS_PATHS && HOOK_REGISTERED == 0 일 때만 출력. 어떤 hook 이 그 역할인지는 template 이 정함)
+   ❌ install 미완 — .ax/hooks/ 안에 없는 항목 K개:  ← MISSING_HOOK_FILES 비었을 땐 출력 생략
+      <MISSING_HOOK_FILES 배열을 한 줄씩 echo — installer 재실행으로만 복원 가능>
 ```
 
-> **TOTAL_HOOKS 가 0인 경우**: `PLUGIN_ROOT` 미도출 또는 template 부재 — 이때는 "Sensors — settings.json hook 등록" 섹션을 통째로 skip 하고 path-scoped 단독 검증(HAS_PATHS + HOOK_REGISTERED) 결과만 §3 본 표에서 처리. doctor가 plugin 컨텍스트에서 발동되면 거의 항상 도출돼요.
+> **TOTAL_HOOKS 가 0인 경우**: `PLUGIN_ROOT` 미도출 또는 template 부재 — 이때는 "Sensors — settings.json hook 등록" 섹션을 통째로 skip 하고 path-scoped 단독 검증(HAS_PATHS + HOOK_REGISTERED) 결과만 본 표에서 처리. doctor가 plugin 컨텍스트에서 발동되면 거의 항상 도출돼요.
 
 `다음 단계`에 추가:
 
 ```
- [n] ✓ spirit lint 정리                 [추천]
+ [n] ✅ spirit lint 정리                 [추천]
   명령 비표준 헤더 수정 + 중복 토큰 해소 (사용자)
   이유 spirit/SKILL.md:28-31 lint 통과
 
- [s] ✓ template hook 등록 (미등록 MISS_HOOKS 개)         [추천 — MISS_HOOKS > 0 일 때]
+ [s] ✅ template hook 등록 (미등록 MISS_HOOKS 개)         [추천 — MISS_HOOKS > 0 일 때]
   1순위 bash .ax/scripts/bash/register-hooks.sh
         → template SSOT 기반 누락분 일괄 additive merge (idempotent, 백업 자동)
         → 사용자 추가 hook 보존, --prune 명시 안 하면 어떤 entry 도 삭제 안 함
@@ -394,18 +404,18 @@ MISMATCHES=()
 
 보고:
 - mismatch 없으면 출력 생략 (조용)
-- 있으면 §3 끝에 "문서 ↔ 실제 일치" 섹션 추가:
+- 있으면 본 표 끝에 "문서 ↔ 실제 일치" 섹션 추가:
 
 ```
- ─ 문서 ↔ 실제 일치 ─────────────────────────────────────
- ⚠ CLAUDE.md는 shim 메커니즘 명시 — 0.1.8에서 폐기됨 (generate-rule-shims.sh 없음)
- ⚠ CLAUDE.md가 두 메커니즘 동시 명시 — 모순
+📑  문서 ↔ 실제 일치
+   ⚠️  CLAUDE.md는 shim 메커니즘 명시 — 옛 버전에서 폐기됨 (generate-rule-shims.sh 없음)
+   ⚠️  CLAUDE.md가 두 메커니즘 동시 명시 — 모순
 ```
 
 `다음 단계`에 추가:
 
 ```
- [d] ✓ CLAUDE.md path-scoped 설명 갱신                 [추천]
+ [d] ✅ CLAUDE.md path-scoped 설명 갱신                 [추천]
   명령 path-scoped 섹션을 현재 활성 메커니즘으로 갱신
         (Design B → "PreToolUse hook이 자동 안내, .ax/hooks/pre-edit/spirit-rules-inject.sh")
   이유 다른 세션이 stale 메커니즘 언어로 답변하는 위험 차단
@@ -413,7 +423,7 @@ MISMATCHES=()
 
 자동 적용 X — 사용자 + LLM이 함께 path-scoped 섹션 본문을 작성. 이 검증 자체는 grep만 — 결정론.
 
-**왜 이 검증이 필요한가**: 세션마다 CLAUDE.md 컨텍스트가 다를 수 있어, 한 세션이 0.1.7 시점 design generation으로 작업하면 CLAUDE.md를 Design A 언어로 되돌리거나 두 메커니즘을 섞을 수 있음. 실제 hook은 Design B로 동작하지만 문서는 다른 메커니즘을 가리키면 신뢰 침식. 이 §3.8이 마지막 방어선.
+**왜 이 검증이 필요한가**: 세션마다 CLAUDE.md 컨텍스트가 다를 수 있어, 한 세션이 옛 design generation으로 작업하면 CLAUDE.md를 Design A 언어로 되돌리거나 두 메커니즘을 섞을 수 있음. 실제 hook은 Design B로 동작하지만 문서는 다른 메커니즘을 가리키면 신뢰 침식. 이 검증이 마지막 방어선.
 
 ### 3.9 Rule Enforcement invariant — `check-rule-enforcement.sh` 위임 (NEW)
 
@@ -439,45 +449,45 @@ RE_I5R=$(echo "$RESULT" | jq -r '.result.i5_not_registered | length')
 
 자세한 schema·invariant 본문: `.ax/docs/reference/rule-enforcement.md` (사용자 프로젝트에 깔림).
 
-보고 — 위반 0 이면 §3 본 표의 ✓ 만, 1+ 이면 별도 섹션:
+보고 — 위반 0 이면 본 표의 ✅ 만, 1+ 이면 별도 섹션:
 
 ```
- ─ Rule Enforcement ─────────────────────────────────────
- ❌ I1 위반 — CRITICAL 인데 자동 차단 메커니즘 없음 (거짓 약속) RE_I1건:
-   <i1_violations 배열을 한 줄씩 echo: "rule_id (enforced_by, enforced_kind)">
- ❌ I2 위반 — TODO 인데 deadline 없음 RE_I2건:
-   <i2_violations 동상>
- ⚠ I3 임박 (≤7일) RE_I3IM건 / 초과 RE_I3OD건:
-   <i3_imminent + i3_overdue, deadline + days_left/days_overdue 포함>
- ⚠ I5 위반 — hook 파일 부재 RE_I5F건 / 미등록 RE_I5R건:
-   <i5_file_missing + i5_not_registered>
+⚖️  Rule Enforcement
+   ❌ I1 위반 — CRITICAL 인데 자동 차단 메커니즘 없음 (거짓 약속) RE_I1건:
+      <i1_violations 배열을 한 줄씩 echo: "rule_id (enforced_by, enforced_kind)">
+   ❌ I2 위반 — TODO 인데 deadline 없음 RE_I2건:
+      <i2_violations 동상>
+   ⚠️  I3 임박 (≤7일) RE_I3IM건 / 초과 RE_I3OD건:
+      <i3_imminent + i3_overdue, deadline + days_left/days_overdue 포함>
+   ⚠️  I5 위반 — hook 파일 부재 RE_I5F건 / 미등록 RE_I5R건:
+      <i5_file_missing + i5_not_registered>
 ```
 
 `다음 단계` 옵션 (위반 종류별, 무거운 것부터):
 
 ```
- [r] ✓ 라벨 강등 — CRITICAL → MANDATORY (I1 위반 RE_I1건)         [최우선 추천]
+ [r] ✅ 라벨 강등 — CRITICAL → MANDATORY (I1 위반 RE_I1건)         [최우선 추천]
    명령  CLAUDE.md 의 🔴 → 🟡 일괄 변환 + enforced_by 형식 정리 (사용자 confirm 후 LLM 적용)
    이유  CRITICAL 라벨이 거짓 약속 — 라벨과 실제가 일치해야 다른 세션 오인 차단
    대안  [w] hook 작성 후 🔴 유지 — 이쪽이 정직하지만 시간 듦
 
- [w] ✓ hook 작성 — enforced_by 가 가리키는 hook 파일 신규 작성   [장기 — 룰 진짜 enforce]
+ [w] ✅ hook 작성 — enforced_by 가 가리키는 hook 파일 신규 작성   [장기 — 룰 진짜 enforce]
    명령  .ax/hooks/<sub>/<basename>.sh 직접 작성 (룰 의미 의존, template 없음)
         + 작성 후 register-hooks.sh 또는 register-spirit-hook.sh 로 settings.json 등록
    이유  CRITICAL 유지하면서 약속을 진짜로 지킴
 
- [d] ✓ deadline 갱신 — 임박/초과 TODO 에 새 absolute date 부여     [강등 거부 시]
+ [d] ✅ deadline 갱신 — 임박/초과 TODO 에 새 absolute date 부여     [강등 거부 시]
    명령  enforced_by: TODO:<new-date> 갱신 (사용자 입력)
    이유  ADR 검토 시점 연기. 단 단순 연기 반복은 anti-pattern (3회 이상 → 강등 권장)
 
- [g] ✓ deadline 입력 — I2 위반 (deadline 없음) 에 absolute date 부여
+ [g] ✅ deadline 입력 — I2 위반 (deadline 없음) 에 absolute date 부여
    명령  enforced_by: TODO → TODO:<YYYY-MM-DD>
    이유  invariant I2 통과 + doctor 가 추적 가능 상태로
 ```
 
 **원칙**: 자동 수정 X — 모든 옵션은 사용자 confirm 후 LLM 이 CLAUDE.md / spirit/rules 갱신. 강등은 특히 사용자 의도 변경이라 명시 동의 필수.
 
-**왜 이 검증이 필요한가**: onboarding 이 deferred ("나중에 hook 작성") 옵션을 받아도 추적 메커니즘이 없으면 deadline 이 흘러도 아무도 모름. 🔴 라벨이 enforce 보장 없이 박혀있으면 다른 세션이 "이 룰은 자동 차단됨" 으로 오인 → 진짜 위반이 살아있어도 안전한 줄. 이 §3.9 가 영구 추적 안전망.
+**왜 이 검증이 필요한가**: onboarding 이 deferred ("나중에 hook 작성") 옵션을 받아도 추적 메커니즘이 없으면 deadline 이 흘러도 아무도 모름. 🔴 라벨이 enforce 보장 없이 박혀있으면 다른 세션이 "이 룰은 자동 차단됨" 으로 오인 → 진짜 위반이 살아있어도 안전한 줄. 이 검증이 영구 추적 안전망.
 
 ## 3. 출력
 
@@ -485,60 +495,63 @@ RE_I5R=$(echo "$RESULT" | jq -r '.result.i5_not_registered | length')
 🩺 goax doctor — /path/to/your-project
     goax 0.3.0 · preset=default · installed 2026-05-02
 
- ─ Layer 1 — Constitution ───────────────────────────────
- ✓ CLAUDE.md (62줄, 시그널 라벨 있음, 4계층 인덱스 ✓)
+🏛️  Layer 1 — Constitution
+   ✅ CLAUDE.md (62줄, 시그널 라벨 🔴×3 / 🟡×9 / 🔵×1, 4계층 인덱스 ✓)
 
- ─ Layer 0 — Triage / 설정 ───────────────────────────────
- ✓ config.yml (domain_risk 30 keys, default L1)
- ✓ version (goax &lt;version&gt;)
+⚙️  Layer 0 — Triage / 설정
+   ✅ config.yml (domain_risk 30 keys, default L1)
+   ✅ version (goax <version>)
 
- ─ Cross-cut — Spirit ───────────────────────────────────
- ✓ spirit/values.md (사용자 정의됨)
- · spirit/tone.md → placeholder 그대로
- ✓ spirit/rules/ (사용자 큐레이션 N 카테고리; opt-in 샘플은 .ax/_templates/spirit/)
+🧠  Cross-cut — Spirit
+   ✅ spirit/values.md (사용자 정의됨)
+   ⚠️ spirit/tone.md → placeholder 그대로
+   ✅ spirit/rules/ (사용자 큐레이션 N 카테고리; opt-in 샘플은 .ax/_templates/spirit/)
 
- ─ Cross-cut — Mistake Loop ─────────────────────────────
- ✓ mistakes/ (3건 누적, 다음 audit: 2026-05-09)
+🪤  Cross-cut — Mistake Loop
+   ✅ mistakes/ (3건 누적)
 
- ─ Layer 3 — Spec / ADR ─────────────────────────────────
- ✓ docs/adr/ (1건: 0001-goax-adoption.md)
- ✓ docs/_templates/spec/
- · docs/spec/NNN-*/ — 작성된 spec 0건 (첫 spec 권장)
+🥕  Layer 3 — Spec / ADR
+   ✅ docs/adr/ (1건: 0001-goax-adoption.md)
+   ✅ docs/_templates/spec/
+   ⚠️ docs/spec/NNN-*/ — 작성된 spec 0건 (첫 spec 권장)
 
- ─ Layer 2 — Module Rules ───────────────────────────────
- ✓ <module>/CLAUDE.md (5/13 모듈 — L2/L3 도메인만, 선택적)
+📦  Layer 2 — Module Rules
+   ✅ <module>/CLAUDE.md (5/13 모듈 — L2/L3 도메인만, 선택적)
 
- ─ Sensors — Hooks ──────────────────────────────────────
- ✓ pre-bash, pre-edit, post-edit, pre-commit hooks (디렉토리)
- ✓ .claude/settings.json
- ✓ template hook 등록: REG_HOOKS/TOTAL_HOOKS  (또는 ⚠ — 미등록 리스트는 §3.7 "Sensors — settings.json hook 등록" 섹션)
+🪝  Sensors — Hooks
+   ✅ pre-bash, pre-edit, post-edit, pre-commit hooks (디렉토리)
+   ✅ .claude/settings.json
+   ✅ template hook 등록: REG_HOOKS/TOTAL_HOOKS   (미등록 시 ⚠️  — 리스트는 별도 🪝 "Sensors — settings.json hook 등록" 섹션)
 
- ─ 점수 ──────────────────────────────────────────────────
- 9/11 (90%)
+🎯  점수
+   90%   (9 / 11)
+   ▲ +7%p vs 직전 호출 (83% → 90%)        ← state.json 에 직전 점수 있을 때만 표기
+   ✅ 해소: version drift · scripts backfill · _templates drift
 
- ─ 다음 단계 ──────────────────────────────────────────────
+🚦  다음 단계
 
- [a] ✓ tone.md 우리 팀 말투로 수정    [추천]
-  파일 .ax/spirit/tone.md
-  이유 placeholder 그대로 — 모든 sub-agent가 default 톤 사용 중
-  방법 ~해요 체 + 우리 팀 안티패턴 추가
+   [a] ✅ tone.md 우리 팀 말투로 수정    [추천]
+       파일 .ax/spirit/tone.md
+       이유 placeholder 그대로 — 모든 sub-agent가 default 톤 사용 중
+       방법 ~해요 체 + 우리 팀 안티패턴 추가
 
- [b] 첫 spec 작성         [권장]
-  명령 "새 spec 만들어줘 — <slug>"
-  이유 Layer 3은 template만 — 실제 spec이 있어야 game이 시작됨
+   [b] 📝 첫 spec 작성         [권장]
+       명령 "새 spec 만들어줘 — <slug>"
+       이유 Layer 3은 template만 — 실제 spec이 있어야 game이 시작됨
 
- [c] audit 실행 — mistakes 3건 회고
-  명령 "goax audit"
-  이유 3건 누적, 카테고리별 패턴 보일 수 있음
-
- ▸ 답해주세요 [a] / [b] / [c] / 또는 그냥 보고만
+   ▸ 답해주세요 [a] / [b] / 또는 그냥 보고만
 ```
 
 **규칙**
-- 빈 placeholder는 `·` (warning), 누락은 `✗` (fail)
+- **상태 emoji** (인라인): ✅ pass · ⚠️ placeholder/주의/drift/회귀 위험 · ❌ 누락/실패 · ℹ️ 정보성
+  ※ 🟡 는 doctor 상태 indicator 로 쓰지 않음 — CLAUDE.md 시그널 라벨 (🔴 CRITICAL / 🟡 MANDATORY / 🔵 CONVENTION) 전용. 충돌 회피 위해 doctor 주의 = ⚠️ 로 통일.
+- **섹션 헤더 emoji** (layer 구분): 🏛️ Constitution · ⚙️ Triage/설정 · 🧠 Spirit · 🪤 Mistake Loop · ⚖️ Rule Enforcement · 🥕 Spec/ADR · 📦 Module Rules · 🪝 Sensors · 🔄 Plugin update · 🧪 Spirit lint · 📑 문서↔실제 일치 · 🧹 마이그레이션 잔재 · 🎯 점수 · 🚦 다음 단계
 - 다음 단계 옵션은 결손이 큰 항목부터 우선순위 부여
 - `[권장]`/`[추천]` 표시는 점수 기여도 + 안전성 기준
-- 문제 없으면 "다음 단계" 섹션에 [a] "spec 1개 작성"·[b] "audit"처럼 발전적 옵션
+- 문제 없으면 "다음 단계" 섹션에 [a] "첫 spec 작성"·[b] "tone.md 커스터마이즈"처럼 발전적 옵션
+- audit (mistake 회고) 안내는 doctor 가 하지 않음 — `audit` skill 전담
+- **점수 시각화**: 백분율 큰 글자 우선 + 분수 보조 (`90%   (9 / 11)`). 직전 점수가 `state.json:cross_cut.doctor.last_score` 에 있으면 다음 줄에 `▲ +Np vs 직전 호출 (X% → Y%)` 한 줄. 해소된 항목은 `✅ 해소:` 한 줄에 `·` separator. 길어지면 bullet list. 한 줄에 다 박지 말 것 — 시각적 stacking 이 핵심.
+- **이모지 사용 원칙**: 섹션 헤더 + 상태 indicator 만 emoji. 본문 안에 emoji 남발 X (사용자 가독성). monochrome ASCII (`✓` `·` `✗` `─`) 는 색깔이 없어 layer scan 어려우므로 위 매핑으로 통일.
 
 ## 4. --strict 모드
 
