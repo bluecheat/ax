@@ -14,7 +14,7 @@ goax는 Claude Code Plugin이에요.
 
   "goax 도입해줘"
 
-→ installer skill이 발동해서 .ax/ 골격을 깔아요.
+→ `up` skill 이 발동해서 .ax/ 골격을 깔아요. (이미 깔려있으면 idempotent update.)
 brownfield 프로젝트면 onboarding으로 자연스럽게 이어가요.
 
 자세히: https://github.com/bluecheat/ax

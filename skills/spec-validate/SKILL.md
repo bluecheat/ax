@@ -1,15 +1,26 @@
 ---
 name: spec-validate
-description: "spec 명료성 게이팅 — 'spec 확인', 'goax spec check', '스펙 게이트'. spec.md 의 NEEDS CLARIFICATION + placeholder `<...>` + 빈 필수 섹션 3 항목을 check-spec-clarity.sh 로 검출해 진행 가능 여부 판단."
+description: "spec 명료성 게이팅 + 진행률 visibility — 'spec 확인', 'goax spec check', '스펙 게이트'. spec.md 의 NEEDS CLARIFICATION + placeholder `<...>` + 빈 필수 섹션 3 항목을 게이팅하고, tasks.md 진행률 + AC 진행률을 visibility 로 노출 (spec-implement 우회 시 누락 즉시 인지)."
 ---
 
-# goax spec-validate — 명료성 게이팅 (NEEDS / placeholder / 빈 섹션)
+# goax spec-validate — 명료성 게이팅 + 진행률 visibility
 
 ## 시작 전 필수
 `.ax/spirit/values.md`, `tone.md` 따라요.
 
 ## SSOT 원칙
-spec.md 가 single source of truth. **NEEDS CLARIFICATION · placeholder `<...>` · 빈 필수 섹션** 중 하나라도 남으면 tasks 진행 금지.
+spec.md 가 single source of truth.
+
+**게이팅 (fail 시 진행 차단)**
+- NEEDS CLARIFICATION 마커
+- placeholder `<...>` 본문
+- 빈 필수 섹션
+
+**Visibility (게이팅 X — 사용자 인지용)**
+- tasks.md 의 `- [ ]` / `- [x]` 비율
+- spec.md §3 (성공 기준) AC 의 `- [ ]` / `- [x]` 비율
+
+→ spec-implement 우회로 코드 commit 했는데 체크박스 동기화 안 한 케이스를 즉시 노출. "게이트가 거짓말 안 하기" 원칙.
 
 ## 발동
 - "goax spec check"
@@ -29,26 +40,57 @@ STATUS=$(echo "$RESULT" | jq -r '.status')
 NEEDS=$(echo "$RESULT" | jq -r '.result.needs_clarification')
 PLACE=$(echo "$RESULT" | jq -r '.result.placeholders')
 EMPTY=$(echo "$RESULT" | jq -r '.result.empty_sections | join(", ")')
+TASKS_DONE=$(echo "$RESULT" | jq -r '.result.tasks_progress.completed')
+TASKS_TOTAL=$(echo "$RESULT" | jq -r '.result.tasks_progress.total')
+TASKS_OPEN=$(echo "$RESULT"  | jq -r '.result.tasks_progress.open')
+AC_DONE=$(echo "$RESULT"     | jq -r '.result.ac_progress.completed')
+AC_TOTAL=$(echo "$RESULT"    | jq -r '.result.ac_progress.total')
+WARNINGS=$(echo "$RESULT"    | jq -r '.warnings // [] | join("; ")')
 ```
 
-스크립트가 검사하는 것:
+스크립트 검사 (게이팅 — fail 시 진행 차단):
 - NEEDS CLARIFICATION 마커 잔존
 - placeholder `<...>` 본문 잔존 (표 셀·URL 화이트리스트)
 - 필수 섹션 (§1.1 한 줄 정의 / §3 성공 기준 / §4 사용자 시나리오) 본문 1 라인 이상
 
+스크립트 visibility (status 영향 X — 누락 인지 신호):
+- `tasks_progress`: tasks.md 의 `- [ ]` / `- [x]` 카운트
+- `ac_progress`: spec.md §3 AC 의 `- [ ]` / `- [x]` 카운트
+
 ## 3. 출력
 
-### 통과 (0건)
+### 통과 + tasks/AC 모두 0 (clean state)
 
 ```
 ✓ spec-validate 005-payment-refund-policy-change 통과
 
  📍 발견  NEEDS=0  placeholder=0  빈 섹션=0
+ 📊 진행률  tasks 0/0  AC 0/0 (미시작)
  🎯 결과  tasks 진행 가능
 
  다음 단계
  tasks.md 분해 → 구현 (/spec-tasks → /spec-implement)
  L3 도메인이라 ADR 동반 권장 — "ADR 0006 작성 도와줘"
+```
+
+### 통과 + 진행률 미동기화 (visibility warning)
+
+게이팅은 통과하지만 tasks/AC 미체크가 남아있는 상태. spec-implement 우회로 직접 commit 한 경우 또는 phase 가 끝나지 않은 정상 진행 중 상태.
+
+```
+✓ spec-validate 008-review-summary-safe-sync 통과 (with warnings)
+
+ 📍 발견  NEEDS=0  placeholder=0  빈 섹션=0
+ 📊 진행률  tasks 6/11 (미체크 5건)  AC 5/10 (미체크 5건)
+ 🎯 결과  명료성 통과 — 진행률 미동기화 항목 검토
+
+ ⚠ 점검
+  spec-implement 우회로 코드 commit 했다면 체크박스 동기화 누락이에요.
+  최근 commit 의 변경 파일이 spec dir 외부인지 git log 로 확인 권장.
+
+ 다음 단계
+ [a] tasks.md / spec.md §3 의 - [ ] 를 - [x] 로 갱신 (chore commit)
+ [b] 정상 진행 중이면 다음 phase 진입 — spec-implement 호출
 ```
 
 ### 실패 (1건 이상)

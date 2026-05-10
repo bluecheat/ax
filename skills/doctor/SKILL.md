@@ -78,16 +78,16 @@ grep -h "^category:" $ROOT/.ax/mistakes/*.md 2>/dev/null \
 
 ### 3.5 Plugin update 반영 — version + 출고 자산 신선도 (script-backed)
 
-핵심 질문: **"현재 install 상태 == 최신 plugin 출고?"**
+핵심 질문: **"현재 설치 상태 == 최신 plugin 출고?"**
 
-3 가지 신호를 한꺼번에 감지하고 **단일 y/n** 으로 처리. 모두 "plugin 갱신 후 재install 안 함" 단일 원인 — 4 가지 결정을 따로 묻는 건 인지 부담만 키우고 답은 거의 항상 "yes 동기화".
+3 가지 신호를 한꺼번에 감지하고 **단일 y/n** 으로 처리. 모두 "plugin 갱신 후 `/up` 재호출 안 함" 단일 원인 — 4 가지 결정을 따로 묻는 건 인지 부담만 키우고 답은 거의 항상 "yes 동기화".
 
 검사 신호:
 1. **version drift** — `.ax/version` ↔ `state.json:goax_version` ↔ plugin `VERSION` 3-way 비교
 2. **MANIFEST missing/drift** — `check-manifest-install.sh --json` (출고 디렉토리 파일 단위)
 3. **_templates plugin 갱신** — `check-templates-drift.sh --json` 의 `plugin_updated=true` 만 (user_modified 단독은 정상 — 정보성으로만 표시)
 
-> ⚠ **drift 감지 범위 제한**: `check-templates-drift.sh` 는 `.ax/_templates/spec/` SHA snapshot 비교 한정. 나머지 MANIFEST 출고분 (`hooks/`, `scripts/bash/*.sh`, `modules/`, `docs/`, `_templates/{adr,module,spirit,mistakes}/`) 은 `check-manifest-install.sh` 가 파일 단위로 커버 — installer 재실행 시 `cp -R` 로 전부 덮어씀 (idempotent). `.ax/spirit/rules/` 는 plugin 출고 X (사용자 큐레이션) — 검증 대상 아님 (`.ax/_templates/spirit/` opt-in 샘플만 검증).
+> ⚠ **drift 감지 범위 제한**: `check-templates-drift.sh` 는 `.ax/_templates/spec/` SHA snapshot 비교 한정. 나머지 MANIFEST 출고분 (`hooks/`, `scripts/bash/*.sh`, `modules/`, `docs/`, `_templates/{adr,module,spirit,mistakes}/`) 은 `check-manifest-install.sh` 가 파일 단위로 커버 — `up` 재실행 시 `cp -R` 로 전부 덮어씀 (idempotent). `.ax/spirit/{values,tone,README}.md` 와 `.ax/spirit/rules/` 는 사용자 customize 영역이라 plugin 출고 자체가 conditional (`.suggested` 패턴) — 검증 대상 아님 (`.ax/_templates/spirit/` opt-in 샘플만 검증).
 
 ```bash
 # plugin root 도출 — ${CLAUDE_SKILL_DIR} 우선, ${CLAUDE_PLUGIN_ROOT}는 호환용 fallback
@@ -176,27 +176,31 @@ fi
 
 ```
  [u] ✅ 전체 업데이트 파일 덮어쓰기                       [추천]
-   명령 "goax 도입" 또는 /install skill 호출
-   동작 installer 재실행 — MANIFEST 기반 `cp -R` 로 누락분 backfill +
+   명령 "goax up" 또는 /up skill 호출
+   동작 up 재실행 — MANIFEST 기반 `cp -R` 로 누락분 backfill +
         drift 파일 덮어쓰기 + `chmod +x` 재적용 + `.ax/version` 갱신 (idempotent)
    포함 자산:
         scripts/bash/*.sh  ·  hooks/*.sh  ·  _templates/  ·  modules/  ·  docs/
         (SSOT: templates/default/MANIFEST)
-   주의 사용자 수정한 _templates / MANIFEST 출고분은 덮어써짐.
-        installer 자체 backup 안 함 — 보존 원하면 먼저 git stash / git diff 로
-        사후 검토. 진짜 customization 은 wrapper 패턴 (별도 파일 + @import) 권장.
+   보존 사용자 customize 자산 (`.ax/spirit/{values,tone,README}.md`,
+        `.ax/config.yml`, `.ax/mistakes/README.md`, `CLAUDE.md`,
+        `.claude/settings.json`) 은 `.suggested` 패턴으로 보존 — 덮어쓰기 X.
+   주의 사용자 수정한 _templates / MANIFEST 출고분 (scripts/bash, hooks 등) 은
+        덮어써짐. up 재실행 시 자체 backup 안 함 — 보존 원하면 먼저 git stash /
+        git diff 로 사후 검토. 진짜 customization 은 wrapper 패턴
+        (별도 파일 + @import) 권장.
 
  ▸ 답해주세요 [y/n]
 ```
 
-`y` → installer 재실행 (또는 `/install` skill)
+`y` → up 재실행 (또는 `/up` skill)
 `n` → 그대로 유지 (다음 doctor 에서 동일 안내)
 
-**원칙**: 자동 적용 X — 사용자 [y] 응답 후 LLM 이 installer 재실행. 옵션을 1 개로 좁힌 이유는 답이 거의 항상 "yes" 라서 — 사용자 수정 보호는 git 가 함, doctor 단계에서 분기로 다루지 않음.
+**원칙**: 자동 적용 X — 사용자 [y] 응답 후 LLM 이 up 재실행. 옵션을 1 개로 좁힌 이유는 답이 거의 항상 "yes" 라서 — 사용자 수정 보호는 git 가 함, doctor 단계에서 분기로 다루지 않음.
 
 ### 3.6 마이그레이션 잔재 점검
 
-이전 install 이 신규 항목을 갖추지 못했거나, 정책 변경으로 폐기된 자산이 남았을 때 안내.
+이전 up 호출이 신규 항목을 갖추지 못했거나, 정책 변경으로 폐기된 자산이 남았을 때 안내.
 모두 수동 — 자동 수정 X (사용자 동의 후 별도 명령 또는 doctor 옵션 [a]/[b]/...).
 
 ```bash
@@ -290,7 +294,7 @@ SETTINGS="$ROOT/.claude/settings.json"
 EXPECTED_HOOKS=()
 REGISTERED_HOOKS=()
 MISSING_HOOKS=()
-MISSING_HOOK_FILES=()  # template에 선언됐는데 .ax/hooks/ 안 자체가 없는 경우 (install 미완)
+MISSING_HOOK_FILES=()  # template에 선언됐는데 .ax/hooks/ 안 자체가 없는 경우 (초기 설치 미완)
 
 if [ -f "$TPL_SETTINGS" ]; then
     while IFS= read -r hook_path; do
@@ -321,7 +325,7 @@ HOOK_FILE="$ROOT/.ax/hooks/pre-edit/spirit-rules-inject.sh"
 보고:
 - (1)/(2) 결과(비표준 헤더 / 중복 토큰) 어느 하나라도 있으면 본 표 출력에 "Spirit lint" 섹션 추가
 - (3) 결과는 별도 "Sensors — settings.json hook 등록" 섹션으로 분리. `MISS_HOOKS > 0` 일 때만 출력 (전부 등록이면 본 표 row의 ✅ 만으로 충분).
-  - `MISSING_HOOK_FILES` 가 비어있지 않으면 install 미완으로 별도 표기 — 등록 옵션 [s]만으로는 못 고침.
+  - `MISSING_HOOK_FILES` 가 비어있지 않으면 초기 설치 미완으로 별도 표기 — 등록 옵션 [s]만으로는 못 고침.
 
 ```
 🧪  Spirit lint
@@ -336,8 +340,8 @@ HOOK_FILE="$ROOT/.ax/hooks/pre-edit/spirit-rules-inject.sh"
       ...
    ⚠️ path-scoped loading 담당 hook 이 미등록 — paths 선언 룰 N개 있는데 동작 안 함
       (HAS_PATHS && HOOK_REGISTERED == 0 일 때만 출력. 어떤 hook 이 그 역할인지는 template 이 정함)
-   ❌ install 미완 — .ax/hooks/ 안에 없는 항목 K개:  ← MISSING_HOOK_FILES 비었을 땐 출력 생략
-      <MISSING_HOOK_FILES 배열을 한 줄씩 echo — installer 재실행으로만 복원 가능>
+   ❌ 초기 설치 미완 — .ax/hooks/ 안에 없는 항목 K개:  ← MISSING_HOOK_FILES 비었을 땐 출력 생략
+      <MISSING_HOOK_FILES 배열을 한 줄씩 echo — `/up` 재실행으로만 복원 가능>
 ```
 
 > **TOTAL_HOOKS 가 0인 경우**: `PLUGIN_ROOT` 미도출 또는 template 부재 — 이때는 "Sensors — settings.json hook 등록" 섹션을 통째로 skip 하고 path-scoped 단독 검증(HAS_PATHS + HOOK_REGISTERED) 결과만 본 표에서 처리. doctor가 plugin 컨텍스트에서 발동되면 거의 항상 도출돼요.
@@ -359,8 +363,8 @@ HOOK_FILE="$ROOT/.ax/hooks/pre-edit/spirit-rules-inject.sh"
         → 나머지 hook 은 (i) `.ax/settings.json.suggested` 머지 또는 (ii) LLM 이 template 을
           읽어 jq 로 직접 append (백업 후, 사용자 키 보존). 이 경로는 docs/spec/hook-registration.md
           가 mandate 하는 "register-hooks.sh 통합" 이행 전 임시 — 도입되면 사라짐.
-  install 미완 (MISSING_HOOK_FILES 비지 않음) 항목은 [s]로 못 고침 →
-        installer 재실행 권장: `goax 도입` skill 호출 (기존 자산 보존).
+  초기 설치 미완 (MISSING_HOOK_FILES 비지 않음) 항목은 [s]로 못 고침 →
+        `/up` 재호출 권장: `goax up` 또는 `/up` skill 호출 (기존 자산 보존).
   결과 template 이 선언한 EventName · matcher · hook 전체 활성
   이유 hook 셋 자체는 template 이 결정 — 어떤 조합이든 doctor / register-hooks 는
         이름 hardcode 없이 자동 따라감 (Anti-pattern 회피, hook-registration.md I1)

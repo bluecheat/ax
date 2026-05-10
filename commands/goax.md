@@ -25,7 +25,7 @@ goax plugin의 모든 slash command를 보여주세요. 각 명령의 한 줄 �
 또한 `.ax/state.json`이 있으면 현재 4계층 활성도를 한 줄로 보여주세요.
 
 자연어 트리거로만 부르는 작업도 안내:
-- "goax 도입해줘" → installer
+- "goax 도입해줘" → up (install or update)
 - "goax 마무리" → onboarding
 - "spirit 점검" → spirit-check
 - "ADR 작성" → adr-write

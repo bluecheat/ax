@@ -39,7 +39,7 @@ Claude Code 안에서 *한 줄씩* 입력해요
 "goax 도입해줘"
 ```
 
-→ `install`가 프로젝트를 분석하고 동의 프롬프트(Y/n) 후 `.ax/`를 깔아요(약 30초).
+→ `up` skill 이 프로젝트를 분석하고 동의 프롬프트(Y/n) 후 `.ax/`를 깔아요(약 30초).
 **brownfield**(기존 자산 있는 프로젝트)면 이어서 `onboarding`이 도메인·위험도·hooks 강도·외부 spec·Layer 활성화를 **Q1–Q5 5단계 대화**(체감 5분)로 같이 정리해요. 한 발화에 끝나는 *자동 마법*은 아니에요 — 의식적 결정을 받기 위한 흐름이에요.
 
 **Step 3 — 일상 사용**
@@ -145,7 +145,7 @@ goax가 깔아주는 것은 두 결로 나뉘어요:
 
 | 자연어 | 발동 skill |
 |---|---|
-| "goax 도입해줘" | installer → onboarding (자동 위임) |
+| "goax 도입해줘" | up → onboarding (자동 위임) |
 | "<작업> 계획 세워줘" | triage → spec-new (tier 자동 권장) |
 | "spirit 점검" | spirit-check |
 | "ADR 작성" | adr-write |
@@ -166,7 +166,7 @@ goax가 깔아주는 것은 두 결로 나뉘어요:
 
 ## What Gets Installed
 
-`installer`가 사용자 프로젝트에 (동의 후):
+`up` skill 이 사용자 프로젝트에 (동의 후):
 
 ```
 your-project/

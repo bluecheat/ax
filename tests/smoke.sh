@@ -37,7 +37,7 @@ VER_MARKET=$(python3 -c "import json; d=json.load(open('$REPO/.claude-plugin/mar
 # ───────────────────────────────────────────────────────────
 section "2. 핵심 skills (11개 — 0.1.16 spec-plan 폐기)"
 # ───────────────────────────────────────────────────────────
-for skill in install onboarding doctor rules \
+for skill in up onboarding doctor rules \
              spec spec-validate audit spirit hud \
              spec-tasks spec-implement; do
     f="$REPO/skills/$skill/SKILL.md"
@@ -67,7 +67,7 @@ done
 section "2.5 Slash commands (14개 — 'goax-' prefix 컨벤션, 0.1.16 spec-plan 폐기)"
 # ───────────────────────────────────────────────────────────
 # commands는 `goax-<name>.md` 형태 + `goax.md` 인덱스 alias 1개
-for cmd in goax goax-install goax-onboarding goax-doctor goax-audit goax-rules goax-hud goax-spirit \
+for cmd in goax goax-up goax-onboarding goax-doctor goax-audit goax-rules goax-hud goax-spirit \
            goax-triage goax-adr goax-spec goax-spec-validate goax-spec-tasks goax-spec-implement; do
     f="$REPO/commands/$cmd.md"
     if [ -f "$f" ]; then
@@ -103,7 +103,7 @@ for a in evaluator architect; do
 done
 
 # ───────────────────────────────────────────────────────────
-section "4. templates/default — installer가 사용자 프로젝트로 복사할 자산"
+section "4. templates/default — up skill 이 사용자 프로젝트로 복사할 자산"
 # ───────────────────────────────────────────────────────────
 for f in \
     templates/default/CLAUDE.md.template \
@@ -571,7 +571,7 @@ cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,check-templates-drift.s
 # 최소 _templates 파일들 (sha 비교 대상)
 cp -R "$REPO/templates/default/.ax/_templates/spec/." "$DR_FX/.ax/_templates/spec/" 2>/dev/null
 
-# (1) origin_present=false 상태 — 새 install이라 .origin 없음
+# (1) origin_present=false 상태 — up 첫 호출이라 .origin 없음
 OUT=$(CLAUDE_PROJECT_DIR=$DR_FX bash "$DR_FX/.ax/scripts/bash/check-templates-drift.sh" --json 2>&1)
 if echo "$OUT" | jq -e '.result.origin_present == false' >/dev/null 2>&1; then
     pass "drift — .origin 부재 시 origin_present=false"

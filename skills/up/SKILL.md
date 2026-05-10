@@ -1,18 +1,21 @@
 ---
-name: install
-description: "goax 프로젝트 도입 — '/setup', 'goax 도입', 'goax 설치', 'goax 셋업', '하네스 적용', 'goax up' 등 자연어 트리거. 프로젝트를 분석하고 사용자 동의 후 .ax/와 CLAUDE.md를 설치. brownfield면 onboarding skill로 이어감. plugin 설치 후 첫 세팅을 담당."
+name: up
+description: "goax 프로젝트 install or idempotent update — '/up', 'goax up', '/setup', 'goax 도입', 'goax 설치', 'goax 셋업', '하네스 적용' 등 자연어 트리거. 프로젝트를 분석하고 사용자 동의 후 .ax/와 CLAUDE.md를 설치 (greenfield) 또는 plugin 갱신 시 재호출 (idempotent — 사용자 customize 자산은 .suggested 패턴으로 보존). brownfield면 onboarding skill로 이어감."
 ---
 
-# goax installer — 4계층 하네스 도입
+# goax up — install or idempotent update (4계층 하네스 도입)
+
+> 이름이 `up` 인 이유: 동작이 install + update 둘 다라서. 첫 호출 = install, 두 번째부터 = idempotent update (plugin 갱신 후 재호출). doctor → up 흐름이 normal path 라 destructive 면 안 되어요. 사용자 customize 자산 (`.ax/spirit/{values,tone,README}.md`, `.ax/config.yml`, `.ax/mistakes/README.md`, `CLAUDE.md`, `.claude/settings.json`) 은 `.suggested` 패턴으로 보존.
 
 ## 언제 발동하는가
 
 다음 중 하나면 이 skill을 따라요:
-- 사용자가 "/setup", "goax 도입", "goax 설치", "goax 셋업" 등을 입력
+- 사용자가 "/up", "goax up", "/setup", "goax 도입", "goax 설치", "goax 셋업" 등을 입력
 - 사용자가 "하네스 적용해줘" 같은 표현을 사용
 - 프로젝트에 `.ax/`가 없는데 사용자가 goax 관련 작업을 요청
+- doctor 가 plugin 갱신 감지 후 재호출 안내 (`/up` 으로 idempotent backfill)
 
-이미 `.ax/`가 있으면 — `goax doctor` 의도로 해석하고 doctor skill로 위임.
+이미 `.ax/`가 있으면 — 기본 동작은 idempotent update. doctor 진단부터 원하면 `/doctor` 호출.
 
 ## 시작 전 필수 — Spirit 자동 주입
 
@@ -80,7 +83,7 @@ bash 휴리스틱이 아니라 **Claude가 코드를 직접 읽어** 다음을 �
 
 ## 4. 설치 — Bash tool로 cp (MANIFEST 기반)
 
-plugin의 `templates/default/MANIFEST`를 읽어 사용자 프로젝트로 복사. 열거 hardcode 대신 manifest를 SSOT로 사용 — template에 디렉토리 추가 시 MANIFEST만 갱신하면 installer가 자동으로 따라감.
+plugin의 `templates/default/MANIFEST`를 읽어 사용자 프로젝트로 복사. 열거 hardcode 대신 manifest를 SSOT로 사용 — template에 디렉토리 추가 시 MANIFEST만 갱신하면 up 호출 시 자동으로 따라감.
 
 ```bash
 # 0. plugin root 검출 — Claude Code 표준 ${CLAUDE_SKILL_DIR} 우선,
@@ -205,6 +208,20 @@ if [ -f .ax/mistakes/README.md ]; then
 else
     cp "$TPL/.ax/mistakes/README.md" .ax/mistakes/README.md
 fi
+
+# 6.10 .ax/spirit/{values,tone,README}.md — 조건부 (manifest 외)
+# spirit 은 cross-cut Spirit (공유 agent personality) — 팀 가치·톤은 회사·팀별로
+# customize 되는 게 정상. plugin 재호출 이나 doctor → up 흐름에서 사용자
+# 자산을 도자기처럼 깨면 안 됨. 기존 파일이 있으면 `.suggested` 로 옆에 두고 사용자가
+# diff 후 머지 결정. spirit/rules/ 는 plugin 이 출고하는 파일 자체가 없음 (사용자 큐레이션).
+mkdir -p .ax/spirit
+for SPF in values.md tone.md README.md; do
+    if [ -f ".ax/spirit/$SPF" ]; then
+        cp "$TPL/.ax/spirit/$SPF" ".ax/spirit/$SPF.suggested"
+    else
+        cp "$TPL/.ax/spirit/$SPF" ".ax/spirit/$SPF"
+    fi
+done
 
 # 6.9 path-scoped rule injection
 # spirit/rules/<name>.md 의 frontmatter `paths:` 와 편집 대상 파일 path를 매칭해

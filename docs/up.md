@@ -13,17 +13,18 @@
 설치 후, Claude Code에서 한 줄:
 
 ```
-"goax 도입해줘"   # 또는 /install
+"goax up"   # 또는 /up — "goax 도입해줘" / "goax 설치" / "goax 셋업" 도 같은 skill 발동
 ```
 
-→ `install` skill이 발동해서 프로젝트를 분석하고 사용자 동의 후 `.ax/`를 깔아요.
+→ `up` skill이 발동해서 프로젝트를 분석하고 사용자 동의 후 `.ax/`를 깔아요.
+첫 호출 = install, 두 번째부터 = idempotent update (plugin 갱신 후 재호출 — 사용자 customize 자산은 `.suggested` 패턴으로 보존).
 기존 자산(CLAUDE.md, hooks, 모듈, 외부 spec 중 하나라도)이 있으면 `.ax/.onboarding-pending` 마커를 남기고 `onboarding` skill로 이어가요.
 
 ## 흐름 (실제로 일어나는 일)
 
 ```
-1. /install 또는 "goax 도입해줘"
-  └─ install skill
+1. /up 또는 "goax up" / "goax 도입해줘"
+  └─ up skill
    ├─ 1. 프로젝트 분석 (Claude가 코드를 직접 읽음)
    │  ├─ 모노레포/싱글
    │  ├─ 모듈 목록

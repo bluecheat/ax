@@ -39,7 +39,7 @@ Trigger via natural language.
 "set up goax"
 ```
 
-→ `install` analyzes the project, asks a consent prompt (Y/n), then provisions `.ax/` (about 30s).
+→ `up` analyzes the project, asks a consent prompt (Y/n), then provisions `.ax/` (about 30s).
 For **brownfield** projects (with existing assets), `onboarding` follows up and walks through domain · risk level · hooks intensity · external specs · layer activation as a **5-step Q1–Q5 conversation** (about 5 minutes). It's not *one-shot magic* — it's a flow designed to elicit deliberate decisions.
 
 **Step 3 — Daily use**
@@ -145,7 +145,7 @@ Natural language overrides: `"simple"` / `"spec + tasks"` → standard · `"full
 
 | Phrase | Triggered skill |
 |---|---|
-| "set up goax" | installer → onboarding (auto-delegated) |
+| "set up goax" | up → onboarding (auto-delegated) |
 | "plan the <task>" | triage → spec-new (tier auto-recommended) |
 | "spirit check" | spirit-check |
 | "write ADR" | adr-write |
@@ -166,7 +166,7 @@ Natural language overrides: `"simple"` / `"spec + tasks"` → standard · `"full
 
 ## What Gets Installed
 
-`installer` (after consent) adds the following to your project:
+`up` skill (after consent) adds the following to your project:
 
 ```
 your-project/

@@ -1,6 +1,6 @@
 ---
 name: onboarding
-description: "installer 직후 또는 사용자가 'goax 분석/마무리/세팅' 등을 말할 때 발동. .ax/.onboarding-pending 마커가 있으면 우선 처리. 프로젝트의 CLAUDE.md·모듈·도메인·외부 spec을 실제로 읽고 도메인 위험도(L0~L3) 매핑·hooks 강도·룰 분류를 사용자와 대화하며 .ax/config.yml과 adoption-plan.md에 기록. 트리거: 'goax 도입 마무리', 'goax 분석', 'goax 마무리', '하네스 onboarding'."
+description: "/up (install or update) 직후 또는 사용자가 'goax 분석/마무리/세팅' 등을 말할 때 발동. .ax/.onboarding-pending 마커가 있으면 우선 처리. 프로젝트의 CLAUDE.md·모듈·도메인·외부 spec을 실제로 읽고 도메인 위험도(L0~L3) 매핑·hooks 강도·룰 분류를 사용자와 대화하며 .ax/config.yml과 adoption-plan.md에 기록. 트리거: 'goax 도입 마무리', 'goax 분석', 'goax 마무리', '하네스 onboarding'."
 ---
 
 # onboarding — 프로젝트 분석 + 4가지 결정
@@ -733,7 +733,7 @@ Layer 1 — CLAUDE.md 시그널화:
  ---
  ```
 
- > **path-scoped 룰**: 위 frontmatter의 `paths:`를 채우면, install / doctor가 `.claude/rules/<name>.md` shim을 자동 생성해 **해당 path 작업 시에만** 룰이 컨텍스트에 들어가요 (Claude Code 네이티브 path-scoped loading). universal 룰(ops/architecture/data/testing 류)은 paths 생략 — CLAUDE.md @import으로 매 turn 주입. 도메인·레이어 특화 룰(예: <project>-domain, <project>-presenter)은 paths를 채워 token cost·adherence 둘 다 개선.
+ > **path-scoped 룰**: 위 frontmatter의 `paths:`를 채우면, up / doctor가 `.claude/rules/<name>.md` shim을 자동 생성해 **해당 path 작업 시에만** 룰이 컨텍스트에 들어가요 (Claude Code 네이티브 path-scoped loading). universal 룰(ops/architecture/data/testing 류)은 paths 생략 — CLAUDE.md @import으로 매 turn 주입. 도메인·레이어 특화 룰(예: <project>-domain, <project>-presenter)은 paths를 채워 token cost·adherence 둘 다 개선.
 
 Layer 2 — 모듈 도메인 룰 stub 생성 (`.ax/modules/<name>/rules.md`):
 
@@ -779,7 +779,7 @@ Layer 3 — 첫 ADR (0000-template.md 사용 — `adr`와 동일 양식):
 State 초기화 (HUD용):
 10. `.ax/hud/state.json.template`을 `.ax/state.json`로 cp
 11. `doctor` 한 번 실행해 canonical 갱신 (Layer 활성도, mistakes 수 등)
-12. `.ax/current-task.json`은 installer가 이미 깔아놨음. 첫 triage가 이 파일에 작업 컨텍스트를 채워요. `.ax/scripts/bash/`도 installer가 복사함 (8개 결정론 스크립트)
+12. `.ax/current-task.json`은 up 이 이미 깔아놨음. 첫 triage가 이 파일에 작업 컨텍스트를 채워요. `.ax/scripts/bash/`도 up 이 복사함 (8개 결정론 스크립트)
 
 statusline 활성 제안 (Sub-Q4 — **항상 박스를 출력하고 답을 받을 것**):
 14. 기존 `.claude/settings.json` 의 statusLine 상태를 먼저 검사하고, 그 결과를 박스에 표시한 뒤 사용자가 명시적으로 닫게 함. **이미 활성이라고 임의 skip 금지** — 사용자는 무엇이 결정됐는지 알 권리가 있다.
@@ -805,10 +805,10 @@ statusline 활성 제안 (Sub-Q4 — **항상 박스를 출력하고 답을 받�
 
 statusline 활성 제안 (Sub-Q5 — `.ax/settings.json.suggested` 머지):
 
-15. install이 기존 `.claude/settings.json` 발견 시 만든 `.ax/settings.json.suggested` 가 있으면, 사용자에게 머지 여부를 명시적으로 묻기. **Sub-Q5는 SKILL.md 정식 step** — 임기응변 X.
+15. up 이 기존 `.claude/settings.json` 발견 시 만든 `.ax/settings.json.suggested` 가 있으면, 사용자에게 머지 여부를 명시적으로 묻기. **Sub-Q5는 SKILL.md 정식 step** — 임기응변 X.
  ```
  🔧 Sub-Q5: hooks 등록 — .ax/settings.json.suggested 머지?
- install이 기존 .claude/settings.json 보존 + suggested 만들었어요.
+ up 이 기존 .claude/settings.json 보존 + suggested 만들었어요.
  hooks (UserPromptSubmit, PreToolUse:Bash, PreToolUse:Edit, PostToolUse:Edit) 머지해야
  triage-nudge·block-destructive·spirit-check·protected-paths 등 sensors 작동.
 
@@ -873,7 +873,7 @@ rm -f .ax/.onboarding-pending
 
 📂 .ax/ runtime 파일은 .gitignore 자동 처리됨
  .ax/state.json, .ax/current-task.json — per-machine 상태, PR에 들어가지 않음
- → 0.1.7 이전 install이라면 doctor가 누락 entry를 안내해요.
+ → 0.1.7 이전 up 이라면 doctor가 누락 entry를 안내해요.
 
 📋 Mistake Loop — 주 1회 audit 권장
  hook 위반이 .ax/mistakes/에 자동 누적되며, audit_cadence_days=7 (config.yml)에 따라 주기적 회고 필요
@@ -902,7 +902,7 @@ rm -f .ax/.onboarding-pending
   # <PROJECT>:CRITICAL:NNN — <룰 한 줄 설명>
   set -uo pipefail   # ← Guard #5: -e 없이 (grep no-match가 hook 본체 abort하는 trap 회피)
 
-  # Bootstrap guard — install 중간이거나 .ax/ 부분 정리 시 silent skip
+  # Bootstrap guard — up 호출 중간이거나 .ax/ 부분 정리 시 silent skip
   [ -d "${CLAUDE_PROJECT_DIR:-$(pwd)}/.ax/hooks" ] || exit 0
 
   PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
