@@ -16,6 +16,7 @@
 | `check-templates-drift.sh` | `_templates/.origin` ↔ 현재 sha 비교 | `doctor` |
 | `check-manifest-install.sh` | MANIFEST 출고분 ↔ 사용자 프로젝트 파일 단위 비교 (missing + drift) | `doctor` |
 | `promote-mistake.sh` | mistake → CLAUDE.md 룰 승격 (후보·적용) | `audit` |
+| `triage-search.sh` | KEYWORDS 로 specs/adrs/mistakes/rules/modules/imported 6 군데 동시 grep | `triage` |
 
 ## 표준 (모든 스크립트 공통)
 
