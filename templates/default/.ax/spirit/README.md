@@ -19,11 +19,24 @@
 
 ## 사용자 워크플로우
 
+### Universal seeds — opt-in 활성화
+
+`_templates/spirit/` 에 universal opt-in 시드가 들어 있어요. plugin 이 자동 적용 X — 사용자가 명시적으로 `rules/` 으로 복사해서 활성화해요:
+
+```bash
+cp .ax/_templates/spirit/ops.md .ax/spirit/rules/ops.md
+```
+
+현재 제공되는 universal seed:
+- `ops.md` — SP-OPS-001~007 (MANDATORY 행동지시 / Generator-Evaluator 분리 / 워닝 무시 금지). 어느 프로젝트나 통하는 universal 행동 룰.
+
+복사 후 본문은 자유롭게 수정 가능해요. 다음 plugin 업데이트 시 시드는 `_templates/` 에만 갱신되니, `rules/` 의 사용자 버전은 보존돼요.
+
 ### 새 룰 카테고리 추가
 ```bash
 goax spirit add <category>     # 예: goax spirit add observability
 ```
-→ `rules/observability.md` 템플릿이 생성됨. 본문에 룰 작성.
+→ `rules/observability.md` 빈 템플릿이 생성됨. 본문에 룰 작성.
 
 ### 검증
 ```bash

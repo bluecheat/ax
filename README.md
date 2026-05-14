@@ -57,7 +57,7 @@ Once the skeleton is in place, every task goes through the same entry point and 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ Layer 0  Triage         Auto-classify Size × Risk on task entry    │
+│ Layer 0  Triage         Intent interview (short input) + Size × Risk auto-classify │
 │                          + UserPromptSubmit nudge (idle reminder)  │
 ├─────────────────────────────────────────────────────────────────┤
 │ Layer 1  Constitution    CLAUDE.md (root) — thin                   │
@@ -87,7 +87,7 @@ What goax provisions splits into two flavors:
 |---|---|---|
 | **META** (cognitive guard) | 4 core guardrail principles — identical across projects | — |
 | **CRITICAL hooks** | Destructive commands / protected paths / secrets / hydration / Entity·SQL / Kotlin var | DDL conventions · module dependencies · test framework → onboarding asks [hook now / TODO later / demote] |
-| **Behavioral** (Spirit) | `ops.md` SP-OPS-001–007 (MANDATORY behavior directives / Generator-Evaluator / no-warning-suppression) | Category-specific extra rules |
+| **Behavioral** (Spirit) | `_templates/spirit/ops.md` SP-OPS-001–007 — opt-in template (user explicitly copies into `spirit/rules/`) | Category-specific extra rules |
 | **Module rules** | — | `.ax/modules/<n>/rules.md` (only L2/L3 domains mapped in Q2 are stubbed) |
 
 Principle: **Pre-register validated universal best practices; explicitly ask via onboarding when project judgment is required.**
@@ -150,6 +150,7 @@ Natural language overrides: `"simple"` / `"spec + tasks"` → standard · `"full
 | "spirit check" | spirit-check |
 | "write ADR" | adr-write |
 | "activate statusline" | hud setup |
+| "log a mistake" / "capture mistake" | mistake (paired with audit) |
 
 ---
 
@@ -157,7 +158,7 @@ Natural language overrides: `"simple"` / `"spec + tasks"` → standard · `"full
 
 > **Deterministic work goes to scripts; judgment and interaction go to the LLM.**
 
-- **10 bash scripts** (`.ax/scripts/bash/`) — `--json --dry-run --help` standard, `[goax]` stderr prefix, exit 0/1/2 (graceful degradation)
+- **Deterministic bash scripts** (`.ax/scripts/bash/`) — `--json --dry-run --help` standard, `[goax]` stderr prefix, exit 0/1/2 (graceful degradation). See [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) for the catalog.
 - **`current-task.json`** — task-context SSOT shared between triage → spec → audit (no LLM re-inference)
 - **`_templates/.origin`** — sha-compares user edits vs plugin shipped version; doctor surfaces drift. Never auto-overwrites.
 - **Thin-wrapper SKILL.md** — deterministic parts delegated to scripts. SKILL handles only triggers, interaction, and JSON parsing.
@@ -179,10 +180,10 @@ your-project/
 │   ├── hooks/                             # Sensors (deterministic)
 │   │   ├── user-prompt/triage-nudge.sh    # idle-phase reminder
 │   │   ├── pre-bash/{block-destructive,grep-on-commit}.sh
-│   │   ├── pre-edit/{check-protected-paths,spirit-check}.sh
+│   │   ├── pre-edit/{check-protected-paths,spirit-check,spirit-rules-inject}.sh
 │   │   ├── pre-commit/critical-rule-grep.sh
 │   │   └── post-edit/lint-changed.sh
-│   ├── scripts/bash/*.sh                  # 9 deterministic tools (incl. capture-mistake)
+│   ├── scripts/bash/*.sh                  # deterministic tools (--json standard)
 │   ├── current-task.json                  # task-context SSOT
 │   ├── config.yml                         # domain risk + sensors.mode
 │   ├── mistakes/                          # Cross-cut Mistake Loop (hook auto-capture)
@@ -282,7 +283,7 @@ That's all. Just stay on the latest.
 - [`docs/skill-routing.md`](docs/skill-routing.md) — Skill routing matrix
 - [`docs/up.md`](docs/up.md) — Brownfield adoption flow
 - [`changelog/0.1.0.md`](changelog/0.1.0.md) "Design decisions" — Rejected alternatives + adoption rationale (consolidated from old docs/adr/ × 6)
-- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 10-script standard
+- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — Deterministic script catalog + `--json` standard
 - [`changelog/`](changelog/README.md) — Release notes (not strictly user-facing)
 
 ---

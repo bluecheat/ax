@@ -57,7 +57,7 @@ Claude Code 안에서 *한 줄씩* 입력해요
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ Layer 0  Triage         작업 진입 시 Size × Risk 자동 분류         │
+│ Layer 0  Triage         작업 진입 시 의도 인터뷰 + Size × Risk 자동 분류 │
 │                          + UserPromptSubmit nudge (idle 시 reminder) │
 ├─────────────────────────────────────────────────────────────────┤
 │ Layer 1  Constitution    CLAUDE.md (root) — 얇음                   │
@@ -87,7 +87,7 @@ goax가 깔아주는 것은 두 결로 나뉘어요:
 |---|---|---|
 | **META** (사고 가드) | 핵심 가드레일 4원칙 — 모든 프로젝트 동일 | — |
 | **CRITICAL hooks** | 파괴 명령 / 보호 경로 / Secrets / Hydration / Entity·SQL / Kotlin var | DDL 컨벤션·모듈 의존·테스트 프레임워크 → onboarding이 [지금 hook / 나중 TODO / 강등] 묻기 |
-| **Behavioral** (Spirit) | `ops.md` SP-OPS-001–007 (MANDATORY 행동지시 / Generator-Evaluator / 워닝 무시 금지) | 카테고리별 추가 룰 |
+| **Behavioral** (Spirit) | `_templates/spirit/ops.md` SP-OPS-001–007 — opt-in 템플릿 (사용자가 명시적으로 `spirit/rules/` 으로 복사 후 활성화) | 카테고리별 추가 룰 |
 | **Module rules** | — | `.ax/modules/<n>/rules.md` (Q2 매핑된 L2/L3 도메인만 stub) |
 
 원칙: **검증된 universal best practice는 사전 등록, 프로젝트 판단이 필요한 것은 onboarding이 명시적으로 묻기.**
@@ -150,6 +150,7 @@ goax가 깔아주는 것은 두 결로 나뉘어요:
 | "spirit 점검" | spirit-check |
 | "ADR 작성" | adr-write |
 | "statusline 활성화" | hud setup |
+| "실수 기록해줘" / "mistake 캡처" | mistake (audit 와 페어) |
 
 ---
 
@@ -157,7 +158,7 @@ goax가 깔아주는 것은 두 결로 나뉘어요:
 
 > **결정론적인 일은 스크립트가, 판단·인터랙션은 LLM이.**
 
-- **10 bash scripts** (`.ax/scripts/bash/`) — `--json --dry-run --help` 표준, `[goax]` stderr prefix, exit 0/1/2 (graceful degradation)
+- **결정론 bash 스크립트** (`.ax/scripts/bash/`) — `--json --dry-run --help` 표준, `[goax]` stderr prefix, exit 0/1/2 (graceful degradation). 전체 카탈로그는 [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) 참조.
 - **`current-task.json`** — triage → spec → audit 사이 작업 컨텍스트 SSOT (LLM 재추론 X)
 - **`_templates/.origin`** — 사용자 수정 vs plugin 출고본 sha 비교, drift는 doctor가 알려줘요. 자동 덮어쓰기 절대 X
 - **thin wrapper SKILL.md** — 결정론 부분 스크립트 위임. SKILL은 트리거·인터랙션·JSON 파싱만
@@ -179,10 +180,10 @@ your-project/
 │   ├── hooks/                             # Sensors (결정론)
 │   │   ├── user-prompt/triage-nudge.sh    # idle phase 시 reminder
 │   │   ├── pre-bash/{block-destructive,grep-on-commit}.sh
-│   │   ├── pre-edit/{check-protected-paths,spirit-check}.sh
+│   │   ├── pre-edit/{check-protected-paths,spirit-check,spirit-rules-inject}.sh
 │   │   ├── pre-commit/critical-rule-grep.sh
 │   │   └── post-edit/lint-changed.sh
-│   ├── scripts/bash/*.sh                  # 9 결정론 도구 (capture-mistake 포함)
+│   ├── scripts/bash/*.sh                  # 결정론 도구 (--json 표준)
 │   ├── current-task.json                  # 작업 컨텍스트 SSOT
 │   ├── config.yml                         # 도메인 위험도 + sensors.mode
 │   ├── mistakes/                          # Cross-cut Mistake Loop (hook 자동 capture)
@@ -282,7 +283,7 @@ statusline은 *어시스턴트 메시지 후*에 자동 갱신 (Claude Code 사�
 - [`docs/skill-routing.md`](docs/skill-routing.md) — skill 라우팅 매트릭스
 - [`docs/up.md`](docs/up.md) — Brownfield 도입 흐름
 - [`changelog/0.1.0.md`](changelog/0.1.0.md) "설계 결정" — 거부된 대안 + 채택 이유 (옛 docs/adr/ 6건 통합)
-- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 10 스크립트 표준
+- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 결정론 스크립트 카탈로그 + `--json` 표준
 - [`changelog/`](changelog/README.md) — 릴리스 기록 (사용자는 굳이 X)
 
 ---
