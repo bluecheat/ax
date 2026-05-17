@@ -146,6 +146,38 @@ enforced_kind: block
 - 검증: pre-commit grep `(password|secret|api[_-]?key|token).*=.*["']`
 ```
 
+**압축·탈맥락 원칙 (룰 본문·CLAUDE.md 공통)**
+
+룰은 매 turn hook 으로 inject 돼요. verbose 하면 매 작업마다 토큰 낭비. 그리고 매번 새 세션에서 읽히는 evergreen 문서 — 이전 세션 흔적 (시간 부사·발견 경위·일회성 ref) 이 본문에 박히면 6개월 뒤엔 노이즈.
+
+**압축**
+- **3줄 골격 권장** — `위반 예` / `대안` / `검증`. 헤더 1줄 + 본문 3 bullet = 4줄로 끝나면 베스트.
+- **한 줄 한 사실** — 한 bullet 에 사실 1개. "A 이고 B 이며 C" 는 3 bullet 으로 쪼개기.
+- **의례적 표현 제거** — "다음과 같이", "~할 수 있어요", "참고로", "필요시", "일반적으로" 다 삭제. `~해요` 체 자체는 유지 (tone).
+- **단정·명령형** — "~하면 좋습니다" → "~해요" / "~금지". 완곡 어법 X.
+- **약어 OK** — PR, DB, API, CI, regex 같은 표준 약어는 그대로. 처음 등장 풀네임 X.
+- **보존 필수 (절대 압축 X)** — 코드블록(백틱), URL, SP 토큰 (`SP-SEC-001`), 파일경로, 정규식, frontmatter 스키마. 식별자·기술용어는 원본 유지.
+- **목표 길이** — CRITICAL/MANDATORY 룰: 헤더 포함 5~8줄. CONVENTION 룰: 3~5줄. 10줄 넘으면 압축 부족.
+
+**탈맥락 (세션·시간 흔적 금지)**
+- **시간 부사 X** — "이번 세션에서", "방금 전", "최근", "어제", "지난 주", "현재 audit 에서" 모두 삭제. 룰은 시간 불변.
+- **일회성 ref X** — 특정 PR 번호 (`PR #1234`), 이슈 ID, 절대 날짜 (`2026-05-17`), 커밋 SHA 본문에 박지 말기. 식별자는 SP 토큰 하나로 충분.
+- **발견 경위 X** — "이번 audit 에서 발견", "OO 가 제보", "사건 X 로 추가" 같은 출처는 mistake 파일 (archive 후 보존) 의 책임. 룰 본문은 패턴·대안·검증만.
+- **세션 자아 X** — "내가 분석한 결과", "조사해보니" 같은 1인칭/조사 표현 삭제. 룰은 사실의 진술.
+
+before / after 예시:
+
+```diff
+- ## SP-SEC-001: 이번 audit (2026-05-17) 에서 PR #1234 통해 발견된 시크릿 노출 패턴 — 절대 금지합니다
+- - 일반적으로 다음과 같은 패턴이 위반 예시가 될 수 있어요: `password = "..."`, `apiKey: "ghp_..."`
+- - 최근 사건들을 보면 AWS Secrets Manager 나 Vault 같은 시크릿 매니저, 혹은 환경변수를 사용하시면 됩니다
+- - 제가 조사해보니 pre-commit hook 에서 정규식 `(password|secret|api[_-]?key|token).*=.*["']` 로 grep 하면 좋아요
++ ## SP-SEC-001: 시크릿·API 키·비번 hardcode 금지
++ - 위반 예: `password = "..."`, `apiKey: "ghp_..."`, `private val pgKey = "rk_live_..."`
++ - 대안: AWS Secrets Manager / Vault / 환경변수
++ - 검증: pre-commit grep `(password|secret|api[_-]?key|token).*=.*["']`
+```
+
 **왜 spirit/rules 만?**: path-scoped hook (`spirit-rules-inject.sh`) 이 매 작업마다 frontmatter `paths:` 매칭해서 자동 inject — 매 turn CLAUDE.md 에 누적할 필요 없음. CLAUDE.md 는 META 4원칙·핵심 가드 만 유지 (heavy 회피).
 
 **plugin shipped 파일 append 금지**: `security.md`, `ops.md` 같은 plugin 출고본에 직접 append X. project-specific 별도 파일 (`<project>-<category>.md`) 로 만들고, 같은 카테고리 룰이 누적되면 그 파일에 SP-<CAT>-NNN 만 추가.
