@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "_comment": "goax — OpenCode mode config. AGENTS.md 가 Constitution SSOT, .ax/docs/reference 룰 문서 보강. plugin 자리는 향후 TypeScript plugin (block-destructive 등 bash hook 포팅) 도입 시 채움.",
+  "_hook_note": "OpenCode 는 bash subprocess hook 미지원. .ax/hooks/pre-commit/*.sh 는 .ax/scripts/bash/install-git-hooks.sh 로 git pre-commit 에 등록 — CATASTROPHIC 차단·secrets 검출은 commit 시점에 보전.",
+  "instructions": [
+    "AGENTS.md",
+    ".ax/docs/reference/rules-tokens.md",
+    ".ax/docs/reference/rule-enforcement.md",
+    ".ax/docs/reference/triage-matrix.md",
+    ".ax/docs/reference/critical-rules.md",
+    ".ax/docs/reference/opencode-compat.md"
+  ],
+  "plugins": []
+}

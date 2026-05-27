@@ -215,6 +215,31 @@ MANDATORY는 **사람의 판단·승인·리뷰가 게이트로 들어가는 룰
 ### 2.5 외부 spec
 sibling 디렉토리(`<repo>-spec` 등)나 자기 안의 `spec/` `specs/` `governance/`가 의미 있는 결정 문서를 가지고 있으면 후보로 보여줘요.
 
+### 2.6 CLI 환경 자동 감지 (Pre-flight, 0.2.0+)
+
+Q1 박스를 그리기 전 사용 중인 AI CLI 를 감지해서 자산 install 범위를 결정해요. 사용자에게 별도 질문 박스 없이 발견 박스에 표시.
+
+```bash
+# 자동 감지 — 양립 가능 (둘 다 쓰는 사용자도 정상)
+HAS_CLAUDE=false
+HAS_OPENCODE=false
+[ -n "${CLAUDE_PROJECT_DIR:-}" ] || [ -n "${CLAUDE_SKILL_DIR:-}" ] && HAS_CLAUDE=true
+[ -n "${OPENCODE_CONFIG_DIR:-}" ] && HAS_OPENCODE=true
+[ -d ".opencode" ] || [ -d "$HOME/.config/opencode" ] && HAS_OPENCODE=true
+command -v opencode >/dev/null 2>&1 && HAS_OPENCODE=true
+```
+
+| 감지 | 결과 | 자산 install 범위 |
+|---|---|---|
+| Claude Code 만 | claude | AGENTS.md + CLAUDE.md (alias) + .claude/settings.json |
+| OpenCode 만 | opencode | AGENTS.md + CLAUDE.md (alias, fallback 용) + opencode.json + install-git-hooks 안내 |
+| 둘 다 | both | 양쪽 자산 모두 |
+| 미감지 | unknown | greenfield 가정 — 양쪽 모두 install + 사용자 알림 |
+
+이 결과를 Q1 박스 `📍 발견` 의 첫 줄에 prepend: `CLI 환경: <감지결과>`.
+
+OpenCode 감지 시 Q5 [a] 끝에 추가 안내: "Hook 시스템은 OpenCode 에선 PreToolUse 미지원 — `bash .ax/scripts/bash/install-git-hooks.sh` 로 git pre-commit 보전 권장 (CATASTROPHIC·secrets 검출)."
+
 ## 3. 사용자와 4가지 결정
 
 분석 결과를 정리해 보여주고, 4 가지를 자연어로 물어요. **한 번에 하나씩**, 디폴트는 권장값.
@@ -293,14 +318,21 @@ Q1에서 "라벨이 없다"고 발견 보고할 때, 사용자가 시그널을 �
 └  → 다음: Q2 도메인 위험도 매핑
 ```
 
-### Q1. CLAUDE.md 처리
+### Q1. Constitution (AGENTS.md / CLAUDE.md) 처리
 
 ```
-◆  Q1/5   CLAUDE.md 룰 처리
+◆  Q1/5   Constitution 룰 처리   (0.2.0+ AGENTS.md SSOT)
 │
 │  📍 발견
-│   룰 N개 — 카테고리 정리됨, 시그널 라벨 없음
+│   CLI 환경: <claude | opencode | both | unknown> (§2.6 자동 감지)
+│   기존 CLAUDE.md 룰 N개 — 카테고리 정리됨, 시그널 라벨 없음
+│   AGENTS.md: <존재 / 부재>
 │   "비협상"(예: 모듈 의존) + "권장"(예: 테스트 컨벤션)이 한 파일에 섞임
+│
+│  ℹ Constitution SSOT 정책 (0.2.0+)
+│   AGENTS.md = SSOT (multi-CLI). CLAUDE.md = @AGENTS.md import alias.
+│   기존 CLAUDE.md 본문이 customize 됐으면 .ax/CLAUDE.md.suggested 로 보존됨 (up 이 처리).
+│   Q1=[a] 선택 시 룰 라벨링·prepend 는 AGENTS.md 본문에 적용 (CLAUDE.md 는 alias 라 그대로).
 │
 │   시그널 의미
 │   🔴 CRITICAL    자동 차단 (hooks가 막음, 우회 불가)

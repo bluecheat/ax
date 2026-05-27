@@ -1,11 +1,12 @@
-# goax
+# GOAX
 
 <p align="center">
-  <img src="goax_img.png" alt="goax — AX 4-Layer Harness" width="640">
+  <img src="goax_img.png" alt="GOAX — AX 4-Layer Harness" width="640">
 </p>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-D97757?logo=anthropic)](https://github.com/bluecheat/ax)
+[![OpenCode Compatible](https://img.shields.io/badge/OpenCode-Compatible-blue)](https://opencode.ai/)
 [![Lang](https://img.shields.io/badge/lang-한국어-blue.svg)](README.ko.md)
 
 > **Control AI output consistency through the *environment*.**
@@ -13,7 +14,7 @@
 
 **Equip the environment, not the prompt.** Install the plugin → a 5-minute onboarding conversation provisions the harness environment. No *automatic magic* promised.
 
-> **Requirements** — Claude Code CLI
+> **Requirements** — Claude Code CLI · OpenCode (Hybrid compatibility). See [Multi-CLI compatibility](#multi-cli-compatibility) for the matrix.
 
 [Quick Start](#quick-start) · [Architecture](#architecture) · [Spec Workflow](#spec-workflow--two-paths) · [Commands](#commands) · [Principles](#core-principles) · [More](#further-reading)
 
@@ -21,35 +22,29 @@
 
 ## Quick Start
 
-**Step 1 — Install**
-
-Inside Claude Code, run *one line at a time*:
+**1. Install** — inside Claude Code, two lines:
 
 ```
 /plugin marketplace add https://github.com/bluecheat/ax
-
 /plugin install goax
 ```
 
-**Step 2 — Adopt**
-
-Trigger via natural language.
+**2. Adopt** — trigger via natural language:
 
 ```
 "set up goax"
 ```
 
-→ `up` analyzes the project, asks a consent prompt (Y/n), then provisions `.ax/` (about 30s).
-For **brownfield** projects (with existing assets), `onboarding` follows up and walks through domain · risk level · hooks intensity · external specs · layer activation as a **5-step Q1–Q5 conversation** (about 5 minutes). It's not *one-shot magic* — it's a flow designed to elicit deliberate decisions.
+→ `up` analyzes the project, asks for consent (Y/n), and provisions `.ax/` (about 30s). On brownfield projects a 5-minute onboarding conversation (Q1–Q5) follows. Detailed flow: [`docs/up.md`](docs/up.md).
 
-**Step 3 — Daily use**
+**3. Daily use** — drop intent in natural language; every task hits the same entry point and the same gating:
 
 ```
 "plan the payment refund policy change"
    → triage → spec tier recommendation → spirit · rules · persona context injection
 ```
 
-Once the skeleton is in place, every task goes through the same entry point and the same gating.
+> OpenCode users: see [Multi-CLI compatibility](#multi-cli-compatibility).
 
 ---
 
@@ -81,7 +76,7 @@ Scripts (deterministic):  .ax/scripts/bash/*.sh — --json standard
 
 ### Universal vs Project-Specific
 
-What goax provisions splits into two flavors:
+What GOAX provisions splits into two flavors:
 
 | Flavor | Pre-registered (universal) | Consent-based (project-specific) |
 |---|---|---|
@@ -98,7 +93,7 @@ Concept deep-dive: [`CONCEPTS.md`](CONCEPTS.md)
 
 ## Spec Workflow — Two Paths
 
-`spec-new` doesn't generate all 9 files upfront. The triage result decides *just enough*.
+The `spec` skill doesn't generate every artifact upfront. The triage result decides *just enough*.
 
 ### Tier Matrix
 
@@ -107,50 +102,47 @@ Concept deep-dive: [`CONCEPTS.md`](CONCEPTS.md)
 | **standard** | `spec.md` + `tasks.md` (2) | S/M/L × L0–L2 |
 | **full** | + `research / data-model / quickstart / contracts` + paired ADR | L × L3 / XL × * |
 
-### Fast Path — Single Command
+### Fast Path — single phrase
 
 ```
-/spec --tier full payment-refund
+"create spec payment-refund — full package"
 ```
 
-### Stepwise Path — Per-stage
+### Stepwise Path — per stage
 
 ```
-/spec --tier standard payment-refund  → spec.md + tasks.md
-/spec-tasks                                 → tasks breakdown ([P] parallel marker)
-/spec-implement                             → run tasks.md sequentially + - [x] marking
+"create spec payment-refund"   → spec.md + tasks.md
+"break into tasks"              → tasks breakdown ([P] parallel marker)
+"start implementation"          → run tasks.md sequentially + - [x] marking
 # Design decisions go to ADR (.ax/docs/adr/NNNN-*.md)
 ```
 
-Natural language overrides: `"simple"` / `"spec + tasks"` → standard · `"full package"` → full. Design decisions live in ADR (`.ax/docs/adr/NNNN-*.md`), not a separate plan file.
+Natural-language tier overrides: `"simple"` / `"spec + tasks"` → standard · `"full package"` → full. Design decisions live in ADR (`.ax/docs/adr/NNNN-*.md`), not a separate plan file.
 
 ---
 
 ## Commands
 
-### Slash Commands
-
-| Command | What it does | Natural language alias |
-|---|---|---|
-| `/goax` | Help / index | — |
-| `/doctor` | Gap diagnosis + `_templates` drift | "diagnose" |
-| `/rules` | Constitution + Spirit + Module aggregation | "show rules" |
-| `/spec` | Tier-aware spec generation (one-shot) | "create spec — <slug>" |
-| `/spec-tasks` | tasks.md stage | "break into tasks" |
-| `/spec-implement` | Sequential execution + checklist marking | "start implementation" |
-| `/spec-validate` | NEEDS CLARIFICATION gating | "validate spec" |
-| `/audit` | Mistake Loop capture · review · promotion | "audit", "again that" |
-
-### Natural Language Only (no slash command)
+**Every feature is invoked via natural language.** The thin slash wrappers were retired; only `/goax` remains as a discoverability index. Skill `description:` frontmatter drives autorouting on both Claude Code and OpenCode.
 
 | Phrase | Triggered skill |
 |---|---|
-| "set up goax" | up → onboarding (auto-delegated) |
-| "plan the <task>" | triage → spec-new (tier auto-recommended) |
-| "spirit check" | spirit-check |
-| "write ADR" | adr-write |
-| "activate statusline" | hud setup |
-| "log a mistake" / "capture mistake" | mistake (paired with audit) |
+| `/goax` | Index — shows all triggers (the only remaining slash command) |
+| "set up goax" / "install goax" | up → onboarding (auto-delegated for brownfield) |
+| "diagnose" / "goax doctor" | doctor — gap diagnosis + `_templates` drift |
+| "show rules" | rules — Constitution + Spirit + Module aggregation |
+| "create spec — <slug>" | spec — tier-aware spec generation |
+| "break into tasks" | spec-tasks |
+| "start implementation" / "run tasks" | spec-implement |
+| "validate spec" | spec-validate — NEEDS CLARIFICATION gating |
+| "plan the <task>" / "fix" / "refactor" | triage — Size × Risk classify in 30s |
+| "write ADR" / "record decision" | adr — new ADR file |
+| "spirit check" | spirit — frontmatter + token integrity |
+| "log a mistake" / "capture mistake" | mistake — single-event capture |
+| "audit" / "review mistakes" | audit — Mistake Loop review · promotion |
+| "/hud setup" / "activate statusline" | hud — Claude Code statusline (OpenCode adapter pending) |
+
+When autorouting fails, fall back to keywords from the `/goax` index, or have the assistant call `Skill goax:<name>` explicitly.
 
 ---
 
@@ -171,34 +163,78 @@ Natural language overrides: `"simple"` / `"spec + tasks"` → standard · `"full
 
 ```
 your-project/
-├── CLAUDE.md                              # Layer 1 (.suggested if one already exists)
+├── AGENTS.md                              # Layer 1 SSOT — multi-CLI Constitution
+├── CLAUDE.md                              # @AGENTS.md alias for Claude Code auto-detection
+├── opencode.json                          # OpenCode config (only if OpenCode env detected)
 ├── .ax/
 │   ├── spirit/{values, tone, rules}/      # Cross-cut Spirit (includes ops.md)
 │   ├── modules/                           # Layer 2 — per-module domain rules (instances only)
 │   │   ├── README.md
 │   │   └── <module-name>/rules.md         # onboarding Q5 stubs only L2/L3 domains
 │   ├── hooks/                             # Sensors (deterministic)
-│   │   ├── user-prompt/triage-nudge.sh    # idle-phase reminder
+│   │   ├── user-prompt/triage-nudge.sh    # idle-phase reminder (Claude Code only)
 │   │   ├── pre-bash/{block-destructive,grep-on-commit}.sh
 │   │   ├── pre-edit/{check-protected-paths,spirit-check,spirit-rules-inject}.sh
-│   │   ├── pre-commit/critical-rule-grep.sh
+│   │   ├── pre-commit/{critical-rule-grep,check-mistake-secrets}.sh
 │   │   └── post-edit/lint-changed.sh
 │   ├── scripts/bash/*.sh                  # deterministic tools (--json standard)
+│   │   └── install-git-hooks.sh           # OpenCode mode — git pre-commit chain installer
 │   ├── current-task.json                  # task-context SSOT
 │   ├── config.yml                         # domain risk + sensors.mode
-│   ├── mistakes/                          # Cross-cut Mistake Loop (hook auto-capture)
+│   ├── mistakes/                          # Cross-cut Mistake Loop
 │   ├── version
 │   └── docs/
 │       ├── _templates/                    # Layer 3 — all templates in one place
 │       │   ├── adr/0000-template.md
 │       │   └── spec/{spec, tasks, ...}.md  + .origin (drift sha)
 │       ├── adr/                           # Real ADRs (onboarding auto-generates 0001-goax-adoption.md)
-│       └── spec/                          # Real spec directory (NNN-<slug>/)
+│       ├── spec/                          # Real spec directory (NNN-<slug>/)
+│       └── reference/opencode-compat.md   # Multi-CLI compatibility SSOT
 └── .claude/
-    └── settings.json                      # Hook registration (UserPromptSubmit + PreToolUse + PostToolUse)
+    └── settings.json                      # Hook registration (Claude Code only — UserPromptSubmit + PreToolUse + PostToolUse)
 ```
 
-**That's everything added to your project tree.** Skills · commands · agents are auto-loaded by the plugin.
+**That's everything added to your project tree.** Skills · commands · agents are auto-loaded by the plugin (Claude Code) or `opencode.json` `instructions:` (OpenCode).
+
+---
+
+## Multi-CLI compatibility
+
+GOAX ships as a Claude Code plugin but works on OpenCode as well through a Hybrid compatibility layer.
+
+| Asset | Claude Code | OpenCode | Note |
+|---|---|---|---|
+| `AGENTS.md` (Constitution SSOT) | ✅ via `@AGENTS.md` import chain | ✅ direct (priority 1) | multi-CLI SSOT |
+| `CLAUDE.md` (alias) | ✅ native | ✅ fallback | One-line `@AGENTS.md` import |
+| Skills (`.claude/skills/*/SKILL.md`) | ✅ autorouting | ✅ recognised ([docs](https://opencode.ai/docs/skills/)) | OpenCode [Issue #6177](https://github.com/sst/opencode/issues/6177) known plural/singular mismatch |
+| Deterministic bash (`.ax/scripts/bash/`) | ✅ via Claude Code | ✅ via `GOAX_PROJECT_DIR=$pwd` | `--json --dry-run --help` CLI-agnostic |
+| Hooks — PreToolUse / PostToolUse | ✅ `.claude/settings.json` | ❌ not supported | OpenCode plugin SDK is TypeScript in-process only |
+| Hooks — pre-commit | ✅ via `grep-on-commit.sh` | ⚠️ via `install-git-hooks.sh` (git native pre-commit) | CATASTROPHIC + secrets checks preserved at commit time |
+| Slash commands | ✅ `/goax` index | ❌ `.claude/commands/` not read ([Issue #6985](https://github.com/anomalyco/opencode/issues/6985)) | slash wrappers retired — natural language only |
+| Mistake auto-capture (hook) | ✅ deprecated → manual | ❌ manual only | User-invoked `/mistake` on both CLIs |
+| HUD statusline | ✅ Claude Code spec | ⚠️ adapter pending | Claude Code only for now |
+
+### OpenCode install
+
+OpenCode has no `/plugin` marketplace, so vendor the harness directly:
+
+```bash
+git clone https://github.com/bluecheat/ax .ax-source && \
+  cp -r .ax-source/templates/default/* . && \
+  rm -rf .ax-source
+
+bash .ax/scripts/bash/install-git-hooks.sh
+```
+
+Rename `opencode.json.template` → `opencode.json` so OpenCode merges `AGENTS.md` into its system prompt automatically.
+
+### OpenCode environment notes
+
+- If you already installed the Claude Code plugin, `up` skill auto-detects OpenCode via `OPENCODE_CONFIG_DIR`, `.opencode/`, `~/.config/opencode/`, or `command -v opencode` and runs the vendoring above for you.
+- `OPENCODE_DISABLE_CLAUDE_CODE=1` etc. supported — goax stays safe with either default (AGENTS.md is the SSOT either way).
+- Path-scoped Spirit rule injection (`spirit-rules-inject.sh`) is Claude Code only. On OpenCode, import the rule files into `AGENTS.md`'s CONVENTION section to make them universal.
+
+Full compatibility detail, troubleshooting, and TypeScript plugin roadmap: [`docs/reference/opencode-compat.md`](docs/reference/opencode-compat.md).
 
 ---
 

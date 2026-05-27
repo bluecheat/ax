@@ -112,9 +112,13 @@ done
 section "4. templates/default — up skill 이 사용자 프로젝트로 복사할 자산"
 # ───────────────────────────────────────────────────────────
 for f in \
+    templates/default/AGENTS.md.template \
     templates/default/CLAUDE.md.template \
+    templates/default/opencode.json.template \
     templates/default/.claude/settings.json.template \
     templates/default/.gitignore.template \
+    templates/default/.ax/hooks/pre-commit/check-mistake-secrets.sh \
+    templates/default/.ax/scripts/bash/install-git-hooks.sh \
     templates/default/.ax/spirit/values.md \
     templates/default/.ax/spirit/tone.md \
     templates/default/.ax/_templates/spirit/rule.md \
@@ -155,6 +159,33 @@ done
 python3 -c "import json; json.load(open('$REPO/templates/default/.claude/settings.json.template'))" 2>/dev/null \
     && pass "settings.json.template JSON valid" \
     || fail "settings.json.template JSON invalid"
+
+# 0.2.0+ — opencode.json.template JSON valid + schema URL 검증
+python3 -c "import json; d=json.load(open('$REPO/templates/default/opencode.json.template')); assert d['\$schema']=='https://opencode.ai/config.json', d['\$schema']" 2>/dev/null \
+    && pass "opencode.json.template JSON valid + \$schema = opencode.ai/config.json" \
+    || fail "opencode.json.template JSON invalid 또는 \$schema 불일치"
+
+# 0.2.0+ — opencode.json.template 의 instructions 에 AGENTS.md 포함
+python3 -c "import json; d=json.load(open('$REPO/templates/default/opencode.json.template')); assert 'AGENTS.md' in d.get('instructions', []), d.get('instructions')" 2>/dev/null \
+    && pass "opencode.json.template instructions[] 에 AGENTS.md 포함" \
+    || fail "opencode.json.template instructions[] 에 AGENTS.md 누락"
+
+# 0.2.0+ — CLAUDE.md.template 이 @AGENTS.md import 한 줄 + 안내 (20줄 미만)
+CLAUDE_LINES=$(wc -l < "$REPO/templates/default/CLAUDE.md.template" | tr -d ' ')
+if [ "$CLAUDE_LINES" -lt 20 ] && grep -qE '^@AGENTS\.md\b' "$REPO/templates/default/CLAUDE.md.template"; then
+    pass "CLAUDE.md.template — @AGENTS.md alias 형태 (${CLAUDE_LINES}줄 < 20)"
+else
+    fail "CLAUDE.md.template — alias 형태 아님 (${CLAUDE_LINES}줄, @AGENTS.md import 누락 가능)"
+fi
+
+# 0.2.0+ — AGENTS.md.template 이 Constitution SSOT (META + 시그널 의미 + 4계층 인덱스)
+if grep -q "META — 핵심 가드레일" "$REPO/templates/default/AGENTS.md.template" \
+   && grep -q "시그널 의미" "$REPO/templates/default/AGENTS.md.template" \
+   && grep -q "4계층 인덱스" "$REPO/templates/default/AGENTS.md.template"; then
+    pass "AGENTS.md.template — META + 시그널 의미 + 4계층 인덱스 포함 (Constitution SSOT)"
+else
+    fail "AGENTS.md.template — Constitution 필수 섹션 누락"
+fi
 
 python3 -c "import json; json.load(open('$REPO/templates/default/.ax/current-task.json.template'))" 2>/dev/null \
     && pass "current-task.json.template JSON valid" \
@@ -829,6 +860,52 @@ else
 fi
 
 rm -rf "$SL_FX"
+
+# ───────────────────────────────────────────────────────────
+section "16. install-git-hooks.sh — OpenCode mode hook 보전 (NEW 0.2.0)"
+# ───────────────────────────────────────────────────────────
+IGH="$REPO/templates/default/.ax/scripts/bash/install-git-hooks.sh"
+[ -f "$IGH" ] && pass "install-git-hooks.sh 존재" || fail "install-git-hooks.sh 누락"
+[ -x "$IGH" ] && pass "install-git-hooks.sh 실행권한" || fail "install-git-hooks.sh 실행권한 X"
+bash -n "$IGH" 2>/dev/null && pass "install-git-hooks.sh 문법 OK" || fail "install-git-hooks.sh 문법 오류"
+
+# E2E — 임시 fixture 에서 install / re-install (idempotent) / wrapper 검증
+IGH_FX=$(mktemp -d)
+mkdir -p "$IGH_FX/.ax/scripts/bash" "$IGH_FX/.ax/hooks/pre-commit"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,install-git-hooks.sh} "$IGH_FX/.ax/scripts/bash/"
+( cd "$IGH_FX" && git init -q && git config user.email t@l && git config user.name t )
+
+# (1) install — action=installed
+OUT=$(GOAX_PROJECT_DIR=$IGH_FX bash "$IGH_FX/.ax/scripts/bash/install-git-hooks.sh" --json 2>&1)
+ACTION=$(echo "$OUT" | jq -r '.result.action' 2>/dev/null)
+[ "$ACTION" = "installed" ] \
+    && pass "install-git-hooks — 첫 install action=installed" \
+    || fail "install-git-hooks — action 부정확: $ACTION ($OUT)"
+
+# (2) marker + 실행권한
+grep -q "#goax-pre-commit-chain" "$IGH_FX/.git/hooks/pre-commit" \
+    && pass "install-git-hooks — wrapper 에 goax marker 포함" \
+    || fail "install-git-hooks — goax marker 누락"
+[ -x "$IGH_FX/.git/hooks/pre-commit" ] \
+    && pass "install-git-hooks — wrapper 실행권한 (755)" \
+    || fail "install-git-hooks — wrapper 실행권한 X"
+
+# (3) re-install — idempotent (action=skipped, exit=2)
+OUT=$(GOAX_PROJECT_DIR=$IGH_FX bash "$IGH_FX/.ax/scripts/bash/install-git-hooks.sh" --json 2>&1; echo "EXIT=$?")
+STATUS=$(echo "$OUT" | grep -v '^EXIT=' | jq -r '.status' 2>/dev/null)
+EXIT=$(echo "$OUT" | grep '^EXIT=' | cut -d= -f2)
+if [ "$STATUS" = "skipped" ] && [ "$EXIT" = "2" ]; then
+    pass "install-git-hooks — 재호출 시 skipped + exit 2 (idempotent)"
+else
+    fail "install-git-hooks — idempotent 부정확: status=$STATUS exit=$EXIT"
+fi
+
+# (4) wrapper 안에 .ax/hooks/pre-commit chain 로직 포함
+grep -q '.ax/hooks/pre-commit' "$IGH_FX/.git/hooks/pre-commit" \
+    && pass "install-git-hooks — wrapper 에 .ax/hooks/pre-commit chain 로직 포함" \
+    || fail "install-git-hooks — chain 로직 누락"
+
+rm -rf "$IGH_FX"
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"
