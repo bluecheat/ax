@@ -126,11 +126,16 @@ redact_secrets() {
     '
 }
 
-# Find project root: $CLAUDE_PROJECT_DIR if it has .ax/, else nearest ancestor with .ax/
-# CLAUDE_PROJECT_DIR is the Claude Code official env var pointing at the user's project root.
-# Honoring it lets scripts work even when invoked from a different cwd (e.g., smoke fixtures,
-# hooks running from a subdirectory, etc).
+# Find project root — fallback chain:
+#   1) $GOAX_PROJECT_DIR  — CLI-agnostic override. Claude Code 외 환경 (직접 호출, CI,
+#      다른 AI CLI 의 어댑터) 에서 결정론 스크립트를 standalone 으로 부를 때 사용.
+#   2) $CLAUDE_PROJECT_DIR — Claude Code 가 자동 주입하는 사용자 프로젝트 루트.
+#   3) cwd 부터 ancestor 탐색 — .ax/ 디렉토리 가진 첫 조상.
 find_project_root() {
+    if [ -n "${GOAX_PROJECT_DIR:-}" ] && [ -d "$GOAX_PROJECT_DIR/.ax" ]; then
+        printf '%s\n' "$GOAX_PROJECT_DIR"
+        return 0
+    fi
     if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "$CLAUDE_PROJECT_DIR/.ax" ]; then
         printf '%s\n' "$CLAUDE_PROJECT_DIR"
         return 0
@@ -143,7 +148,7 @@ find_project_root() {
         fi
         dir="$(dirname "$dir")"
     done
-    goax_error "no .ax/ found in any ancestor of $(pwd) (CLAUDE_PROJECT_DIR=${CLAUDE_PROJECT_DIR:-unset})"
+    goax_error "no .ax/ found in any ancestor of $(pwd) (GOAX_PROJECT_DIR=${GOAX_PROJECT_DIR:-unset}, CLAUDE_PROJECT_DIR=${CLAUDE_PROJECT_DIR:-unset})"
     return 1
 }
 

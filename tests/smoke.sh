@@ -64,22 +64,28 @@ for removed in skills/global skills/workflows \
 done
 
 # ───────────────────────────────────────────────────────────
-section "2.5 Slash commands (14개 — 'goax-' prefix 컨벤션, 0.1.16 spec-plan 폐기)"
+section "2.5 Slash commands (0.1.20 — 13개 thin wrapper 폐기, /goax 인덱스 1개만 유지)"
 # ───────────────────────────────────────────────────────────
-# commands는 `goax-<name>.md` 형태 + `goax.md` 인덱스 alias 1개
-for cmd in goax goax-up goax-onboarding goax-doctor goax-audit goax-rules goax-hud goax-spirit \
-           goax-triage goax-adr goax-spec goax-spec-validate goax-spec-tasks goax-spec-implement; do
-    f="$REPO/commands/$cmd.md"
-    if [ -f "$f" ]; then
-        if head -5 "$f" | grep -qE "^name: $cmd\$"; then
-            pass "commands/$cmd.md (frontmatter OK)"
-        else
-            fail "commands/$cmd.md frontmatter name 불일치"
-        fi
-    else
-        fail "commands/$cmd.md 누락"
+# 모든 skill 은 SKILL.md frontmatter 의 자연어 키워드 트리거로 호출. /goax 인덱스
+# 1개만 discoverability 진입점으로 남김.
+f="$REPO/commands/goax.md"
+if [ -f "$f" ]; then
+    head -5 "$f" | grep -qE '^name: goax$' \
+        && pass "commands/goax.md (인덱스 frontmatter OK)" \
+        || fail "commands/goax.md frontmatter name 불일치"
+else
+    fail "commands/goax.md 누락"
+fi
+
+# 0.1.21 폐기된 13개 wrapper 가 잔재로 남지 않았는지 확인
+for removed in goax-up goax-onboarding goax-doctor goax-audit goax-rules goax-hud goax-spirit \
+               goax-triage goax-adr goax-spec goax-spec-validate goax-spec-tasks goax-spec-implement; do
+    if [ -e "$REPO/commands/$removed.md" ]; then
+        fail "commands/$removed.md — 0.1.20 에서 폐기됐어야 함 (잔재)"
     fi
 done
+# 폐기 잔재 0 확인 후 단일 pass
+pass "commands/ — 13개 wrapper 폐기 완료 (잔재 0)"
 
 # ───────────────────────────────────────────────────────────
 section "2.6 HUD assets"

@@ -14,11 +14,17 @@
 default_risk: L0
 
 domain_risk:
-  # 예시 — 자기 프로젝트로 교체
-  payment: L3       # 결제, PG, 환불
-  order: L2         # 주문, 발주
-  product: L1       # 상품, 카탈로그
-  search: L0        # 검색
+  # 예시 — 자기 프로젝트로 교체. 도메인 키는 영문 kebab-case.
+  # L3 = 비가역 손실 가능 영역 (돈/의료/안전/장부/자격증명)
+  payment: L3            # 결제, PG, 환불
+  # billing: L3          # 청구·구독·정산
+  # phi-access: L3       # 의료 정보 (PHI/EHR) 접근
+  # safety-control: L3   # 안전·제어 시스템 (의료기기·산업)
+  # ledger: L3           # 회계 장부 무결성
+  # auth-credential: L3  # 인증·자격증명 발급/검증
+  order: L2              # 주문, 발주
+  product: L1            # 상품, 카탈로그
+  search: L0             # 검색
 
 # ───────────────────────────────────────────────────────────
 # 빌드/테스트/린트 명령 — Sensors 와 doctor 가 참조

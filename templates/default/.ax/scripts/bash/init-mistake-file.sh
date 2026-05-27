@@ -160,14 +160,23 @@ if [ "$DRY_RUN" = true ]; then
     exit "$EXIT_OK"
 fi
 
-# Template cp + frontmatter sed 치환
-# sed delimiter | 로 path/url 호환. 백슬래시 escape는 caller 책임 (보통 안 들어옴).
-sed -e "s|{{CATEGORY}}|$CATEGORY|g" \
-    -e "s|{{SEVERITY}}|$SEVERITY|g" \
-    -e "s|{{DETECTED_BY}}|$DETECTED_BY|g" \
-    -e "s|{{CONTEXT_LINK}}|$CONTEXT_LINK_OUT|g" \
-    -e "s|{{CAPTURED_AT}}|$CAPTURED_AT|g" \
-    -e "s|{{SOURCE}}|$SOURCE|g" \
+# Template cp + frontmatter sed 치환.
+# sed delimiter | 와 replacement 메타 (&, \) 를 사전 escape — URL 의 `|` 쿼리 파라미터
+# 등이 CONTEXT_LINK 로 들어와도 delimiter 충돌 없이 동작.
+_sed_escape() { printf '%s' "$1" | sed 's/[\&|]/\\&/g'; }
+CATEGORY_E=$(_sed_escape "$CATEGORY")
+SEVERITY_E=$(_sed_escape "$SEVERITY")
+DETECTED_BY_E=$(_sed_escape "$DETECTED_BY")
+CONTEXT_LINK_E=$(_sed_escape "$CONTEXT_LINK_OUT")
+CAPTURED_AT_E=$(_sed_escape "$CAPTURED_AT")
+SOURCE_E=$(_sed_escape "$SOURCE")
+
+sed -e "s|{{CATEGORY}}|$CATEGORY_E|g" \
+    -e "s|{{SEVERITY}}|$SEVERITY_E|g" \
+    -e "s|{{DETECTED_BY}}|$DETECTED_BY_E|g" \
+    -e "s|{{CONTEXT_LINK}}|$CONTEXT_LINK_E|g" \
+    -e "s|{{CAPTURED_AT}}|$CAPTURED_AT_E|g" \
+    -e "s|{{SOURCE}}|$SOURCE_E|g" \
     "$TEMPLATE" > "$FILE"
 
 # --one-line 주면 # 무엇이 일어났나 섹션 자동 채움

@@ -16,7 +16,7 @@
 | L0 | 사용자 영향 미미, 롤백 자유 | lint + 변경 파일 테스트 |
 | L1 | 사용자 노출, 캐시 영향 없음 | + structural-check |
 | L2 | 트랜잭션 / 노출 + 캐시 | + integration tag + traffic estimation |
-| L3 | 결제 / 정산 / 금액 흐름 | + 사람 architect 게이트 (강제) |
+| L3 | 비가역 손실 가능 영역 — 결제·정산, 의료 PHI·EHR, 안전·제어, 회계·장부 무결성, 인증·자격증명 등 | + 사람 architect 게이트 (강제) |
 
 ## 매트릭스 — 권장 액션 + Friction
 

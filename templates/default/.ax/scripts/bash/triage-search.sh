@@ -61,8 +61,18 @@ fi
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
 cd "$PROJECT_ROOT"
 
-# 키워드 → alternation 패턴 (공백 분리, 빈 토큰 제거)
-ALT=$(printf '%s' "$KEYWORDS" | tr -s ' ' '|' | sed 's/^|//; s/|$//')
+# 키워드 → alternation 패턴 (공백 분리, 빈 토큰 제거).
+# 각 토큰의 regex 메타문자 escape — KEYWORDS 는 LLM 추출이라 신뢰 입력이지만,
+# `.` `*` `(` 같은 메타가 들어오면 의도치 않은 매칭·ReDoS 가능. 방어적 코딩.
+ALT=""
+# shellcheck disable=SC2206
+read -ra _GOAX_KW_ARR <<< "$KEYWORDS"
+for _kw in "${_GOAX_KW_ARR[@]}"; do
+    [ -z "$_kw" ] && continue
+    _esc=$(printf '%s' "$_kw" | sed -E 's/[][\.*+?(){}|^$\\]/\\&/g')
+    if [ -z "$ALT" ]; then ALT="$_esc"; else ALT="$ALT|$_esc"; fi
+done
+unset _GOAX_KW_ARR _kw _esc
 
 if [ -z "$ALT" ]; then
     if [ "$JSON_MODE" = true ]; then
@@ -76,7 +86,14 @@ fi
 # dry-run: 검색 안 하고 어떤 명령이 실행될지만 출력
 if [ "$DRY_RUN" = true ]; then
     if [ "$JSON_MODE" = true ]; then
-        json_output "ok" "{\"alt\":\"$ALT\",\"dry_run\":true}" "검색 안 함 — alternation 패턴만 출력했어요"
+        # ALT 에 escape 된 backslash 포함 가능 → JSON 안전 생성
+        if command -v jq >/dev/null 2>&1; then
+            RES=$(jq -nc --arg alt "$ALT" '{alt: $alt, dry_run: true}')
+        else
+            _esc_alt=$(printf '%s' "$ALT" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            RES="{\"alt\":\"$_esc_alt\",\"dry_run\":true}"
+        fi
+        json_output "ok" "$RES" "검색 안 함 — alternation 패턴만 출력했어요"
     else
         printf 'pattern: %s\n' "$ALT"
         printf '(dry-run — 검색 실행 안 함)\n'
