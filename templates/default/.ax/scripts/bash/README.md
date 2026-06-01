@@ -16,7 +16,9 @@
 | `check-templates-drift.sh` | `_templates/.origin` ↔ 현재 sha 비교 | `doctor` |
 | `check-manifest-install.sh` | MANIFEST 출고분 ↔ 사용자 프로젝트 파일 단위 비교 (missing + drift) | `doctor` |
 | `promote-mistake.sh` | mistake → CLAUDE.md 룰 승격 (후보·적용) | `audit` |
-| `triage-search.sh` | KEYWORDS 로 specs/adrs/mistakes/rules/modules/imported 6 군데 동시 grep | `triage` |
+| `triage-search.sh` | KEYWORDS 로 6 군데(specs/adrs/mistakes/rules/modules/imported) 검색 + 동의어 확장 + 매칭수 랭킹 + 스니펫 + 도메인 boost | `triage` |
+| `build-memory.sh` | `.ax/` 상태 → `.ax/MEMORY.md` 한 줄 포인터 인덱스 재생성 (triage 가 먼저 read) | `triage` |
+| `build-index.sh` | 역색인 `.ax/.search-index` 빌드 + BM25 query (대형 코퍼스 tier, 재생성 캐시) | `triage-search` |
 
 ## 표준 (모든 스크립트 공통)
 

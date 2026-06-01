@@ -9,8 +9,8 @@
   "plugins": [
     {
       "name": "goax",
-      "description": "4계층 하네스(Triage/Constitution/Module/Spec·ADR) + Spirit/Mistake Loop. up/onboarding skill로 자연어 도입 (idempotent install or update). Multi-CLI 지원 — Claude Code (native) + OpenCode (AGENTS.md SSOT + opencode.json Hybrid compat).",
-      "version": "0.2.0",
+      "description": "AI 에이전트 결과 일관성을 환경으로 통제하는 4계층 하네스 (Triage·Constitution·Module·Spec/ADR) + Spirit·Mistake Loop. bash+markdown only, 자연어로 도입. Claude Code·OpenCode 지원.",
+      "version": "0.2.1",
       "author": {
         "name": "bluechat",
         "email": "itsinil@gmail.com"
@@ -30,5 +30,5 @@
       ]
     }
   ],
-  "version": "0.2.0"
+  "version": "0.2.1"
 }

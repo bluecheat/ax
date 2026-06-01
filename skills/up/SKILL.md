@@ -222,6 +222,16 @@ else
     cp "$TPL/.ax/config.yml" .ax/config.yml
 fi
 
+# 6.5b .ax/search-aliases.yml — 조건부 (manifest 외, 사용자 동의어 customize 보존)
+# triage-search 키워드 확장용. 사용자가 도메인 동의어를 채우는 자산이라
+# plugin re-install 이 clobber 하지 않도록 config.yml 과 동일 패턴.
+if [ -f .ax/search-aliases.yml ]; then
+    cp "$TPL/.ax/search-aliases.yml" .ax/search-aliases.yml.suggested
+else
+    mkdir -p .ax
+    cp "$TPL/.ax/search-aliases.yml" .ax/search-aliases.yml
+fi
+
 # 6.6 plugin 메타 reference — cp from PLUGIN_ROOT/docs/reference
 # rules-tokens, critical-rules, glossary, triage-matrix, rule-enforcement 등.
 # CLAUDE.md / spirit/rules / modules/README.md 가 `.ax/docs/reference/*` 경로로 참조 →

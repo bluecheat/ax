@@ -1,0 +1,20 @@
+# .ax/search-aliases.yml — triage 검색 키워드 동의어 확장
+#
+# triage-search.sh 가 사용자 키워드를 같은 그룹의 동의어로 OR 확장해 recall(재현율) 을 보강해요.
+# 키워드-only grep 의 약점(paraphrase·동의어 누락)을 메우는 결정론 레이어 —
+# 예: 키워드 "refund" 로 검색해도 "환불"·"reimbursement" 본문이 같이 잡혀요.
+#
+# 형식:  <대표어>: [동의어1, 동의어2, 한글동의어, ...]
+#   - 대표어·동의어 어느 쪽이든 사용자 키워드와 (대소문자 무시) 일치하면 그룹 전체로 확장.
+#   - 영문·한글 섞어도 돼요. 쉼표로 구분.
+#   - 자기 프로젝트 도메인 용어로 교체/추가하세요.
+#   - 이 파일이 없어도 triage 검색은 동작해요 (확장만 생략).
+#
+# ⚠ 한 토큰을 여러 그룹에 중복으로 넣지 마세요 (확장 폭주 방지).
+#
+# ─── 예시 — 자기 도메인으로 교체 ───
+refund: [환불, reimbursement, chargeback, 반품]
+payment: [결제, pay, 페이, 청구, billing]
+settlement: [정산, settle, 세틀먼트]
+order: [주문, 발주, 오더]
+auth: [인증, authentication, 로그인, login, 자격증명, credential]

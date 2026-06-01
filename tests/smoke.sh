@@ -335,11 +335,12 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────
-section "9. .ax/scripts/bash/ 10개 + --json + --help (0.1.16 check-spec-clarity 추가)"
+section "9. .ax/scripts/bash/ 12개 + --json + --help"
 # ───────────────────────────────────────────────────────────
 SCRIPTS_DIR="$REPO/templates/default/.ax/scripts/bash"
 for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
-         check-spec-clarity slug-from-text check-templates-drift check-manifest-install promote-mistake; do
+         check-spec-clarity slug-from-text check-templates-drift check-manifest-install promote-mistake \
+         build-memory build-index; do
     f="$SCRIPTS_DIR/$s.sh"
     if [ -f "$f" ]; then
         # bash -n 통과
@@ -371,7 +372,9 @@ mkdir -p "$TMP_E2E/.ax/mistakes"
         "slug-from-text.sh --json 'End To End Test'" \
         "check-templates-drift.sh --json" \
         "check-manifest-install.sh --json --plugin-dir $REPO" \
-        "promote-mistake.sh --json"; do
+        "promote-mistake.sh --json" \
+        "build-memory.sh --json" \
+        "build-index.sh --json"; do
         out=$(bash "$REPO/templates/default/.ax/scripts/bash/"$cmd 2>/dev/null) || true
         if echo "$out" | jq -e '.status' >/dev/null 2>&1; then
             pass "$cmd → valid JSON"

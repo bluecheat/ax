@@ -106,6 +106,16 @@ SHORT=$([ "$WC" -lt 5 ] && echo 1 || echo 0)
 
 LLM 분류 전에 **bash로 후보 자료를 좁혀요**. 큰 프로젝트(>1000 파일)일수록 이게 정확도·속도를 결정해요.
 
+### 1.0 MEMORY.md 먼저 — 빠른 회상 인덱스
+
+검색 전에 `.ax/MEMORY.md` 를 재생성하고 **가장 먼저 읽어요**. 현재 작업·CRITICAL/MANDATORY 룰·모듈·최근 ADR·열린 mistakes·spec 을 한 줄 포인터로 담은 작은 인덱스라, 이걸로 "지금 프로젝트에 뭐가 있는지" 를 토큰 싸게 파악한 뒤 키워드를 더 정확히 뽑아요.
+
+```bash
+bash .ax/scripts/bash/build-memory.sh --json   # .ax/MEMORY.md 재생성 (.ax/ 상태 반영)
+```
+
+그다음 `.ax/MEMORY.md` 본문을 read. 포인터 중 작업과 관련된 항목만 그 `→ 경로` 의 본문을 추가로 read 해요 (index/detail 분리 — 통째로 다 읽지 않아요).
+
 ### 1.1 작업 키워드 추출
 
 사용자 메시지에서 명사·도메인 단어를 뽑아 변수로:
@@ -121,24 +131,28 @@ KEYWORDS="payment refund settlement" # 예시 (실제는 LLM이 의역)
 .ax/scripts/bash/triage-search.sh --keywords "$KEYWORDS" --json
 ```
 
-출력 JSON:
+출력 JSON — 각 카테고리는 `score`(매칭 줄 수, 내림차순) + `snippets`(매칭 줄 미리보기) 를 가진 객체 배열:
 ```json
 {
  "status": "ok",
  "result": {
-   "specs":    ["기존 spec 디렉토리들"],
-   "adrs":     ["관련 ADR 파일들"],
-   "mistakes": ["같은 영역 과거 실수들"],
-   "rules":    ["매칭된 Constitution / Spirit 룰 파일들"],
-   "modules":  ["module/rules.md|매칭된키워드"],
-   "imported": ["외부 흡수 spec들"]
+   "specs":    [{"path": ".ax/docs/spec/003-refund-flow", "score": 1, "snippets": []}],
+   "adrs":     [{"path": ".ax/docs/adr/0007-refund-window.md", "score": 4,
+                 "snippets": ["2:환불(refund) 윈도우 30일.", "3:refund 승인은 ledger 확인."]}],
+   "mistakes": [{"path": "...", "score": 2, "snippets": ["..."]}],
+   "rules":    [{"path": "CLAUDE.md", "score": 1, "snippets": ["..."]}],
+   "modules":  [{"path": ".ax/modules/payment/rules.md", "score": 1, "snippets": [], "match": "refund"}],
+   "imported": [{"path": "...", "score": 1, "snippets": ["..."]}]
  },
- "next_step": "N개 자료 매칭 — Required reading 에 첨부해요"
+ "next_step": "N개 자료 매칭 (score 내림차순) — snippet 으로 연관성 먼저 확인하고 필요한 것만 본문 read"
 }
 ```
 
-LLM 은 JSON 만 받아 결과를 분류 결과의 *Required reading* 으로 첨부해요.
-`.ax/modules/<n>/rules.md` 가 매칭되면 **반드시** 포함해요 — 모듈 도메인 룰은 작업 진입 시 컨텍스트에 들어가야 효력이 있어요.
+**snippet-first 읽기 (토큰 효율)**: LLM 은 먼저 `snippets` 만 보고 연관성을 판단해요. 스니펫이 실제로 작업과 관련 있을 때만 그 `path` 전체를 read 해서 *Required reading* 에 첨부 — 매칭됐다고 통째로 다 읽지 않아요. `score` 가 높은 항목부터 봐요.
+
+예외 — 본문을 **반드시** read 해야 하는 경우:
+- `modules` 매칭(`.ax/modules/<n>/rules.md`): 모듈 도메인 룰은 작업 진입 시 컨텍스트에 들어가야 효력이 있어요. snippet 이 비어 있어도 본문 포함.
+- `mistakes` 매칭: 과거에 같은 함정에 빠진 기록이라 snippet 으로 끝내지 말고 본문 확인 (1.2 말미 규칙).
 
 ### 1.3 도메인 위험도 매칭
 
