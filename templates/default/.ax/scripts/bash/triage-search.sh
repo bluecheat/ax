@@ -92,8 +92,10 @@ expand_keywords() {
         done
         [ "$hit" -eq 1 ] && expanded="$expanded $toks"
     done < "$ALIAS_FILE"
-    # 토큰 dedup (대소문자 무시), 공백 구분 재출력
-    printf '%s' "$expanded" | tr ' ' '\n' | grep -v '^$' | awk '!seen[tolower($0)]++' | tr '\n' ' '
+    # 토큰 dedup (대소문자 무시), 공백 구분 재출력.
+    # 전부-공백 입력이면 grep -v 가 exit 1 → pipefail+set -e 로 치환 abort 하므로 || true 가드
+    # (빈 결과는 아래에서 ALT 빈값 → json_error 로 깔끔히 처리됨).
+    printf '%s' "$expanded" | tr ' ' '\n' | grep -v '^$' | awk '!seen[tolower($0)]++' | tr '\n' ' ' || true
 }
 
 # 키워드 → (동의어 확장) → alternation 패턴 (공백 분리, 빈 토큰 제거).
