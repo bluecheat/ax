@@ -111,10 +111,16 @@ LLM 분류 전에 **bash로 후보 자료를 좁혀요**. 큰 프로젝트(>1000
 검색 전에 `.ax/MEMORY.md` 를 재생성하고 **가장 먼저 읽어요**. 현재 작업·CRITICAL/MANDATORY 룰·모듈·최근 ADR·열린 mistakes·spec 을 한 줄 포인터로 담은 작은 인덱스라, 이걸로 "지금 프로젝트에 뭐가 있는지" 를 토큰 싸게 파악한 뒤 키워드를 더 정확히 뽑아요.
 
 ```bash
-bash .ax/scripts/bash/build-memory.sh --json   # .ax/MEMORY.md 재생성 (.ax/ 상태 반영)
+bash .ax/scripts/bash/build-memory.sh --json   # 재생성. 응답 result.mode 로 full/lean 확인
 ```
 
-그다음 `.ax/MEMORY.md` 본문을 read. 포인터 중 작업과 관련된 항목만 그 `→ 경로` 의 본문을 추가로 read 해요 (index/detail 분리 — 통째로 다 읽지 않아요).
+그다음 `.ax/MEMORY.md` 본문을 read. 포인터 중 작업과 관련된 항목만 그 `→ 경로` 의 본문을 추가로 read 해요 (index/detail 분리 — 통째로 다 읽지 않아요). 읽는 법:
+
+- **★ 표시** = 현재 작업 domain 에 걸린 ADR/spec/모듈 — **이걸 먼저** 보고 `→ 경로` 본문만 read.
+- **`… +N more → <dir>`** = 섹션 예산(8개) 초과분. 더 필요하면 그 `<dir>` 를 glob.
+- **lean 모드** (`result.mode=="lean"` · 작은 프로젝트): 모듈/ADR/spec/mistakes 가 `(N) → <dir>` 한 줄로 접혀 있어요. 인덱스가 오버헤드라 일부러 열거를 생략한 거니, 필요하면 그 dir 를 직접 glob 하세요.
+
+토큰 조절 옵션: `--no-preview`(룰 토큰+경로만)·`--lean`(강제 접기)·`--full`(전체 열거). 자세한 건 `build-memory.sh --help`.
 
 ### 1.1 작업 키워드 추출
 
