@@ -10,5 +10,6 @@
   "started_at": null,
   "updated_at": null,
   "phase": "idle",
+  "intent_notes": {},
   "blocked_by": []
 }

@@ -68,6 +68,7 @@ if [ "$RESET" = true ]; then
             | .started_at = null
             | .updated_at = (now | todate)
             | .phase = "idle"
+            | .intent_notes = {}
             | .blocked_by = []' "$TASK_FILE" \
             > "${TASK_FILE}.tmp" && mv "${TASK_FILE}.tmp" "$TASK_FILE"
     fi

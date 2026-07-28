@@ -92,12 +92,12 @@ SHORT=$([ "$WC" -lt 5 ] && echo 1 || echo 0)
 
 ### 인터뷰 종료 후
 
-답변을 받으면 그 의도를 1단계 (bash 사전 검색) 의 `KEYWORDS` 추출에 합쳐요. 인터뷰 결과는 `.ax/current-task.json` 의 `intent_notes` 필드에 기록 (3.5단계). 다음 skill (spec/spec-tasks/...) 이 같은 의도를 재추론하지 않아요.
+답변을 받으면 그 의도를 1단계 (bash 사전 검색) 의 `KEYWORDS` 추출에 합쳐요. 인터뷰 결과는 `.ax/current-task.json` 의 `intent_notes` 객체에 **축별 key** 로 기록해요 (3.5단계) — 0단계 3축은 `why` / `constraints` / `done`. 다음 skill (spec/spec-tasks/...) 과 4단계 역면접이 같은 의도를 재추론·재질문하지 않아요.
 
 ### 절대 금지
 
 - 입력이 짧은데 인터뷰 없이 *default 분류* 로 흘려보냄 → values 자기 합리화 신호 *"이건 너무 사소해서 spec 안 만들어도 돼"* 의 triage 버전
-- 한 라운드에 2개 이상 질문 (목적 + 제약 동시 묻기) — 사용자 부담 증가, 답변 품질 저하
+- 한 라운드에 2개 이상 질문 (목적 + 제약 동시 묻기) — 사용자 부담 증가, 답변 품질 저하. **0단계 한정 룰** — 4단계 역면접은 체크리스트 성격이라 별도 상한 (최대 5문) 을 따라요
 - 자유 텍스트 강요 (`"어떤 의도세요?"`) — multiple choice 가능한 상황에서 free text 는 사용자에 사고 비용 전가
 
 ---
@@ -304,7 +304,8 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 2. 2단계 (Size × Risk) — config.yml + 키워드 매핑
 3. 3단계 (출력 + 옵션 제시) — 사용자가 [a]/[b]/[c] 선택
 4. **3.5단계 — current-task.json 작성**
-5. 분류 오차 발견 시 `.ax/mistakes/` 캡처 → 다음 audit에서 룰 승격 검토
+5. **4단계 — 역면접 (spec 경로 셀만)** → 답변을 `intent_notes` 에 병합
+6. 분류 오차 발견 시 `.ax/mistakes/` 캡처 → 다음 audit에서 룰 승격 검토
 
 ## 3.5단계 — current-task.json 작성 
 
@@ -313,6 +314,7 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 ```bash
 TASK_ID=$(date -u +%Y-%m-%d)-$(printf '%03d' $((RANDOM % 1000)))
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+INTENT_JSON='{}'   # 0단계 인터뷰 답변 — 축별 객체 (예: '{"why":"버그 수정 — 환불 실패"}'), 스킵 시 {}
 
 jq --arg id "$TASK_ID" \
  --arg desc "$DESCRIPTION" \
@@ -326,12 +328,60 @@ jq --arg id "$TASK_ID" \
  | .risk = $risk
  | .domain = $domain
  | .started_at = $now
- | .phase = "triaged"' \
+ | .phase = "triaged"
+ | .intent_notes = ((.intent_notes // {}) + $intent)' \
+ --argjson intent "$INTENT_JSON" \
  .ax/current-task.json > .ax/current-task.json.tmp \
  && mv .ax/current-task.json.tmp .ax/current-task.json
 ```
 
 이후 spec-new가 `.ax/scripts/bash/tier-from-state.sh --json`로 tier 자동 결정.
+
+## 4단계 — 역면접 (Reverse Interview)
+
+> 0단계가 "어느 상자에 넣을지"(분류) 를 물었다면, 4단계는 "만들기 전에 놓친 요구사항" 을 캐요.
+> 핵심은 명령을 더 받는 게 아니라 **내가 뭘 모르는지** 를 채우는 것 — 규모·실패 모드·경계·성공 기준은 코드에 없어서 물어야만 알아요.
+
+### 발동 조건
+
+**3단계에서 확정된 경로가 spec 경로일 때만** — 게이팅 매트릭스에서 spec 이 권장되는 셀 (M×L2 이상, L×*, XL×*). spec/spec-implement 진입 직전 **1회**.
+
+| 분류 | 역면접 |
+|---|---|
+| S×* / M×L0~L1 (즉시·inline) | **스킵** — spec 진입이 없어 과잉질문이에요 |
+| M×L2 이상, L, XL (spec 경로) | 발동 — spec 만들기 전 1회 |
+| L3 (비가역 영역) | **스킵 금지** — 스킵하면 `.ax/mistakes/` 캡처 대상이에요 |
+
+### 진행 룰
+
+1. **질문 축은 [`references/reverse-interview.md`](references/reverse-interview.md)** — 프로젝트에 `.ax/docs/reference/reverse-interview.md` 가 있으면 그쪽이 우선 (도메인 특화 축).
+2. **작업과 관련된 축 3~5개만** 골라요. 한 라운드 최대 5문, multiple choice 우선. (0단계의 "한 라운드 1문" 은 0단계 한정 — 역면접은 체크리스트 성격이라 한 라운드에 묶어 물어요.)
+3. **낯선 영역이면 blind-pass 먼저** — 처음 만지는 코드베이스/도메인이면 첫 라운드를 질문이 아니라 정찰로 시작해요. AI 가 자주 깨지는 지점·엣지케이스·기존 유사 구현을 먼저 스캔하고, 그 결과에서 나온 구체적 불확실성만 질문으로 변환. 상세는 references 참조.
+4. **중복 방지** — `.ax/current-task.json` 의 `intent_notes` 에 이미 key 가 있는 축은 재질문 금지 (0단계 답변 포함):
+   ```bash
+   jq -r '.intent_notes // {} | keys[]' .ax/current-task.json   # 이미 답한 축
+   ```
+
+### 종료 후 — intent_notes 병합
+
+답변을 축별 key 로 `intent_notes` 에 병합해요 (3.5단계와 같은 jq tmp-mv 패턴):
+
+```bash
+jq --argjson intent "$REVERSE_INTERVIEW_JSON" \
+ '.intent_notes = ((.intent_notes // {}) + $intent)' \
+ .ax/current-task.json > .ax/current-task.json.tmp \
+ && mv .ax/current-task.json.tmp .ax/current-task.json
+```
+
+spec/spec-tasks 는 이 `intent_notes` 를 입력으로 받아 §3 acceptance criteria 와 §7.5 Technical Context 를 채워요 — 재질문·재추론하지 않아요.
+
+### 절대 금지
+
+- 사용자가 이미 답한 축 재질문 — `intent_notes` 를 안 읽었다는 신호예요
+- 한 라운드 5개 초과 질문 — 발굴이 아니라 심문이에요
+- **L3 인데 역면접 스킵** — 비가역 영역의 요구사항 누락은 되돌릴 수 없어요. 스킵 발견 시 `.ax/mistakes/` 캡처 대상
+- S×L0~L1 에 역면접 강행 — 결정 공간 없는 질문은 사용자 시간 낭비 (3.3 과 같은 원칙)
+- 코드를 읽으면 알 수 있는 걸 질문 — 정찰 (blind-pass) 로 스스로 채우고, 질문은 코드에 없는 것 (의도·제약·기준) 만
 
 ## 상세
 

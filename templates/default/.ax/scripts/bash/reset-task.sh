@@ -7,7 +7,7 @@
 #   - /task-done 같은 명령
 #
 # 효과:
-#   - current-task.json → phase=idle, size/risk/domain/spec_* 모두 null
+#   - current-task.json → phase=idle, size/risk/domain/spec_* 모두 null, intent_notes={}
 #   - .triage-nudged 마커 삭제 → 다음 사용자 메시지에 nudge 재발동 가능
 #
 # Usage:
