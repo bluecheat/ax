@@ -121,6 +121,19 @@ elif [ -z "$SIZE" ] || [ -z "$RISK" ]; then
     RISK="${RISK:-L1}"
 fi
 
+# enum 검증 — 오타·비표준 값(소문자 l, "Large" 등)이 조용히 standard 로 fallback 되면
+# L×L3/XL 이 full 로 못 가서 L3 게이팅이 우회된다. fallback 이 아니라 에러가 맞다.
+case "$SIZE" in
+    S|M|L|XL) ;;
+    *) goax_error "invalid size '$SIZE' — S|M|L|XL 만 허용. triage 를 다시 돌리거나 --size 로 교정."
+       exit "$EXIT_ERROR" ;;
+esac
+case "$RISK" in
+    L0|L1|L2|L3) ;;
+    *) goax_error "invalid risk '$RISK' — L0|L1|L2|L3 만 허용. triage 를 다시 돌리거나 --risk 로 교정."
+       exit "$EXIT_ERROR" ;;
+esac
+
 # 매트릭스 (0.1.16 — 2 단계로 슬림화)
 case "$SIZE-$RISK" in
     S-*|M-*)        TIER="standard"; REASON="S/M size — spec + tasks" ;;

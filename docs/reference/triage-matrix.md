@@ -4,10 +4,13 @@
 
 | 등급 | 정의 | 권장 경로 |
 |---|---|---|
-| S | 1\~2 파일, 비즈니스 로직 미변경 | 즉시 작업 + commit |
-| M | 한 도메인 신규 기능, 1\~2일 | task-machine / speckit |
-| L | Cross-domain OR 고위험 도메인 | task-machine 5-parallel + ADR |
-| XL | 신규 도메인 / 리팩토링 / 마이그레이션 | 단계 분할 + 단계당 ADR |
+| S | 1\~2 파일·한 함수, 비즈니스 로직 미변경 — 30분 안 | 즉시 작업 + commit |
+| M | 한 모듈/도메인 신규 기능 — 반나절\~2일 | inline 또는 standard tier |
+| L | 2개 이상 모듈/도메인 또는 새 추상화 — 1\~3일 | standard tier (+ evaluator/ADR) |
+| XL | 신규 도메인 / 리팩토링 / 마이그레이션 — 1주 이상 | full tier + 단계 분할 + 단계당 ADR |
+
+> Size 는 **규모만** 잰다 — 도메인 위험은 Risk 축이 담당. "결제라서 L" 같은 혼입은
+> 위험을 두 축에 이중 반영해 매트릭스를 왜곡한다.
 
 ## Risk
 
@@ -22,10 +25,10 @@
 
 | Size \ Risk | L0 | L1 | L2 | L3 |
 |---|---|---|---|---|
-| **S** | 즉시 · autopilot | 즉시+lint · autopilot | 즉시+ADR · phase_gate | 게이트+ADR+traffic · per_task |
-| **M** | task-machine · autopilot | +structural · phase_gate | +traffic · phase_gate | 게이트+ADR+evaluator · per_task |
-| **L** | +ADR · phase_gate | +ADR · phase_gate | +ADR+evaluator · phase_gate | 게이트+단계분할 · per_task |
-| **XL** | 단계분할 · phase_gate | 단계분할 · phase_gate | 단계분할 · phase_gate | 단계분할+게이트+단계당 ADR · per_task |
+| **S** | 즉시 · autopilot | 즉시+lint · autopilot | 즉시+ADR · phase_gate | 게이트+ADR · per_task |
+| **M** | inline · autopilot | inline+lint · phase_gate | standard · phase_gate | standard+evaluator · per_task |
+| **L** | standard · phase_gate | standard · phase_gate | standard+evaluator · phase_gate | full+게이트 · per_task |
+| **XL** | full+단계분할 · phase_gate | full+단계분할 · phase_gate | full+단계분할 · phase_gate | full+단계분할+단계당 ADR · per_task |
 
 > 각 셀: `권장 액션 · friction 모드`. friction 의미는 `confirmation-policy.md` 참조.
 > - `autopilot` — 메뉴 X, 자동 진행, 실패 시에만 halt
@@ -52,14 +55,19 @@
 
 ## 호출 순서
 
-기본:
+즉시/inline 경로:
 ```
-[/triage] → [persona] → [구현] → [hooks] → [tester] → [evaluator] → [commit]
+[/triage] → [구현] → [hooks] → [commit]
 ```
 
-L 이상:
+spec 경로 (M×L2 이상, L, XL):
 ```
-[/triage] → [adr-write] → [task-machine] → [도메인 페르소나(들)] → [hooks] → [tester] → [evaluator] → [architect] → [commit]
+[/triage] → [spec] → [spec-tasks] → [spec-implement] → [hooks] → [evaluator] → [commit]
+```
+
+L3 또는 아키텍처 영향:
+```
++ [adr] · [architect] 게이트
 ```
 
 ## 관련 룰

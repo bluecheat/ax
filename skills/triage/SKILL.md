@@ -176,10 +176,12 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 
 | Size | 기준 |
 |---|---|
-| S | 한 파일·한 함수, 30분 안 |
-| M | 1~2 모듈, 반나절 안 |
-| L | 다중 모듈 또는 새 추상화, 1~3일 |
-| XL | 새 도메인·새 모듈·아키텍처 변경, 1주 이상 |
+| S | 1~2 파일·한 함수, 한 도메인, 비즈니스 로직 미변경 — 30분 안 |
+| M | 한 모듈/도메인 내 신규 기능 — 반나절~2일 |
+| L | 2개 이상 모듈/도메인 또는 새 추상화 — 1~3일 |
+| XL | 새 도메인 추가·아키텍처 변경·마이그레이션 — 1주 이상 |
+
+> Size 는 **규모만** 재요. "결제라서 L" 같은 위험 혼입 금지 — 도메인 위험은 Risk 축이 담당하고, 섞으면 위험이 두 축에 이중 반영돼 매트릭스가 왜곡돼요. (기준표는 `references/risk-matrix.md` 와 동일 — 수정 시 함께.)
 
 ### Risk
 
@@ -192,13 +194,15 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 | Size × Risk | 권장 경로 | spec tier | 게이트 |
 |---|---|---|---|
 | S × L0~L1 | 즉시 작업 | — (불필요) | hooks만 |
-| M × L0~L1 | inline fallback | basic (spec.md만, 선택) | hooks + lint |
-| M × L2 | spec 권장 | **basic** (spec.md + README) | spec-validate |
-| M × L3 | spec + plan | **standard** (spec + plan + tasks) | spec-validate + evaluator |
-| L × L0~L2 | spec + plan + tasks | **standard** | spec-validate + evaluator |
-| L × L3 / XL × * | spec + plan + tasks + research/data-model/contracts + ADR | **full** (9 파일) | spec-validate + ADR + 사람 게이트 |
+| M × L0~L1 | inline fallback | standard (선택) | hooks + lint |
+| M × L2 | spec 권장 | **standard** (spec.md + tasks.md) | spec-validate |
+| M × L3 | spec + tasks | **standard** | spec-validate + evaluator |
+| L × L0~L2 | spec + tasks | **standard** | spec-validate + evaluator |
+| L × L3 / XL × * | spec + tasks + research/data-model/quickstart + contracts + ADR | **full** | spec-validate + ADR + 사람 게이트 |
 
-**핵심**: triage가 size×risk에 따라 *spec tier 권장*을 함께 출력해요. spec-new는 이 tier 결과를 받아 *필요한 파일만* 생성해요. 처음부터 9개 다 깔지 않음.
+> tier 는 0.1.16부터 **standard / full 2단계** (basic·plan.md 폐기 — 설계 결정은 ADR 로). 결정론 SSOT 는 `tier-from-state.sh` — 이 표와 스크립트 매트릭스가 어긋나면 스크립트가 맞아요.
+
+**핵심**: triage가 size×risk에 따라 *spec tier 권장*을 함께 출력해요. spec-new는 이 tier 결과를 받아 *필요한 파일만* 생성해요. 처음부터 full 세트를 다 깔지 않음.
 
 ## 3단계 — 출력 (조건부 메뉴)
 
@@ -214,7 +218,7 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 |---|---|
 | S × L0 | "즉시 작업으로 진행해요. 다른 경로 원하면 말씀." |
 | S × L1 | "즉시 + lint 로 진행해요. ADR 필요하면 말씀." |
-| L × L3 / XL × L3 | "spec + plan + tasks + ADR 풀 패키지로 진행해요. 축소 원하면 `--tier standard` 명시." |
+| L × L3 / XL × L3 | "spec + tasks + ADR 풀 패키지로 진행해요. 축소 원하면 `--tier standard` 명시." |
 | 나머지 매트릭스 명백 셀 | 권장 1줄만 |
 
 출력 예 (S × L0):
@@ -236,7 +240,7 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 🔬 Triage (입력: "<요약>")
 
  📍 분류  L × L3 — <도메인> <변경 요약> (다중 모듈)
- 🎯 권장  spec + plan + tasks + ADR 풀 패키지. evaluator + architect 게이트.
+ 🎯 권장  spec + tasks + ADR 풀 패키지. evaluator + architect 게이트.
 
  ─ 사전 검색 결과 ─────────────────────────────────
  관련 spec .ax/docs/spec/<NNN>-<slug>/
@@ -269,7 +273,7 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
   Risk  L2 (<도메인> 매칭)
   도메인  <도메인>
 
- 🎯 권장 경로  tier=standard (spec + plan + tasks)
+ 🎯 권장 경로  tier=standard (spec + tasks)
 
  ─ 사전 검색 결과 ─────────────────────────────────
  관련 spec ...
