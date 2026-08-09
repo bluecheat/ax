@@ -14,7 +14,6 @@ schema 변경 시 반드시 `statusline.sh`가 읽는 path와 이 문서를 같�
 |---|---|---|---|
 | `goax_version` | installer (template cp) | release만 (불변) | doctor |
 | `updated_at` | installer | 모든 skill 종료 시 | doctor, hud |
-| `hud_preset` | installer | `/hud preset <name>` | statusline |
 | `layers.L0_triage.active` | installer | onboarding Q5, doctor | statusline |
 | `layers.L1_constitution.active` | installer | onboarding Q5, doctor | statusline |
 | `layers.L2_module.active` | installer | onboarding Q5, doctor | statusline |
@@ -24,7 +23,7 @@ schema 변경 시 반드시 `statusline.sh`가 읽는 path와 이 문서를 같�
 | `cross_cut.spirit.{rules_count,values_filled}` | installer | doctor (실측) | statusline |
 | `cross_cut.mistakes.active` | installer | doctor (`count > 0` 이면 true) | statusline |
 | `cross_cut.mistakes.{count,last_audit,due_in_days}` | installer | audit, doctor | statusline |
-| `current_task` | null | triage skill | statusline |
+| `current_task` | null (미사용 — 작업 컨텍스트는 별도 파일 `.ax/current-task.json` 이 SSOT) | — | statusline 은 `.ax/current-task.json` 을 직접 읽음 |
 | `last_skill` | null | 모든 skill 종료 시 | doctor |
 | `skill_calls` | 0 | 모든 skill 종료 시 (`+= 1`) | doctor |
 

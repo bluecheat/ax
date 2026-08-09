@@ -38,7 +38,12 @@ while [ $# -gt 0 ]; do
         --help|-h)   SHOW_HELP=true ;;
         --apply)     APPLY=true ;;
         --archive)   ARCHIVE=true ;;
-        --threshold) shift; THRESHOLD="${1:-}"; THRESHOLD_SET=true ;;
+        --threshold)
+            shift; THRESHOLD="${1:-}"
+            case "$THRESHOLD" in
+                ''|*[!0-9]*) goax_error "--threshold 는 양의 정수가 필요해요 (받은 값: '$THRESHOLD')"; exit "$EXIT_ERROR" ;;
+            esac
+            THRESHOLD_SET=true ;;
         --token)     shift; TOKEN="${1:-}" ;;
         --category)  shift; CATEGORY="${1:-}" ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;

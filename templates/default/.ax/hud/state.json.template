@@ -1,7 +1,6 @@
 {
   "goax_version": null,
   "updated_at": null,
-  "hud_preset": "compact",
   "sensors_mode": "warning",
   "layers": {
     "L0_triage":       { "active": true,  "skills": 3 },

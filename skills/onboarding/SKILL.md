@@ -39,7 +39,7 @@ stack=...
 
 ## 2. 깊이 분석 (Claude가 직접 코드를 본다)
 
-다음을 실제 파일로 확인해요. **추측 금지, 추측 대신 질문(values 4️⃣)**.
+다음을 실제 파일로 확인해요. **추측 금지 — 파일로 확인 못 한 건 사용자에게 물어요.**
 
 ### 2.0 사전 bash 스캔 — 큰 프로젝트 대비
 
@@ -574,14 +574,16 @@ Layer 1 — CLAUDE.md 시그널화:
  > AI 에이전트의 비협상 룰. 룰 토큰: `<scope>:<TIER>:<NNN>` — `.ax/docs/reference/rules-tokens.md` 참조.
  ```
 
- **(b) META — 핵심 가드레일 4원칙 (항상 동일 문구)**:
+ **(b) META — 핵심 가드레일 (AGENTS.md.template 과 항상 동일 문구)**:
  ```
- ## META — 핵심 가드레일 4원칙
+ ## META — 핵심 가드레일
 
- - **Think Before Coding** — 추측 금지. 모르면 질문.
- - **Simplicity First** — 50줄로 되면 200줄 쓰지 마. 추상화는 두 번째 호출자부터.
- - **Surgical Changes** — 요청 외 코드 X. 변경 한 줄도 요청에 trace.
- - **Goal-Driven** — 검증 없이 끝나지 마. 버그 고침 = 재현 테스트 통과.
+ - **Triage First** — 새 작업·기능·수정·리팩토링·버그 fix 요청 받자마자 `goax:triage` 1회 호출. **`EnterPlanMode` 진입 전·직후에도 필수** (plan mode 와 triage 는 직교 — 도구 제약이 Skill 호출을 막지 않음). "사용자가 '계획' 단어 썼으니 plan mode 직행" 은 anti-pattern.
+
+ > lean 원칙: 일반 행동 원칙(추측 금지·단순성 우선·요청 범위 준수·검증 후 종료)은 frontier
+ > 모델의 기본 행동이라 상시 주입하지 않아요 — 중복 지시는 토큰 낭비 + 과잉 검증 유발.
+ > `config.yml` `model_tier: standard`(경량·타사 모델) 프로젝트는
+ > `.ax/_templates/spirit/behavioral-baseline.md` 를 복원해요.
  ```
 
  **(c) 시그널 의미 (항상 동일 문구)**:

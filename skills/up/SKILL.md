@@ -166,9 +166,9 @@ if [ -f AGENTS.md ]; then
     cp "$TPL/AGENTS.md.template" .ax/AGENTS.md.suggested
 else
     cp "$TPL/AGENTS.md.template" AGENTS.md
-    # 신규 설치일 때만 [PROJECT_NAME] 치환 — 프로젝트 디렉토리 basename (BSD-sed 호환)
+    # 신규 설치일 때만 [PROJECT_NAME] 치환 — 프로젝트 디렉토리 basename (tmp-mv — BSD/GNU sed 모두 호환)
     PROJECT_NAME="$(basename "$(pwd)")"
-    sed -i '' "s/\[PROJECT_NAME\]/$PROJECT_NAME/g" AGENTS.md
+    sed "s/\[PROJECT_NAME\]/$PROJECT_NAME/g" AGENTS.md > AGENTS.md.tmp && mv AGENTS.md.tmp AGENTS.md
 fi
 
 # 5.1 CLAUDE.md — Claude Code alias (manifest 외 조건부)

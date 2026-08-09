@@ -72,8 +72,8 @@ idle → triaged → spec → spec_checked
 승격 3단계와 `promote-mistake.sh` 실제 플래그:
 
 ```bash
-# 1. 후보 조회 (dry-run 기본)
-bash .ax/scripts/bash/promote-mistake.sh --json --threshold 2
+# 1. 후보 조회 (dry-run 기본 — threshold 는 config.yml promotion_threshold, 기본 3)
+bash .ax/scripts/bash/promote-mistake.sh --json
 
 # 2. mistake 에 promoted_to 마킹 (룰 본문은 LLM 이 spirit/rules 에 직접 Edit)
 bash .ax/scripts/bash/promote-mistake.sh --apply --json --token SP-SEC-001 --category security

@@ -178,7 +178,7 @@ before / after 예시:
 + - 검증: pre-commit grep `(password|secret|api[_-]?key|token).*=.*["']`
 ```
 
-**왜 spirit/rules 만?**: path-scoped hook (`spirit-rules-inject.sh`) 이 매 작업마다 frontmatter `paths:` 매칭해서 자동 inject — 매 turn CLAUDE.md 에 누적할 필요 없음. CLAUDE.md 는 META 4원칙·핵심 가드 만 유지 (heavy 회피).
+**왜 spirit/rules 만?**: path-scoped hook (`spirit-rules-inject.sh`) 이 매 작업마다 frontmatter `paths:` 매칭해서 자동 inject — 매 turn CLAUDE.md 에 누적할 필요 없음. Constitution(AGENTS.md) 은 META(Triage First)·핵심 가드만 유지 (heavy 회피).
 
 **plugin shipped 파일 append 금지**: `security.md`, `ops.md` 같은 plugin 출고본에 직접 append X. project-specific 별도 파일 (`<project>-<category>.md`) 로 만들고, 같은 카테고리 룰이 누적되면 그 파일에 SP-<CAT>-NNN 만 추가.
 

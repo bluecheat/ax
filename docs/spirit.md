@@ -6,7 +6,7 @@ Spirit은 모든 sub-agent가 공유하는 *태도·문화·일하는 방식*이
 
 `.ax/spirit/` (사용자 프로젝트에 깔리는 자산):
 
-- `values.md` — 핵심 가치 (긍정 편향 금지·비판적 사고·결과→근거→다음 액션·추측 대신 질문·작은 단위·자가 점검·안전 우선)
+- `values.md` — 핵심 가치 (작은 단위·안전 우선·팀 고유 가치 — lean 기본. frontier 모델 기본 행동과 중복되는 행동 지시는 `_templates/spirit/behavioral-baseline.md` opt-in, `model_tier` 로 분기)
 - `tone.md` — 어체·말씨 (`~해요 체` 강제 + 안티패턴)
 - `rules/<카테고리>.md` — 카테고리별 룰 (security, naming, pr, testing, error-handling, concurrency, observability, architecture, data)
 

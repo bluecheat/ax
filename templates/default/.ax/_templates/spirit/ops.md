@@ -14,8 +14,8 @@ applies_to: [code, pr, commit, review]
 > 모든 작업·sub-agent의 공통 행동 룰. 도메인 특화 룰이 아닌 *어떻게 일하는지*의 베이스라인.
 > 룰 작성법: `.ax/docs/reference/rules-tokens.md`
 
-<!-- META 4원칙(Think Before / Simplicity First / Surgical Changes / Goal-Driven)은
-     root CLAUDE.md ## META 블록에 별도 박힘. 본 파일은 그 위에 쌓는 운영 룰. -->
+<!-- META(Triage First)는 root AGENTS.md ## META 블록에 별도 박힘 (lean — 일반 행동
+     원칙은 behavioral-baseline.md opt-in). 본 파일은 그 위에 쌓는 운영 룰. -->
 
 ## SP-OPS-001: MANDATORY 룰 위반 가능성 감지 시 작업 중단
 

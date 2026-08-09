@@ -83,12 +83,12 @@ grep -lE "^\| 상태 \|.*폐기|superseded" .ax/docs/adr/*.md 2>/dev/null
 DEST=".ax/docs/adr/0006-payment-refund-strategy.md"
 cp .ax/_templates/adr/0000-template.md "$DEST"
 
-# 메타 자동 채움 (sed로 — BSD sed 호환)
-sed -i '' \
+# 메타 자동 채움 (tmp-mv — BSD/GNU sed 모두 호환)
+sed \
  -e "s/| ADR ID | NNNN |/| ADR ID | 0006 |/" \
  -e "s/| 작성일 | YYYY-MM-DD |/| 작성일 | $(date +%Y-%m-%d) |/" \
  -e "s/<한 줄 결정>/Payment Refund Strategy/" \
- "$DEST"
+ "$DEST" > "$DEST.tmp" && mv "$DEST.tmp" "$DEST"
 ```
 
 ✓ 메시지:

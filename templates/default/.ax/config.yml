@@ -3,6 +3,16 @@
 # 자기 프로젝트에 맞게 수정해.
 
 # ───────────────────────────────────────────────────────────
+# Model tier — 하네스 행동 스캐폴딩 강도
+#   frontier  lean 하네스 (기본). 행동 가이드 최소, 결정론(Sensors·스크립트) 중심.
+#             최신 상위 모델은 행동 지시가 적을수록 잘 작동해요.
+#   standard  경량·구세대·타사 모델용. behavioral-baseline 복원 권장:
+#             cp .ax/_templates/spirit/behavioral-baseline.md .ax/spirit/ 후
+#             AGENTS.md CONVENTION 섹션에 @.ax/spirit/behavioral-baseline.md 추가
+# ───────────────────────────────────────────────────────────
+model_tier: frontier
+
+# ───────────────────────────────────────────────────────────
 # 도메인 위험도 매트릭스 — /triage 가 키워드로 매칭
 # 키: 영문(kebab-case) 도메인 이름. 값: L0|L1|L2|L3
 #

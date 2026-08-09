@@ -154,8 +154,9 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 ## 5. 완료 마킹 — silent
 
 ```bash
-# - [ ] T020 ... → - [x] T020 ...
-sed -i '' 's/^- \[ \] \(\[T020\]\)/- [x] \1/' "$SPEC_DIR/tasks.md"
+# - [ ] T020 ... → - [x] T020 ...  (tmp-mv — BSD/GNU sed 모두 호환)
+sed 's/^- \[ \] \(\[T020\]\)/- [x] \1/' "$SPEC_DIR/tasks.md" > "$SPEC_DIR/tasks.md.tmp" \
+  && mv "$SPEC_DIR/tasks.md.tmp" "$SPEC_DIR/tasks.md"
 ```
 
 각 task 완료 후 1줄 보고 (대화 [y/n] X):

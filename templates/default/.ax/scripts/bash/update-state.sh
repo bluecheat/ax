@@ -35,7 +35,9 @@ case "$MODE" in
         ;;
     update|--json|--dry) ;;
     *)
-        json_error "unknown option: $MODE"
+        # 알 수 없는 옵션 — 호출자가 --json 을 안 줬으니 stderr 사람용 에러 (다른 스크립트와 동일)
+        goax_error "unknown option: $MODE (사용법: --help)"
+        exit "$EXIT_ERROR"
         ;;
 esac
 

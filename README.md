@@ -80,7 +80,7 @@ What GOAX provisions splits into two flavors:
 
 | Flavor | Pre-registered (universal) | Consent-based (project-specific) |
 |---|---|---|
-| **META** (cognitive guard) | 4 core guardrail principles — identical across projects | — |
+| **META** (cognitive guard) | Triage First (lean — generic behavioral principles live in the opt-in `_templates/spirit/behavioral-baseline.md`) | — |
 | **CRITICAL hooks** | Destructive commands / protected paths / secrets / hydration / Entity·SQL / Kotlin var | DDL conventions · module dependencies · test framework → onboarding asks [hook now / TODO later / demote] |
 | **Behavioral** (Spirit) | `_templates/spirit/ops.md` SP-OPS-001–007 — opt-in template (user explicitly copies into `spirit/rules/`) | Category-specific extra rules |
 | **Module rules** | — | `.ax/modules/<n>/rules.md` (only L2/L3 domains mapped in Q2 are stubbed) |
@@ -154,6 +154,7 @@ When autorouting fails, fall back to keywords from the `/goax` index, or have th
 - **`current-task.json`** — task-context SSOT shared between triage → spec → audit (no LLM re-inference)
 - **`_templates/.origin`** — sha-compares user edits vs plugin shipped version; doctor surfaces drift. Never auto-overwrites.
 - **Thin-wrapper SKILL.md** — deterministic parts delegated to scripts. SKILL handles only triggers, interaction, and JSON parsing.
+- **Rebaseline over accumulate** — behavioral scaffolding is re-baselined per model generation: lean by default for frontier models (`model_tier: frontier`), full behavioral baseline opt-in for weaker models via `.ax/_templates/spirit/behavioral-baseline.md`. Instructions are restored per-item only when a failure actually recurs (ablation principle) — determinism (Sensors · Mistake Loop) is exempt from this depreciation.
 
 ---
 

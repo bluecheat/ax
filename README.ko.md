@@ -80,7 +80,7 @@ GOAX 가 깔아주는 자산은 두 결로 나뉘어요:
 
 | 결 | 사전 등록 (universal) | 사용자 동의 (project-specific) |
 |---|---|---|
-| **META** (사고 가드) | 핵심 가드레일 4원칙 — 모든 프로젝트 동일 | — |
+| **META** (사고 가드) | Triage First (lean — 일반 행동 원칙은 opt-in `_templates/spirit/behavioral-baseline.md`) | — |
 | **CRITICAL hooks** | 파괴 명령 / 보호 경로 / Secrets / Hydration / Entity·SQL / Kotlin var | DDL 컨벤션·모듈 의존·테스트 프레임워크 → onboarding이 [지금 hook / 나중 TODO / 강등] 묻기 |
 | **Behavioral** (Spirit) | `_templates/spirit/ops.md` SP-OPS-001–007 — opt-in 템플릿 (사용자가 명시적으로 `spirit/rules/` 으로 복사 후 활성화) | 카테고리별 추가 룰 |
 | **Module rules** | — | `.ax/modules/<n>/rules.md` (Q2 매핑된 L2/L3 도메인만 stub) |
@@ -154,6 +154,7 @@ GOAX 가 깔아주는 자산은 두 결로 나뉘어요:
 - **`current-task.json`** — triage → spec → audit 사이 작업 컨텍스트 SSOT (LLM 재추론 X)
 - **`_templates/.origin`** — 사용자 수정 vs plugin 출고본 sha 비교, drift는 doctor가 알려줘요. 자동 덮어쓰기 절대 X
 - **얇은 wrapper SKILL.md** — 결정론 부분은 스크립트에 위임하고 SKILL 은 트리거·인터랙션·JSON 파싱만 담당해요
+- **축적 대신 재베이스라인** — 행동 스캐폴딩은 모델 세대마다 재베이스라인해요: frontier 모델은 lean 기본 (`model_tier: frontier`), 경량·타사 모델은 `.ax/_templates/spirit/behavioral-baseline.md` opt-in. 지시 복원은 실패가 실제로 재발할 때 항목 단위로만 (ablation 원칙) — 결정론(Sensors · Mistake Loop)은 이 감가상각의 예외예요
 
 ---
 
