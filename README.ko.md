@@ -67,7 +67,7 @@
 └─────────────────────────────────────────────────────────────────┘
        ▲                                       ▲
        │ Cross-cut: Spirit                     │ Cross-cut: Mistake Loop
-       │ .ax/spirit/{values, tone, rules}      │ .ax/mistakes/ — hook 자동 capture
+       │ .ax/spirit/{values, tone, rules}      │ .ax/mistakes/ — 수동 캡처 (mistake skill)
        │ → 모든 sub-agent 공통 태도              │ → /audit 심사 → 룰 승격
 
 Sensors (결정론적):  .ax/hooks/{user-prompt, pre-bash, pre-edit, post-edit, pre-commit}/*.sh
@@ -167,7 +167,7 @@ your-project/
 ├── CLAUDE.md                              # @AGENTS.md alias — Claude Code 자동 인식
 ├── opencode.json                          # OpenCode config (OpenCode 환경 감지 시만)
 ├── .ax/
-│   ├── spirit/{values, tone, rules}/      # Cross-cut Spirit (ops.md 포함)
+│   ├── spirit/{values, tone, README}.md   # Cross-cut Spirit (출고되는 3종; rules/ 는 사용자 큐레이션, ops.md 는 _templates/spirit/ 를 통한 opt-in)
 │   ├── modules/                           # Layer 2 — 모듈별 도메인 룰 (인스턴스만)
 │   │   ├── README.md
 │   │   └── <module-name>/rules.md         # onboarding Q5가 L2/L3 도메인만 stub
@@ -179,17 +179,17 @@ your-project/
 │   │   └── post-edit/lint-changed.sh
 │   ├── scripts/bash/*.sh                  # 결정론 도구 (--json 표준)
 │   │   └── install-git-hooks.sh           # OpenCode mode — git pre-commit chain 설치
+│   ├── _templates/                        # Layer 3 — 모든 template 한 곳
+│   │   ├── adr/0000-template.md
+│   │   └── spec/{spec, tasks, ...}.md  + .origin (drift sha)
 │   ├── current-task.json                  # 작업 컨텍스트 SSOT
 │   ├── config.yml                         # 도메인 위험도 + sensors.mode
 │   ├── mistakes/                          # Cross-cut Mistake Loop
 │   ├── version
 │   └── docs/
-│       ├── _templates/                    # Layer 3 — 모든 template 한 곳
-│       │   ├── adr/0000-template.md
-│       │   └── spec/{spec, tasks, ...}.md  + .origin (drift sha)
 │       ├── adr/                           # 실제 ADR (onboarding이 0001-goax-adoption.md 자동 생성)
 │       ├── spec/                          # 실제 spec 디렉토리 (NNN-<slug>/)
-│       └── reference/opencode-compat.md   # Multi-CLI 호환 SSOT
+│       └── reference/                     # 읽기 전용 reference 문서 7개 (plugin docs/reference/ 에서 복사)
 └── .claude/
     └── settings.json                      # hooks 등록 (Claude Code 전용 — UserPromptSubmit + PreToolUse + PostToolUse)
 ```
@@ -313,7 +313,7 @@ statusline 은 *어시스턴트 메시지 직후* 에 자동으로 갱신돼요 
 
 ## Further Reading
 
-- [`CONCEPTS.md`](CONCEPTS.md) — 14개 핵심 개념 카드 (왜 이렇게 만들었나)
+- [`CONCEPTS.md`](CONCEPTS.md) — 설계 사상, 왜 이렇게 만들었나
 - [`docs/sdd.md`](docs/sdd.md) — Spec-Driven Development
 - [`docs/spirit.md`](docs/spirit.md) — Spirit 운영 가이드
 - [`docs/skill-routing.md`](docs/skill-routing.md) — skill 라우팅 매트릭스

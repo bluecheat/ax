@@ -1,6 +1,6 @@
 ---
 name: adr
-description: "ADR (Architecture Decision Record) 작성 워크플로우. 새 결정을 .ax/docs/adr/NNNN-<slug>.md로 기록. 트리거: 'ADR 작성', 'adr', '결정 기록', '아키텍처 결정', 'rationale', '선택의 근거', 'adr', '/adr'."
+description: "ADR (Architecture Decision Record) 작성 워크플로우. 새 결정을 .ax/docs/adr/NNNN-<slug>.md로 기록. 트리거: 'ADR 작성', 'adr', '결정 기록', '아키텍처 결정', 'rationale', '선택의 근거'."
 ---
 
 # adr — ADR 작성 워크플로우
@@ -39,9 +39,7 @@ KEYWORDS="payment refund"
 grep -rilE "($KEYWORDS)" .ax/docs/adr 2>/dev/null
 
 # 다음 번호 계산 (NNNN 4자리 zero-pad)
-NEXT=$(ls .ax/docs/adr/[0-9][0-9][0-9][0-9]-*.md 2>/dev/null \
- | sed 's|.*/||' | awk -F- '{print $1}' | sort -n | tail -1)
-NEXT=$(printf "%04d" $((10#${NEXT:-0} + 1)))
+NEXT=$(bash .ax/scripts/bash/next-spec-num.sh --kind adr --json | jq -r '.result.next')
 echo "다음 ADR 번호: $NEXT"
 
 # 폐기·대체된 ADR 확인 (재제안 차단)
@@ -85,8 +83,8 @@ grep -lE "^\| 상태 \|.*폐기|superseded" .ax/docs/adr/*.md 2>/dev/null
 DEST=".ax/docs/adr/0006-payment-refund-strategy.md"
 cp .ax/_templates/adr/0000-template.md "$DEST"
 
-# 메타 자동 채움 (sed로)
-sed -i \
+# 메타 자동 채움 (sed로 — BSD sed 호환)
+sed -i '' \
  -e "s/| ADR ID | NNNN |/| ADR ID | 0006 |/" \
  -e "s/| 작성일 | YYYY-MM-DD |/| 작성일 | $(date +%Y-%m-%d) |/" \
  -e "s/<한 줄 결정>/Payment Refund Strategy/" \

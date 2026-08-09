@@ -1,6 +1,6 @@
 ---
 name: spec-tasks
-description: "기존 spec에 tasks.md 추가 + 분해 가이드 — '/spec-tasks', 'tasks 분해', 'tasks.md 작성', '작업 분해', '체크리스트 만들어'. spec.md (§3 acceptance + §7.5 Technical Context) + 관련 ADR 기반. add-spec-files.sh 로 selective cp."
+description: "기존 spec에 tasks.md 추가 + 분해 가이드 — 'tasks 분해', 'tasks.md 작성', '작업 분해', '체크리스트 만들어'. spec.md (§3 acceptance + §7.5 Technical Context) + 관련 ADR 기반. add-spec-files.sh 로 selective cp."
 ---
 
 # spec-tasks — tasks.md 단계
@@ -27,7 +27,7 @@ if [ ! -f "$SPEC_DIR/spec.md" ]; then
 fi
 ```
 
-> 0.1.16 부터 plan.md 는 폐기됐어요 — spec.md §7.5 Technical Context 가 기술 컨텍스트, ADR 이 설계 결정.
+> plan.md 는 폐기됐어요 — spec.md §7.5 Technical Context 가 기술 컨텍스트, ADR 이 설계 결정.
 
 ## 2. 파일 추가
 
@@ -88,7 +88,7 @@ jq '.phase = "tasks" | .updated_at = (now | todate)' .ax/current-task.json \
 📐 spec-tasks (spec 005-payment-refund-policy-change)
 
  ✓ tasks.md 추가 (tier: standard 유지)
- ✓ phase 갱신: plan → tasks
+ ✓ phase 갱신: spec_checked → tasks
 
  📍 다음
   1. tasks.md 를 spec.md §3 acceptance + §7.5 Technical Context + ADR 기반으로 분해

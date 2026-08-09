@@ -5,6 +5,9 @@ description: "Spirit 검증 — 'spirit 점검', 스피릿 분류, 'goax spirit'
 
 # goax spirit-check — Spirit 무결성
 
+## 시작 전 필수
+`.ax/spirit/values.md`, `tone.md` 따라요.
+
 ## 발동
 - "spirit 점검", "spirit lint", "goax spirit"
 
@@ -40,7 +43,7 @@ description: <one-liner>
 
  ✓ values.md (8 항목 — 사용자 정의됨)
  ✓ tone.md (~해요 체 + 5 안티패턴)
- ✓ docs/_templates/spirit/rule.md
+ ✓ .ax/_templates/spirit/rule.md
  ✓ rules/security.md (3 룰)
  ✗ rules/testing.md → frontmatter category: 누락
  · rules/pr.md → ID SP-PR-002 중복

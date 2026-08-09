@@ -28,9 +28,9 @@ goax가 어떤 프로젝트에든 깔아주는 골격.
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 1  Constitution    CLAUDE.md — 비협상 룰                │
 ├─────────────────────────────────────────────────────────────┤
-│ Layer 2  Module Rules    <module>/CLAUDE.md — 도메인별 룰     │
+│ Layer 2  Module Rules    .ax/modules/<name>/rules.md — 도메인별 룰 │
 ├─────────────────────────────────────────────────────────────┤
-│ Layer 3  Spec / ADR     docs/adr/, spec/                    │
+│ Layer 3  Spec / ADR     .ax/docs/adr/, .ax/docs/spec/        │
 └─────────────────────────────────────────────────────────────┘
                                 ↑
             ┌───────────────────┴───────────────────┐
@@ -43,7 +43,7 @@ goax가 어떤 프로젝트에든 깔아주는 골격.
 
 - **왜**: 한 줄 수정과 P0 리팩토링이 같은 진입점을 가지면 안 된다.
 - **무엇**: `/triage <설명>` 호출 시 30초 안에 Size(S/M/L/XL) × Risk(L0\~L3) 분류 + 권장 경로/sensors/사람 게이트 출력.
-- **어디**: `.ax/skills/global/triage/SKILL.md` + CLI `goax triage`.
+- **어디**: `triage` skill (plugin 이 자동 로드, 프로젝트 파일 아님) — "구현해줘"/"고쳐줘" 같은 작업 의도 표현 시 자동 발동.
 
 ### Layer 1 — Constitution
 
@@ -54,12 +54,12 @@ goax가 어떤 프로젝트에든 깔아주는 골격.
 ### Layer 2 — Module Rules
 
 - **왜**: Constitution 한 파일에 모든 모듈 룰이 몰리면 비대화 + 컨텍스트 낭비.
-- **무엇**: 모노레포의 각 모듈/앱마다 `<module>/CLAUDE.md`를 두고 그 모듈 안에서만 결정되는 룰 명시.
+- **무엇**: 모노레포의 각 모듈마다 `.ax/modules/<name>/rules.md`를 두고 그 모듈 안에서만 결정되는 룰 명시. keywords frontmatter 로 triage 가 자동 매칭해요.
 
 ### Layer 3 — Spec / ADR
 
 - **왜**: ADR가 *context drift* 방지의 핵심이에요. 거부된 패턴을 적어두지 않으면 미래의 AI가 그 대안을 다시 제안해요.
-- **무엇**: `docs/adr/NNN-*.md` (결정·검토대안·결과). 도메인 정의는 `spec/<domain>.md` 또는 별도 spec 프로젝트.
+- **무엇**: `.ax/docs/adr/NNNN-*.md` (결정·검토대안·결과). 도메인 정의는 `.ax/docs/spec/<domain>.md` 또는 별도 spec 프로젝트.
 
 ### Cross-cut — Mistake Loop
 

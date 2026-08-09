@@ -1,6 +1,6 @@
 # Claude Code Constitution — AGENTS.md alias
 
-> 이 파일은 **SSOT 가 아닙니다**. 본문은 [`AGENTS.md`](AGENTS.md) 에 있고, 이 파일은 Claude Code 의 import 트리거 역할만 해요.
+> 이 파일은 **SSOT 가 아니에요**. 본문은 [`AGENTS.md`](AGENTS.md) 에 있고, 이 파일은 Claude Code 의 import 트리거 역할만 해요.
 > 직접 편집하지 말고 `AGENTS.md` 를 customize 하세요. doctor 가 두 파일 drift 를 감지해요.
 
 @AGENTS.md

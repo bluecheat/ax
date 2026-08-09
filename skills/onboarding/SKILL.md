@@ -15,7 +15,7 @@ description: "/up (install or update) 직후 또는 사용자가 'goax 분석/�
 
 ## 시작 전 필수
 
-`.ax/spirit/values.md`, `tone.md`, `rules/output-style.md` 따라요. 출력은 clack 스타일 (◆/│/├/└ + ●/○ + 시맨틱 이모지).
+`.ax/spirit/values.md`, `tone.md` 따라요. 출력은 clack 스타일 (◆/│/├/└ + ●/○ + 시맨틱 이모지) — 표준은 §3.0 참조.
 
 ## 왜 bash가 아니라 Claude가 하는가
 
@@ -215,7 +215,7 @@ MANDATORY는 **사람의 판단·승인·리뷰가 게이트로 들어가는 룰
 ### 2.5 외부 spec
 sibling 디렉토리(`<repo>-spec` 등)나 자기 안의 `spec/` `specs/` `governance/`가 의미 있는 결정 문서를 가지고 있으면 후보로 보여줘요.
 
-### 2.6 CLI 환경 자동 감지 (Pre-flight, 0.2.0+)
+### 2.6 CLI 환경 자동 감지 (Pre-flight)
 
 Q1 박스를 그리기 전 사용 중인 AI CLI 를 감지해서 자산 install 범위를 결정해요. 사용자에게 별도 질문 박스 없이 발견 박스에 표시.
 
@@ -246,7 +246,7 @@ OpenCode 감지 시 Q5 [a] 끝에 추가 안내: "Hook 시스템은 OpenCode 에
 
 ### 3.0 질문 출력 패턴 (clack 스타일, 모든 Q에 적용)
 
-`.ax/spirit/rules/output-style.md`의 표준을 따라요. 핵심 글리프: `◆`(헤더) `│`(좌측 bar) `├─ ─`(섹션) `└`(끝) `●/○`(옵션 상태) `▸`(입력 마커). 시맨틱 이모지: `📍 발견` `🎯 목표` `📂 영향` `⚡ 큰 변경` `✓ 장점` `⚠ 위험·주의`.
+이 skill의 clack 스타일 표준 — 핵심 글리프: `◆`(헤더) `│`(좌측 bar) `├─ ─`(섹션) `└`(끝) `●/○`(옵션 상태) `▸`(입력 마커). 시맨틱 이모지: `📍 발견` `🎯 목표` `📂 영향` `⚡ 큰 변경` `✓ 장점` `⚠ 위험·주의`.
 
 표준 박스:
 
@@ -321,7 +321,7 @@ Q1에서 "라벨이 없다"고 발견 보고할 때, 사용자가 시그널을 �
 ### Q1. Constitution (AGENTS.md / CLAUDE.md) 처리
 
 ```
-◆  Q1/5   Constitution 룰 처리   (0.2.0+ AGENTS.md SSOT)
+◆  Q1/5   Constitution 룰 처리   (AGENTS.md SSOT)
 │
 │  📍 발견
 │   CLI 환경: <claude | opencode | both | unknown> (§2.6 자동 감지)
@@ -329,7 +329,7 @@ Q1에서 "라벨이 없다"고 발견 보고할 때, 사용자가 시그널을 �
 │   AGENTS.md: <존재 / 부재>
 │   "비협상"(예: 모듈 의존) + "권장"(예: 테스트 컨벤션)이 한 파일에 섞임
 │
-│  ℹ Constitution SSOT 정책 (0.2.0+)
+│  ℹ Constitution SSOT 정책
 │   AGENTS.md = SSOT (multi-CLI). CLAUDE.md = @AGENTS.md import alias.
 │   기존 CLAUDE.md 본문이 customize 됐으면 .ax/CLAUDE.md.suggested 로 보존됨 (up 이 처리).
 │   Q1=[a] 선택 시 룰 라벨링·prepend 는 AGENTS.md 본문에 적용 (CLAUDE.md 는 alias 라 그대로).
@@ -525,7 +525,7 @@ status: imported # draft / accepted / superseded 로 사용자가 갱신
 
 `.snapshot-meta`에 원본 파일별 SHA256 기록 → 다음 onboarding/audit 시 외부 변경 감지.
 
-### Q5. Layer 1-3 활성화 (NEW — 핵심)
+### Q5. Layer 1-3 활성화 (핵심)
 
 > "도구가 깔린 것"과 "4계층이 작동하는 것"은 달라요.
 > Q1~Q4는 자산을 *준비*했고, Q5가 그걸 *활성화*해요.
@@ -664,7 +664,7 @@ Layer 1 — CLAUDE.md 시그널화:
     - [ ] <YYYY-MM-DD> hook <name>.sh 작성 또는 룰 강등 (<scope>:MANDATORY:NNN)
     ```
     doctor 가 ADR 의 `- [ ]` 라인을 grep + deadline 비교 → 임박/초과 보고.
- 5. **`.ax/mistakes/auto-todo-hooks.md`** 도 갱신 (legacy 호환 — doctor 는 ADR checklist 우선).
+ 5. **`.ax/mistakes/auto-todo-hooks.md`** 존재할 때만 함께 갱신 — doctor 는 ADR checklist 를 우선 참조.
 
  **[c] 강등 흐름**:
  - 시그널을 🟡 또는 🔵로 변경해서 prepend
@@ -765,7 +765,7 @@ Layer 1 — CLAUDE.md 시그널화:
  ---
  ```
 
- > **path-scoped 룰**: 위 frontmatter의 `paths:`를 채우면, up / doctor가 `.claude/rules/<name>.md` shim을 자동 생성해 **해당 path 작업 시에만** 룰이 컨텍스트에 들어가요 (Claude Code 네이티브 path-scoped loading). universal 룰(ops/architecture/data/testing 류)은 paths 생략 — CLAUDE.md @import으로 매 turn 주입. 도메인·레이어 특화 룰(예: <project>-domain, <project>-presenter)은 paths를 채워 token cost·adherence 둘 다 개선.
+ > **path-scoped 룰**: 위 frontmatter의 `paths:`를 채우면, `.ax/hooks/pre-edit/spirit-rules-inject.sh` (`.claude/settings.json`에 PreToolUse 로 등록됨) 가 **해당 path 작업 시에만** 룰을 additionalContext로 안내해요. universal 룰(ops/architecture/data/testing 류)은 paths 생략 — CLAUDE.md @import으로 매 turn 주입. 도메인·레이어 특화 룰(예: <project>-domain, <project>-presenter)은 paths를 채워 token cost·adherence 둘 다 개선.
 
 Layer 2 — 모듈 도메인 룰 stub 생성 (`.ax/modules/<name>/rules.md`):
 
@@ -811,7 +811,7 @@ Layer 3 — 첫 ADR (0000-template.md 사용 — `adr`와 동일 양식):
 State 초기화 (HUD용):
 10. `.ax/hud/state.json.template`을 `.ax/state.json`로 cp
 11. `doctor` 한 번 실행해 canonical 갱신 (Layer 활성도, mistakes 수 등)
-12. `.ax/current-task.json`은 up 이 이미 깔아놨음. 첫 triage가 이 파일에 작업 컨텍스트를 채워요. `.ax/scripts/bash/`도 up 이 복사함 (8개 결정론 스크립트)
+12. `.ax/current-task.json`은 up 이 이미 깔아놨음. 첫 triage가 이 파일에 작업 컨텍스트를 채워요. `.ax/scripts/bash/`도 up 이 복사함 (결정론 스크립트 일체)
 
 statusline 활성 제안 (Sub-Q4 — **항상 박스를 출력하고 답을 받을 것**):
 14. 기존 `.claude/settings.json` 의 statusLine 상태를 먼저 검사하고, 그 결과를 박스에 표시한 뒤 사용자가 명시적으로 닫게 함. **이미 활성이라고 임의 skip 금지** — 사용자는 무엇이 결정됐는지 알 권리가 있다.
@@ -823,7 +823,7 @@ statusline 활성 제안 (Sub-Q4 — **항상 박스를 출력하고 답을 받�
 
  [a] ✓ 활성화         [기존 statusLine 없을 때 권장]
    수정 .claude/settings.json
-   결과 🪝 goax ✓✓✓✓ ▸ payment L3 ▸ 📐7 🔧3 📋7d
+   결과 triage: M×L3 | harness: 🌟 | ☄2
 
  [b] ⚠ 합치기 — 기존 statusLine과 둘 다
    다른 도구(omc 등)가 이미 statusLine을 점유하고 있을 때 권장
@@ -885,7 +885,7 @@ statusline 활성 제안 (Sub-Q5 — `.ax/settings.json.suggested` 머지):
 
 ## 5. 마무리 — 마커 정리 + Spec 디렉토리 안내
 
-onboarding이 끝나면 **마커만 삭제**해요. plugin skill 자체는 plugin 디렉토리(`bluecheat/ax/skills/`)에 있어 사용자 프로젝트에서 자가 삭제 불가능 — 마커로만 "완료" 신호를 표시해요. 다음 세션에서 onboarding이 다시 자동 발동되지 않도록.
+onboarding이 끝나면 **마커만 삭제**해요. plugin skill 자체는 plugin 설치 디렉토리에 있어 사용자 프로젝트에서 자가 삭제 불가능 — 마커로만 "완료" 신호를 표시해요. 다음 세션에서 onboarding이 다시 자동 발동되지 않도록.
 
 ```bash
 # 마커 삭제
@@ -905,10 +905,10 @@ rm -f .ax/.onboarding-pending
 
 📂 .ax/ runtime 파일은 .gitignore 자동 처리됨
  .ax/state.json, .ax/current-task.json — per-machine 상태, PR에 들어가지 않음
- → 0.1.7 이전 up 이라면 doctor가 누락 entry를 안내해요.
+ → 누락 entry가 있으면 doctor가 안내해요.
 
 📋 Mistake Loop — 주 1회 audit 권장
- hook 위반이 .ax/mistakes/에 자동 누적되며, audit_cadence_days=7 (config.yml)에 따라 주기적 회고 필요
+ 실수는 "실수 기록해줘" 로 사용자가 의도적으로 캡처해요 (.ax/mistakes/), audit_cadence_days=7 (config.yml)에 따라 주기적 회고 필요
  수동 호출: "goax audit"
  자동화 옵션: Claude Routine 등록 → fresh clone에서 weekly로 promote-mistake.sh 실행 → 후보 PR 생성
  HUD ☄ 마커가 누적된 mistakes 카운트 표시

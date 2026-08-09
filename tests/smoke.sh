@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/smoke.sh — goax Plugin 구조 검증
-# 검증: 파일 구조·JSON 유효성·skill frontmatter·shell 문법·jq syntax·hook 경로
-#       + scripts/bash/ 9개·current-task.json.template (NEW)
+# 검증: 파일 구조·JSON 유효성·skill/agent frontmatter·shell 문법·jq syntax·hook 경로 양방향
+#       cross-check·MANIFEST 완전성·버전 마커 lint·scripts/bash 런타임 e2e
 
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -31,26 +31,32 @@ PLUGIN_NAME=$(python3 -c "import json; print(json.load(open('$REPO/.claude-plugi
 VER_FILE=$(cat "$REPO/VERSION" 2>/dev/null | tr -d '\n')
 VER_PLUGIN=$(python3 -c "import json; print(json.load(open('$REPO/.claude-plugin/plugin.json'))['version'])" 2>/dev/null)
 VER_MARKET=$(python3 -c "import json; d=json.load(open('$REPO/.claude-plugin/marketplace.json')); print(d['version'])" 2>/dev/null)
+VER_MARKET_PLUGIN=$(python3 -c "import json; d=json.load(open('$REPO/.claude-plugin/marketplace.json')); print(d['plugins'][0]['version'])" 2>/dev/null)
 [ "$VER_FILE" = "$VER_PLUGIN" ] && pass "VERSION ↔ plugin.json (=$VER_FILE)" || fail "VERSION/plugin.json 불일치 ($VER_FILE vs $VER_PLUGIN)"
 [ "$VER_FILE" = "$VER_MARKET" ] && pass "VERSION ↔ marketplace.json (=$VER_FILE)" || fail "VERSION/marketplace.json 불일치 ($VER_FILE vs $VER_MARKET)"
+[ "$VER_FILE" = "$VER_MARKET_PLUGIN" ] && pass "VERSION ↔ marketplace.json plugins[0].version (=$VER_FILE)" \
+    || fail "VERSION/marketplace.json plugins[0].version 불일치 ($VER_FILE vs $VER_MARKET_PLUGIN)"
+
+# changelog/<VERSION>.md 존재 — 릴리즈 시 CHANGELOG 기록 강제
+CHANGELOG_FILE="$REPO/changelog/$VER_FILE.md"
+[ -n "$VER_FILE" ] && [ -f "$CHANGELOG_FILE" ] \
+    && pass "changelog/$VER_FILE.md 존재" \
+    || fail "changelog/$VER_FILE.md 누락 (VERSION=$VER_FILE)"
 
 # ───────────────────────────────────────────────────────────
-section "2. 핵심 skills (11개 — 0.1.16 spec-plan 폐기)"
+section "2. skills/ — name: frontmatter가 디렉토리명과 일치하는지 (전체 동적 순회)"
 # ───────────────────────────────────────────────────────────
-for skill in up onboarding doctor rules \
-             spec spec-validate audit spirit hud \
-             spec-tasks spec-implement; do
-    f="$REPO/skills/$skill/SKILL.md"
-    if [ -f "$f" ]; then
-        if head -5 "$f" | grep -qE "^name: $skill\$"; then
-            pass "skills/$skill/SKILL.md (frontmatter OK)"
-        else
-            fail "skills/$skill/SKILL.md frontmatter name 불일치"
-        fi
+skill_name_count=0
+while IFS= read -r f; do
+    skill_name_count=$((skill_name_count+1))
+    skill="$(basename "$(dirname "$f")")"
+    if head -5 "$f" | grep -qE "^name: $skill\$"; then
+        pass "skills/$skill/SKILL.md (frontmatter name=$skill)"
     else
-        fail "skills/$skill/SKILL.md 누락"
+        fail "skills/$skill/SKILL.md frontmatter name 불일치 (디렉토리=$skill)"
     fi
-done
+done < <(find "$REPO/skills" -name SKILL.md | sort)
+[ "$skill_name_count" -gt 0 ] || fail "skills/*/SKILL.md 0개 — skills/ 구조 확인 필요"
 
 # 제거된 skill이 잔재로 남지 않았는지 확인 (옛 구조)
 for removed in skills/global skills/workflows \
@@ -64,7 +70,7 @@ for removed in skills/global skills/workflows \
 done
 
 # ───────────────────────────────────────────────────────────
-section "2.5 Slash commands (0.1.20 — 13개 thin wrapper 폐기, /goax 인덱스 1개만 유지)"
+section "2.5 Slash commands — thin wrapper 폐기, /goax 인덱스 1개만 유지"
 # ───────────────────────────────────────────────────────────
 # 모든 skill 은 SKILL.md frontmatter 의 자연어 키워드 트리거로 호출. /goax 인덱스
 # 1개만 discoverability 진입점으로 남김.
@@ -77,15 +83,15 @@ else
     fail "commands/goax.md 누락"
 fi
 
-# 0.1.21 폐기된 13개 wrapper 가 잔재로 남지 않았는지 확인
+# 폐기된 skill별 thin wrapper 가 잔재로 남지 않았는지 확인
 for removed in goax-up goax-onboarding goax-doctor goax-audit goax-rules goax-hud goax-spirit \
                goax-triage goax-adr goax-spec goax-spec-validate goax-spec-tasks goax-spec-implement; do
     if [ -e "$REPO/commands/$removed.md" ]; then
-        fail "commands/$removed.md — 0.1.20 에서 폐기됐어야 함 (잔재)"
+        fail "commands/$removed.md — thin wrapper 폐기됐어야 함 (잔재)"
     fi
 done
 # 폐기 잔재 0 확인 후 단일 pass
-pass "commands/ — 13개 wrapper 폐기 완료 (잔재 0)"
+pass "commands/ — thin wrapper 폐기 완료 (잔재 0)"
 
 # ───────────────────────────────────────────────────────────
 section "2.6 HUD assets"
@@ -107,6 +113,21 @@ for a in evaluator architect; do
         fail "agents/$a.md 누락"
     fi
 done
+
+# agents/*.md frontmatter — name + description 필수 (동적 순회)
+agent_fm_count=0
+while IFS= read -r f; do
+    agent_fm_count=$((agent_fm_count+1))
+    agent="$(basename "$f" .md)"
+    has_name=$(head -5 "$f" | grep -cE "^name: $agent\$" || true)
+    has_desc=$(head -10 "$f" | grep -cE "^description:" || true)
+    if [ "$has_name" -ge 1 ] && [ "$has_desc" -ge 1 ]; then
+        pass "agents/$agent.md (frontmatter name+description OK)"
+    else
+        fail "agents/$agent.md frontmatter 누락 (name=$has_name, description=$has_desc)"
+    fi
+done < <(find "$REPO/agents" -name "*.md" | sort)
+[ "$agent_fm_count" -gt 0 ] || fail "agents/*.md 0개 — agents/ 구조 확인 필요"
 
 # ───────────────────────────────────────────────────────────
 section "4. templates/default — up skill 이 사용자 프로젝트로 복사할 자산"
@@ -160,17 +181,17 @@ python3 -c "import json; json.load(open('$REPO/templates/default/.claude/setting
     && pass "settings.json.template JSON valid" \
     || fail "settings.json.template JSON invalid"
 
-# 0.2.0+ — opencode.json.template JSON valid + schema URL 검증
+# opencode.json.template JSON valid + schema URL 검증
 python3 -c "import json; d=json.load(open('$REPO/templates/default/opencode.json.template')); assert d['\$schema']=='https://opencode.ai/config.json', d['\$schema']" 2>/dev/null \
     && pass "opencode.json.template JSON valid + \$schema = opencode.ai/config.json" \
     || fail "opencode.json.template JSON invalid 또는 \$schema 불일치"
 
-# 0.2.0+ — opencode.json.template 의 instructions 에 AGENTS.md 포함
+# opencode.json.template 의 instructions 에 AGENTS.md 포함
 python3 -c "import json; d=json.load(open('$REPO/templates/default/opencode.json.template')); assert 'AGENTS.md' in d.get('instructions', []), d.get('instructions')" 2>/dev/null \
     && pass "opencode.json.template instructions[] 에 AGENTS.md 포함" \
     || fail "opencode.json.template instructions[] 에 AGENTS.md 누락"
 
-# 0.2.0+ — CLAUDE.md.template 이 @AGENTS.md import 한 줄 + 안내 (20줄 미만)
+# CLAUDE.md.template 이 @AGENTS.md import 한 줄 + 안내 (20줄 미만)
 CLAUDE_LINES=$(wc -l < "$REPO/templates/default/CLAUDE.md.template" | tr -d ' ')
 if [ "$CLAUDE_LINES" -lt 20 ] && grep -qE '^@AGENTS\.md\b' "$REPO/templates/default/CLAUDE.md.template"; then
     pass "CLAUDE.md.template — @AGENTS.md alias 형태 (${CLAUDE_LINES}줄 < 20)"
@@ -178,7 +199,7 @@ else
     fail "CLAUDE.md.template — alias 형태 아님 (${CLAUDE_LINES}줄, @AGENTS.md import 누락 가능)"
 fi
 
-# 0.2.0+ — AGENTS.md.template 이 Constitution SSOT (META + 시그널 의미 + 4계층 인덱스)
+# AGENTS.md.template 이 Constitution SSOT (META + 시그널 의미 + 4계층 인덱스)
 if grep -q "META — 핵심 가드레일" "$REPO/templates/default/AGENTS.md.template" \
    && grep -q "시그널 의미" "$REPO/templates/default/AGENTS.md.template" \
    && grep -q "4계층 인덱스" "$REPO/templates/default/AGENTS.md.template"; then
@@ -191,7 +212,7 @@ python3 -c "import json; json.load(open('$REPO/templates/default/.ax/current-tas
     && pass "current-task.json.template JSON valid" \
     || fail "current-task.json.template JSON invalid"
 
-# .gitignore.template — 0.1.8 신규. runtime 엔트리 4종 모두 포함하는지 검증.
+# .gitignore.template — runtime 엔트리 4종 모두 포함하는지 검증.
 GI_TPL="$REPO/templates/default/.gitignore.template"
 if [ -f "$GI_TPL" ]; then
     missing=0
@@ -201,33 +222,162 @@ if [ -f "$GI_TPL" ]; then
     [ "$missing" -eq 0 ] && pass ".gitignore.template — runtime 엔트리 4종 모두 포함"
 fi
 
-# 0.1.8 잔재 검증 — spirit/rules/output-style.md (plugin meta로 분류되어 0.1.8에서 출고 제거)
+# 잔재 검증 — spirit/rules/output-style.md (plugin meta로 분류되어 출고에서 제거됨)
 [ -f "$REPO/templates/default/.ax/spirit/rules/output-style.md" ] \
-    && fail "spirit/rules/output-style.md — 0.1.8에서 plugin 출고 제거됐어야 함 (plugin meta)" \
-    || pass "spirit/rules/output-style.md 출고 제거됨 (0.1.8)"
+    && fail "spirit/rules/output-style.md — plugin 출고 제거됐어야 함 (plugin meta)" \
+    || pass "spirit/rules/output-style.md 출고 제거됨"
 
 # ───────────────────────────────────────────────────────────
-section "4.1 settings.json.template — 참조 hook 파일 실존"
+section "4.1 settings.json.template ↔ .ax/hooks/ 양방향 cross-check"
 # ───────────────────────────────────────────────────────────
-HOOK_REFS=$(python3 -c "
-import json
-d = json.load(open('$REPO/templates/default/.claude/settings.json.template'))
-hooks = d.get('hooks', {})
+# 정방향: settings.json.template 이 참조하는 .ax/... 경로가 실제로 존재하는지.
+# 역방향: .ax/hooks/{user-prompt,pre-bash,pre-edit,post-edit}/*.sh 가 모두 등록됐는지
+#         (pre-commit/ 은 grep-on-commit.sh + install-git-hooks.sh 체이닝으로 별도 등록되므로 예외).
+# 실제 구조는 hooks[phase][n]['hooks'][m]['command'] 깊이이고 command 는
+# `bash "${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-bash/block-destructive.sh"` 형태라 .ax/ 부분만 추출.
+# fail() 을 파이프 서브셸 밖(here-string)에서 호출해야 fail_count 가 유실되지 않음.
+HOOK_XCHECK=$(python3 <<PYEOF
+import json, os, re, glob
+tpl = "$REPO/templates/default"
+d = json.load(open(os.path.join(tpl, ".claude/settings.json.template")))
+hooks = d.get("hooks", {})
+registered = set()
 for phase, items in hooks.items():
     for item in items:
-        cmd = item.get('command', '')
-        if cmd.startswith('.ax/'):
-            print(cmd[4:])
-" 2>/dev/null)
-echo "$HOOK_REFS" | while IFS= read -r relpath; do
-    [ -z "$relpath" ] && continue
-    full="$REPO/templates/default/.ax/$relpath"
-    if [ -f "$full" ]; then
-        pass "settings.json → .ax/$relpath (실존)"
-    else
-        fail "settings.json → .ax/$relpath 누락 (런타임 깨짐)"
-    fi
-done
+        for h in item.get("hooks", []):
+            cmd = h.get("command", "")
+            m = re.search(r'\.ax/[^"\s]+\.sh', cmd)
+            if m:
+                registered.add(m.group(0))
+lines = []
+for path in sorted(registered):
+    full = os.path.join(tpl, path)
+    lines.append("FWD|%s|%d" % (path, 1 if os.path.isfile(full) else 0))
+for phase in ["user-prompt", "pre-bash", "pre-edit", "post-edit"]:
+    for f in sorted(glob.glob(os.path.join(tpl, ".ax/hooks", phase, "*.sh"))):
+        rel = os.path.relpath(f, tpl)
+        lines.append("REV|%s|%d" % (rel, 1 if rel in registered else 0))
+print("\n".join(lines))
+PYEOF
+)
+if [ -z "$HOOK_XCHECK" ]; then
+    fail "4.1 hook cross-check — python 실행 실패 또는 settings.json.template 파싱 오류"
+else
+    while IFS='|' read -r kind relpath ok; do
+        [ -z "$kind" ] && continue
+        case "$kind" in
+            FWD)
+                if [ "$ok" = "1" ]; then
+                    pass "settings.json → $relpath (실존)"
+                else
+                    fail "settings.json → $relpath 누락 (런타임 깨짐)"
+                fi
+                ;;
+            REV)
+                if [ "$ok" = "1" ]; then
+                    pass "$relpath → settings.json.template 등록됨"
+                else
+                    fail "$relpath → settings.json.template 미등록 (hook 안 걸림)"
+                fi
+                ;;
+        esac
+    done <<< "$HOOK_XCHECK"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "4.2 MANIFEST 완전성 — templates/default 전체 파일이 MANIFEST 또는 조건부 복사로 커버되는지"
+# ───────────────────────────────────────────────────────────
+# skills/up/SKILL.md §5-§6 이 실제로 처리하는 조건부(manifest 외) 파일 목록.
+# 이 목록과 up SKILL.md 본문이 벌어지면 이 테스트도 같이 갱신해야 함.
+CONDITIONAL_COPIES="AGENTS.md.template CLAUDE.md.template opencode.json.template \
+.claude/settings.json.template .ax/config.yml .ax/search-aliases.yml \
+.ax/mistakes/README.md .ax/spirit/values.md .ax/spirit/tone.md .ax/spirit/README.md \
+.gitignore.template"
+
+MANIFEST_CHECK=$(python3 <<PYEOF
+import os
+tpl = "$REPO/templates/default"
+manifest = os.path.join(tpl, "MANIFEST")
+dirs = []
+renames = {}
+singles = []
+with open(manifest) as fh:
+    for line in fh:
+        line = line.rstrip("\n")
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if " -> " in line:
+            src, dst = line.split(" -> ", 1)
+            renames[src.strip()] = dst.strip()
+        elif line.endswith("/"):
+            dirs.append(line)
+        else:
+            singles.append(line)
+
+lines = []
+# MANIFEST source 실존 검증
+for d in dirs:
+    full = os.path.join(tpl, d)
+    lines.append("SRC|%s|%d" % (d, 1 if os.path.isdir(full) else 0))
+for s in singles:
+    full = os.path.join(tpl, s)
+    lines.append("SRC|%s|%d" % (s, 1 if os.path.isfile(full) else 0))
+for src in renames:
+    full = os.path.join(tpl, src)
+    lines.append("SRC|%s|%d" % (src, 1 if os.path.isfile(full) else 0))
+
+conditional = set("$CONDITIONAL_COPIES".split())
+
+def covered(relpath):
+    if relpath in singles or relpath in renames:
+        return True
+    if relpath in conditional:
+        return True
+    for d in dirs:
+        if relpath.startswith(d):
+            return True
+    return False
+
+orphans = []
+for root, _, files in os.walk(tpl):
+    for fn in files:
+        full = os.path.join(root, fn)
+        rel = os.path.relpath(full, tpl)
+        if rel == "MANIFEST":
+            continue
+        if not covered(rel):
+            orphans.append(rel)
+
+for o in sorted(orphans):
+    lines.append("ORPHAN|%s|0" % o)
+
+print("\n".join(lines))
+PYEOF
+)
+if [ -z "$MANIFEST_CHECK" ]; then
+    fail "4.2 MANIFEST 완전성 — python 실행 실패"
+else
+    manifest_src_missing=0
+    manifest_orphan_count=0
+    while IFS='|' read -r kind relpath ok; do
+        [ -z "$kind" ] && continue
+        case "$kind" in
+            SRC)
+                if [ "$ok" != "1" ]; then
+                    fail "MANIFEST source 누락: $relpath"
+                    manifest_src_missing=$((manifest_src_missing+1))
+                fi
+                ;;
+            ORPHAN)
+                fail "MANIFEST 미커버 (orphan): $relpath"
+                manifest_orphan_count=$((manifest_orphan_count+1))
+                ;;
+        esac
+    done <<< "$MANIFEST_CHECK"
+    [ "$manifest_src_missing" -eq 0 ] && pass "MANIFEST 모든 source 경로 실존"
+    [ "$manifest_orphan_count" -eq 0 ] && pass "templates/default/ 전체 파일이 MANIFEST/조건부 복사로 커버됨 (orphan 0)"
+fi
 
 # ───────────────────────────────────────────────────────────
 section "5. SKILL frontmatter — 모든 skill의 description"
@@ -274,10 +424,13 @@ if command -v jq >/dev/null 2>&1; then
     cat > "$HUD_TMP/.ax/state.json" <<JSON
 {"layers":{"L0_triage":{"active":true},"L1_constitution":{"active":true},"L2_module":{"active":false},"L3_spec_adr":{"active":true,"specs":1}},
 "cross_cut":{"spirit":{"active":true},"mistakes":{"active":false,"count":0,"due_in_days":7}},
-"current_task":{"domain":"test","risk":"L1"},"hud_preset":"full"}
+"hud_preset":"full"}
 JSON
+    # .ax/current-task.json 이 triage(size/risk) SSOT — state.json.current_task 는 갖지 않음.
+    # phase=idle(또는 size/risk 미채움)이면 statusline 이 triage fragment 를 숨기므로
+    # phase!=idle + size/risk 둘 다 채워야 e2e 가 triage: 라벨을 검증할 수 있음.
     cat > "$HUD_TMP/.ax/current-task.json" <<JSON
-{"spec_id":"005","spec_dir":".ax/docs/spec/005-test","spec_tier":"standard","phase":"implementing"}
+{"spec_id":"005","spec_dir":".ax/docs/spec/005-test","spec_tier":"standard","phase":"implementing","size":"M","risk":"L1"}
 JSON
     cat > "$HUD_TMP/.ax/docs/spec/005-test/spec.md" <<MD
 # Spec
@@ -335,7 +488,7 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────
-section "9. .ax/scripts/bash/ 12개 + --json + --help"
+section "9. .ax/scripts/bash/ 핵심 스크립트 — 문법 + 실행권한 + e2e JSON"
 # ───────────────────────────────────────────────────────────
 SCRIPTS_DIR="$REPO/templates/default/.ax/scripts/bash"
 for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
@@ -357,32 +510,34 @@ for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
 done
 
 # end-to-end JSON validity (임시 프로젝트에서)
+# pushd/popd 는 서브셸을 만들지 않으므로 pass/fail 이 fail_count 를 정상 갱신함
+# (이전엔 `( cd … )` 서브셸 안에서 호출돼 카운트가 유실됐음).
 TMP_E2E=$(mktemp -d)
 mkdir -p "$TMP_E2E/.ax/_templates/spec"
 cp -R "$REPO/templates/default/.ax/_templates/spec/." "$TMP_E2E/.ax/_templates/spec/" 2>/dev/null
 cp "$REPO/templates/default/.ax/current-task.json.template" "$TMP_E2E/.ax/current-task.json" 2>/dev/null
 mkdir -p "$TMP_E2E/.ax/mistakes"
-(
-    cd "$TMP_E2E" || exit 1
-    for cmd in \
-        "next-spec-num.sh --json" \
-        "tier-from-state.sh --json" \
-        "tier-from-state.sh --json --size L --risk L3" \
-        "init-spec-dir.sh --json --tier standard --slug e2e-test --dry-run" \
-        "slug-from-text.sh --json 'End To End Test'" \
-        "check-templates-drift.sh --json" \
-        "check-manifest-install.sh --json --plugin-dir $REPO" \
-        "promote-mistake.sh --json" \
-        "build-memory.sh --json" \
-        "build-index.sh --json"; do
-        out=$(bash "$REPO/templates/default/.ax/scripts/bash/"$cmd 2>/dev/null) || true
-        if echo "$out" | jq -e '.status' >/dev/null 2>&1; then
-            pass "$cmd → valid JSON"
-        else
-            fail "$cmd → invalid JSON: ${out:0:120}"
-        fi
-    done
-)
+
+pushd "$TMP_E2E" >/dev/null || fail "TMP_E2E pushd 실패"
+for cmd in \
+    "next-spec-num.sh --json" \
+    "tier-from-state.sh --json" \
+    "tier-from-state.sh --json --size L --risk L3" \
+    "init-spec-dir.sh --json --tier standard --slug e2e-test --dry-run" \
+    "slug-from-text.sh --json 'End To End Test'" \
+    "check-templates-drift.sh --json" \
+    "check-manifest-install.sh --json --plugin-dir $REPO" \
+    "promote-mistake.sh --json" \
+    "build-memory.sh --json" \
+    "build-index.sh --json"; do
+    out=$(bash "$REPO/templates/default/.ax/scripts/bash/"$cmd 2>/dev/null) || true
+    if echo "$out" | jq -e '.status' >/dev/null 2>&1; then
+        pass "$cmd → valid JSON"
+    else
+        fail "$cmd → invalid JSON: ${out:0:120}"
+    fi
+done
+popd >/dev/null || true
 rm -rf "$TMP_E2E"
 
 # ───────────────────────────────────────────────────────────
@@ -445,7 +600,7 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────
-section "11. spirit-rules-inject.sh — hook-based path-scoped (Design B, NEW 0.1.8)"
+section "11. spirit-rules-inject.sh — hook-based path-scoped (Design B)"
 # ───────────────────────────────────────────────────────────
 HOOK_PATH="$REPO/templates/default/.ax/hooks/pre-edit/spirit-rules-inject.sh"
 [ -f "$HOOK_PATH" ] && pass "hooks/pre-edit/spirit-rules-inject.sh 존재" \
@@ -565,7 +720,7 @@ BAK_COUNT=$(find "$REG_FX/.claude" -name "settings.json.bak.*" 2>/dev/null | wc 
 rm -rf "$REG_FX"
 
 # ───────────────────────────────────────────────────────────
-section "12. update-state.sh — state.json 시그널 카운트 정확성 (NEW 0.1.8)"
+section "12. update-state.sh — state.json 시그널 카운트 정확성"
 # ───────────────────────────────────────────────────────────
 US_FX=$(mktemp -d)
 mkdir -p "$US_FX/.ax/spirit/rules" "$US_FX/.ax/scripts/bash" "$US_FX/.ax/modules" "$US_FX/.ax/docs/adr" "$US_FX/.ax/docs/spec"
@@ -596,14 +751,14 @@ if command -v jq >/dev/null 2>&1; then
                       || fail "update-state — MANDATORY=$MAND (expected 1)"
     # CONV: inline 1 (CLAUDE.md) + spirit heading 2 = 3
     [ "$CONV" = "3" ] && pass "update-state — CONVENTION=3 (1 inline + 2 spirit heading)" \
-                      || fail "update-state — CONVENTION=$CONV (expected 3, 0.1.8 heading 패턴 합산)"
+                      || fail "update-state — CONVENTION=$CONV (expected 3, heading 패턴 합산)"
     [ "$L1_ACTIVE" = "true" ] && pass "update-state — L1 active (rules > 0)" \
                               || fail "update-state — L1 active=$L1_ACTIVE"
 fi
 rm -rf "$US_FX"
 
 # ───────────────────────────────────────────────────────────
-section "13. check-templates-drift.sh — 3-state coverage (NEW 0.1.8)"
+section "13. check-templates-drift.sh — 3-state coverage"
 # ───────────────────────────────────────────────────────────
 DR_FX=$(mktemp -d)
 mkdir -p "$DR_FX/.ax/_templates/spec/contracts" "$DR_FX/.ax/_templates/spec/checklists" "$DR_FX/.ax/scripts/bash"
@@ -865,7 +1020,7 @@ fi
 rm -rf "$SL_FX"
 
 # ───────────────────────────────────────────────────────────
-section "16. install-git-hooks.sh — OpenCode mode hook 보전 (NEW 0.2.0)"
+section "16. install-git-hooks.sh — OpenCode mode hook 보전"
 # ───────────────────────────────────────────────────────────
 IGH="$REPO/templates/default/.ax/scripts/bash/install-git-hooks.sh"
 [ -f "$IGH" ] && pass "install-git-hooks.sh 존재" || fail "install-git-hooks.sh 누락"
@@ -909,6 +1064,70 @@ grep -q '.ax/hooks/pre-commit' "$IGH_FX/.git/hooks/pre-commit" \
     || fail "install-git-hooks — chain 로직 누락"
 
 rm -rf "$IGH_FX"
+
+# ───────────────────────────────────────────────────────────
+section "17. next-spec-num.sh --kind adr|spec — 번호 계산 회귀"
+# ───────────────────────────────────────────────────────────
+NS2_FX=$(mktemp -d)
+mkdir -p "$NS2_FX/.ax/scripts/bash" "$NS2_FX/.ax/docs/adr" "$NS2_FX/.ax/docs/spec"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS2_FX/.ax/scripts/bash/"
+
+# (1) --kind adr, 빈 adr/ → 0001
+OUT=$(CLAUDE_PROJECT_DIR=$NS2_FX bash "$NS2_FX/.ax/scripts/bash/next-spec-num.sh" --kind adr --json 2>&1)
+NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
+[ "$NEXT" = "0001" ] && pass "next-spec-num --kind adr — 빈 adr/ → 0001" \
+                     || fail "next-spec-num --kind adr — 빈 adr/ 결과: $NEXT ($OUT)"
+
+# (2) --kind adr, 0003-x.md 존재 → 0004
+: > "$NS2_FX/.ax/docs/adr/0003-x.md"
+OUT=$(CLAUDE_PROJECT_DIR=$NS2_FX bash "$NS2_FX/.ax/scripts/bash/next-spec-num.sh" --kind adr --json 2>&1)
+NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
+[ "$NEXT" = "0004" ] && pass "next-spec-num --kind adr — 0003-x.md → 0004 (4자리 zero-pad)" \
+                     || fail "next-spec-num --kind adr — 0003 다음 결과: $NEXT ($OUT)"
+
+# (3) --kind spec (기본) — 기존 3자리 동작 그대로 (adr/ 존재해도 영향 없음)
+OUT=$(CLAUDE_PROJECT_DIR=$NS2_FX bash "$NS2_FX/.ax/scripts/bash/next-spec-num.sh" --kind spec --json 2>&1)
+NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
+[ "$NEXT" = "001" ] && pass "next-spec-num --kind spec — 빈 spec/ → 001 (3자리, 기존 동작 유지)" \
+                    || fail "next-spec-num --kind spec 결과: $NEXT ($OUT)"
+
+# (4) --kind 생략 시 기본값 spec — 동일 결과
+OUT=$(CLAUDE_PROJECT_DIR=$NS2_FX bash "$NS2_FX/.ax/scripts/bash/next-spec-num.sh" --json 2>&1)
+NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
+[ "$NEXT" = "001" ] && pass "next-spec-num — --kind 생략 시 기본값 spec 유지" \
+                    || fail "next-spec-num --kind 생략 결과: $NEXT ($OUT)"
+
+rm -rf "$NS2_FX"
+
+# ───────────────────────────────────────────────────────────
+section "18. 버전 마커 lint — 플러그인 문서/코드에 (NEW n.n)·(n.n.n)·n.n.n+ 잔재 금지"
+# ───────────────────────────────────────────────────────────
+# repo CLAUDE.md 컨벤션: 버전 마커는 changelog/ 에만 존재해야 함 (rot 방지).
+# 정당한 외부 참조(예: 서드파티 이슈 트래커 버전)만 파일 단위로 예외 허용.
+declare -a VERSION_LINT_EXEMPT_FILES=()
+
+VLINT_OUT=$(grep -rEn '\(NEW [0-9]|\(0\.[0-9]+\.[0-9]+|[0-9]\.[0-9]+\.[0-9]+\+' \
+    --include='*.md' --include='*.sh' \
+    "$REPO/skills" "$REPO/commands" "$REPO/templates" "$REPO/docs" "$REPO/agents" 2>/dev/null || true)
+
+vlint_violation_count=0
+if [ -n "$VLINT_OUT" ]; then
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        filepath="${line%%:*}"
+        exempt=false
+        if [ "${#VERSION_LINT_EXEMPT_FILES[@]}" -gt 0 ]; then
+            for ex in "${VERSION_LINT_EXEMPT_FILES[@]}"; do
+                [ "$filepath" = "$ex" ] && exempt=true && break
+            done
+        fi
+        if [ "$exempt" = false ]; then
+            fail "버전 마커 잔재: ${line#$REPO/}"
+            vlint_violation_count=$((vlint_violation_count+1))
+        fi
+    done <<< "$VLINT_OUT"
+fi
+[ "$vlint_violation_count" -eq 0 ] && pass "버전 마커 lint — skills/commands/templates/docs/agents 잔재 0"
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"

@@ -15,7 +15,7 @@
 | 작성자 | <이름> |
 | 작성일 | YYYY-MM-DD |
 | 상태 | 초안 / 검토 중 / 승인 / 폐기 |
-| 관련 ADR | docs/adr/NNNN-*.md (있으면) |
+| 관련 ADR | .ax/docs/adr/NNNN-*.md (있으면) |
 | Triage 결과 | size=L, risk=L2 (`goax triage` 출력 첨부) |
 
 ---
@@ -33,7 +33,7 @@
 - [ ] **NEEDS CLARIFICATION**: <불확실한 것 — 결정 필요>
 - [ ] 제외 (Out of scope): <이번 버전에서 안 다루는 것>
 
-> NEEDS CLARIFICATION이 1개라도 남아있으면 `goax spec check`가 fail. 모두 해소 후 plan 단계로.
+> NEEDS CLARIFICATION이 1개라도 남아있으면 `goax spec check`가 fail. 모두 해소 후 tasks 단계로.
 
 ---
 
@@ -126,7 +126,7 @@ API/이벤트가 있으면 [`contracts/`](contracts/) 디렉토리로:
 | 스택·언어 | <e.g. Kotlin 2.0 + Spring Boot 3.3 / TypeScript> |
 | 영향 모듈 | <module-a, module-b> |
 | 적용 룰 | <CRITICAL/MANDATORY 룰 토큰 — e.g. `AX:CRITICAL:003`, `SP-SEC-002`> |
-| 진입 ADR | <docs/adr/NNNN-*.md — 설계 결정 기록 위치> |
+| 진입 ADR | <.ax/docs/adr/NNNN-*.md — 설계 결정 기록 위치> |
 
 > 짧게. 3~5 줄이면 충분. *어떻게* 의 디테일은 tasks.md 가, *왜 그 결정* 은 ADR 이 담당해요.
 

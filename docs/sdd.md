@@ -33,7 +33,7 @@ tasks.md (작업 분해)
 - spec 과 코드가 다르면 → **spec 이 맞다고 가정**, 코드를 spec 에 맞춰요
 - spec 이 바뀌면 → tasks 갱신 *필수*
 - spec 없이 코드부터 짜는 건 → L 등급 이상 작업에서 차단
-- 설계 결정 (왜 X 대신 Y) → ADR — spec 안에 우겨넣지 않아요 (0.1.16 plan.md 폐기 이후)
+- 설계 결정 (왜 X 대신 Y) → ADR — spec 안에 우겨넣지 않아요 (plan.md 는 폐기됐어요)
 
 ---
 
@@ -143,7 +143,7 @@ spec 이 통과되면:
 | 변경 빈도 | 낮음 (결정은 이력) | 중간 (도메인 진화) |
 | 게이팅 | 없음 (참고 문서) | NEEDS CLARIFICATION 게이팅 |
 
-**결합** (0.1.16):
+**결합**:
 spec.md 2️⃣ (거부된 대안) 은 *짧은 한 줄 요약* 만 두고, 결정 *근거* + Trade-offs + 거부된 옵션의 *왜* 는 ADR 이 단독으로 담당. plan.md 가 폐기되면서 spec ↔ ADR 의 역할 분리가 더 명확해졌어요.
 
 ---
@@ -184,6 +184,6 @@ goax spec list            # 모든 spec + 상태 (🔵 NEEDS / 🟡 SPEC만 / �
 
 ## 더
 
-- 템플릿 본문: [`docs/_templates/spec/`](_templates/spec/)
-- ADR template: [`docs/_templates/adr/0000-template.md`](_templates/adr/0000-template.md)
+- 템플릿 본문: [`templates/default/.ax/_templates/spec/`](../templates/default/.ax/_templates/spec/)
+- ADR template: [`templates/default/.ax/_templates/adr/0000-template.md`](../templates/default/.ax/_templates/adr/0000-template.md)
 - 4 Layer 모델 전체: [`../CONCEPTS.md`](../CONCEPTS.md)

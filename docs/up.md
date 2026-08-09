@@ -88,7 +88,7 @@
 ## 관련 문서
 
 - [`README.md`](../README.md) — 설치·명령 매핑
-- [`CONCEPTS.md`](../CONCEPTS.md) — 14개 핵심 개념
+- [`CONCEPTS.md`](../CONCEPTS.md) — 설계 사상
 - [`docs/sdd.md`](sdd.md) — Spec-Driven Development
 - [`docs/spirit.md`](spirit.md) — Spirit 작성·적용
-- [`docs/adr/`](adr/) — 결정 근거 (ADR 0001~0006)
+- [`changelog/0.1.0.md`](../changelog/0.1.0.md) "Design decisions" 섹션 — 결정 근거 (거부된 대안 포함)

@@ -1,6 +1,6 @@
 ---
 name: audit
-description: "Mistake Loop **회고·승격** skill (read+aggregate, review phase). 누적된 .ax/mistakes/*.md 를 카테고리·빈도로 분석하고 룰 승격 후보 제시. 트리거: 'goax audit', '/audit', '실수 회고', '실수 분석', '실수 패턴 분석', 'mistakes 정리', 'mistakes 점검', '재발', '같은 문제', '룰 승격', '룰 강화 후보', '또 그걸', '주간 회고'. **'회고'·'심사'·'정리'·'패턴'·'승격'·'재발' 같은 review 의도 키워드만 매칭** — '기록'·'캡처'·'남겨' 같은 capture 의도는 mistake skill 이 담당. 1건 새로 캡처하지 않음 (mistake skill 위임)."
+description: "Mistake Loop **회고·승격** skill (read+aggregate, review phase). 누적된 .ax/mistakes/*.md 를 카테고리·빈도로 분석하고 룰 승격 후보 제시. 트리거: 'goax audit', '실수 회고', '실수 분석', '실수 패턴 분석', 'mistakes 정리', 'mistakes 점검', '재발', '같은 문제', '룰 승격', '룰 강화 후보', '또 그걸', '주간 회고'. **'회고'·'심사'·'정리'·'패턴'·'승격'·'재발' 같은 review 의도 키워드만 매칭** — '기록'·'캡처'·'남겨' 같은 capture 의도는 mistake skill 이 담당. 1건 새로 캡처하지 않음 (mistake skill 위임)."
 ---
 
 # goax audit — Mistake Loop (캡처 → 심사 → 승격)
@@ -37,8 +37,8 @@ audit 은 **누적된 mistakes 회고·승격 전용**. 새 mistake 캡처는 `m
 스크립트가 카테고리 분포 + 승격 후보를 계산해요. LLM은 결과 받아 사용자 인터랙션만:
 
 ```bash
-# 후보 조회 (dry-run 기본 — 변경 없음)
-RESULT=$(bash .ax/scripts/bash/promote-mistake.sh --json --threshold 2)
+# 후보 조회 (dry-run 기본 — 변경 없음). threshold 는 config.yml promotion_threshold (기본 3) 사용
+RESULT=$(bash .ax/scripts/bash/promote-mistake.sh --json)
 
 CANDIDATES=$(echo "$RESULT" | jq -r '.result.candidates')
 TOTAL=$(echo "$RESULT" | jq -r '.result.total_categories')
@@ -198,7 +198,7 @@ ARCHIVED=$(echo "$RESULT" | jq -r '.result.archived_count')
 archived 파일은 maxdepth 1 scan 에서 자동 제외 — 후속 audit candidate · count · HUD state 모두 정확.
 
 **완료 검증 (보고 직전 필수)**:
-- `grep -rl "^promoted_to: SP-SEC-001" .ax/mistakes/ --max-depth 1` 결과 0줄 (root 에서 사라짐)
+- `grep -l "^promoted_to: SP-SEC-001" .ax/mistakes/*.md 2>/dev/null` 결과 0줄 (root 에서 사라짐)
 - `ls .ax/mistakes/_archive/<YEAR>/<MONTH>/` 에 archived 파일 N개
 
 각 단계 ✓ 보고:

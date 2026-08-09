@@ -84,7 +84,7 @@
 
 | Layer | 위치 | 역할 | enforce |
 |---|---|---|---|
-| 0 Triage | `.ax/skills/global/triage/SKILL.md` | 작업 진입 시 Size×Risk 분류 | skill |
+| 0 Triage | `goax:triage` — plugin 자동 로드, 프로젝트 파일 아님 | 작업 진입 시 Size×Risk 분류 | skill |
 | 1 Constitution | 이 파일 (AGENTS.md, META + CRITICAL/MANDATORY/CONVENTION) | 사고 가드 + 비협상 룰 | hook + human + critical-rule-grep |
 | 2 Module Rules | `.ax/modules/<name>/rules.md` | 모듈 도메인 룰 — triage가 keywords 매칭으로 자동 참조 | hook (path-scoped inject, Claude Code) + human |
 | 3 Spec / ADR | `.ax/docs/adr/` + `.ax/docs/spec/` | 결정 근거 | human (PR 리뷰) |
@@ -99,7 +99,7 @@
 빌드·테스트·실행 명령은 [`.ax/config.yml`](.ax/config.yml)의 `commands` 섹션에 기록한다.
 
 ```bash
-# 모든 명령은 자연어 트리거로 호출 가능 (0.1.20+ slash wrapper 폐기, /goax 인덱스만 유지)
+# 모든 명령은 자연어 트리거로 호출 가능 (slash wrapper 는 폐기, /goax 인덱스만 유지)
 "rules 보여줘" / /goax        # 룰 인덱스 (전체 또는 인덱스)
 "실수 회고" / "audit"          # mistakes 심사
 "진단해줘"                     # 하네스 상태 점검 (doctor)

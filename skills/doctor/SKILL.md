@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: "goax 설치 상태 진단 — '/doctor', 'goax doctor', 'goax 진단', '하네스 점검', 'goax 상태' 트리거. 4계층 + cross-cut + sensors 결손을 검사하고 다음 단계를 친절히 안내."
+description: "goax 설치 상태 진단 — 'goax doctor', 'goax 진단', '하네스 점검', 'goax 상태' 트리거. 4계층 + cross-cut + sensors 결손을 검사하고 다음 단계를 친절히 안내."
 ---
 
 # goax doctor — 4계층 결손 진단
@@ -36,7 +36,7 @@ ROOT=$(pwd) # 또는 감지한 PROJECT_ROOT
 
 # 전체 자산 한눈에
 echo "Spirit rules: $(ls $ROOT/.ax/spirit/rules/*.md 2>/dev/null | wc -l) 카테고리"
-echo "ADR:    $(ls $ROOT/.ax/docs/adr/*.md 2>/dev/null | grep -v 0000-template | wc -l) 건"
+echo "ADR:    $(ls $ROOT/.ax/docs/adr/*.md 2>/dev/null | wc -l) 건"
 echo "Spec:   $(ls -d $ROOT/.ax/docs/spec/[0-9][0-9][0-9]-* 2>/dev/null | wc -l) 건"
 echo "Mistakes:  $(ls $ROOT/.ax/mistakes/*.md 2>/dev/null | grep -v README | wc -l) 건"
 echo "Module CLAUDE: $(find $ROOT -maxdepth 4 -name CLAUDE.md -not -path "*/.*" -not -path $ROOT/CLAUDE.md 2>/dev/null | wc -l) 건"
@@ -71,7 +71,7 @@ grep -h "^category:" $ROOT/.ax/mistakes/*.md 2>/dev/null \
 | **Layer 0 / 설정** | `.ax/config.yml` (domain_risk 5+ 권장) + `.ax/version` |
 | **Cross-cut Spirit** | `values.md`/`tone.md` (placeholder 검사), `rules/<카테고리>.md` 1개+ |
 | **Cross-cut Mistake Loop** | `.ax/mistakes/` 디렉토리 존재 |
-| **Layer 3 / Spec·ADR** | `.ax/docs/adr/`, ADR 1개+ (0000-template 외), `.ax/_templates/spec/` (drift 비교는 "Plugin update 반영" 섹션 통합) |
+| **Layer 3 / Spec·ADR** | `.ax/docs/adr/`, ADR 1개+, `.ax/_templates/spec/` (drift 비교는 "Plugin update 반영" 섹션 통합) |
 | **Layer 2 / Module Rules** | (선택) 모듈별 `<module>/CLAUDE.md` 카운트 |
 | **Sensors / Hooks** | `.ax/hooks/{pre-bash,pre-edit,post-edit,pre-commit}/` + `.claude/settings.json` + **template hook 전체가 settings.json 에 등록됐는지** (Spirit lint 섹션의 SSOT 기반 점검) |
 | **Rule Enforcement** | `enforced_by` schema invariant 검증 — `check-rule-enforcement.sh --json` 위임 ("Rule Enforcement invariant" 섹션) |
@@ -354,20 +354,15 @@ HOOK_FILE="$ROOT/.ax/hooks/pre-edit/spirit-rules-inject.sh"
   이유 spirit/SKILL.md:28-31 lint 통과
 
  [s] ✅ template hook 등록 (미등록 MISS_HOOKS 개)         [추천 — MISS_HOOKS > 0 일 때]
-  1순위 bash .ax/scripts/bash/register-hooks.sh
-        → template SSOT 기반 누락분 일괄 additive merge (idempotent, 백업 자동)
-        → 사용자 추가 hook 보존, --prune 명시 안 하면 어떤 entry 도 삭제 안 함
-        → 자세한 계약: docs/spec/hook-registration.md
-  fallback (스크립트 부재 시) bash .ax/scripts/bash/register-spirit-hook.sh
-        → path-scoped loading 담당 hook 1개만 등록 (역할 hook 한정 — 나머지는 미등록 채로 남음)
+  1순위 bash .ax/scripts/bash/register-spirit-hook.sh
+        → path-scoped loading 담당 hook 1개 등록 (idempotent)
         → 나머지 hook 은 (i) `.ax/settings.json.suggested` 머지 또는 (ii) LLM 이 template 을
-          읽어 jq 로 직접 append (백업 후, 사용자 키 보존). 이 경로는 docs/spec/hook-registration.md
-          가 mandate 하는 "register-hooks.sh 통합" 이행 전 임시 — 도입되면 사라짐.
+          읽어 jq 로 직접 append (백업 후, 사용자 키 보존)
   초기 설치 미완 (MISSING_HOOK_FILES 비지 않음) 항목은 [s]로 못 고침 →
         `/up` 재호출 권장: `goax up` 또는 `/up` skill 호출 (기존 자산 보존).
   결과 template 이 선언한 EventName · matcher · hook 전체 활성
-  이유 hook 셋 자체는 template 이 결정 — 어떤 조합이든 doctor / register-hooks 는
-        이름 hardcode 없이 자동 따라감 (Anti-pattern 회피, hook-registration.md I1)
+  이유 hook 셋 자체는 template 이 결정 — 어떤 조합이든 doctor 는
+        이름 hardcode 없이 자동 따라감
 ```
 
 [s]는 사용자 동의 후 실행 — 직접 수정이지만 idempotent + 백업이라 안전. 헤더 수정/중복 해소(`[n]`)는 의미상 LLM이 사용자와 함께.
@@ -399,7 +394,7 @@ MISMATCHES=()
 [ "$DESC_HOOK" -eq 1 ] && [ "$INST_HOOK" -eq 0 ] \
     && MISMATCHES+=("CLAUDE.md는 hook 메커니즘 명시 — 실제 미설치/미등록")
 [ "$DESC_SHIM" -eq 1 ] && [ "$INST_SHIM" -eq 0 ] \
-    && MISMATCHES+=("CLAUDE.md는 shim 메커니즘 명시 — 0.1.8에서 폐기됨 (generate-rule-shims.sh 없음)")
+    && MISMATCHES+=("CLAUDE.md는 shim 메커니즘 명시 — 폐기됨 (generate-rule-shims.sh 없음)")
 [ "$DESC_HOOK" -eq 1 ] && [ "$DESC_SHIM" -eq 1 ] \
     && MISMATCHES+=("CLAUDE.md가 두 메커니즘 동시 명시 — 모순")
 [ "$INST_HOOK" -eq 1 ] && [ "$DESC_HOOK" -eq 0 ] && [ "$DESC_SHIM" -eq 0 ] \
@@ -429,7 +424,7 @@ MISMATCHES=()
 
 **왜 이 검증이 필요한가**: 세션마다 CLAUDE.md 컨텍스트가 다를 수 있어, 한 세션이 옛 design generation으로 작업하면 CLAUDE.md를 Design A 언어로 되돌리거나 두 메커니즘을 섞을 수 있음. 실제 hook은 Design B로 동작하지만 문서는 다른 메커니즘을 가리키면 신뢰 침식. 이 검증이 마지막 방어선.
 
-### 3.9 Rule Enforcement invariant — `check-rule-enforcement.sh` 위임 (NEW)
+### 3.9 Rule Enforcement invariant — `check-rule-enforcement.sh` 위임
 
 `enforced_by` / `enforced_kind` schema 검증 로직 자체는 결정론 — `.ax/scripts/bash/check-rule-enforcement.sh` 가 SSOT. doctor 는 호출 + JSON 파싱 + 보고만.
 
@@ -477,7 +472,7 @@ RE_I5R=$(echo "$RESULT" | jq -r '.result.i5_not_registered | length')
 
  [w] ✅ hook 작성 — enforced_by 가 가리키는 hook 파일 신규 작성   [장기 — 룰 진짜 enforce]
    명령  .ax/hooks/<sub>/<basename>.sh 직접 작성 (룰 의미 의존, template 없음)
-        + 작성 후 register-hooks.sh 또는 register-spirit-hook.sh 로 settings.json 등록
+        + 작성 후 register-spirit-hook.sh 로 settings.json 등록 (또는 suggested 병합)
    이유  CRITICAL 유지하면서 약속을 진짜로 지킴
 
  [d] ✅ deadline 갱신 — 임박/초과 TODO 에 새 absolute date 부여     [강등 거부 시]
@@ -516,7 +511,7 @@ RE_I5R=$(echo "$RESULT" | jq -r '.result.i5_not_registered | length')
 
 🥕  Layer 3 — Spec / ADR
    ✅ docs/adr/ (1건: 0001-goax-adoption.md)
-   ✅ docs/_templates/spec/
+   ✅ .ax/_templates/spec/
    ⚠️ docs/spec/NNN-*/ — 작성된 spec 0건 (첫 spec 권장)
 
 📦  Layer 2 — Module Rules

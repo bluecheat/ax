@@ -8,7 +8,7 @@
 
 ## 0. 입력
 - [`spec.md`](spec.md) — SSOT (What/Why + Technical Context §7.5)
-- 관련 ADR (있으면): `docs/adr/NNNN-*.md`
+- 관련 ADR (있으면): `.ax/docs/adr/NNNN-*.md`
 
 ---
 

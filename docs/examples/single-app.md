@@ -14,10 +14,10 @@ goax doctor
 
 | Layer | 위치 | 무엇을 담는가 |
 |---|---|---|
-| 0 Triage | `.ax/skills/global/triage/SKILL.md` | 작업 진입 시 Size × Risk |
-| 1 Constitution | `CLAUDE.md` | 비협상 룰 — 단일 앱이라 Layer 2 없이 여기에 모음 |
-| 2 Module Rules | (생략 또는 디렉토리 단위로 가벼운 분리) | 큰 앱이면 `src/<area>/CLAUDE.md`로 분리 가능 |
-| 3 Spec/ADR | `docs/adr/` | 결정 근거 |
+| 0 Triage | `triage` skill (plugin 자동 로드) | 작업 진입 시 Size × Risk |
+| 1 Constitution | `AGENTS.md` / `CLAUDE.md` | 비협상 룰 — 단일 앱이라 Layer 2 없이 여기에 모음 |
+| 2 Module Rules | (생략 또는 가벼운 분리) | 큰 앱이면 `.ax/modules/<area>/rules.md`로 분리 가능 |
+| 3 Spec/ADR | `.ax/docs/adr/` | 결정 근거 |
 
 ## .ax/config.yml — 도메인을 기능 단위로
 

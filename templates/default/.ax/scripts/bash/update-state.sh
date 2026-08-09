@@ -14,8 +14,10 @@
 #   bash .ax/scripts/bash/update-state.sh           # in-place update (기본)
 #   bash .ax/scripts/bash/update-state.sh --json    # stdout JSON only (state.json은 안 건드림)
 #   bash .ax/scripts/bash/update-state.sh --dry     # 계산 결과 미리보기 (stderr)
+#   bash .ax/scripts/bash/update-state.sh --help    # 사용법만 출력, 부작용 없음
 #
 # 의존: jq (필수), grep, find, awk, common.sh
+# 프로젝트 루트: $GOAX_PROJECT_DIR > $CLAUDE_PROJECT_DIR > ancestor 탐색 (common.sh find_project_root)
 
 set -u
 
@@ -24,11 +26,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 . "$SCRIPT_DIR/common.sh"
 
-# WS 검출 — common.sh 패턴 따름 (env 우선, cwd fallback)
-WS="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-S="$WS/.ax/state.json"
-
 MODE="${1:-update}"
+
+case "$MODE" in
+    --help|-h)
+        awk 'NR>=2 && /^#/ { sub(/^# ?/, ""); print; next } NR>=2 { exit }' "${BASH_SOURCE[0]}"
+        exit "$EXIT_OK"
+        ;;
+    update|--json|--dry) ;;
+    *)
+        json_error "unknown option: $MODE"
+        ;;
+esac
+
+# WS 검출 — GOAX_PROJECT_DIR > CLAUDE_PROJECT_DIR > ancestor 탐색
+WS=$(find_project_root) || exit "$EXIT_ERROR"
+S="$WS/.ax/state.json"
 
 if [ ! -f "$S" ]; then
     goax_error "state.json 없음 ($S) — installer 먼저 실행"
@@ -41,15 +54,29 @@ command -v jq >/dev/null || { goax_error "jq 필요 (brew install jq)"; exit 1; 
 # Layer 0 — plugin 깔리면 항상 active (skills 자체가 plugin 제공)
 L0_ACTIVE=true
 
-# Layer 1 — root CLAUDE.md의 시그널 라벨 카운트 (wc -l: BSD/GNU grep 모두 안전)
+# Layer 1 — Constitution 시그널 라벨 카운트 (wc -l: BSD/GNU grep 모두 안전)
 # CONVENTION은 인라인(root) + @import된 spirit/rules/*.md 합산 — root에 인라인 정의가 없어도
 # spirit/rules/ 의 🔵 룰들이 카운트되도록 (state.json convention=0 방지)
+#
+# Constitution 파일 — 0.2.0 부터 AGENTS.md 가 SSOT 본문이고 CLAUDE.md 는 `@AGENTS.md`
+# alias(룰 시그널 라인 없음). "먼저 존재하는 파일" 이 아니라 "실제 룰 시그널(🔴/🟡 **`)
+# 을 가진 파일" 을 골라요 — alias 를 잘못 집어 rules=0 으로 보이던 버그 방지.
+# (build-memory.sh 의 RULES_FILE 해석 체인과 동일 — SSOT 일치)
+RULES_FILE=""
+for _cand in AGENTS.md CLAUDE.md; do
+    if [ -f "$WS/$_cand" ] && grep -qE '^(🔴|🟡) \*\*`' "$WS/$_cand" 2>/dev/null; then
+        RULES_FILE="$WS/$_cand"; break
+    fi
+done
+[ -z "$RULES_FILE" ] && [ -f "$WS/AGENTS.md" ] && RULES_FILE="$WS/AGENTS.md"
+[ -z "$RULES_FILE" ] && [ -f "$WS/CLAUDE.md" ] && RULES_FILE="$WS/CLAUDE.md"
+
 CRIT=0; MAND=0; CONV=0
-if [ -f "$WS/CLAUDE.md" ]; then
-    CRIT=$(grep -E '^🔴 \*\*`' "$WS/CLAUDE.md" 2>/dev/null | wc -l | tr -d ' ')
-    MAND=$(grep -E '^🟡 \*\*`' "$WS/CLAUDE.md" 2>/dev/null | wc -l | tr -d ' ')
-    # CLAUDE.md inline rule: 🔵 **`TOKEN`** 형식
-    CONV_INLINE=$(grep -E '^🔵 \*\*`' "$WS/CLAUDE.md" 2>/dev/null | wc -l | tr -d ' ')
+if [ -n "$RULES_FILE" ]; then
+    CRIT=$(grep -E '^🔴 \*\*`' "$RULES_FILE" 2>/dev/null | wc -l | tr -d ' ')
+    MAND=$(grep -E '^🟡 \*\*`' "$RULES_FILE" 2>/dev/null | wc -l | tr -d ' ')
+    # inline rule: 🔵 **`TOKEN`** 형식
+    CONV_INLINE=$(grep -E '^🔵 \*\*`' "$RULES_FILE" 2>/dev/null | wc -l | tr -d ' ')
 
     # spirit/rules/ — heading 형식 (`## SP-`, plugin 컨벤션) + 옛 inline 형식 (`^🔵 \*\*\``)
     # 단일 grep alternation으로 합산 — process 1회 (split 버전보다 빠름).

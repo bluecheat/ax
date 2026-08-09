@@ -1,6 +1,6 @@
 ---
 name: hud
-description: "goax HUD/statusline 관리 — '/hud setup' '/hud refresh' '/hud preset minimal' 등. statusline은 .ax/hud/statusline.sh가 .ax/state.json을 읽어 한 줄 출력. 기존 statusLine(omc 등)과 충돌 안 나게 안내."
+description: "goax HUD/statusline 관리 — 'HUD 활성화', 'statusline 설정', 'HUD 갱신' 등. statusline은 .ax/hud/statusline.sh가 .ax/state.json을 읽어 한 줄 출력. 기존 statusLine(omc 등)과 충돌 안 나게 안내."
 ---
 
 # hud — 4계층 활성도 시각 신호
@@ -12,17 +12,14 @@ description: "goax HUD/statusline 관리 — '/hud setup' '/hud refresh' '/hud p
 
 statusline 한 줄 — 매 응답 위에 표시:
 ```
-🪝 goax ✓✓·✓ ▸ payment L3 ▸ 📐7 🔧3 📋4d
+triage: M×L2 | harness: 🌟 | ☄2
 ```
 
 | 부분 | 의미 |
 |---|---|
-| `🪝 goax` | 하네스 활성 (plugin 로드됨) |
-| `✓✓·✓` | Layer 0/1/2/3 활성도 (✓ active / · 비어 있음) |
-| `payment L3` | 현재 작업 도메인 + 위험도 (config.yml 매칭) |
-| `📐7` | spec 수 (.ax/docs/spec/NNN-*) |
-| `🔧3` | 미승격 mistakes 수 |
-| `📋4d` | 다음 audit까지 남은 일수 |
+| `triage: M×L2` | 현재 작업 Size×Risk (current_task 매칭 시만 표시) |
+| `harness: 🌟` | Layer 0/1/2/3 종합 활성도 — 우주 진화 한 글자 (· ✦ ⭐ 🌟 🪐, 0/4~4/4) |
+| `☄2` | 미승격 mistakes 수 (색상: 5+ 노랑, 10+ 빨강) |
 
 ## subcommand
 
@@ -76,29 +73,11 @@ statusline 한 줄 — 매 응답 위에 표시:
 
 ### `/hud refresh` — state.json canonical 갱신
 
-`doctor`의 §2 빠른 사전 통계 그대로 실행하고 결과를 `.ax/state.json`에 직렬화.
-
 ```bash
-# pseudo
-{
- "goax_version": "$(cat .ax/version | head -1)",
- "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
- "layers": {...},
- "cross_cut": {...},
- "current_task": null
-}
+bash .ax/scripts/bash/update-state.sh
 ```
 
-✓ 메시지: `state.json 갱신 (Layer ✓✓·✓, mistakes 3건)`
-
-### `/hud preset <name>`
-
-`.ax/state.json`의 `hud_preset` 필드 갱신:
-- `minimal` — Layer 활성도 + 도메인·위험도만
-- `full` — 위 + spec/mistakes/audit due
-- `dev` — full + skill 호출 카운트, 마지막 호출 skill
-
-statusline.sh가 preset 보고 출력 결정.
+✓ 메시지: `state.json 갱신 (harness: 🌟, mistakes 3건)`
 
 ### `/hud disable`
 
@@ -117,7 +96,6 @@ goax statusline을 끄려면 .claude/settings.json에서 "statusLine" 필드를 
 
  state.json 존재 (갱신: 2026-05-02 15:30, 35분 전)
  statusline 활성 (.ax/hud/statusline.sh)
- preset  full
  settings  .claude/settings.json에 등록됨
 
  마지막 갱신 항목: spec-validate (current_task.spec_passed = false)

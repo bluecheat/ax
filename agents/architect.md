@@ -19,7 +19,7 @@ description: "아키텍처 결정·검토 sub-agent. 시스템 설계·모듈 �
 - "아키텍처 검토해줘", "설계 리뷰", "system design"
 - 모듈 의존 변경 제안 시 (Layer 2 영향)
 - 새 spec.md §7.5 Technical Context 또는 ADR 초안 검토 시
-- ADR 초안 작성 시 → workflows/adr-write 로 위임 가능
+- ADR 초안 작성 시 → `adr` skill 로 위임 가능
 
 ## 출력 형식
 
@@ -42,8 +42,8 @@ description: "아키텍처 결정·검토 sub-agent. 시스템 설계·모듈 �
  Option <X>. 이유: ...
 
 ▸ 후속 액션
- - ADR 초안 작성 (workflows/adr-write로 위임)
- - 영향 받는 module CLAUDE.md 갱신 제안
+ - ADR 초안 작성 (`adr` skill로 위임)
+ - 영향 받는 .ax/modules/<name>/rules.md 갱신 제안
 ```
 
 ## 절대 금지

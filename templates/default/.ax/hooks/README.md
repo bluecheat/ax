@@ -8,7 +8,7 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 | pre-bash/ | bash 도구 호출 직전 | 파괴적 명령 차단 + `git commit` 감지 시 critical-rule-grep 위임 |
 | pre-edit/ | Edit/Write 직전 | 보호 경로 변경 확인 + spirit 룰 점검 |
 | post-edit/ | Edit/Write 직후 | 변경 파일 lint (경고만) |
-| pre-commit/ | git commit 직전 | CRITICAL 룰 정적 검출 (위반 시 `.ax/mistakes/` 자동 캡처) |
+| pre-commit/ | git commit 직전 | CRITICAL 룰 정적 검출 (위반 시 차단/경고만 — 자동 캡처는 폐기, §"Mistake 캡처" 참고) |
 
 ## 동작 모드 — `sensors.mode`
 

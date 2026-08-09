@@ -124,8 +124,10 @@ fi
 
 if [ "$DRY_RUN" = true ]; then
     if [ "$JSON_MODE" = true ]; then
+        BACKUP_FIELD="null"
+        [ -n "$BACKUP" ] && BACKUP_FIELD="\"${BACKUP#$PROJECT_ROOT/}\""
         json_output "ok" \
-            "{\"hook_path\":\"$REL_HOOK\",\"action\":\"$ACTION\",\"backup\":${BACKUP:+\"$BACKUP\"}${BACKUP:-null},\"dry_run\":true}" \
+            "{\"hook_path\":\"$REL_HOOK\",\"action\":\"$ACTION\",\"backup\":$BACKUP_FIELD,\"dry_run\":true}" \
             "would $ACTION → $REL_HOOK"
     else
         goax_log "dry-run: would $ACTION → $REL_HOOK${BACKUP:+ (backup: $BACKUP)}"

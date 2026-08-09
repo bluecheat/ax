@@ -3,7 +3,9 @@ name: spec
 description: "새 spec 디렉토리 생성 — 'spec 만들어줘', 'goax spec new <slug>', '스펙 작성 시작'. .ax/docs/spec/NNN-<slug>/ 에 size×risk에 맞는 tier(standard/full)만큼만 SDD 산출물 생성. plan.md 폐기 — 설계 결정은 ADR 로. tier override: '--tier standard|full' 또는 자연어 '간단/풀패키지'. 결정론은 .ax/scripts/bash/ 위임."
 ---
 
-# goax spec-new — 새 SDD 디렉토리 (tier-aware, script-backed)
+# goax spec — 새 SDD 디렉토리 (tier-aware, script-backed)
+
+> 별칭: `spec-new` (예: "goax spec new <slug>") — 같은 skill.
 
 ## 시작 전 필수
 `.ax/spirit/values.md`, `tone.md` 따라요.
@@ -18,11 +20,11 @@ description: "새 spec 디렉토리 생성 — 'spec 만들어줘', 'goax spec n
 > 처음부터 spec / tasks / research / data-model / contracts / quickstart / checklists 다 만들지 않아요.
 > triage의 size×risk 결과로 **딱 필요한 만큼**만 만들고, 결정론적 부분(번호·디렉토리·cp)은 `.ax/scripts/bash/`에 위임.
 
-### Tier 매트릭스 (0.1.16 — 2 단계로 슬림화)
+### Tier 매트릭스 (2 단계)
 
 | Tier | 산출물 | 적용 size×risk |
 |---|---|---|
-| **standard** | `spec.md` + `tasks.md` (2) | S/M/L × L0~L2 |
+| **standard** | `spec.md` + `tasks.md` (2) | S/M/L × L0~L2 및 M×L3 |
 | **full** | + `research.md` + `data-model.md` + `quickstart.md` + `contracts/` + ADR | L × L3 / XL × * |
 
 > `plan.md` 폐기 — 설계 결정·아키텍처·트레이드오프는 ADR (`.ax/docs/adr/NNNN-*.md`) 로 기록.
@@ -88,7 +90,7 @@ TIER_RESULT=$(bash .ax/scripts/bash/tier-from-state.sh --json --size L --risk L3
 ## 2. 출력 (옵션 제시)
 
 ```
-📐 spec-new (생성 대상)
+📐 spec (생성 대상)
 
  📍 발견
   slug   payment-refund-policy-change
@@ -174,7 +176,7 @@ jq --arg id "$SPEC_ID" \
 bash .ax/scripts/bash/add-spec-files.sh --json --spec 005-payment-refund --add tasks
 ```
 
-> `--add plan` 은 0.1.16 에서 폐기됐어요 — 설계 결정은 `/adr` 로.
+> `--add plan` 은 폐기됐어요 — 설계 결정은 `/adr` 로.
 
 ## 절대 금지
 
@@ -183,7 +185,7 @@ bash .ax/scripts/bash/add-spec-files.sh --json --spec 005-payment-refund --add t
 - 처음부터 5 파일 다 깔지 않아요 — 항상 tier-aware
 - 결정론 부분(번호·sha·cp)을 LLM이 직접 처리 X — 스크립트 위임
 - slug 추출이 모호하면 `[c]` 옵션으로 사용자에게 명시 요청.
-- `tier=basic` 사용자가 명시해도 거부 — 0.1.16 에서 폐기. standard 권유.
+- `tier=basic` 사용자가 명시해도 거부 — 폐기된 tier. standard 권유.
 - `plan.md` 작성 가이드 X — 설계 결정은 ADR 로 위임.
 
 ## state.json 갱신

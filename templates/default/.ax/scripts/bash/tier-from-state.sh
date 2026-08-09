@@ -9,7 +9,7 @@
 #   2. .ax/current-task.json 의 size/risk
 #   3. default standard
 #
-# 매트릭스 (0.1.16 — basic·plan 폐기, 2 단계):
+# 매트릭스 (standard/full 2 단계 — basic·plan 폐기):
 #   S/M/L × L0~L2   → standard (spec.md + tasks.md)
 #   L     × L3      → full     (+ research/data-model/quickstart + ADR)
 #   XL    × *       → full
@@ -134,7 +134,7 @@ case "$RISK" in
        exit "$EXIT_ERROR" ;;
 esac
 
-# 매트릭스 (0.1.16 — 2 단계로 슬림화)
+# 매트릭스 (standard/full 2 단계로 슬림화)
 case "$SIZE-$RISK" in
     S-*|M-*)        TIER="standard"; REASON="S/M size — spec + tasks" ;;
     L-L0|L-L1|L-L2) TIER="standard"; REASON="L size, low~mid risk — spec + tasks" ;;

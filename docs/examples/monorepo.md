@@ -18,10 +18,10 @@ goax doctor
 
 | Layer | 위치 | 무엇을 담는가 |
 |---|---|---|
-| 0 Triage | `.ax/skills/global/triage/SKILL.md` | 작업 진입 시 Size × Risk × **어떤 앱** |
-| 1 Constitution | `CLAUDE.md` (root) | 모든 앱 공통 비협상 룰 (예: 보호 경로, 빌드 흐름) |
-| 2 Module Rules | `apps/<app>/CLAUDE.md` | 그 앱 안에서만 결정되는 룰 (스택 특화 패턴) |
-| 3 Spec/ADR | `docs/adr/` | 모노레포 차원의 결정 (모듈 의존 방향, 빌드 시스템 등) |
+| 0 Triage | `triage` skill (plugin 자동 로드) | 작업 진입 시 Size × Risk × **어떤 앱** |
+| 1 Constitution | `AGENTS.md` / `CLAUDE.md` (root) | 모든 앱 공통 비협상 룰 (예: 보호 경로, 빌드 흐름) |
+| 2 Module Rules | `.ax/modules/<app>/rules.md` | 그 앱 안에서만 결정되는 룰 (스택 특화 패턴) — keywords frontmatter 로 triage 자동 매칭 |
+| 3 Spec/ADR | `.ax/docs/adr/` | 모노레포 차원의 결정 (모듈 의존 방향, 빌드 시스템 등) |
 
 ## .ax/config.yml — 도메인을 앱 단위로
 

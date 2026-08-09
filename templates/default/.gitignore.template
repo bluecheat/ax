@@ -9,3 +9,6 @@
 # install/onboarding 시점 머지 임시본 (사용자가 처리 후 rm)
 .ax/*.suggested
 .ax/.onboarding-pending
+
+# hook 런타임 마커 (세션당 재생성)
+.ax/.triage-nudged

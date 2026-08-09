@@ -5,7 +5,6 @@ detected_by: {{DETECTED_BY}}
 context_link: {{CONTEXT_LINK}}
 captured_at: {{CAPTURED_AT}}
 source: {{SOURCE}}
-status: open
 ---
 
 # 무엇이 일어났나

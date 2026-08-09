@@ -131,7 +131,7 @@ Harness를 더 분해하면:
 
 **왜 필요한가**: 모노레포에서 root CLAUDE.md 한 파일에 모든 모듈 룰이 몰리면 비대해지고 컨텍스트 낭비. 모듈 안에서만 결정되는 룰은 그 모듈의 sub-CLAUDE.md에 두면 작업 시 *필요한 룰만* 컨텍스트에 들어와요.
 
-**구현**: `apps/<app>/CLAUDE.md`, `<module>/CLAUDE.md`.
+**구현**: `.ax/modules/<name>/rules.md` — keywords frontmatter 로 triage 가 자동 grep 매칭해요. (모듈 자체 `<module>/CLAUDE.md` 를 병행 컨벤션으로 둘 수도 있지만, goax 가 깔아주는 메커니즘은 `.ax/modules/<name>/rules.md` 예요.)
 
 ### 3.5 Layer 3 — Spec / ADR (결정 근거 + 도메인 정의)
 
@@ -258,14 +258,14 @@ Spirit:        SP-<CATEGORY>-<id>       (예: SP-SEC-001)
 - `research/data-model/quickstart/contracts` — full tier 부가 산출물.
 - ADR (`.ax/docs/adr/NNNN-*.md`) — 설계 결정·트레이드오프·거부된 대안 기록 (full tier 정규).
 
-**SSOT 원칙**: spec.md 가 단일 진실. tasks 가 spec 을 *입력*으로 받음. 설계 결정의 *근거* 는 ADR 이 단독 소유 (0.1.16 plan.md 폐기).
+**SSOT 원칙**: spec.md 가 단일 진실. tasks 가 spec 을 *입력*으로 받음. 설계 결정의 *근거* 는 ADR 이 단독 소유 (plan.md 는 폐기됐어요).
 **게이팅**: NEEDS CLARIFICATION · placeholder `<...>` · 빈 필수 섹션 어느 하나라도 남으면 다음 단계 차단 (`check-spec-clarity.sh`).
 
 ### 5.5 Tier-aware Spec — Over-engineering 방지
 
 **문제**: 한 줄 수정에 spec / tasks / research / data-model / contracts / quickstart 다 만들면 의식(ritual) 이 돼요.
 
-**해결**: triage 결과(size × risk)로 *딱 필요한 만큼* (0.1.16 — 2 단계로 슬림화):
+**해결**: triage 결과(size × risk)로 *딱 필요한 만큼* — 2 단계로 슬림화:
 
 | Tier | 산출물 | 적용 |
 |---|---|---|
@@ -415,5 +415,5 @@ goax의 *고유 기여*는 두 가지예요:
 - [`docs/spirit.md`](docs/spirit.md) — Spirit 운영 가이드
 - [`docs/skill-routing.md`](docs/skill-routing.md) — skill 라우팅 매트릭스
 - [`docs/up.md`](docs/up.md) — Brownfield 도입 흐름
-- [`docs/adr/`](docs/adr/) — 결정 기록 (ADR 6건, 거부된 대안 포함)
-- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 결정론 도구 8개 표준
+- [`changelog/0.1.0.md`](changelog/0.1.0.md) "Design decisions" 섹션 — 결정 기록·거부된 대안 (옛 docs/adr/ 통합)
+- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 결정론 도구 19개 표준

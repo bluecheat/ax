@@ -1,6 +1,6 @@
 ---
 name: spec-implement
-description: "tasks.md의 - [ ] 항목을 순차 실행하고 완료 시 - [x]로 마킹 — '/spec-implement', '구현 시작', 'tasks 실행', 'task 진행'. 실패 시 halt+보고. spec.md / tasks.md / 관련 ADR 을 입력으로. friction 강도는 .ax/config.yml 의 confirmation 정책으로 결정."
+description: "tasks.md의 - [ ] 항목을 순차 실행하고 완료 시 - [x]로 마킹 — '구현 시작', 'tasks 실행', 'task 진행'. 실패 시 halt+보고. spec.md / tasks.md / 관련 ADR 을 입력으로. friction 강도는 .ax/config.yml 의 confirmation 정책으로 결정."
 ---
 
 # spec-implement — 구현 단계
@@ -20,7 +20,7 @@ description: "tasks.md의 - [ ] 항목을 순차 실행하고 완료 시 - [x]�
 SPEC=$(jq -r '.spec_dir | split("/") | .[-1]' .ax/current-task.json 2>/dev/null)
 SPEC_DIR=".ax/docs/spec/$SPEC"
 
-# 필수 파일 검증 (0.1.16 — plan.md 폐기, spec.md + tasks.md 만)
+# 필수 파일 검증 (plan.md 폐기 — spec.md + tasks.md 만)
 for f in spec.md tasks.md; do
  [ ! -f "$SPEC_DIR/$f" ] && { echo "$f 누락 — 먼저 작성"; exit 1; }
 done
@@ -57,7 +57,6 @@ MISTAKE_THRESHOLD="${MISTAKE_THRESHOLD:-3}"
 
 # 2. current-task.json 에서 분류 결과 읽기
 TASK_RISK=$(jq -r '.risk // "L0"' .ax/current-task.json)
-TASK_TIER=$(jq -r '.spec_tier // "basic"' .ax/current-task.json)
 TASK_DOMAIN=$(jq -r '.domain // "default"' .ax/current-task.json)
 
 # 3. effective mode 결정 (priority: C5 > C3 > C1)
@@ -228,7 +227,7 @@ fi
 ### per_task 또는 strict 매칭 (§3.2)
 §3.2 의 `[y/n]` 박스.
 
-## 절대 금지 (0.1.14 갱신)
+## 절대 금지
 
 - **모드 불문 모든 task 에 [y/n] 묻기** — `EFFECTIVE_MODE` 결정 결과를 무시한 의례적 확인
 - **Phase 경계 게이트를 형식적 [y/n] 으로 축소** — 정보 밀도(이전 결과 + 다음 파일 + 룰 delta) 누락

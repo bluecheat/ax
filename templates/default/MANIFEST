@@ -18,6 +18,7 @@
 # - .ax/spirit/values.md  ← templates/default/.ax/spirit/values.md (팀 가치 customize 보존)
 # - .ax/spirit/tone.md    ← templates/default/.ax/spirit/tone.md (팀 톤 customize 보존)
 # - .ax/spirit/README.md  ← templates/default/.ax/spirit/README.md (팀 운영 가이드 보존)
+# - .ax/search-aliases.yml ← templates/default/.ax/search-aliases.yml (§6.5b, 사용자 동의어 customize 보존)
 # - .gitignore            ← templates/default/.gitignore.template (append-if-missing)
 
 # ─── .ax/ 디렉토리 (재귀 복사) ───

@@ -31,4 +31,4 @@
 
 - 자세한 동작: spec.md
 - 작업 분해: tasks.md
-- 설계 결정 근거: docs/adr/NNNN-*.md
+- 설계 결정 근거: .ax/docs/adr/NNNN-*.md

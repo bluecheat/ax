@@ -9,7 +9,7 @@
 #   - 기존 파일 있으면 skip + 알림
 #   - tier 메모(.tier) 갱신 (standard→full 자동 승급, slim 정의)
 #
-# Slim tier 정의 (0.1.16 — plan.md 폐기, basic 폐기):
+# Slim tier 정의 (plan.md·basic 폐기):
 #   standard  spec.md + tasks.md
 #   full      + research/data-model/quickstart 중 하나라도 (단일 파일)
 #   checklists/contracts 의 lazy 생성은 tier 와 무관 — 사용자 명시 추가만
@@ -74,7 +74,7 @@ IFS=',' read -ra REQUESTED <<< "$ADD"
 for item in "${REQUESTED[@]}"; do
     item="${item## }"; item="${item%% }"  # trim
     case "$item" in
-        plan)         goax_warn "'plan' 은 0.1.16 에서 폐기됐어요 — 설계 결정은 ADR 로 (skipped)" ;;
+        plan)         goax_warn "'plan' 은 폐기됐어요 — 설계 결정은 ADR 로 (skipped)" ;;
         tasks)        TO_ADD+=("tasks.md") ;;
         research)     TO_ADD+=("research.md") ;;
         data-model|data) TO_ADD+=("data-model.md") ;;
@@ -112,7 +112,7 @@ for f in "${TO_ADD[@]}"; do
     fi
 done
 
-# Tier 갱신 — 추가된 파일에 따라 standard→full 자동 승급 (0.1.16: basic·plan 폐기)
+# Tier 갱신 — 추가된 파일에 따라 standard→full 자동 승급 (basic·plan 폐기)
 NEW_TIER="standard"
 if [ -f "$SPEC_DIR/research.md" ] || [ -f "$SPEC_DIR/data-model.md" ] || \
    [ -f "$SPEC_DIR/quickstart.md" ]; then

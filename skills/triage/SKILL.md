@@ -1,6 +1,6 @@
 ---
 name: triage
-description: "사용자가 새 작업·기능·수정·리팩토링·버그 fix를 요청할 때 가장 먼저 자동 매칭되는 skill. Size × Risk로 30초 안에 분류하고 spirit·룰·페르소나를 자동 주입. 트리거: '구현해줘', '만들어줘', '작업 계획', '어떻게 만들지', '고쳐줘', '추가해줘', '바꿔줘', '리팩토링', '리팩터링', 'fix', '버그', '기능 추가', 'PR 만들어', '작업하자', '/triage', 'classify', 새 대화 첫 메시지에서 작업 의도가 보이면 자동 발동. EnterPlanMode 안에서도 1회 호출 필수."
+description: "사용자가 새 작업·기능·수정·리팩토링·버그 fix를 요청할 때 가장 먼저 자동 매칭되는 skill. Size × Risk로 30초 안에 분류하고 spirit·룰·페르소나를 자동 주입. 트리거: '구현해줘', '만들어줘', '작업 계획', '어떻게 만들지', '고쳐줘', '추가해줘', '바꿔줘', '리팩토링', '리팩터링', 'fix', '버그', '기능 추가', 'PR 만들어', '작업하자', 'classify', 새 대화 첫 메시지에서 작업 의도가 보이면 자동 발동. EnterPlanMode 안에서도 1회 호출 필수."
 ---
 
 # Triage Skill
@@ -10,7 +10,7 @@ description: "사용자가 새 작업·기능·수정·리팩토링·버그 fix�
 ## 시작 전 필수
 
 `.ax/spirit/values.md`, `tone.md` 따라요.
-**`.ax/spirit/values.md` 또는 `tone.md`가 누락되면 triage 자체가 fail. 작업 시작 자체가 거부됨.
+**`.ax/spirit/values.md` 또는 `tone.md`가 누락되면 triage 자체가 fail. 작업 시작 자체가 거부됨.**
 
 ## 발동 시점
 
@@ -194,13 +194,15 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 | Size × Risk | 권장 경로 | spec tier | 게이트 |
 |---|---|---|---|
 | S × L0~L1 | 즉시 작업 | — (불필요) | hooks만 |
+| S × L2 | 즉시 + ADR(짧게) | — (불필요) | hooks + ADR |
+| S × L3 | 사람 게이트 + ADR | — (불필요) | 사람 게이트 + ADR |
 | M × L0~L1 | inline fallback | standard (선택) | hooks + lint |
 | M × L2 | spec 권장 | **standard** (spec.md + tasks.md) | spec-validate |
 | M × L3 | spec + tasks | **standard** | spec-validate + evaluator |
 | L × L0~L2 | spec + tasks | **standard** | spec-validate + evaluator |
 | L × L3 / XL × * | spec + tasks + research/data-model/quickstart + contracts + ADR | **full** | spec-validate + ADR + 사람 게이트 |
 
-> tier 는 0.1.16부터 **standard / full 2단계** (basic·plan.md 폐기 — 설계 결정은 ADR 로). 결정론 SSOT 는 `tier-from-state.sh` — 이 표와 스크립트 매트릭스가 어긋나면 스크립트가 맞아요.
+> tier 는 **standard / full 2단계** (basic·plan.md 폐기 — 설계 결정은 ADR 로). 결정론 SSOT 는 `tier-from-state.sh` — 이 표와 스크립트 매트릭스가 어긋나면 스크립트가 맞아요.
 
 **핵심**: triage가 size×risk에 따라 *spec tier 권장*을 함께 출력해요. spec-new는 이 tier 결과를 받아 *필요한 파일만* 생성해요. 처음부터 full 세트를 다 깔지 않음.
 
@@ -259,7 +261,7 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 
 | 분류 | 이유 |
 |---|---|
-| M × L2 | tier standard / full 둘 다 정당화 가능 (0.1.16 — basic 폐기) |
+| M × L2 | tier standard / full 둘 다 정당화 가능 |
 | L × L1 ~ L2 | ADR 동반 여부가 진짜 결정 |
 | 도메인 다중 매칭 | 어느 도메인 우선인지 사용자 결정 필요 |
 | domain_risk 미매핑 (default 적용) | 사용자 확인 필요 |
@@ -352,9 +354,9 @@ jq --arg id "$TASK_ID" \
 
 | 분류 | 역면접 |
 |---|---|
-| S×* / M×L0~L1 (즉시·inline) | **스킵** — spec 진입이 없어 과잉질문이에요 |
+| S/M × L0~L1 (즉시·inline) | **스킵** — spec 진입이 없어 과잉질문이에요 |
 | M×L2 이상, L, XL (spec 경로) | 발동 — spec 만들기 전 1회 |
-| L3 (비가역 영역) | **스킵 금지** — 스킵하면 `.ax/mistakes/` 캡처 대상이에요 |
+| L3 (모든 Size, 비가역 영역) | **스킵 금지** — Size 불문 발동. 스킵하면 `.ax/mistakes/` 캡처 대상이에요 |
 
 ### 진행 룰
 

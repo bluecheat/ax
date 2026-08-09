@@ -1,6 +1,6 @@
 ---
 name: up
-description: "goax 프로젝트 install or idempotent update — '/up', 'goax up', '/setup', 'goax 도입', 'goax 설치', 'goax 셋업', '하네스 적용' 등 자연어 트리거. 프로젝트를 분석하고 사용자 동의 후 .ax/ + AGENTS.md (Constitution SSOT) + CLAUDE.md (Claude Code alias) 를 설치. multi-CLI 지원 — Claude Code/OpenCode 환경 자동 감지, OpenCode 환경에선 opencode.json 추가 설치. brownfield 면 onboarding skill 로 이어감."
+description: "goax 프로젝트 install or idempotent update — '/up', 'goax up', 'goax 도입', 'goax 설치', 'goax 셋업', '하네스 적용' 등 자연어 트리거. 프로젝트를 분석하고 사용자 동의 후 .ax/ + AGENTS.md (Constitution SSOT) + CLAUDE.md (Claude Code alias) 를 설치. multi-CLI 지원 — Claude Code/OpenCode 환경 자동 감지, OpenCode 환경에선 opencode.json 추가 설치. brownfield 면 onboarding skill 로 이어감."
 ---
 
 # goax up — install or idempotent update (4계층 하네스 도입)
@@ -34,7 +34,7 @@ bash 휴리스틱이 아니라 **Claude가 코드를 직접 읽어** 다음을 �
 - 모듈 목록 (실제 build 단위)
 
 ### 1.2 기존 자산
-- `AGENTS.md` 존재·줄 수 (0.2.0+ 신규 SSOT)
+- `AGENTS.md` 존재·줄 수 (Constitution SSOT)
 - `CLAUDE.md` 존재·줄 수·룰 수 추정 (alias 형태인지 customize 본문인지 판별)
 - `opencode.json` 또는 `.opencode/` 디렉토리 (OpenCode 환경 신호)
 - 모듈별 `<module>/CLAUDE.md` 또는 `<module>/AGENTS.md`
@@ -160,23 +160,26 @@ GOAX_VER=$(cat "$PLUGIN_ROOT/VERSION" 2>/dev/null || echo "unknown")
 echo "# goax_version: $GOAX_VER" >> .ax/_templates/spec/.origin
 
 # 5. AGENTS.md — Constitution SSOT (multi-CLI, manifest 외 조건부)
-# AGENTS.md 가 0.2.0+ 의 SSOT. Claude Code 는 CLAUDE.md 의 @AGENTS.md import,
+# AGENTS.md 가 현재 SSOT. Claude Code 는 CLAUDE.md 의 @AGENTS.md import,
 # OpenCode 는 AGENTS.md 직접 인식.
 if [ -f AGENTS.md ]; then
     cp "$TPL/AGENTS.md.template" .ax/AGENTS.md.suggested
 else
     cp "$TPL/AGENTS.md.template" AGENTS.md
+    # 신규 설치일 때만 [PROJECT_NAME] 치환 — 프로젝트 디렉토리 basename (BSD-sed 호환)
+    PROJECT_NAME="$(basename "$(pwd)")"
+    sed -i '' "s/\[PROJECT_NAME\]/$PROJECT_NAME/g" AGENTS.md
 fi
 
 # 5.1 CLAUDE.md — Claude Code alias (manifest 외 조건부)
-# 본문이 @AGENTS.md import 1줄 + Claude Code 안내. 0.1.x 사용자가 본문을 customize
+# 본문이 @AGENTS.md import 1줄 + Claude Code 안내. 사용자가 본문을 customize
 # 했으면 .suggested 로 보존 (§7 마이그레이션 안내).
 if [ -f CLAUDE.md ]; then
     # 이미 alias 형태인지 (1줄 @AGENTS.md 포함 + 20줄 미만) 판별 → 출고본으로 drift 갱신
     if grep -qE '^@AGENTS\.md\b' CLAUDE.md && [ "$(wc -l < CLAUDE.md | tr -d ' ')" -lt 20 ]; then
         cp "$TPL/CLAUDE.md.template" CLAUDE.md
     else
-        # 0.1.x customize 본문 → 보존 + 마이그레이션 안내 (§7)
+        # customize 본문 → 보존 + 마이그레이션 안내 (§7)
         cp "$TPL/CLAUDE.md.template" .ax/CLAUDE.md.suggested
     fi
 else
@@ -238,8 +241,8 @@ fi
 # 사용자 프로젝트에 깔려야 그 참조가 valid. 사용자 customize 안 하는 read-only 자료라
 # plugin 갱신 시 항상 덮어쓰기 OK (drift 위험 없음).
 # MANIFEST 에 안 박은 이유: docs/reference 는 plugin repo 루트의 SSOT (templates/default 외).
-mkdir -p .ax/docs
-cp -R "$PLUGIN_ROOT/docs/reference" .ax/docs/reference
+mkdir -p .ax/docs/reference
+cp -R "$PLUGIN_ROOT/docs/reference/." .ax/docs/reference/
 echo "✓ .ax/docs/reference: $(ls .ax/docs/reference | wc -l | tr -d ' ')개 reference 파일"
 
 # 6.7 .gitignore — append-if-missing (manifest 외)
@@ -327,7 +330,7 @@ META
  → PR diff 노이즈 방지 위해 .gitignore에 자동 추가 (또는 기존 .gitignore에 누락 줄 append)
 
 📋 Mistake Loop — 주기적 audit 권장
- hook 위반·실수가 .ax/mistakes/에 자동 누적 (race-free + redact 보호)
+ 실수는 "실수 기록해줘" 로 캡처해요 (사용자 의도적 capture, race-free + redact 보호)
  audit_cadence_days=7 (.ax/config.yml) — 주 1회 회고 권장
  실행: "goax audit" 또는 "실수 회고" — 카테고리 N회 누적 시 CRITICAL/MANDATORY 룰 승격 후보 제시
  자동화: Claude Routine으로 weekly cron 등록하면 PR 형태로 audit 결과 받기 가능
@@ -337,7 +340,7 @@ META
  → triage skill이 Size×Risk 분류 → spirit·룰·페르소나 자동 주입
 ```
 
-## 7. AGENTS.md / CLAUDE.md 마이그레이션 가이드 (0.1.x → 0.2.0)
+## 7. AGENTS.md / CLAUDE.md 마이그레이션 가이드 (customize 본문 보존)
 
 ### Case A — 기존 CLAUDE.md 본문이 customize 됐을 때
 
@@ -392,6 +395,6 @@ diff 후 누락된 META / 4계층 인덱스 / 시그널 의미 섹션만 머지 
 bash .ax/scripts/bash/update-state.sh
 
 # 메타데이터만
-jq '.last_skill = "install" | .skill_calls = ((.skill_calls // 0) + 1)' \
+jq '.last_skill = "up" | .skill_calls = ((.skill_calls // 0) + 1)' \
  .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
 ```

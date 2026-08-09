@@ -53,9 +53,21 @@ case "$ACTIVE" in
 esac
 HARNESS_FRAG=$(printf "\033[2mharness:\033[0m %b%s\033[0m" "$HC" "$HARNESS")
 
-# ─── triage (current_task) ───
-SIZE=$(jq -r '.current_task.size // ""' "$S" 2>/dev/null)
-RISK=$(jq -r '.current_task.risk // ""' "$S" 2>/dev/null)
+# ─── triage (current-task.json) ───
+# state.json 은 .current_task 를 갖지 않음 — triage 상태는 .ax/current-task.json 이 SSOT.
+# phase=idle(또는 파일 부재/size·risk 미채움)이면 triage fragment 자체를 숨김.
+CT="$WS_DIR/.ax/current-task.json"
+SIZE=""
+RISK=""
+if [ -f "$CT" ]; then
+    CT_PHASE=$(jq -r '.phase // "idle"' "$CT" 2>/dev/null)
+    if [ -n "$CT_PHASE" ] && [ "$CT_PHASE" != "idle" ] && [ "$CT_PHASE" != "null" ]; then
+        CT_SIZE=$(jq -r '.size // empty' "$CT" 2>/dev/null)
+        CT_RISK=$(jq -r '.risk // empty' "$CT" 2>/dev/null)
+        [ -n "$CT_SIZE" ] && [ "$CT_SIZE" != "null" ] && SIZE="$CT_SIZE"
+        [ -n "$CT_RISK" ] && [ "$CT_RISK" != "null" ] && RISK="$CT_RISK"
+    fi
+fi
 
 # Risk 색상 — L3 red / L2 yellow / L1 green / L0 dim
 case "$RISK" in

@@ -67,7 +67,7 @@
 └─────────────────────────────────────────────────────────────────┘
        ▲                                       ▲
        │ Cross-cut: Spirit                     │ Cross-cut: Mistake Loop
-       │ .ax/spirit/{values, tone, rules}      │ .ax/mistakes/ — auto-captured by hooks
+       │ .ax/spirit/{values, tone, rules}      │ .ax/mistakes/ — manually captured (mistake skill)
        │ → shared attitude across sub-agents   │ → /audit review → promote to rule
 
 Sensors (deterministic):  .ax/hooks/{user-prompt, pre-bash, pre-edit, post-edit, pre-commit}/*.sh
@@ -167,7 +167,7 @@ your-project/
 ├── CLAUDE.md                              # @AGENTS.md alias for Claude Code auto-detection
 ├── opencode.json                          # OpenCode config (only if OpenCode env detected)
 ├── .ax/
-│   ├── spirit/{values, tone, rules}/      # Cross-cut Spirit (includes ops.md)
+│   ├── spirit/{values, tone, README}.md   # Cross-cut Spirit (shipped trio; rules/ is user-curated, ops.md is opt-in via _templates/spirit/)
 │   ├── modules/                           # Layer 2 — per-module domain rules (instances only)
 │   │   ├── README.md
 │   │   └── <module-name>/rules.md         # onboarding Q5 stubs only L2/L3 domains
@@ -179,17 +179,17 @@ your-project/
 │   │   └── post-edit/lint-changed.sh
 │   ├── scripts/bash/*.sh                  # deterministic tools (--json standard)
 │   │   └── install-git-hooks.sh           # OpenCode mode — git pre-commit chain installer
+│   ├── _templates/                        # Layer 3 — all templates in one place
+│   │   ├── adr/0000-template.md
+│   │   └── spec/{spec, tasks, ...}.md  + .origin (drift sha)
 │   ├── current-task.json                  # task-context SSOT
 │   ├── config.yml                         # domain risk + sensors.mode
 │   ├── mistakes/                          # Cross-cut Mistake Loop
 │   ├── version
 │   └── docs/
-│       ├── _templates/                    # Layer 3 — all templates in one place
-│       │   ├── adr/0000-template.md
-│       │   └── spec/{spec, tasks, ...}.md  + .origin (drift sha)
 │       ├── adr/                           # Real ADRs (onboarding auto-generates 0001-goax-adoption.md)
 │       ├── spec/                          # Real spec directory (NNN-<slug>/)
-│       └── reference/opencode-compat.md   # Multi-CLI compatibility SSOT
+│       └── reference/                     # 7 read-only reference docs (copied from plugin docs/reference/)
 └── .claude/
     └── settings.json                      # Hook registration (Claude Code only — UserPromptSubmit + PreToolUse + PostToolUse)
 ```
@@ -313,7 +313,7 @@ That's all. Just stay on the latest.
 
 ## Further Reading
 
-- [`CONCEPTS.md`](CONCEPTS.md) — 14 core concept cards (why it's built this way)
+- [`CONCEPTS.md`](CONCEPTS.md) — the design rationale, why it's built this way
 - [`docs/sdd.md`](docs/sdd.md) — Spec-Driven Development
 - [`docs/spirit.md`](docs/spirit.md) — Spirit operating guide
 - [`docs/skill-routing.md`](docs/skill-routing.md) — Skill routing matrix

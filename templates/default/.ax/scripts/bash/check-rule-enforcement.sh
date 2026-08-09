@@ -5,7 +5,7 @@
 #   bash check-rule-enforcement.sh [--json] [--strict] [--help]
 #
 # Sources (read-only):
-#   - $ROOT/CLAUDE.md              (inline 룰: 🔴/🟡/🔵 + 다음 라인 - enforced_by:)
+#   - $ROOT/AGENTS.md (또는 CLAUDE.md)  (inline 룰: 🔴/🟡/🔵 + 다음 라인 - enforced_by:)
 #   - $ROOT/.ax/spirit/rules/*.md   (frontmatter enforced_by/enforced_kind)
 #   - $ROOT/.ax/modules/*/rules.md  (frontmatter)
 #   - $ROOT/.ax/docs/adr/*.md       (deadline checklist: - [ ] YYYY-MM-DD ...)
@@ -63,17 +63,30 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 ROOT=$(find_project_root) || exit "$EXIT_ERROR"
-CLAUDE_MD="$ROOT/CLAUDE.md"
+
+# Constitution 파일 — 0.2.0 부터 AGENTS.md 가 SSOT 본문이고 CLAUDE.md 는 `@AGENTS.md`
+# alias(룰 시그널 라인 없음). "먼저 존재하는 파일" 이 아니라 "실제 룰 시그널(🔴/🟡/🔵 **`)
+# 을 가진 파일" 을 골라요 — alias 를 잘못 집어 rule_count=0 으로 보이던 버그 방지.
+# (build-memory.sh 의 RULES_FILE 해석 체인과 동일 — SSOT 일치)
+RULES_FILE=""
+for _cand in AGENTS.md CLAUDE.md; do
+    if [ -f "$ROOT/$_cand" ] && grep -qE '^(🔴|🟡) \*\*`' "$ROOT/$_cand" 2>/dev/null; then
+        RULES_FILE="$ROOT/$_cand"; break
+    fi
+done
+[ -z "$RULES_FILE" ] && [ -f "$ROOT/AGENTS.md" ] && RULES_FILE="$ROOT/AGENTS.md"
+[ -z "$RULES_FILE" ] && [ -f "$ROOT/CLAUDE.md" ] && RULES_FILE="$ROOT/CLAUDE.md"
+
 SETTINGS="$ROOT/.claude/settings.json"
 TODAY=$(date -u +%Y-%m-%d)
 
-if [ ! -f "$CLAUDE_MD" ]; then
-    if [ "$JSON_MODE" = true ]; then json_skip "CLAUDE.md 부재 — 검증 skip"
-    else goax_warn "CLAUDE.md 부재 — 검증 skip"; fi
+if [ -z "$RULES_FILE" ]; then
+    if [ "$JSON_MODE" = true ]; then json_skip "AGENTS.md/CLAUDE.md 부재 — 검증 skip"
+    else goax_warn "AGENTS.md/CLAUDE.md 부재 — 검증 skip"; fi
     exit "$EXIT_SKIPPED"
 fi
 
-# ─── (1) inline 룰 추출 — CLAUDE.md ───────────────────────────────
+# ─── (1) inline 룰 추출 — AGENTS.md/CLAUDE.md ───────────────────────
 # 라벨 시그널 + 다음 라인들의 - enforced_by:/- enforced_kind: 페어링
 # 출력: TSV "rule_id\tlabel\tenforced_by\tenforced_kind\tsource_file"
 extract_inline() {
@@ -156,7 +169,7 @@ extract_frontmatter() {
 ALL_RULES=$(mktemp)
 trap 'rm -f "$ALL_RULES"' EXIT
 
-extract_inline "$CLAUDE_MD" >> "$ALL_RULES"
+extract_inline "$RULES_FILE" >> "$ALL_RULES"
 for f in "$ROOT/.ax/spirit/rules/"*.md; do
     [ -f "$f" ] || continue
     extract_frontmatter "$f" >> "$ALL_RULES"

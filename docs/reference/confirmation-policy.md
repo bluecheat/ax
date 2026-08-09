@@ -16,7 +16,7 @@
 | 변수 | 출처 | 역할 |
 |---|---|---|
 | `size × risk` | triage 분류 결과 | 1차 friction 강도 |
-| `spec_tier` | basic / standard / full | 2차 friction (tier 가 size×risk 흡수) |
+| `spec_tier` | standard / full | 2차 friction (tier 가 size×risk 흡수) |
 | `sensors.mode` | `.ax/config.yml` (warning/fail) | hooks 차단 강도 → LLM 추가 확인 redundancy 결정 |
 | `mistake_recurrence` | 같은 카테고리 mistake 누적 | 동적 강화 신호 |
 | `enforced_by_coverage` | hook:* + external:* / 전체 | sensor 부재 영역 보완 필요성 |
@@ -28,7 +28,6 @@
 
 | spec_tier | implement 게이트 |
 |---|---|
-| basic | 0회 (tasks 묶음 1회 승인 후 silent) |
 | standard | Phase 경계 1회 (`Phase 1 → Phase 2` 전환 시) |
 | full | Phase 경계 + ADR-touching task 단위 |
 

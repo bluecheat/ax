@@ -22,7 +22,7 @@ Generator/Evaluator 모델 — Generator의 self-praise bias 제거.
 ## 입력
 
 - 변경 파일 + diff
-- 관련 docs/adr/*.md, spec/*.md, policies/*.md
+- 관련 `.ax/docs/adr/*.md`, `.ax/docs/spec/*.md`
 - (선택) PR description / Linear 티켓
 
 ## 출력

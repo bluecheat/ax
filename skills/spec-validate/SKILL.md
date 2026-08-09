@@ -109,7 +109,7 @@ WARNINGS=$(echo "$RESULT"    | jq -r '.warnings // [] | join("; ")')
 
  [a] ✓ 한 항목씩 같이 해결      [권장]
   제가 각 항목을 보여드리고 사용자 결정·도메인 전문가 확인 받아요.
-  결정 후 spec/plan/contracts 본문 자동 갱신 (NEEDS CLARIFICATION 제거).
+  결정 후 spec/contracts 본문 자동 갱신 (NEEDS CLARIFICATION 제거).
 
  [b] 사용자가 직접 편집 후 다시 [check]
   파일 위치만 알려드릴게요. 직접 수정 후 "goax spec check 005" 재실행.

@@ -27,7 +27,8 @@ JSON_MODE=false
 SHOW_HELP=false
 APPLY=false
 ARCHIVE=false
-THRESHOLD=2
+THRESHOLD=""
+THRESHOLD_SET=false
 TOKEN=""
 CATEGORY=""
 
@@ -37,7 +38,7 @@ while [ $# -gt 0 ]; do
         --help|-h)   SHOW_HELP=true ;;
         --apply)     APPLY=true ;;
         --archive)   ARCHIVE=true ;;
-        --threshold) shift; THRESHOLD="${1:-2}" ;;
+        --threshold) shift; THRESHOLD="${1:-}"; THRESHOLD_SET=true ;;
         --token)     shift; TOKEN="${1:-}" ;;
         --category)  shift; CATEGORY="${1:-}" ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;
@@ -52,6 +53,22 @@ fi
 
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
 MIST_DIR="$PROJECT_ROOT/.ax/mistakes"
+
+# threshold SSOT — .ax/config.yml 의 mistake_loop.promotion_threshold 를 기본값으로.
+# --threshold 로 명시하면 그 값이 우선. config.yml 없거나 숫자 파싱 실패 시 3 (config.yml
+# 기본 shipped 값과 동일 — 두 곳이 어긋나지 않도록).
+if [ "$THRESHOLD_SET" != true ]; then
+    CONFIG="$PROJECT_ROOT/.ax/config.yml"
+    CFG_THRESHOLD=""
+    if [ -f "$CONFIG" ]; then
+        CFG_THRESHOLD=$(grep -E '^[[:space:]]*promotion_threshold:[[:space:]]*' "$CONFIG" 2>/dev/null \
+            | head -1 | sed -E 's/^[^:]*:[[:space:]]*//' | awk '{print $1}')
+    fi
+    case "$CFG_THRESHOLD" in
+        ''|*[!0-9]*) THRESHOLD=3 ;;
+        *)           THRESHOLD="$CFG_THRESHOLD" ;;
+    esac
+fi
 
 if [ ! -d "$MIST_DIR" ]; then
     if [ "$JSON_MODE" = true ]; then json_skip "mistakes/ not found"
