@@ -3,7 +3,7 @@
   "name": "goax",
   "description": "goax — AX 4-Layer 하네스 프레임워크. AI 에이전트 결과 일관성을 *환경*으로 통제.",
   "owner": {
-    "name": "bluechat",
+    "name": "bluecheat",
     "email": "itsinil@gmail.com"
   },
   "plugins": [
@@ -12,7 +12,7 @@
       "description": "AI 에이전트 결과 일관성을 환경으로 통제하는 4계층 하네스 (Triage·Constitution·Module·Spec/ADR) + Spirit·Mistake Loop. bash+markdown only, 자연어로 도입. Claude Code·OpenCode 지원.",
       "version": "0.3.0",
       "author": {
-        "name": "bluechat",
+        "name": "bluecheat",
         "email": "itsinil@gmail.com"
       },
       "source": "./",
