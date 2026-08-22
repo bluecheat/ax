@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# .ax/scripts/bash/install-git-hooks.sh — OpenCode mode (또는 Claude Code 미사용 환경)
-# 사용자가 .ax/hooks/pre-commit/*.sh 자동 chain 을 git pre-commit 으로 보전하도록 wrapper 설치.
+# .ax/scripts/bash/install-git-hooks.sh — git pre-commit wrapper 설치 (모든 환경 기본)
+# .ax/hooks/pre-commit/*.sh 자동 chain 을 git pre-commit 으로 보전하는 wrapper 설치.
+# Claude Code 환경에서도 필요해요 — PreToolUse:Bash 는 에이전트가 실행하는 git commit 만
+# 잡고, 사람이 터미널에서 하는 커밋은 이 wrapper 가 없으면 완전히 우회돼요.
 #
 # Usage:
 #   bash install-git-hooks.sh [--force] [--json] [--dry-run] [--help]
@@ -42,7 +44,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# //; s/^#//'
+    sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# //; s/^#//'
     exit "$EXIT_OK"
 fi
 
@@ -66,7 +68,7 @@ GOAX_MARKER="#goax-pre-commit-chain"
 WRAPPER=$(cat <<'WRAPPER_EOF'
 #!/usr/bin/env bash
 #goax-pre-commit-chain
-# goax — OpenCode/non-Claude-Code 환경에서 hook 시스템 보전.
+# goax — 사람 터미널 커밋에서도 hook 시스템 보전 (에이전트 커밋은 PreToolUse 가 별도 커버).
 # .ax/hooks/pre-commit/*.sh 자동 chain (사전순).
 # 첫 exit 2 (fail) 에서 차단. 기타 비정상 exit 는 stderr 로 보고 후 chain 계속.
 set -uo pipefail

@@ -75,6 +75,7 @@ grep -h "^category:" $ROOT/.ax/mistakes/*.md 2>/dev/null \
 | **Layer 2 / Module Rules** | (선택) 모듈별 `<module>/CLAUDE.md` 카운트 |
 | **Sensors / Hooks** | `.ax/hooks/{pre-bash,pre-edit,post-edit,pre-commit}/` + `.claude/settings.json` + **template hook 전체가 settings.json 에 등록됐는지** (Spirit lint 섹션의 SSOT 기반 점검) |
 | **Rule Enforcement** | `enforced_by` schema invariant 검증 — `check-rule-enforcement.sh --json` 위임 ("Rule Enforcement invariant" 섹션) |
+| **Sensors — Liveness** | Sensors 장치 생사 검증 (grep 스캐폴드·git hook·차단 능력·세션 루트) — `check-sensor-liveness.sh --json` 위임 (3.10 섹션) |
 
 ### 3.5 Plugin update 반영 — version + 출고 자산 신선도 (script-backed)
 
@@ -438,6 +439,7 @@ RE_I3IM=$(echo "$RESULT" | jq -r '.result.i3_imminent | length')
 RE_I3OD=$(echo "$RESULT" | jq -r '.result.i3_overdue | length')
 RE_I5F=$(echo "$RESULT" | jq -r '.result.i5_file_missing | length')
 RE_I5R=$(echo "$RESULT" | jq -r '.result.i5_not_registered | length')
+RE_I6=$(echo "$RESULT" | jq -r '.result.i6_no_trigger | length')
 ```
 
 검증 invariants (스크립트가 mandate, doctor 는 보고만):
@@ -445,6 +447,11 @@ RE_I5R=$(echo "$RESULT" | jq -r '.result.i5_not_registered | length')
 - **I2**: `TODO:*` 는 deadline 필수 (`YYYY-MM-DD` 또는 `+Nd/+Nw`)
 - **I3**: deadline 임박(≤7일) / 초과 보고
 - **I5**: `enforced_by: hook:<path>` 면 (a) 파일 존재 (b) `.claude/settings.json` 등록
+- **I6**: `enforced_by: external:*` 면 자동 트리거(CI workflow[GitHub/GitLab/Circle/Jenkins/
+  Azure/Buildkite] / git pre-commit / husky / pre-commit-framework / lefthook)가 리포에
+  1개 이상 실재 — 없으면 "손으로 돌릴 때만" 도는 라벨뿐인 룰 (I1 을 통과해도 실체가
+  없는 케이스를 잡는 invariant). goax wrapper 만 있는 pre-commit 은 트리거로 안 쳐요
+  (up 이 기본 설치하므로 자기 무력화) — 프로젝트 전용 chain 훅이 있을 때만 인정
 
 자세한 schema·invariant 본문: `.ax/docs/reference/rule-enforcement.md` (사용자 프로젝트에 깔림).
 
@@ -460,6 +467,8 @@ RE_I5R=$(echo "$RESULT" | jq -r '.result.i5_not_registered | length')
       <i3_imminent + i3_overdue, deadline + days_left/days_overdue 포함>
    ⚠️  I5 위반 — hook 파일 부재 RE_I5F건 / 미등록 RE_I5R건:
       <i5_file_missing + i5_not_registered>
+   ❌ I6 위반 — external 인데 자동 트리거 없음 RE_I6건 (I6 는 트리거 0 일 때만 발동 — 감지된 트리거는 항상 "없음"):
+      <i6_no_trigger 배열을 한 줄씩 echo: "rule_id (enforced_by)">
 ```
 
 `다음 단계` 옵션 (위반 종류별, 무거운 것부터):
@@ -482,17 +491,54 @@ RE_I5R=$(echo "$RESULT" | jq -r '.result.i5_not_registered | length')
  [g] ✅ deadline 입력 — I2 위반 (deadline 없음) 에 absolute date 부여
    명령  enforced_by: TODO → TODO:<YYYY-MM-DD>
    이유  invariant I2 통과 + doctor 가 추적 가능 상태로
+
+ [t] ✅ 트리거 설치 — I6 위반 (external 인데 자동 실행 없음)
+   명령  CI 워크플로우 작성 (external 도구를 push 마다 실행) — 이게 본 처방
+        또는 external 도구를 실행하는 프로젝트 전용 훅을 .ax/hooks/pre-commit/ 에 추가
+        + bash .ax/scripts/bash/install-git-hooks.sh (chain 을 사람 커밋에도 연결)
+   이유  external 라벨을 진짜 자동 차단으로. goax wrapper 설치만으로는 I6 가 안 풀려요 —
+        wrapper 는 chain 만 하고 external 도구를 직접 실행하지 않으니까요
 ```
 
 **원칙**: 자동 수정 X — 모든 옵션은 사용자 confirm 후 LLM 이 CLAUDE.md / spirit/rules 갱신. 강등은 특히 사용자 의도 변경이라 명시 동의 필수.
 
 **왜 이 검증이 필요한가**: onboarding 이 deferred ("나중에 hook 작성") 옵션을 받아도 추적 메커니즘이 없으면 deadline 이 흘러도 아무도 모름. 🔴 라벨이 enforce 보장 없이 박혀있으면 다른 세션이 "이 룰은 자동 차단됨" 으로 오인 → 진짜 위반이 살아있어도 안전한 줄. 이 검증이 영구 추적 안전망.
 
+### 3.10 Sensors — Liveness (`check-sensor-liveness.sh` 위임)
+
+rule-enforcement(3.9) 가 룰 **라벨**의 schema 를 본다면, 이 검사는 **Sensors 장치**의 생사를 봐요 — 라벨이 완벽해도 장치가 죽어 있으면 아무것도 차단되지 않아요.
+
+```bash
+RESULT_L=$(bash "$ROOT/.ax/scripts/bash/check-sensor-liveness.sh" --json 2>/dev/null)
+L_SCAFFOLD=$(echo "$RESULT_L" | jq -r '.result.grep_scaffold_unfilled')
+L_DEMO=$(echo "$RESULT_L" | jq -r '.result.grep_demo_content')
+L_GITHOOK=$(echo "$RESULT_L" | jq -r '.result.git_precommit_installed')
+L_BZ=$(echo "$RESULT_L" | jq -r '.result.blocking_zero')
+L_RM=$(echo "$RESULT_L" | jq -r '.result.session_root_mismatch')
+L_ROOT=$(echo "$RESULT_L" | jq -r '.result.project_root')
+```
+
+검사 항목 (스크립트가 mandate, doctor 는 보고만):
+- **C1 grep 스캐폴드/데모**: `critical-rule-grep.sh` 가 미작성 스캐폴드(`#goax-grep-scaffold` 마커)거나 구버전 데모 내용(남의 룰 검사) 그대로면 보고
+- **C2 git pre-commit 미설치**: Claude Code PreToolUse 는 **에이전트가 실행하는** `git commit` 만 잡음 — 사람이 터미널에서 하는 커밋은 git hook 이 없으면 완전 우회. `install-git-hooks.sh` 로 커버
+- **C3 차단 능력 0**: `sensors.mode` 가 warning/off 이고 git hook 도 없으면 어떤 위반도 "경고 후 통과"(off 는 검사 자체 생략)만 함. 기본 설치가 이 상태라 명시적으로 보고
+- **C4 세션 루트 이탈**: `CLAUDE_PROJECT_DIR ≠ .ax 루트` — 서브디렉토리(특히 gitignore 된 생성물 디렉토리)에서 세션 시작 시 훅·spirit 주입이 조용히 누락될 위험
+
+보고 — finding 0 이면 본 표의 ✅ 만, 1+ 이면:
+
+```
+🫀 Sensors — Liveness
+   ⚠️  C1 grep 훅 미작성/데모 잔존 — AGENTS.md 🔴 룰의 패턴을 채우거나 /up 재실행
+   ⚠️  C2 git pre-commit 미설치 — bash .ax/scripts/bash/install-git-hooks.sh
+   ❌ C3 차단 능력 0 — mode=<sensors_mode> (+ git hook 부재). 지금 어떤 위반도 자동 차단되지 않아요
+   ⚠️  C4 세션 루트 이탈 — 세션을 <L_ROOT> 에서 시작하세요
+```
+
 ## 3. 출력
 
 ```
 🩺 goax doctor — /path/to/your-project
-    goax 0.3.0 · preset=default · installed 2026-05-02
+    goax 0.3.1 · preset=default · installed 2026-05-02
 
 🏛️  Layer 1 — Constitution
    ✅ CLAUDE.md (62줄, 시그널 라벨 🔴×3 / 🟡×9 / 🔵×1, 4계층 인덱스 ✓)

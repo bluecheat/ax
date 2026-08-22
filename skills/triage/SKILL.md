@@ -242,3 +242,20 @@ spec/spec-tasks 는 이 `intent_notes` 를 입력으로 받아 §3 acceptance cr
 - **사전 검색 결과를 분류에 반영해요** — 기존 spec/ADR 있는 영역을 추측으로 재분류하면 일관성이 깨져요. mistakes 매칭 시 본문을 읽고 반영해요.
 - **L3 는 게이팅을 우회하지 않아요** — spec/ADR 없는 즉시 작업 권장 금지, 역면접 Size 불문 발동.
 - **결정 공간에 비례해서 물어요** — 코너 케이스에 의례적 메뉴 금지, 모호 영역에 1줄 축약 금지, 이미 답한 축 재질문 금지.
+
+## state.json 갱신
+
+이 skill이 끝날 때 `.ax/state.json` 갱신 항목:
+- Layer 0 (triage) + 메타데이터
+
+갱신 방법: jq로 in-place. 실패해도 skill 본 작업은 영향 X (HUD·doctor 의 3-way 버전 비교가
+이 데이터를 봐요 — triage 가 안 찍으면 `goax_version: null`·`skill_calls: 0` 인 죽은
+state 로 남아서 doctor 가 stale 로 오진해요).
+```bash
+# canonical 갱신 (layer.active, sensors_mode, goax_version, updated_at) — 결정론 스크립트
+bash .ax/scripts/bash/update-state.sh
+
+# 메타데이터 (last_skill, skill_calls)만 별도
+jq '.last_skill = "triage" | .skill_calls = ((.skill_calls // 0) + 1)' \
+ .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+```

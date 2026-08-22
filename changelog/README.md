@@ -4,6 +4,22 @@
 
 ## 버전
 
+- [0.3.1](0.3.1.md) — 집행 실체 검증 (I6·sensor liveness) + git hook 전 환경 기본
+- [0.3.0](0.3.0.md) — 재베이스라인: 행동 스캐폴딩 lean 전환 + model_tier 분기
+- [0.2.5](0.2.5.md) — 플러그인 전면 정비: SSOT 버그·유령 참조 제거 + smoke 재작성
+- [0.2.4](0.2.4.md) — triage 4단계 역면접(Reverse Interview) + intent_notes 스키마 실체화
+- [0.2.3](0.2.3.md) — MEMORY.md 회상 인덱스 품질·토큰 개선
+- [0.2.2](0.2.2.md) — triage-search 공백 키워드 크래시 수정
+- [0.2.1](0.2.1.md) — triage 검색 연관성·토큰 효율 개선 + MEMORY.md·BM25 인덱스
+- [0.2.0](0.2.0.md) — OpenCode Hybrid 호환 + AGENTS.md Constitution SSOT
+- [0.1.20](0.1.20.md) — 보안 경화 + CLI-agnostic fallback + L3 일반화 + slash wrapper 폐기
+- [0.1.19](0.1.19.md) — audit §4.2 압축·탈맥락 원칙 박스
+- [0.1.18](0.1.18.md) — brownfield 보호 + spec-validate visibility + friction anti-pattern + install→up rename
+- [0.1.17](0.1.17.md) — doctor 시각화 개편 (emoji 매핑 + Plugin update 단일 y/n + changelog 발췌)
+- [0.1.16](0.1.16.md) — SDD 슬림화 (plan.md 폐기 + tier 2 단계 + spec-validate 강화)
+- [0.1.15](0.1.15.md) — spec/README 출고 제거 (Layer 3 책임 분리)
+- [0.1.14](0.1.14.md) — Confirmation Friction Policy
+- [0.1.13](0.1.13.md) — MANIFEST install 검증 + rules-tokens 재작성
 - [0.1.12](0.1.12.md) — ops.md opt-in 강등
 - [0.1.11](0.1.11.md) — audit 3단계 강제 + mistake archive
 - [0.1.10](0.1.10.md) — mistake skill 본문 작성 강제 + template 청소

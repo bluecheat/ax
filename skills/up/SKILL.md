@@ -79,7 +79,8 @@ bash 휴리스틱이 아니라 **Claude가 코드를 직접 읽어** 다음을 �
  Cross-cut Mistake Loop:.ax/mistakes/
  Sensors (Hooks):  .ax/hooks/*.sh
        Claude Code → .claude/settings.json 자동 등록
-       OpenCode → install-git-hooks.sh 안내 (PreToolUse 미지원, commit 시점 보전)
+       모든 환경 → git pre-commit wrapper 설치 (install-git-hooks.sh, idempotent)
+       (Claude Code PreToolUse 는 에이전트 커밋만 잡아요 — 사람 터미널 커밋은 git hook 이 커버)
  OpenCode config :  opencode.json (OpenCode 환경 감지 시만)
 
 추가 (brownfield):
@@ -201,6 +202,18 @@ if [ "$HAS_OPENCODE" = true ]; then
     fi
     echo "✓ OpenCode 환경 감지 — opencode.json 설치"
     echo "  Hook 시스템 보전: bash .ax/scripts/bash/install-git-hooks.sh"
+fi
+
+# 5.6 git pre-commit wrapper — 모든 환경 (idempotent, exit 2 = 이미 설치라 안전)
+# Claude Code 의 PreToolUse:Bash 는 "에이전트가 실행하는" git commit 만 잡아요.
+# 사람이 터미널에서 직접 커밋하면 완전히 우회되므로, 환경 불문 git hook 을 설치해요.
+# 기존 pre-commit(goax marker 없음)이 있으면 스크립트가 ERROR 로 알리고 건드리지
+# 않아요 (--force 필요) — 아래 `|| true` 가 그 exit 1 을 삼켜 설치 흐름은 계속돼요.
+# husky 등 기존 훅 팀은 이 ERROR 가 정상이에요 (사용자 자산 보존 원칙).
+if [ -d ".git" ] || [ -f ".git" ]; then
+    bash .ax/scripts/bash/install-git-hooks.sh || true
+else
+    echo "  (git 리포 아님 — git pre-commit wrapper 는 git init 후 install-git-hooks.sh 로)"
 fi
 
 # 6. .claude/settings.json — Claude Code mode 한정 (manifest 외 조건부)

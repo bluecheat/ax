@@ -15,11 +15,12 @@
 | `slug-from-text.sh` | 영문 텍스트 → kebab-case 정규화·검증 | `spec` |
 | `check-templates-drift.sh` | `_templates/.origin` ↔ 현재 sha 비교 | `doctor` |
 | `check-manifest-install.sh` | MANIFEST 출고분 ↔ 사용자 프로젝트 파일 단위 비교 (missing + drift) | `doctor` |
-| `check-rule-enforcement.sh` | 룰의 `enforced_by`/`enforced_kind` invariant(I1/I2/I3/I5) 검증 | `doctor` |
+| `check-rule-enforcement.sh` | 룰의 `enforced_by`/`enforced_kind` invariant(I1~I6) 검증 | `doctor` |
+| `check-sensor-liveness.sh` | Sensors 장치 생사 검증 (C1 grep 스캐폴드 · C2 git hook · C3 차단 능력 0 · C4 세션 루트 이탈) | `doctor` |
 | `check-spec-clarity.sh` | spec.md 명료성 게이팅(NEEDS CLARIFICATION/placeholder/빈 섹션) + tasks·AC 진행률 visibility | `spec-validate` |
 | `promote-mistake.sh` | mistake → spirit rule 승격 (후보·적용·archive) | `audit` |
 | `init-mistake-file.sh` | mistake 파일 skeleton 생성 (template cp + frontmatter 치환) | `mistake`, `audit` |
-| `install-git-hooks.sh` | OpenCode 등 non-Claude-Code 환경에 `.ax/hooks/pre-commit/*.sh` chain 을 git pre-commit wrapper 로 설치 | `up`, `onboarding` |
+| `install-git-hooks.sh` | `.ax/hooks/pre-commit/*.sh` chain 을 git pre-commit wrapper 로 설치 (모든 환경 기본 — 사람 터미널 커밋 커버) | `up`, `onboarding` |
 | `register-spirit-hook.sh` | `.claude/settings.json` 에 spirit-rules-inject hook idempotent 등록 | `doctor` |
 | `reset-task.sh` | 작업 완료 후 `current-task.json` → phase=idle 리셋 (`tier-from-state.sh --reset` 위임) | `spec-implement` |
 | `update-state.sh` | `.ax/` 실측 → `.ax/state.json` (layers/cross_cut/sensors_mode) 갱신 | `up`, `onboarding`, `audit`, `doctor`, `hud`, `mistake` |
@@ -43,7 +44,7 @@
 오작동해요. 각 자리에서 `|| true` 로 개별 guard 하는 대신 스크립트 전체에서 `-e` 를 뺀 선택:
 
 - `set -u` 만: `build-index.sh`, `build-memory.sh`, `update-state.sh`
-- `set -uo pipefail`: `check-rule-enforcement.sh`, `init-mistake-file.sh`, `install-git-hooks.sh`
+- `set -uo pipefail`: `check-rule-enforcement.sh`, `check-sensor-liveness.sh`, `init-mistake-file.sh`, `install-git-hooks.sh`
 
 나머지 스크립트는 모두 `set -euo pipefail`.
 

@@ -172,6 +172,8 @@ for f in \
     templates/default/.ax/scripts/bash/slug-from-text.sh \
     templates/default/.ax/scripts/bash/check-templates-drift.sh \
     templates/default/.ax/scripts/bash/check-manifest-install.sh \
+    templates/default/.ax/scripts/bash/check-rule-enforcement.sh \
+    templates/default/.ax/scripts/bash/check-sensor-liveness.sh \
     templates/default/.ax/scripts/bash/promote-mistake.sh
 do
     [ -f "$REPO/$f" ] && pass "$f" || fail "$f 누락"
@@ -493,6 +495,7 @@ section "9. .ax/scripts/bash/ 핵심 스크립트 — 문법 + 실행권한 + e2
 SCRIPTS_DIR="$REPO/templates/default/.ax/scripts/bash"
 for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
          check-spec-clarity slug-from-text check-templates-drift check-manifest-install promote-mistake \
+         check-rule-enforcement check-sensor-liveness \
          build-memory build-index; do
     f="$SCRIPTS_DIR/$s.sh"
     if [ -f "$f" ]; then
@@ -527,6 +530,8 @@ for cmd in \
     "slug-from-text.sh --json 'End To End Test'" \
     "check-templates-drift.sh --json" \
     "check-manifest-install.sh --json --plugin-dir $REPO" \
+    "check-rule-enforcement.sh --json" \
+    "check-sensor-liveness.sh --json" \
     "promote-mistake.sh --json" \
     "build-memory.sh --json" \
     "build-index.sh --json"; do

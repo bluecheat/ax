@@ -15,6 +15,12 @@
 #   I2. TODO:* 는 deadline 필수 (YYYY-MM-DD)
 #   I3. deadline 임박(≤7일) 또는 초과 보고
 #   I5. enforced_by: hook:<path> 면 (a) 파일 존재 (b) .claude/settings.json 등록
+#   I6. enforced_by: external:* 면 그걸 자동 실행하는 트리거가 리포에 실재해야 함
+#       (CI workflow[GitHub/GitLab/Circle/Jenkins/Azure/Buildkite] / git pre-commit /
+#        husky / pre-commit-framework / lefthook 중 1+)
+#       — goax wrapper 만 있는 pre-commit 은 트리거로 안 쳐요 (up 이 기본 설치하므로
+#         자기 무력화). 프로젝트 전용 chain 훅이 있을 때만 git:pre-commit-chain 인정.
+#       external 라벨만 있고 트리거가 없으면 "누군가 손으로 돌릴 때만" 도는 거짓 약속
 #
 # JSON output schema (--json):
 #   { status: ok|warning|error,
@@ -22,6 +28,7 @@
 #       i1_violations: [...], i2_violations: [...],
 #       i3_imminent: [...], i3_overdue: [...],
 #       i5_file_missing: [...], i5_not_registered: [...],
+#       i6_no_trigger: [...], trigger_surfaces: [...],
 #       rule_count: N, source_files: [...]
 #     },
 #     next_step, warnings, errors }
@@ -53,7 +60,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# //; s/^#//'
+    sed -n '2,42p' "${BASH_SOURCE[0]}" | sed 's/^# //; s/^#//'
     exit "$EXIT_OK"
 fi
 
@@ -188,6 +195,48 @@ I3_IMMINENT=()
 I3_OVERDUE=()
 I5_FILE=()  # hook:<path> 파일 부재
 I5_REG=()   # hook:<path> 파일 OK 인데 settings.json 미등록
+I6=()       # external:* 인데 자동 실행 트리거(CI/git hook) 부재
+
+# I6 준비 — 리포에 존재하는 자동 트리거 표면을 한 번만 수집.
+# external:<tool> 의 내용까지는 도구별이라 검증 못 하지만, "무엇이 그걸 자동으로
+# 돌리는가" 는 도구 무관하게 검사 가능. 하나도 없으면 external 룰 전부가 수동 집행.
+TRIGGER_SURFACES=()
+# CI — GitHub Actions 외 주요 CI 도 표면으로 인정 (도구 무관 검사라는 원칙 유지)
+if ls "$ROOT/.github/workflows/"*.yml >/dev/null 2>&1 \
+    || ls "$ROOT/.github/workflows/"*.yaml >/dev/null 2>&1; then
+    TRIGGER_SURFACES+=("ci:github-actions")
+fi
+for _ci in .gitlab-ci.yml .circleci/config.yml Jenkinsfile azure-pipelines.yml; do
+    [ -f "$ROOT/$_ci" ] && { TRIGGER_SURFACES+=("ci:$_ci"); break; }
+done
+[ -d "$ROOT/.buildkite" ] && TRIGGER_SURFACES+=("ci:buildkite")
+
+# git pre-commit — core.hooksPath 설정(husky v9 등)까지 반영해 실제 경로로 확인.
+# 실행권한 없는 훅은 git 이 무시하므로 -x 까지 요구.
+GIT_PC=$(git -C "$ROOT" rev-parse --git-path hooks/pre-commit 2>/dev/null || echo "")
+if [ -n "$GIT_PC" ]; then
+    case "$GIT_PC" in /*) ;; *) GIT_PC="$ROOT/$GIT_PC" ;; esac
+    if [ -f "$GIT_PC" ] && [ -x "$GIT_PC" ]; then
+        if grep -q '#goax-pre-commit-chain' "$GIT_PC" 2>/dev/null; then
+            # goax wrapper 는 .ax/hooks/pre-commit/*.sh 만 chain 해요 — up 이 전 환경
+            # 기본으로 설치하므로 wrapper 존재 자체는 external 실행의 근거가 못 돼요
+            # (그걸 근거로 치면 I6 가 항상 통과하는 자기 무력화). 출고 훅 이외의
+            # 프로젝트 전용 훅이 1개 이상 있을 때만 트리거로 인정해요.
+            for _h in "$ROOT/.ax/hooks/pre-commit/"*.sh; do
+                [ -f "$_h" ] || continue
+                case "$(basename "$_h")" in
+                    critical-rule-grep.sh|check-mistake-secrets.sh) ;;
+                    *) TRIGGER_SURFACES+=("git:pre-commit-chain"); break ;;
+                esac
+            done
+        else
+            TRIGGER_SURFACES+=("git:pre-commit")
+        fi
+    fi
+fi
+[ -f "$ROOT/.pre-commit-config.yaml" ] && TRIGGER_SURFACES+=("framework:pre-commit")
+[ -f "$ROOT/.husky/pre-commit" ] && TRIGGER_SURFACES+=("framework:husky")
+{ [ -f "$ROOT/lefthook.yml" ] || [ -f "$ROOT/.lefthook.yml" ]; } && TRIGGER_SURFACES+=("framework:lefthook")
 
 # 날짜 차이 (YYYY-MM-DD) — bash 만으로 (date -d 가 BSD 에선 다름. macOS/Linux 호환).
 date_diff_days() {
@@ -234,6 +283,14 @@ while IFS=$'\t' read -r rid label eb ek file; do
         fi
     fi
 
+    # I6: external:* 인데 리포에 자동 트리거 표면이 하나도 없음
+    # (TRIGGER_SURFACES 는 루프 불변 — 룰별 조건은 external 여부뿐이라 루프 안 판정이 안전)
+    if [ "${#TRIGGER_SURFACES[@]}" -eq 0 ]; then
+        case "$eb" in
+            *external:*) I6+=("$rid|$eb|no_trigger|$file") ;;
+        esac
+    fi
+
     # I5: enforced_by 가 hook:<path> 형식이면 파일 + settings.json 등록 검증
     # eb 안에 hook:.ax/hooks/<...>.sh 추출 (복수면 모두)
     while [[ "$eb" =~ hook:([^[:space:]+]+\.sh) ]]; do
@@ -254,7 +311,7 @@ while IFS=$'\t' read -r rid label eb ek file; do
 done < "$ALL_RULES"
 
 # ─── (5) 보고 ────────────────────────────────────────────────────
-TOTAL_VIOLATIONS=$((${#I1[@]} + ${#I2[@]} + ${#I3_OVERDUE[@]} + ${#I5_FILE[@]} + ${#I5_REG[@]}))
+TOTAL_VIOLATIONS=$((${#I1[@]} + ${#I2[@]} + ${#I3_OVERDUE[@]} + ${#I5_FILE[@]} + ${#I5_REG[@]} + ${#I6[@]}))
 
 if [ "$JSON_MODE" = true ]; then
     # 배열 → JSON. set -u 환경에서 빈 배열 expand 안전하게.
@@ -270,8 +327,10 @@ if [ "$JSON_MODE" = true ]; then
         --argjson i3od "$(arr_to_json ${I3_OVERDUE[@]+"${I3_OVERDUE[@]}"})" \
         --argjson i5f "$(arr_to_json ${I5_FILE[@]+"${I5_FILE[@]}"})" \
         --argjson i5r "$(arr_to_json ${I5_REG[@]+"${I5_REG[@]}"})" \
+        --argjson i6 "$(arr_to_json ${I6[@]+"${I6[@]}"})" \
+        --argjson ts "$(if [ "${#TRIGGER_SURFACES[@]}" -eq 0 ]; then echo "[]"; else printf '%s\n' "${TRIGGER_SURFACES[@]}" | jq -R . | jq -s .; fi)" \
         --argjson rc "$RULE_COUNT" \
-        '{i1_violations: $i1, i2_violations: $i2, i3_imminent: $i3im, i3_overdue: $i3od, i5_file_missing: $i5f, i5_not_registered: $i5r, rule_count: $rc}')
+        '{i1_violations: $i1, i2_violations: $i2, i3_imminent: $i3im, i3_overdue: $i3od, i5_file_missing: $i5f, i5_not_registered: $i5r, i6_no_trigger: $i6, trigger_surfaces: $ts, rule_count: $rc}')
 
     if [ "$TOTAL_VIOLATIONS" -eq 0 ]; then
         json_output "ok" "$result" "all invariants pass"
@@ -289,6 +348,7 @@ else
         [ "${#I3_OVERDUE[@]}" -gt 0 ] && printf '  I3 초과 %d건\n' "${#I3_OVERDUE[@]}" >&2
         [ "${#I5_FILE[@]}" -gt 0 ] && printf '  I5 (hook 파일 부재) %d건\n' "${#I5_FILE[@]}" >&2
         [ "${#I5_REG[@]}" -gt 0 ] && printf '  I5 (settings.json 미등록) %d건\n' "${#I5_REG[@]}" >&2
+        [ "${#I6[@]}" -gt 0 ] && printf '  I6 (external 인데 자동 트리거 부재 — CI/git hook 없음) %d건\n' "${#I6[@]}" >&2
         goax_log "자세한 보고: $0 --json | jq"
     fi
 fi

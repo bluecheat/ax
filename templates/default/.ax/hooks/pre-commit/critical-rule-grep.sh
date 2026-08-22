@@ -48,32 +48,26 @@ STAGED=$(git diff --cached --name-only 2>/dev/null || true)
 
 echo "[goax] CRITICAL 룰 검사 (mode=$SENSOR_MODE) — 대상 $(echo "$STAGED" | wc -l | tr -d ' ')개 파일"
 
-while IFS= read -r f; do
-    [ -z "$f" ] || [ ! -f "$f" ] && continue
-    case "$f" in
-        *.ts|*.tsx)
-            if grep -nE 'typeof window[[:space:]]*[!=]==[[:space:]]*"undefined"' "$f" >/dev/null 2>&1; then
-                report "hydration" "$f: typeof window 분기 — Hydration 위험"
-            fi
-            ;;
-        *.kt|*.kts)
-            # 파일 경로가 domain/(model|entity) 하위인 경우에만 var 검출 (이전: grep -n 출력에 대한
-            # 후속 grep으로 영원히 안 켜지던 dead code).
-            if echo "$f" | grep -qE 'domain/(model|entity)' \
-                    && grep -qE '^[[:space:]]*var[[:space:]]+[a-zA-Z_]+:[[:space:]]+' "$f" 2>/dev/null; then
-                report "kotlin-mutable-domain" "$f: domain에 var — val 권장"
-            fi
-            ;;
-    esac
-done <<< "$STAGED"
-
-ENTITY_CHANGED=$(echo "$STAGED" | grep -E '(entity|Entity).*\.(kt|ts)$' || true)
-if [ -n "$ENTITY_CHANGED" ]; then
-    SQL_CHANGED=$(echo "$STAGED" | grep -E 'migrations?/.*\.sql$' || true)
-    if [ -z "$SQL_CHANGED" ]; then
-        report "entity-without-migration" "Entity 변경 감지 — 마이그레이션 SQL 동반 누락" "$ENTITY_CHANGED"
-    fi
-fi
+# ─── 프로젝트 CRITICAL 패턴 (스캐폴드) ──────────────────────────────
+#goax-grep-scaffold — 이 마커는 "프로젝트 패턴 미작성" 신호. AGENTS.md 의 🔴 룰에서
+# grep 가능한 패턴을 뽑아 아래에 채우고, 채우면 이 마커 라인을 지우세요 (doctor 가 감지).
+#
+# 작성 예시 (실룰이 아니라 형식 참고용 — 그대로 켜지 않아요):
+#   while IFS= read -r f; do
+#       [ -z "$f" ] || [ ! -f "$f" ] && continue
+#       case "$f" in
+#           *.ts|*.tsx)
+#               # 예: 사용자 노출 카피에 내부 용어 금지 (XX:CRITICAL:001)
+#               if grep -qE '(내부용어A|내부용어B)' "$f" 2>/dev/null; then
+#                   report "internal-terms" "$f: 내부 용어 노출 — XX:CRITICAL:001"
+#               fi
+#               ;;
+#       esac
+#   done <<< "$STAGED"
+#
+# 주의: 여기 검출은 "grep 으로 잡히는 표면 위반"용 보조 그물이에요. 본 집행(테스트·린트)이
+# 있는 룰은 그쪽을 pre-commit/CI 에서 직접 실행하는 별도 훅 파일로 두세요 —
+# .ax/hooks/pre-commit/ 의 *.sh 는 전부 자동 chain 되고, exit 2 가 커밋을 차단해요.
 
 # secrets 검출 — xargs -I{} sh -c '...{}...'는 파일명에 `"`/백틱/`$` 들어가면 명령 주입 가능 → while-read 안전 loop으로 변경
 SECRETS_HIT=0

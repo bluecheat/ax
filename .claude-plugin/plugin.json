@@ -1,6 +1,6 @@
 {
   "name": "goax",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "AX 4-Layer harness — Triage / Constitution / Module / Spec·ADR + Spirit·Mistake Loop. Bash + Markdown only, with Claude-driven onboarding. Multi-CLI: Claude Code (native) + OpenCode (Hybrid compat via AGENTS.md SSOT + opencode.json).",
   "author": {
     "name": "bluecheat",

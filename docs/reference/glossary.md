@@ -18,4 +18,7 @@
 | **Structural test** | 레이어/모듈 의존 방향 위반 자동 검출 |
 | **Circuit Breaker** | 무한 루프 차단 — 같은 명령 N회 실패 시 정지 |
 | **Mistake Loop** | `.ax/mistakes/` 캡처 → audit → 룰 승격 |
+| **Invariant I1~I6** | 룰 라벨 ↔ 차단 메커니즘 계약의 불변량. `rule-enforcement.md` 가 SSOT, `check-rule-enforcement.sh` 가 검증 |
+| **Sensors liveness** | Sensors 장치가 실제로 차단 가능한 상태인지 — mode·git hook·grep 패턴의 생사 (C1~C4, `check-sensor-liveness.sh`) |
+| **거짓 약속** | 🔴 라벨이 자동 차단을 약속하지만 실제 차단 장치(트리거·훅)가 없는 상태. I1·I5·I6 가 잡는 대상 |
 | **Preset** | goax init의 옵션 — default, ax 등. 기본 위에 overlay |
