@@ -1314,6 +1314,54 @@ REAL_SC=$(find "$REPO/templates/default/.ax/scripts/bash" -maxdepth 1 -name '*.s
     || fail "CLAUDE.md 는 ${DOC_SC} scripts 라는데 실제는 ${REAL_SC}개"
 
 # ───────────────────────────────────────────────────────────
+section "27. mistake — model / session_ref 기록"
+# ───────────────────────────────────────────────────────────
+DM_FX=$(mktemp -d)
+mkdir -p "$DM_FX"/.ax/scripts/bash "$DM_FX"/.ax/mistakes "$DM_FX"/.ax/_templates/mistakes
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,init-mistake-file,detect-model,slug-from-text}.sh \
+   "$DM_FX/.ax/scripts/bash/" 2>/dev/null || true
+chmod +x "$DM_FX"/.ax/scripts/bash/*.sh
+cp "$REPO/templates/default/.ax/_templates/mistakes/mistake.md" "$DM_FX/.ax/_templates/mistakes/"
+
+# 템플릿이 placeholder 를 갖고 있어야 치환이 가능해요
+grep -q '{{MODEL}}' "$REPO/templates/default/.ax/_templates/mistakes/mistake.md" \
+    && pass "mistake 템플릿 — {{MODEL}} placeholder 존재" \
+    || fail "mistake 템플릿에 {{MODEL}} 없음 — 기록이 불가능"
+
+(cd "$DM_FX" && GOAX_PROJECT_DIR="$DM_FX" bash .ax/scripts/bash/init-mistake-file.sh --json \
+    --category process --slug smoke-model --severity low --detected-by user \
+    --source skill --model claude-test-5 --one-line x >/dev/null 2>&1)
+MK_FILE=$(ls "$DM_FX"/.ax/mistakes/2*.md 2>/dev/null | head -1)
+if [ -n "$MK_FILE" ] && grep -q '^model: claude-test-5' "$MK_FILE"; then
+    pass "init-mistake-file --model — frontmatter 에 기록"
+else
+    fail "init-mistake-file --model — model 미기록"
+fi
+# placeholder 가 그대로 남으면 안 돼요
+[ -n "$MK_FILE" ] && grep -q '{{' "$MK_FILE" \
+    && fail "mistake 파일에 치환 안 된 placeholder 잔존" \
+    || pass "mistake 파일 — placeholder 전부 치환"
+
+# 감지 실패해도 캡처를 막으면 안 돼요 (unknown 으로 진행)
+rm -f "$DM_FX"/.ax/mistakes/2*.md
+(cd "$DM_FX" && GOAX_PROJECT_DIR="$DM_FX" CLAUDE_PROJECT_DIR="$DM_FX" \
+    bash .ax/scripts/bash/init-mistake-file.sh --json \
+    --category process --slug smoke-unknown --severity low --detected-by user \
+    --source skill --one-line x >/dev/null 2>&1)
+MK2=$(ls "$DM_FX"/.ax/mistakes/2*.md 2>/dev/null | head -1)
+[ -n "$MK2" ] && grep -q '^model: unknown' "$MK2" \
+    && pass "model 감지 실패 시 unknown 으로 캡처 계속 (차단 안 함)" \
+    || fail "model 감지 실패가 캡처를 막거나 필드가 비었음"
+
+# session_ref 는 파일명만 — mistake 는 커밋되므로 절대경로가 들어가면 안 돼요
+if [ -n "$MK2" ] && grep -qE '^session_ref: .*/' "$MK2"; then
+    fail "session_ref 에 경로가 들어감 (파일명만이어야)"
+else
+    pass "session_ref — 경로 없이 파일명만"
+fi
+rm -rf "$DM_FX"
+
+# ───────────────────────────────────────────────────────────
 section "25. vendor — ADE 루트 ≠ 프로젝트 루트 (모노레포) 처리"
 # ───────────────────────────────────────────────────────────
 # .claude/skills 는 저장소 루트, .ax/ 는 projects/<app>/ 인 구조에서

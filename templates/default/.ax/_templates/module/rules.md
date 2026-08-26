@@ -1,11 +1,12 @@
 ---
 module: __MODULE_NAME__
 keywords: [__keyword1__, __keyword2__, __한글_동의어__]
-applies_to: [code, pr, review]
+applies_to: [code, pr, review]      # code 가 있어야 편집 시점에 주입돼요 (pr/review 는 표시용)
 paths:                              # 이 모듈의 소스 글롭 — **비우면 자동 주입이 안 돼요**
   - "__module/src/path__/**"        # 편집 대상이 여기 매칭되면 훅이 이 파일 경로를 주입
                                     # (pre-edit/module-rules-inject.sh)
-# adr: .ax/docs/adr/NNNN-*.md   # 결정 근거 ADR (선택)
+adr:                                # 이 모듈의 결정 근거 ADR (선택) — 주입 시 같이 가리켜요
+  - .ax/docs/adr/NNNN-<slug>.md
 ---
 
 # __Module Name__ — 도메인 룰

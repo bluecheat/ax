@@ -35,6 +35,8 @@ SLUG=""
 SEVERITY=""
 DETECTED_BY=""
 SOURCE=""
+MODEL=""
+SESSION_REF=""
 CONTEXT_LINK=""
 ONE_LINE=""
 
@@ -50,6 +52,7 @@ while [ $# -gt 0 ]; do
         --source)       shift; SOURCE="${1:-}" ;;
         --context-link) shift; CONTEXT_LINK="${1:-}" ;;
         --one-line)     shift; ONE_LINE="${1:-}" ;;
+        --model)        shift; MODEL="${1:-}" ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;
     esac
     shift
@@ -149,6 +152,20 @@ REL="${FILE#$PROJECT_ROOT/}"
 CAPTURED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 CONTEXT_LINK_OUT="${CONTEXT_LINK:-}"
 
+# 어떤 모델이 낸 실수인지 — audit 에서 "특정 모델에 몰린 실수" 를 보려면 필요해요.
+# --model 로 명시 안 하면 결정론 스크립트가 transcript 에서 뽑아요 (LLM 자가보고 X).
+# 식별 실패는 unknown 으로 넘어가요 — 캡처 자체를 막으면 안 되니까요.
+if [ -z "$MODEL" ] && [ -x "$SCRIPT_DIR/detect-model.sh" ]; then
+    if command -v jq >/dev/null 2>&1; then
+        DM=$(bash "$SCRIPT_DIR/detect-model.sh" --json 2>/dev/null || true)
+        MODEL=$(printf '%s' "$DM" | jq -r '.result.model // empty' 2>/dev/null || true)
+        SESSION_REF=$(printf '%s' "$DM" | jq -r '.result.session_ref // empty' 2>/dev/null || true)
+    else
+        MODEL=$(bash "$SCRIPT_DIR/detect-model.sh" 2>/dev/null || true)
+    fi
+fi
+MODEL="${MODEL:-unknown}"
+
 if [ "$DRY_RUN" = true ]; then
     if [ "$JSON_MODE" = true ]; then
         json_output "ok" \
@@ -170,8 +187,12 @@ DETECTED_BY_E=$(_sed_escape "$DETECTED_BY")
 CONTEXT_LINK_E=$(_sed_escape "$CONTEXT_LINK_OUT")
 CAPTURED_AT_E=$(_sed_escape "$CAPTURED_AT")
 SOURCE_E=$(_sed_escape "$SOURCE")
+MODEL_E=$(_sed_escape "$MODEL")
+SESSION_REF_E=$(_sed_escape "$SESSION_REF")
 
-sed -e "s|{{CATEGORY}}|$CATEGORY_E|g" \
+sed -e "s|{{MODEL}}|$MODEL_E|g" \
+    -e "s|{{SESSION_REF}}|$SESSION_REF_E|g" \
+    -e "s|{{CATEGORY}}|$CATEGORY_E|g" \
     -e "s|{{SEVERITY}}|$SEVERITY_E|g" \
     -e "s|{{DETECTED_BY}}|$DETECTED_BY_E|g" \
     -e "s|{{CONTEXT_LINK}}|$CONTEXT_LINK_E|g" \

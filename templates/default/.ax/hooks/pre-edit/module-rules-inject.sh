@@ -47,13 +47,34 @@ if [ -d "$MOD_DIR" ]; then
     for rules in "$MOD_DIR"/*/rules.md; do
         [ -f "$rules" ] || continue
         mod=$(basename "$(dirname "$rules")")
+
+        # applies_to 에 `code` 가 없으면 편집 시점 주입 대상이 아니에요.
+        # (pr/commit/review 전용 룰은 편집 중에 나오면 노이즈)
+        # 필드가 아예 없으면 하위호환으로 주입 — 기존 프로젝트를 깨지 않으려고요.
+        APPLIES=$(goax_yaml_list "$rules" applies_to)
+        if [ -n "$APPLIES" ] && ! printf '%s\n' "$APPLIES" | grep -qx 'code'; then
+            continue
+        fi
+
+        matched=false
         while IFS= read -r glob; do
             [ -z "$glob" ] && continue
             if goax_glob_match "$glob" "$TARGET_REL"; then
-                LINES="${LINES}  Layer 2 · ${mod}  →  .ax/modules/${mod}/rules.md"$'\n'
+                matched=true
                 break
             fi
         done < <(goax_yaml_list "$rules" paths)
+        [ "$matched" = true ] || continue
+
+        LINES="${LINES}  Layer 2 · ${mod}  →  .ax/modules/${mod}/rules.md"$'\n'
+
+        # 모듈이 자기 결정 근거 ADR 을 선언했으면 같이 가리켜요.
+        # 룰만 보면 "왜 이런 룰인지" 를 몰라서 다시 제안하는 일이 생겨요 (컨텍스트 drift).
+        while IFS= read -r adrp; do
+            [ -z "$adrp" ] && continue
+            case "$adrp" in *"<slug>"*|*NNNN*) continue ;; esac   # 템플릿 placeholder 무시
+            [ -f "$PROJECT_ROOT/$adrp" ] && LINES="${LINES}  Layer 2 · ${mod} ADR  →  ${adrp}"$'\n'
+        done < <(goax_yaml_list "$rules" adr)
     done
 fi
 

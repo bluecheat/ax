@@ -209,6 +209,21 @@ archived 파일은 maxdepth 1 scan 에서 자동 제외 — 후속 audit candida
 ✓ path-scoped hook 활성 — 매 .kt / .properties / .yaml 편집 시 SP-SEC-001 자동 inject
 ```
 
+## model 분포 — 어느 모델에서 몰리나
+
+`model` frontmatter 가 쌓이면 카테고리와 교차해서 볼 수 있어요.
+
+```bash
+grep -h '^model:' .ax/mistakes/*.md .ax/mistakes/_archive/*/*/*.md 2>/dev/null \
+  | awk '{print $2}' | sort | uniq -c | sort -rn
+```
+
+읽는 법 — **모델을 탓하는 지표가 아니에요.** 특정 모델에 특정 카테고리가 몰리면
+그건 보통 *그 모델에 안 맞는 지시* 라는 신호예요. 룰을 그 모델이 지킬 수 있는
+형태로 다시 쓰는 게 대응이에요.
+
+`unknown` 이 많으면 감지가 안 되는 환경(다른 CLI·CI)에서 캡처된 거예요. 문제 아니에요.
+
 ## 절대 금지
 
 - 사용자 동의 없이 룰을 자동 승격 X

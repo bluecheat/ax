@@ -5,6 +5,8 @@ detected_by: {{DETECTED_BY}}
 context_link: {{CONTEXT_LINK}}
 captured_at: {{CAPTURED_AT}}
 source: {{SOURCE}}
+model: {{MODEL}}
+session_ref: {{SESSION_REF}}
 ---
 
 # 무엇이 일어났나

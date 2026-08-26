@@ -146,6 +146,17 @@ jq --arg file "$FILE" \
 
 `update-state.sh` 의 mistake count 도 자동 반영 (다음 호출 시).
 
+## model 기록 — 자동
+
+frontmatter 의 `model` / `session_ref` 는 `init-mistake-file.sh` 가 자동으로 채워요.
+사용자에게 묻지 마세요. LLM 자가보고가 아니라 `detect-model.sh` 가 transcript 에서
+결정론으로 뽑아요 (실패하면 `unknown`).
+
+특정 모델을 지목해야 하면 `--model <id>` 로 넘길 수 있어요 (예: 다른 CLI 로 낸 실수를
+사후 기록할 때). 안 넘기면 감지에 맡기세요.
+
+`session_ref` 는 파일명만 담아요 — mistake 는 커밋되므로 개인 절대경로가 들어가면 안 돼요.
+
 ## 절대 금지
 
 - **자동 capture X** — hook 시점에 이 skill 호출 금지 (LLM 부재). hook 들은 차단/경고만, 사용자가 의도적으로 mistake skill 호출.
