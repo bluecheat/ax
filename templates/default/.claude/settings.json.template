@@ -28,7 +28,8 @@
       {
         "matcher": "Edit|Write|MultiEdit|Read",
         "hooks": [
-          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-edit/spirit-rules-inject.sh\"" }
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-edit/spirit-rules-inject.sh\"" },
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-edit/module-rules-inject.sh\"" }
         ]
       }
     ],

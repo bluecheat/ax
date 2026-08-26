@@ -1,6 +1,11 @@
 ---
 category: testing
 applies_to: [code, pr]
+paths:                    # 자동 주입 대상 글롭. 프로젝트에 맞게 좁히세요.
+  - "**/*test*/**"
+  - "**/*Test*"
+  - "**/*.spec.*"
+  - "**/*_test.*"
 ---
 
 # Testing

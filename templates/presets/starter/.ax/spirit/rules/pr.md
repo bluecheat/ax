@@ -1,6 +1,8 @@
 ---
 category: pr
 applies_to: [pr, commit]
+paths: []                 # 파일 편집이 아니라 PR 단계 룰이라 비워요.
+                          # (비면 pre-edit 자동 주입 대상이 아님 — 의도된 값)
 ---
 
 # PR / Commit

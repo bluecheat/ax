@@ -2,6 +2,9 @@
 module: __MODULE_NAME__
 keywords: [__keyword1__, __keyword2__, __한글_동의어__]
 applies_to: [code, pr, review]
+paths:                              # 이 모듈의 소스 글롭 — **비우면 자동 주입이 안 돼요**
+  - "__module/src/path__/**"        # 편집 대상이 여기 매칭되면 훅이 이 파일 경로를 주입
+                                    # (pre-edit/module-rules-inject.sh)
 # adr: .ax/docs/adr/NNNN-*.md   # 결정 근거 ADR (선택)
 ---
 

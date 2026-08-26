@@ -1,6 +1,9 @@
 ---
 category: __CATEGORY__              # 파일명과 일치 (kebab-case)
 applies_to: [code]                  # code | pr | commit | review (필요한 것 다중 선택)
+paths:                              # 이 룰이 적용될 파일 글롭 — **비우면 자동 주입이 안 돼요**
+  - "**/*.__EXT__"                  # 편집 대상이 여기 매칭되면 훅이 이 파일 경로를 주입
+                                    # (pre-edit/spirit-rules-inject.sh)
 # adr: .ax/docs/adr/NNNN-*.md           # 결정 근거 ADR (선택)
 ---
 

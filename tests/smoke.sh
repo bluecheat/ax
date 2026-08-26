@@ -1293,6 +1293,77 @@ NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
 rm -rf "$NS2_FX"
 
 # ───────────────────────────────────────────────────────────
+section "24. Layer 2·3 자동 주입 (module-rules-inject)"
+# ───────────────────────────────────────────────────────────
+# 하네스 테제는 "환경으로 통제한다" 인데, Layer 2(module)·3(spec/ADR) 은
+# 자동 주입 경로가 없어서 모델이 읽기로 *선택* 해야만 들어왔어요.
+L23=$(mktemp -d)
+mkdir -p "$L23"/.ax/hooks/pre-edit "$L23"/.ax/scripts/bash \
+         "$L23"/.ax/modules/order "$L23"/.ax/docs/spec/012-x "$L23"/.ax/docs/adr
+cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$L23/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/hooks/pre-edit/module-rules-inject.sh" "$L23/.ax/hooks/pre-edit/"
+printf -- '---\nmodule: order\npaths:\n  - "services/order/**"\n---\n# order\n' > "$L23/.ax/modules/order/rules.md"
+printf -- '# Spec\n.ax/docs/adr/0008-x.md 참고\n' > "$L23/.ax/docs/spec/012-x/spec.md"
+: > "$L23/.ax/docs/adr/0008-x.md"
+echo '{"phase":"implementing","spec_dir":".ax/docs/spec/012-x"}' > "$L23/.ax/current-task.json"
+
+l23_ctx() {
+    printf '{"tool_input":{"file_path":"%s"}}' "$1" \
+      | CLAUDE_PROJECT_DIR=$L23 bash "$L23/.ax/hooks/pre-edit/module-rules-inject.sh" 2>/dev/null \
+      | jq -r '.hookSpecificOutput.additionalContext // ""'
+}
+
+OUT_L2=$(l23_ctx "$L23/services/order/OrderService.kt")
+echo "$OUT_L2" | grep -q 'Layer 2 · order' \
+    && pass "Layer 2 — 편집 파일에 매칭되는 module rules 경로 주입" \
+    || fail "Layer 2 — module rules 미주입"
+echo "$OUT_L2" | grep -q 'Layer 3 · spec' \
+    && pass "Layer 3 — 진행 중 spec 경로 주입" \
+    || fail "Layer 3 — 활성 spec 미주입"
+echo "$OUT_L2" | grep -q '0008-x.md' \
+    && pass "Layer 3 — spec 이 인용한 ADR 만 주입" \
+    || fail "Layer 3 — 인용 ADR 미주입"
+
+# 본문이 아니라 경로만 (B-pointer) — 룰 전문이 들어가면 컨텍스트가 터져요
+echo "$OUT_L2" | grep -q '^# order' \
+    && fail "Layer 2 — 룰 본문이 통째로 주입됨 (경로만 넣어야)" \
+    || pass "Layer 2·3 — 본문이 아니라 경로만 주입 (B-pointer)"
+
+# 무관 파일은 Layer 2 가 안 붙어야
+l23_ctx "$L23/web/other.ts" | grep -q 'Layer 2' \
+    && fail "Layer 2 — 매칭 안 되는 파일에 주입됨" \
+    || pass "Layer 2 — 무관 경로엔 주입 안 함"
+
+# .ax/ 자기 자신 편집엔 주입 안 함
+[ -z "$(l23_ctx "$L23/.ax/config.yml")" ] \
+    && pass "Layer 2·3 — .ax/ 자체 편집엔 주입 안 함" \
+    || fail "Layer 2·3 — 하네스가 자기 자신에 주입함"
+
+# phase=idle 이면 Layer 3 는 빠지고 Layer 2 만
+echo '{"phase":"idle"}' > "$L23/.ax/current-task.json"
+IDLE_OUT=$(l23_ctx "$L23/services/order/OrderService.kt")
+if echo "$IDLE_OUT" | grep -q 'Layer 2' && ! echo "$IDLE_OUT" | grep -q 'Layer 3'; then
+    pass "Layer 3 — phase=idle 이면 주입 안 함 (Layer 2 는 유지)"
+else
+    fail "Layer 3 — idle 상태에서도 spec 을 주입함"
+fi
+rm -rf "$L23"
+
+# 출고 자산이 주입에 필요한 paths: 를 실제로 담고 있는가
+# (훅은 paths: 를 읽는데 템플릿·preset 이 그 필드를 안 담으면 주입이 영영 안 돌아요)
+PATHS_MISSING=0
+for f in "$REPO"/templates/presets/starter/.ax/spirit/rules/*.md; do
+    awk '/^---$/{c++; if(c==2) exit} c==1 && /^paths:/{found=1} END{exit !found}' "$f" \
+        || { fail "starter preset 룰에 paths: 없음 — 자동 주입 대상이 안 됨: $(basename "$f")"; PATHS_MISSING=1; }
+done
+for t in "$REPO"/templates/default/.ax/_templates/spirit/rule.md \
+         "$REPO"/templates/default/.ax/_templates/module/rules.md; do
+    awk '/^---$/{c++; if(c==2) exit} c==1 && /^paths:/{found=1} END{exit !found}' "$t" \
+        || { fail "템플릿에 paths: 없음 — 사용자가 만든 룰이 주입 안 됨: $(basename "$(dirname "$t")")/$(basename "$t")"; PATHS_MISSING=1; }
+done
+[ "$PATHS_MISSING" -eq 0 ] && pass "출고 룰 템플릿·preset 전부 paths: 보유 (주입 가능 상태)"
+
+# ───────────────────────────────────────────────────────────
 section "23. 모든 skill 에 슬래시 트리거 표기"
 # ───────────────────────────────────────────────────────────
 # 자연어 트리거만으로는 안 잡히는 경우가 실제로 있었어요 — 프로덕션 사용자가

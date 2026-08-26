@@ -213,6 +213,66 @@ goax_yaml_list() {
     ' "$file"
 }
 
+# goax_glob_match <glob> <path>
+#   `**` 를 이해하는 glob 매칭. 0 = 매치.
+#   path-scoped 룰 주입(Layer 2 module / Spirit rules)이 공유해요 —
+#   훅마다 따로 구현하면 같은 룰이 훅에 따라 다르게 매칭돼요.
+#   python3 가 있으면 정확히, 없으면 보수적 substring 으로 degrade.
+goax_glob_match() {
+    local pattern="${1:-}" path="${2:-}"
+    [ -z "$pattern" ] && return 1
+    if command -v python3 >/dev/null 2>&1; then
+        python3 - "$pattern" "$path" <<'PYGLOB' 2>/dev/null
+import sys, re
+pattern, path = sys.argv[1], sys.argv[2]
+def glob_to_regex(g):
+    out, i, n = [], 0, len(g)
+    while i < n:
+        c = g[i]
+        if c == '*':
+            if i + 1 < n and g[i+1] == '*':
+                out.append('.*'); i += 2
+                if i < n and g[i] == '/': i += 1
+                continue
+            out.append('[^/]*')
+        elif c == '?':
+            out.append('[^/]')
+        elif c in r'.+(){}[]|^$\\':
+            out.append('\\' + c)
+        else:
+            out.append(c)
+        i += 1
+    return '^' + ''.join(out) + '$'
+sys.exit(0 if re.match(glob_to_regex(pattern), path) else 1)
+PYGLOB
+        return $?
+    fi
+    # python3 없음 — `**/` 접두를 걷어낸 나머지로 substring 판정 (보수적)
+    local tail="${pattern##*\*\*/}"
+    case "$path" in *"$tail"*) return 0 ;; esac
+    return 1
+}
+
+# goax_rules_matching <rules-dir> <rel-path>
+#   frontmatter 의 `paths:` 글롭이 rel-path 에 매칭되는 룰 파일들의 상대 경로를 출력.
+#   본문이 아니라 **경로만** 돌려줘요 (B-pointer) — 룰 전문을 컨텍스트에 밀어 넣으면
+#   편집 한 번에 수천 토큰이 들어가고, 정작 필요 없는 룰까지 같이 들어와요.
+goax_rules_matching() {
+    local dir="${1:-}" rel="${2:-}" prefix="${3:-}" f glob
+    [ -d "$dir" ] || return 0
+    for f in "$dir"/*.md; do
+        [ -f "$f" ] || continue
+        case "$(basename "$f")" in README.md) continue ;; esac
+        while IFS= read -r glob; do
+            [ -z "$glob" ] && continue
+            if goax_glob_match "$glob" "$rel"; then
+                printf '%s%s\n' "$prefix" "$(basename "$f")"
+                break
+            fi
+        done < <(goax_yaml_list "$f" paths)
+    done
+}
+
 # Find project root — fallback chain:
 #   1) $GOAX_PROJECT_DIR  — CLI-agnostic override. Claude Code 외 환경 (직접 호출, CI,
 #      다른 AI CLI 의 어댑터) 에서 결정론 스크립트를 standalone 으로 부를 때 사용.
