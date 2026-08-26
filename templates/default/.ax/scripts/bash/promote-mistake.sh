@@ -185,7 +185,7 @@ fi
 if [ "$JSON_MODE" = true ]; then
     cand_json="["
     first=true
-    if [ "${#CANDIDATES[@]:-0}" -gt 0 ]; then
+    if [ "${#CANDIDATES[@]}" -gt 0 ]; then
         for c in "${CANDIDATES[@]}"; do
             cat="${c%%:*}"; cnt="${c##*:}"
             [ "$first" = true ] || cand_json+=","
@@ -198,7 +198,7 @@ if [ "$JSON_MODE" = true ]; then
                     "$cand_json" "$THRESHOLD" "$TOTAL_CATS")
     json_output "ok" "$RESULT" "review candidates and run --apply with --token --category. then edit .ax/spirit/rules/<category>.md (LLM)"
 else
-    if [ "${#CANDIDATES[@]:-0}" -eq 0 ]; then
+    if [ "${#CANDIDATES[@]}" -eq 0 ]; then
         goax_log "no candidates over threshold $THRESHOLD"
     else
         goax_log "promotion candidates (threshold $THRESHOLD):"

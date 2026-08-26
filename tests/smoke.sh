@@ -1199,6 +1199,21 @@ NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
 rm -rf "$NS2_FX"
 
 # ───────────────────────────────────────────────────────────
+section "19. bash 호환 lint — macOS(3.2) 에선 통과하고 Linux(5.x) 에선 터지는 문법"
+# ───────────────────────────────────────────────────────────
+# `${#ARR[@]:-0}` 는 bash 3.2 가 조용히 0 을 반환해서 macOS 로컬에선 절대 안 보이고,
+# bash 5.x(= CI ubuntu-latest) 에서만 "bad substitution" 으로 죽어요.
+# 배열이 `ARR=()` 로 선언돼 있으면 `${#ARR[@]}` 만으로 두 버전 모두 안전해요.
+BASHLINT=0
+while IFS= read -r hit; do
+    [ -z "$hit" ] && continue
+    fail "bash 호환 lint — \${#ARR[@]:-...} 는 bash 5.x 에서 bad substitution: $hit"
+    BASHLINT=$((BASHLINT+1))
+done < <(grep -rn '\${#[A-Za-z_][A-Za-z0-9_]*\[@\*\]:-' \
+            "$REPO/templates" "$REPO/tests" "$REPO/.claude" 2>/dev/null || true)
+[ "$BASHLINT" -eq 0 ] && pass "bash 호환 lint — \${#ARR[@]:-...} 잔재 0"
+
+# ───────────────────────────────────────────────────────────
 section "18. 버전 마커 lint — 플러그인 문서/코드에 (NEW n.n)·(n.n.n)·n.n.n+ 잔재 금지"
 # ───────────────────────────────────────────────────────────
 # repo CLAUDE.md 컨벤션: 버전 마커는 changelog/ 에만 존재해야 함 (rot 방지).
