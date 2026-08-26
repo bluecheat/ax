@@ -22,8 +22,21 @@ SPIRIT_DIR="$PROJECT_ROOT/.ax/spirit"
 
 [ -d "$SPIRIT_DIR" ] || exit 0
 
+# 경로 정규화 헬퍼 — `./x`·`a/../x` 같은 표기 변형을 흡수해야 경로 판정이 일관돼요.
+# common.sh 가 없으면 degrade (원래 문자열 그대로) 하되 죽지 않아요.
+COMMON="$PROJECT_ROOT/.ax/scripts/bash/common.sh"
+if [ -f "$COMMON" ]; then
+    # shellcheck source=../../scripts/bash/common.sh
+    source "$COMMON"
+fi
+type goax_normalize_path >/dev/null 2>&1 || goax_normalize_path() { printf '%s' "${1:-}"; }
+
+TARGET_ABS=$(goax_normalize_path "$TARGET_PATH" "$PROJECT_ROOT")
+ROOT_ABS=$(goax_normalize_path "$PROJECT_ROOT" "$PROJECT_ROOT")
+TARGET_REL="${TARGET_ABS#$ROOT_ABS/}"
+[ "$TARGET_REL" = "$TARGET_ABS" ] && TARGET_REL="${TARGET_ABS#/}"
+
 # 1. spirit/ 자체 변경 시 강한 경고
-TARGET_REL="${TARGET_PATH#$PROJECT_ROOT/}"
 if [[ "$TARGET_REL" == .ax/spirit/* ]]; then
     printf '\033[33m[spirit hook]\033[0m Spirit 디렉토리 변경 시도: %s\n' "$TARGET_REL" >&2
     printf '             values/tone/rules 변경은 모든 sub-agent에 영향. 의도 확인 후 진행해.\n' >&2
@@ -32,7 +45,7 @@ fi
 # 2. 변경 파일에 적용되는 spirit 룰 알림 (정성)
 # applies_to에 'code'가 있는 카테고리들의 ID를 표시
 if [ -d "$SPIRIT_DIR/rules" ]; then
-    case "$TARGET_PATH" in
+    case "$TARGET_ABS" in
         *.ts|*.tsx|*.js|*.jsx|*.py|*.go|*.kt|*.kts|*.rs|*.rb)
             printf '\033[36m[spirit]\033[0m 적용 가능한 룰 (참고):\n' >&2
             grep -hE '^## SP-' "$SPIRIT_DIR/rules"/*.md 2>/dev/null \

@@ -312,6 +312,24 @@ That's all. Just stay on the latest.
 
 ---
 
+## Security model
+
+goax installs **shell scripts into your repository** and registers them as Claude Code hooks. Two things follow from that, and both are worth understanding before you adopt it.
+
+**1. Hooks are a safety net, not a security boundary.**
+
+The hooks (`block-destructive.sh`, `check-protected-paths.sh`, the pre-commit chain) are bash pattern matching. They are designed to catch *accidents* — an agent or a person doing something destructive by mistake. They are **not** designed to stop someone who is trying to get around them, and they cannot be: a shell command string can express the same action in unlimited ways, and any hook can be sidestepped by using a tool path it does not watch (`sed -i` instead of `Edit`, `git commit --no-verify`, editing in an IDE).
+
+So read 🔴 CRITICAL as *"you will not pass this by accident"*, not *"this cannot be bypassed"*. If you need a real trust boundary — running untrusted code, isolating credentials — use a sandbox, permission separation, or a CI gate. goax does not replace those. See [`docs/reference/rule-enforcement.md`](docs/reference/rule-enforcement.md) for the full contract.
+
+**2. `.ax/` is executable code that travels with your repository.**
+
+`.ax/hooks/**/*.sh`, `.ax/scripts/bash/*.sh`, and `.claude/settings.json` are meant to be committed — that is how the harness stays consistent across your team. The consequence is that **cloning a repository that uses goax and opening it in Claude Code means running shell scripts that repository supplied.** Claude Code's own trust prompt is the gate here, but treat a third-party `.ax/` the same way you would treat any other executable content in a repo you did not write: read it before you trust it.
+
+For your own repositories this is exactly the point — the harness is version-controlled alongside the code it governs. For repositories from elsewhere, review `.ax/hooks/` and `.claude/settings.json` in the diff.
+
+---
+
 ## Further Reading
 
 - [`CONCEPTS.md`](CONCEPTS.md) — the design rationale, why it's built this way

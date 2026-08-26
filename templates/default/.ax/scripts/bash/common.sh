@@ -117,6 +117,12 @@ redact_secrets() {
     sed -E '
         s/AKIA[A-Z0-9]{16,}/[REDACTED:aws]/g
         s/gh[poshru]_[A-Za-z0-9]{20,}/[REDACTED:github]/g
+        s/github_pat_[A-Za-z0-9_]{20,}/[REDACTED:github]/g
+        s/sk-(ant|proj)-[A-Za-z0-9_-]{20,}/[REDACTED:llm-key]/g
+        s/sk-[A-Za-z0-9]{20,}/[REDACTED:llm-key]/g
+        s/AIza[0-9A-Za-z_-]{35}/[REDACTED:google]/g
+        s/npm_[A-Za-z0-9]{30,}/[REDACTED:npm]/g
+        s#https://hooks\.slack\.com/services/[A-Za-z0-9/+]{20,}#[REDACTED:slack-webhook]#g
         s/xox[baprs]-[A-Za-z0-9-]{10,}/[REDACTED:slack]/g
         s/(sk|pk|rk)_live_[A-Za-z0-9]{20,}/[REDACTED:stripe]/g
         s/whsec_[A-Za-z0-9]{20,}/[REDACTED:stripe]/g
@@ -124,6 +130,87 @@ redact_secrets() {
         s/-----BEGIN[A-Z ]*PRIVATE KEY-----/[REDACTED:pem-begin]/g
         s/([Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Tt][Oo][Kk][Ee][Nn]|[Bb][Ee][Aa][Rr][Ee][Rr]|[Pp][Gg][_-]?[Kk][Ee][Yy])([[:space:]]*[:=][[:space:]]*"?)([A-Za-z0-9+\/=_-]{12,})/\1\2[REDACTED]/g
     '
+}
+
+# ─── 경로 정규화 / 경계 매칭 ────────────────────────────────────────
+# 보호 경로 검사처럼 "이 경로가 저 경로 안에 있나" 를 판정하는 곳은 반드시 이 둘을
+# 거쳐야 해요. 문자열 접두 비교만 하면 `./x`·`a/../x` 같은 표기 변형으로 우회되고,
+# `CLAUDE.md.bak` 같은 무관 파일이 오탐돼요.
+#
+# goax_normalize_path <path> [base]
+#   렉시컬 정규화 — `.`·`..`·중복 슬래시 해소 후 절대경로 출력.
+#   파일시스템을 건드리지 않아요 (아직 없는 파일도 처리 — Write 는 새 파일을 만듦).
+#   realpath 비의존 = macOS/Linux 동일 동작. bash 3.2 호환.
+goax_normalize_path() {
+    local p="${1:-}" base="${2:-$PWD}" out="" seg oldIFS
+    [ -z "$p" ] && return 0
+    case "$p" in /*) ;; *) p="$base/$p" ;; esac
+    oldIFS="$IFS"
+    set -f                      # `set --` 시 glob 확장 방지
+    IFS='/'
+    # shellcheck disable=SC2086
+    set -- $p
+    IFS="$oldIFS"
+    set +f
+    for seg in "$@"; do
+        case "$seg" in
+            ''|'.') continue ;;
+            '..')   out="${out%/*}" ;;
+            *)      out="$out/$seg" ;;
+        esac
+    done
+    printf '%s' "${out:-/}"
+}
+
+# goax_path_under <rel-path> <pattern>
+#   rel 이 pattern 과 동일하거나 그 하위 경로면 0. 경로 경계(`/`)를 지켜서
+#   `CLAUDE.md` 패턴이 `CLAUDE.md.bak` 을 잡지 않아요.
+goax_path_under() {
+    local rel="${1:-}" pat="${2:-}"
+    [ -z "$pat" ] && return 1
+    pat="${pat%/}"              # 후행 슬래시 정규화 (`.ax/hooks/` → `.ax/hooks`)
+    [ "$rel" = "$pat" ] && return 0
+    case "$rel" in "$pat"/*) return 0 ;; esac
+    return 1
+}
+
+# goax_yaml_list <file> <key>
+#   YAML 시퀀스를 들여쓰기 인식으로 추출 (awk range 연산자는 시작 라인이 종료
+#   패턴에도 매칭되면 1줄로 붕괴해서 조용히 빈 값을 냄 — 보안 컨트롤에선 치명적).
+#   블록 형식(`key:` + `  - v`) 과 flow 형식(`key: [a, b]`) 둘 다 지원.
+goax_yaml_list() {
+    local file="${1:-}" key="${2:-}"
+    [ -f "$file" ] || return 0
+    awk -v key="$key" '
+        function ind(s,   i) { if (s ~ /^[ \t]*$/) return -1; i = match(s, /[^ \t]/); return i - 1 }
+        BEGIN { inlist = 0; keyind = -1 }
+        {
+            t = $0; sub(/\r$/, "", t)
+            if (t ~ /^[ \t]*#/ || t ~ /^[ \t]*$/) next
+            i = ind(t)
+            if (!inlist) {
+                if (t ~ ("^[ \t]*" key ":[ \t]*$")) { inlist = 1; keyind = i; next }
+                if (t ~ ("^[ \t]*" key ":[ \t]*\\[")) {
+                    s = t; sub(/^[^[]*\[/, "", s); sub(/\].*$/, "", s)
+                    n = split(s, arr, ",")
+                    for (j = 1; j <= n; j++) {
+                        v = arr[j]
+                        gsub(/^[ \t\042\047]+|[ \t\042\047]+$/, "", v)
+                        if (v != "") print v
+                    }
+                }
+                next
+            }
+            if (i > keyind && t ~ /^[ \t]*-[ \t]+/) {
+                v = t; sub(/^[ \t]*-[ \t]+/, "", v)
+                sub(/[ \t]+$/, "", v)
+                gsub(/^[\042\047]+|[\042\047]+$/, "", v)
+                if (v != "") print v
+                next
+            }
+            if (i <= keyind) inlist = 0
+        }
+    ' "$file"
 }
 
 # Find project root — fallback chain:

@@ -9,3 +9,11 @@ __pycache__/
 *.pyc
 .ax_write_test
 .omc/
+
+# 사내 발표자료 — 공개 저장소에 넣지 않아요 (회사 브랜딩 포함).
+# 다시 포함하려면 디브랜딩 후 `git add -f .intro`.
+.intro/
+
+# Claude Code 로컬 설정 — 사람마다 다르고 로컬 경로·권한이 들어가요.
+# (사용자 전역 gitignore 에만 의존하면 다른 기여자·CI 에서 새어나가요)
+.claude/settings.local.json

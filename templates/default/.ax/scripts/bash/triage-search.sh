@@ -74,6 +74,9 @@ expand_keywords() {
     local expanded="$kws"
     [ -f "$ALIAS_FILE" ] || { printf '%s' "$kws"; return; }
     local line key grp toks kw t hit
+    # `for kw in $kws` 는 워드 스플리팅(의도) + glob 확장(비의도) 을 함께 일으켜요.
+    # 키워드에 `*` 가 들어오면 cwd 파일명으로 확장돼 검색이 깨지므로 noglob 으로 감싸요.
+    set -f
     while IFS= read -r line; do
         case "$line" in ''|\#*) continue ;; esac
         case "$line" in *:*\[*\]*) ;; *) continue ;; esac
@@ -95,6 +98,7 @@ expand_keywords() {
     # 토큰 dedup (대소문자 무시), 공백 구분 재출력.
     # 전부-공백 입력이면 grep -v 가 exit 1 → pipefail+set -e 로 치환 abort 하므로 || true 가드
     # (빈 결과는 아래에서 ALT 빈값 → json_error 로 깔끔히 처리됨).
+    set +f
     printf '%s' "$expanded" | tr ' ' '\n' | grep -v '^$' | awk '!seen[tolower($0)]++' | tr '\n' ' ' || true
 }
 

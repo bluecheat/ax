@@ -341,9 +341,17 @@ def covered(relpath):
             return True
     return False
 
+# 런타임/도구가 templates/ 안에 흘린 산출물은 MANIFEST 대상이 아니에요.
+# (.omc/ 는 OMC 세션 상태, .git/ 는 worktree, 나머지는 흔한 캐시)
+NOISE_DIRS = {".omc", ".git", "node_modules", "__pycache__", ".pytest_cache", ".venv"}
+NOISE_FILES = {".DS_Store"}
+
 orphans = []
-for root, _, files in os.walk(tpl):
+for root, subdirs, files in os.walk(tpl):
+    subdirs[:] = [d for d in subdirs if d not in NOISE_DIRS]
     for fn in files:
+        if fn in NOISE_FILES:
+            continue
         full = os.path.join(root, fn)
         rel = os.path.relpath(full, tpl)
         if rel == "MANIFEST":
@@ -940,7 +948,93 @@ assert_passed 'rm /tmp/x'    'rm 단일 파일 (no -r)'
 assert_passed 'rm -v /tmp/x' 'rm -v 단일 파일 (verbose only)'
 assert_passed 'ls -la'       'ls (무관)'
 
+# CATASTROPHIC — 표기 변형 우회 (regression lock)
+# `rm -rf /` 는 OS(rm --preserve-root)가 이미 거부해요. 실제로 통하는 건 아래 형태들이라
+# 이쪽을 못 잡으면 안전망이 의미가 없어요. 한 번 뚫렸던 케이스이므로 고정합니다.
+assert_blocked 'rm -rf /*'                 'rm -rf /* (루트 글롭 — OS 가 안 막는 실제 위험)'
+assert_blocked 'rm -rf \"/\"'               'rm -rf \"/\" (따옴표 우회)'
+assert_blocked 'rm -rf /usr /etc'          'rm -rf 시스템 디렉토리'
+assert_blocked 'rm --recursive --force /'  'long option (--recursive/--force)'
+assert_blocked 'rm -rf /System'            'macOS 시스템 디렉토리'
+assert_blocked 'rm -rf ~'                  'rm -rf ~ (홈 전체)'
+assert_blocked 'find / -delete'            'find / -delete'
+assert_blocked 'find /usr -exec rm {} +'   'find -exec rm'
+assert_blocked 'chmod -R 777 /'            'chmod -R 777 /'
+
+# false positive 방지 — 일상 작업은 반드시 통과해야 함
+assert_passed 'rm -rf node_modules'        'rm -rf node_modules (일상)'
+assert_passed 'rm -rf /tmp/build-cache'    'rm -rf /tmp 하위 (루트 아님)'
+assert_passed 'rm -rf ./dist'              'rm -rf ./dist'
+assert_passed 'git rm -r --cached .intro'  'git rm -r --cached'
+assert_passed 'find . -name x -delete'     'find . -delete (루트 아님)'
+assert_passed 'grep -r / etc/hosts'        'grep -r (rm 아님)'
+
 rm -rf "$BD_FX"
+
+# 15.1b check-protected-paths — 경로 정규화 + 경계 매칭 + YAML 파싱
+PP_FX=$(mktemp -d)
+mkdir -p "$PP_FX/.ax/scripts/bash" "$PP_FX/.ax/hooks/pre-edit"
+cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$PP_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/hooks/pre-edit/check-protected-paths.sh" "$PP_FX/.ax/hooks/pre-edit/"
+
+pp_config() { printf '%s' "$1" > "$PP_FX/.ax/config.yml"; }
+assert_pp() {
+    local want="$1" path="$2" label="$3" out got
+    out=$(printf '{"tool_input":{"file_path":%s}}' "$(printf '%s' "$path" | jq -Rs .)" \
+        | CLAUDE_PROJECT_DIR=$PP_FX bash "$PP_FX/.ax/hooks/pre-edit/check-protected-paths.sh" 2>/dev/null)
+    got=ALLOW; printf '%s' "$out" | grep -q '"deny"' && got=DENY
+    if [ "$got" = "$want" ]; then pass "check-protected-paths $want: $label"
+    else fail "check-protected-paths want=$want got=$got: $label ('$path')"; fi
+}
+
+pp_config 'sensors:
+  mode: fail
+  protected_paths:
+    - CLAUDE.md
+    - .ax/spirit
+    - .ax/hooks/
+'
+# 표기 변형으로 보호를 우회할 수 없어야 함 (regression lock)
+assert_pp DENY  "$PP_FX/CLAUDE.md"                'absolute path'
+assert_pp DENY  'CLAUDE.md'                       'relative path'
+assert_pp DENY  './CLAUDE.md'                     './ 접두'
+assert_pp DENY  "$PP_FX/./CLAUDE.md"              '경로 내 ./'
+assert_pp DENY  "$PP_FX/.ax/../CLAUDE.md"         '.. 경유 비정규화'
+assert_pp DENY  "$PP_FX/.ax//spirit/values.md"    '중복 슬래시'
+assert_pp DENY  "$PP_FX/.ax/hooks/pre-bash/x.sh"  '디렉토리 패턴 하위'
+# 경계 검사 — 접두만 같은 무관 파일은 오탐되면 안 됨
+assert_pp ALLOW "$PP_FX/CLAUDE.md.bak"            '경계 검사 (CLAUDE.md.bak 오탐 방지)'
+assert_pp ALLOW "$PP_FX/.ax/spirit-notes.md"      '경계 검사 (spirit-notes 오탐 방지)'
+assert_pp ALLOW "$PP_FX/src/main.ts"              '무관 파일'
+
+# 최상위(들여쓰기 0) YAML 도 파싱돼야 함 — awk range 붕괴로 조용히 꺼지던 케이스
+pp_config 'protected_paths:
+  - CLAUDE.md
+sensors:
+  mode: fail
+'
+assert_pp DENY "$PP_FX/CLAUDE.md" 'top-level protected_paths (silent no-op 회귀 방지)'
+
+rm -rf "$PP_FX"
+
+# 15.1c common.sh 경로 헬퍼 단위 검증
+assert_helper() {
+    local want="$1" got="$2" label="$3"
+    if [ "$got" = "$want" ]; then pass "common.sh $label"
+    else fail "common.sh $label — want='$want' got='$got'"; fi
+}
+HELPER_OUT=$(bash -c "source '$REPO/templates/default/.ax/scripts/bash/common.sh'
+    goax_normalize_path '/p/a/../b//c' /p")
+assert_helper '/p/b/c' "$HELPER_OUT" 'goax_normalize_path — ../ 및 중복 슬래시 해소'
+HELPER_OUT=$(bash -c "source '$REPO/templates/default/.ax/scripts/bash/common.sh'
+    goax_normalize_path './x.md' /p")
+assert_helper '/p/x.md' "$HELPER_OUT" 'goax_normalize_path — 상대경로 → 절대경로'
+if bash -c "source '$REPO/templates/default/.ax/scripts/bash/common.sh'
+    goax_path_under 'CLAUDE.md.bak' 'CLAUDE.md'" 2>/dev/null; then
+    fail "common.sh goax_path_under — CLAUDE.md.bak 오탐"
+else
+    pass "common.sh goax_path_under — 경계 검사 (오탐 없음)"
+fi
 
 # 15.2 common.sh _goax_json_array — special char escape
 COM_FX=$(mktemp -d)

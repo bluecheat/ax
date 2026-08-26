@@ -312,6 +312,24 @@ statusline 은 *어시스턴트 메시지 직후* 에 자동으로 갱신돼요 
 
 ---
 
+## 보안 모델
+
+goax 는 **셸 스크립트를 저장소에 설치**하고 Claude Code hook 으로 등록해요. 여기서 두 가지가 따라오는데, 도입 전에 알고 계시는 게 좋아요.
+
+**1. 훅은 안전망이지 보안 경계가 아니에요.**
+
+훅들 (`block-destructive.sh`, `check-protected-paths.sh`, pre-commit chain) 은 bash 패턴 매칭이에요. **사고**를 잡으려고 만들었어요 — 에이전트나 사람이 실수로 파괴적인 일을 하는 상황이요. 우회하려는 상대를 막으려고 만든 게 **아니고**, 만들 수도 없어요. 셸 명령 문자열은 같은 동작을 무한히 다르게 쓸 수 있고, 훅이 보지 않는 경로 (`Edit` 대신 `sed -i`, `git commit --no-verify`, IDE 직접 편집) 로는 어떤 훅이든 비껴갈 수 있으니까요.
+
+그래서 🔴 CRITICAL 은 *"사고로는 통과 못 함"* 으로 읽어야지 *"우회 불가"* 로 읽으면 안 돼요. 진짜 신뢰 경계가 필요하면 — 신뢰할 수 없는 코드 실행, 크레덴셜 격리 같은 — 훅이 아니라 샌드박스·권한 분리·CI 게이트로 해결하세요. goax 는 그걸 대체하지 않아요. 전체 계약은 [`docs/reference/rule-enforcement.md`](docs/reference/rule-enforcement.md) 에 있어요.
+
+**2. `.ax/` 는 저장소를 따라다니는 실행 가능한 코드예요.**
+
+`.ax/hooks/**/*.sh`, `.ax/scripts/bash/*.sh`, `.claude/settings.json` 은 커밋되는 걸 전제로 해요 — 그래야 팀 전체에서 하네스가 일관되니까요. 대신 이런 결과가 따라와요: **goax 를 쓰는 저장소를 clone 해서 Claude Code 로 열면, 그 저장소가 제공한 셸 스크립트가 실행돼요.** Claude Code 자체의 신뢰 프롬프트가 1차 관문이지만, 남의 `.ax/` 는 내가 안 쓴 저장소의 다른 실행 가능한 내용물과 똑같이 다루세요 — 신뢰하기 전에 읽어보시고요.
+
+내 저장소에선 이게 바로 의도한 바예요. 하네스가 자기가 관장하는 코드와 같이 버전 관리되니까요. 외부에서 받은 저장소라면 diff 에서 `.ax/hooks/` 와 `.claude/settings.json` 을 확인하세요.
+
+---
+
 ## Further Reading
 
 - [`CONCEPTS.md`](CONCEPTS.md) — 설계 사상, 왜 이렇게 만들었나

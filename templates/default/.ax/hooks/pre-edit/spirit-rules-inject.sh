@@ -26,10 +26,19 @@ PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null 
 SPIRIT_DIR="$PROJECT_ROOT/.ax/spirit/rules"
 [ -d "$SPIRIT_DIR" ] || exit 0
 
-# 절대경로면 PROJECT_ROOT 기준 상대로 변환
-TARGET_REL="${TARGET_PATH#$PROJECT_ROOT/}"
-# 이미 상대였다면 그대로
-[ -z "$TARGET_REL" ] && TARGET_REL="$TARGET_PATH"
+# 경로 정규화 헬퍼 — `./x`·`a/../x` 같은 표기 변형을 흡수해야 경로 판정이 일관돼요.
+# common.sh 가 없으면 degrade (원래 문자열 그대로) 하되 죽지 않아요.
+COMMON="$PROJECT_ROOT/.ax/scripts/bash/common.sh"
+if [ -f "$COMMON" ]; then
+    # shellcheck source=../../scripts/bash/common.sh
+    source "$COMMON"
+fi
+type goax_normalize_path >/dev/null 2>&1 || goax_normalize_path() { printf '%s' "${1:-}"; }
+
+TARGET_ABS=$(goax_normalize_path "$TARGET_PATH" "$PROJECT_ROOT")
+ROOT_ABS=$(goax_normalize_path "$PROJECT_ROOT" "$PROJECT_ROOT")
+TARGET_REL="${TARGET_ABS#$ROOT_ABS/}"
+[ "$TARGET_REL" = "$TARGET_ABS" ] && TARGET_REL="${TARGET_ABS#/}"
 
 # spirit/rules/<name>.md frontmatter에서 paths: 배열 추출 (각 줄: 단일 glob 패턴)
 extract_paths_from_file() {

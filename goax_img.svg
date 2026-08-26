@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-label="GOAX — a small robot mascot wearing a harness">
+  <title>GOAX</title>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#0d1029"/>
+      <stop offset="55%"  stop-color="#080a1e"/>
+      <stop offset="100%" stop-color="#060818"/>
+    </linearGradient>
+    <linearGradient id="shell" x1="0.3" y1="0" x2="0.7" y2="1">
+      <stop offset="0%"   stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d9dcf5"/>
+    </linearGradient>
+    <linearGradient id="limb" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#e8eaff"/>
+      <stop offset="100%" stop-color="#c3c7e8"/>
+    </linearGradient>
+    <radialGradient id="antennaGlow">
+      <stop offset="0%"   stop-color="#6ee0e0" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#6ee0e0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="floorGlow">
+      <stop offset="0%"   stop-color="#ffd166" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#ffd166" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- 별 — 아주 옅게, 배경 깊이만 -->
+  <g fill="#ffffff" opacity="0.5">
+    <circle cx="120"  cy="90"  r="2"/>
+    <circle cx="255"  cy="180" r="1.5"/>
+    <circle cx="95"   cy="420" r="1.5"/>
+    <circle cx="180"  cy="545" r="2"/>
+    <circle cx="600"  cy="80"  r="1.5"/>
+    <circle cx="700"  cy="540" r="1.5"/>
+    <circle cx="1080" cy="120" r="2"/>
+    <circle cx="1140" cy="430" r="1.5"/>
+    <circle cx="960"  cy="575" r="1.5"/>
+  </g>
+
+  <!-- ── 캐릭터 ─────────────────────────────────────────── -->
+  <g transform="translate(0,10)">
+
+    <!-- 바닥 글로우 + 그림자 -->
+    <ellipse cx="400" cy="497" rx="215" ry="58" fill="url(#floorGlow)"/>
+    <ellipse cx="400" cy="492" rx="118" ry="20" fill="#000000" opacity="0.38"/>
+
+    <!-- 안테나 -->
+    <circle cx="400" cy="142" r="34" fill="url(#antennaGlow)"/>
+    <path d="M400 202 V154" stroke="#c3c7e8" stroke-width="9" stroke-linecap="round"/>
+    <circle cx="400" cy="144" r="13" fill="#6ee0e0"/>
+    <circle cx="396" cy="140" r="4"  fill="#ffffff" opacity="0.9"/>
+
+    <!-- 팔 -->
+    <rect x="252" y="304" width="34" height="84" rx="17" fill="url(#limb)"/>
+    <rect x="514" y="304" width="34" height="84" rx="17" fill="url(#limb)"/>
+
+    <!-- 발 -->
+    <ellipse cx="352" cy="482" rx="42" ry="22" fill="url(#limb)"/>
+    <ellipse cx="448" cy="482" rx="42" ry="22" fill="url(#limb)"/>
+
+    <!-- 몸통 -->
+    <rect x="272" y="196" width="256" height="272" rx="92" fill="url(#shell)"/>
+
+    <!-- 얼굴 화면 — 위쪽에 배치해서 아래로 하네스 자리를 비워요 -->
+    <rect x="322" y="226" width="156" height="112" rx="50" fill="#141833"/>
+
+    <!-- 눈 -->
+    <circle cx="368" cy="280" r="18" fill="#ffffff"/>
+    <circle cx="432" cy="280" r="18" fill="#ffffff"/>
+    <circle cx="372" cy="276" r="6.5" fill="#6ee0e0"/>
+    <circle cx="436" cy="276" r="6.5" fill="#6ee0e0"/>
+
+    <!-- 웃는 입 -->
+    <path d="M383 310 Q400 325 417 310" stroke="#ffffff" stroke-width="7"
+          stroke-linecap="round" fill="none" opacity="0.92"/>
+
+    <!-- 볼터치 — 어두운 화면이 아니라 흰 쉘 위에 -->
+    <ellipse cx="300" cy="300" rx="15" ry="10" fill="#ff6e8a" opacity="0.4"/>
+    <ellipse cx="500" cy="300" rx="15" ry="10" fill="#ff6e8a" opacity="0.4"/>
+
+    <!-- ── 하네스 (이름 그대로, 제품 은유) — 얼굴 아래 몸통에 ── -->
+    <!-- 어깨끈 -->
+    <path d="M336 352 L390 398" stroke="#ffd166" stroke-width="14" stroke-linecap="round"/>
+    <path d="M464 352 L410 398" stroke="#ffd166" stroke-width="14" stroke-linecap="round"/>
+    <!-- 허리 벨트 -->
+    <rect x="277" y="396" width="246" height="32" rx="16" fill="#ffd166"/>
+    <!-- 버클 -->
+    <circle cx="400" cy="412" r="25" fill="#141833"/>
+    <circle cx="400" cy="412" r="25" fill="none" stroke="#ffd166" stroke-width="7"/>
+    <!-- Triage · Guides · Sensors · Loop -->
+    <circle cx="391" cy="403" r="4.2" fill="#ff6e8a"/>
+    <circle cx="409" cy="403" r="4.2" fill="#ffd166"/>
+    <circle cx="391" cy="421" r="4.2" fill="#6ee0e0"/>
+    <circle cx="409" cy="421" r="4.2" fill="#6dffaa"/>
+  </g>
+
+  <!-- ── 워드마크 ───────────────────────────────────────── -->
+  <g transform="translate(660,0)" font-family="'Avenir Next', Avenir, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <text x="0" y="288" font-size="118" font-weight="600" letter-spacing="13" fill="#ffffff">GOAX</text>
+
+    <text x="4" y="350" font-size="29" font-weight="500" letter-spacing="0.2" fill="#c8ccea">4-Layer harness for AI agents</text>
+
+    <g font-size="22" font-weight="500" letter-spacing="0.3" fill="#8f95c4">
+      <circle cx="10" cy="406" r="5.5" fill="#ff6e8a"/>
+      <text x="28" y="413">Triage</text>
+      <circle cx="118" cy="406" r="5.5" fill="#ffd166"/>
+      <text x="136" y="413">Guides</text>
+      <circle cx="234" cy="406" r="5.5" fill="#6ee0e0"/>
+      <text x="252" y="413">Sensors</text>
+      <circle cx="360" cy="406" r="5.5" fill="#6dffaa"/>
+      <text x="378" y="413">Loop</text>
+    </g>
+  </g>
+</svg>
