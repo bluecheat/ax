@@ -1293,6 +1293,44 @@ NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
 rm -rf "$NS2_FX"
 
 # ───────────────────────────────────────────────────────────
+section "21. spec-implement 완료 마킹이 실제 tasks.md 형식과 맞는가"
+# ───────────────────────────────────────────────────────────
+# 출고 템플릿은 `- [ ] **T001** — ...` (볼드) 인데, 마킹 sed 가 `- [ ] [T020]`
+# (대괄호) 를 기대해서 서로 안 맞았음 — 출고된 마킹 명령이 동작하지 않았어요.
+# 실사용 리포는 `**T002 [P]**` 형식까지 씀. 세 형식 모두 커버해야 해요.
+
+MK_FX=$(mktemp -d)
+cat > "$MK_FX/tasks.md" <<'MKEOF'
+- [ ] **T001** — 출고 템플릿 형식 (볼드)
+- [ ] **T002 [P]** — 실사용 형식 (P 마커)
+- [ ] [T003] 구 대괄호 형식
+- [ ] **T0011** — 자리수 다른 별개 task
+MKEOF
+
+mark_task() {   # $1 = TASK_ID, $2 = file — SKILL.md 에 적힌 것과 동일한 식
+    sed -E "/^- \[ \] .*$1([^0-9A-Za-z]|\$)/ s/^- \[ \]/- [x]/" "$2"
+}
+
+MK_OK=1
+for tid in T001 T002 T003; do
+    mark_task "$tid" "$MK_FX/tasks.md" | grep -qE "^- \[x\] .*$tid" \
+        || { fail "완료 마킹 — $tid 형식 매칭 실패"; MK_OK=0; }
+done
+# 접두 오매칭 방지: T001 마킹이 T0011 을 건드리면 안 됨
+if mark_task T001 "$MK_FX/tasks.md" | grep -qE '^- \[x\] \*\*T0011'; then
+    fail "완료 마킹 — T001 이 T0011 을 잘못 체크함"; MK_OK=0
+fi
+[ "$MK_OK" -eq 1 ] && pass "spec-implement 완료 마킹 — 볼드/대괄호/[P] 3형식 + 접두 오매칭 방지"
+
+# 하드코딩된 예시 ID 가 실행 위치에 남아 있으면 안 돼요 (그대로 복사될 위험)
+if grep -qE "^sed .*\[T[0-9]{3}\]" "$REPO/skills/spec-implement/SKILL.md"; then
+    fail "spec-implement — 마킹 sed 에 하드코딩된 task ID 잔존"
+else
+    pass "spec-implement — 마킹 sed 가 TASK_ID 변수 사용"
+fi
+rm -rf "$MK_FX"
+
+# ───────────────────────────────────────────────────────────
 section "20. MANIFEST `->` = stateful seed-only 계약"
 # ───────────────────────────────────────────────────────────
 # up 은 "install or idempotent update" 라 재실행이 destructive 하면 안 돼요.

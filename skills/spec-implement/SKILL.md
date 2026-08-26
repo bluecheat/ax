@@ -154,8 +154,15 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 ## 5. 완료 마킹 — silent
 
 ```bash
-# - [ ] T020 ... → - [x] T020 ...  (tmp-mv — BSD/GNU sed 모두 호환)
-sed 's/^- \[ \] \(\[T020\]\)/- [x] \1/' "$SPEC_DIR/tasks.md" > "$SPEC_DIR/tasks.md.tmp" \
+# 방금 끝낸 task 의 ID 를 변수로 — 예시값을 그대로 쓰면 엉뚱한 task 가 체크돼요.
+TASK_ID="$COMPLETED_TASK_ID"     # 예: T013
+
+# 체크박스만 뒤집어요. task 줄 형식이 `**T013**`·`[T013]`·`T013 [P]` 중 무엇이든
+# ID 만 찾으면 되도록 했어요 (출고 템플릿은 `- [ ] **T013** — ...` 형식).
+# ID 뒤에 영숫자가 오면 매칭 안 함 → T001 이 T0011 을 건드리지 않아요.
+# `\b` 는 GNU sed 전용이라 안 써요 (BSD/macOS 비호환).
+sed -E "/^- \[ \] .*${TASK_ID}([^0-9A-Za-z]|\$)/ s/^- \[ \]/- [x]/" \
+  "$SPEC_DIR/tasks.md" > "$SPEC_DIR/tasks.md.tmp" \
   && mv "$SPEC_DIR/tasks.md.tmp" "$SPEC_DIR/tasks.md"
 ```
 
