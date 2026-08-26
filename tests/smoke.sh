@@ -403,7 +403,12 @@ while IFS= read -r f; do
     fi
 done < <(find "$REPO/skills" -name SKILL.md)
 pass "skill frontmatter ($ok_skills/$total_skills)"
-[ "$total_skills" -eq 14 ] && pass "skill 카운트 = 14" || fail "skill 카운트 $total_skills"
+# 하드코딩 대신 실제 디렉토리 수와 대조 — skill 추가 때마다 이 줄을 고치는 건
+# 계약이 아니라 잡일이에요. 여기서 잡고 싶은 건 "SKILL.md 없는 빈 디렉토리" 예요.
+expected_skills=$(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d | grep -c . || true)
+[ "$total_skills" -eq "${expected_skills:-0}" ] \
+    && pass "skill 카운트 = $total_skills (디렉토리 수와 일치)" \
+    || fail "skill 디렉토리 ${expected_skills}개인데 SKILL.md 는 ${total_skills}개 — 빈 skill 디렉토리 존재"
 
 # ───────────────────────────────────────────────────────────
 section "6. HUD statusline 우주 이모지 + spec/ADR 진척 (팩트 기반)"
@@ -1291,6 +1296,94 @@ NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
                     || fail "next-spec-num --kind 생략 결과: $NEXT ($OUT)"
 
 rm -rf "$NS2_FX"
+
+# ───────────────────────────────────────────────────────────
+section "26. repo CLAUDE.md 의 개수 서술 ↔ 실제 일치"
+# ───────────────────────────────────────────────────────────
+# 문서에 박은 개수는 자산이 늘 때마다 조용히 틀려져요 (실제로 19→21 로 어긋나 있었음).
+DOC_SK=$(grep -oE '`skills/<name>/SKILL\.md` — [0-9]+ skills' "$REPO/CLAUDE.md" | grep -oE '[0-9]+' | head -1)
+REAL_SK=$(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d | grep -c . || true)
+[ "${DOC_SK:-0}" = "${REAL_SK:-0}" ] \
+    && pass "CLAUDE.md skill 개수 = $REAL_SK (실제와 일치)" \
+    || fail "CLAUDE.md 는 ${DOC_SK} skills 라는데 실제는 ${REAL_SK}개"
+
+DOC_SC=$(grep -oE 'deterministic shell tooling \([0-9]+ scripts\)' "$REPO/CLAUDE.md" | grep -oE '[0-9]+' | head -1)
+REAL_SC=$(find "$REPO/templates/default/.ax/scripts/bash" -maxdepth 1 -name '*.sh' | grep -c . || true)
+[ "${DOC_SC:-0}" = "${REAL_SC:-0}" ] \
+    && pass "CLAUDE.md script 개수 = $REAL_SC (실제와 일치)" \
+    || fail "CLAUDE.md 는 ${DOC_SC} scripts 라는데 실제는 ${REAL_SC}개"
+
+# ───────────────────────────────────────────────────────────
+section "25. vendor — ADE 루트 ≠ 프로젝트 루트 (모노레포) 처리"
+# ───────────────────────────────────────────────────────────
+# .claude/skills 는 저장소 루트, .ax/ 는 projects/<app>/ 인 구조에서
+# 조상 탐색만으로는 하네스를 못 찾아요 (.ax 가 *하위* 에 있으니까).
+VN=$(mktemp -d)
+mkdir -p "$VN/.claude" "$VN/projects/app/.ax/scripts/bash"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,vendor-skills}.sh "$VN/projects/app/.ax/scripts/bash/"
+
+# 포인터 없으면 저장소 루트에서 못 찾아야 (문제 재현)
+if (cd "$VN" && GOAX_PROJECT_DIR= CLAUDE_PROJECT_DIR= bash -c \
+      "source projects/app/.ax/scripts/bash/common.sh; find_project_root" >/dev/null 2>&1); then
+    fail "vendor — 포인터 없이도 찾아짐 (테스트 전제가 깨짐)"
+else
+    pass "vendor — 포인터 없으면 저장소 루트에서 하네스 미발견 (전제 확인)"
+fi
+
+VN_OUT=$(cd "$VN/projects/app" && GOAX_PROJECT_DIR="$VN/projects/app" \
+    bash .ax/scripts/bash/vendor-skills.sh --plugin-dir "$REPO" --json 2>/dev/null)
+echo "$VN_OUT" | jq -e '.result.split == true and .result.pointer_written == true' >/dev/null 2>&1 \
+    && pass "vendor — 루트 분리 감지 + .goax-root 포인터 작성" \
+    || fail "vendor — 모노레포 분리 처리 실패: $VN_OUT"
+
+[ -d "$VN/.claude/skills" ] && [ -d "$VN/.claude/agents" ] \
+    && pass "vendor — skills/agents 가 ADE 루트의 .claude/ 로 동봉" \
+    || fail "vendor — 동봉 위치가 ADE 루트가 아님"
+
+# 포인터가 실제로 문제를 푸는가
+VN_RESOLVED=$(cd "$VN" && GOAX_PROJECT_DIR= CLAUDE_PROJECT_DIR= bash -c \
+    "source projects/app/.ax/scripts/bash/common.sh; find_project_root" 2>/dev/null)
+[ "$VN_RESOLVED" = "$VN/projects/app" ] \
+    && pass "vendor — 포인터로 저장소 루트에서 하네스 해결" \
+    || fail "vendor — 포인터가 있어도 해결 실패 ($VN_RESOLVED)"
+
+# 사용자 자기 스킬 보존
+mkdir -p "$VN/.claude/skills/my-own" && echo mine > "$VN/.claude/skills/my-own/SKILL.md"
+(cd "$VN/projects/app" && GOAX_PROJECT_DIR="$VN/projects/app" \
+    bash .ax/scripts/bash/vendor-skills.sh --plugin-dir "$REPO" --json >/dev/null 2>&1)
+[ "$(cat "$VN/.claude/skills/my-own/SKILL.md" 2>/dev/null)" = "mine" ] \
+    && pass "vendor — 사용자가 만든 skill 보존" \
+    || fail "vendor — 사용자 skill 을 덮어씀"
+
+# stale 감지
+echo "0.0.1" > "$VN/.claude/.goax-vendored"
+(cd "$VN/projects/app" && GOAX_PROJECT_DIR="$VN/projects/app" \
+    bash .ax/scripts/bash/vendor-skills.sh --check --plugin-dir "$REPO" --json 2>/dev/null) \
+    | jq -e '.result.stale == true' >/dev/null 2>&1 \
+    && pass "vendor --check — 낡은 동봉본 감지" \
+    || fail "vendor --check — stale 미감지"
+rm -rf "$VN"
+
+# 단일 저장소면 포인터를 만들지 않아야 (불필요한 파일 금지)
+VS=$(mktemp -d)
+mkdir -p "$VS/.ax/scripts/bash"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,vendor-skills}.sh "$VS/.ax/scripts/bash/"
+(cd "$VS" && GOAX_PROJECT_DIR="$VS" bash .ax/scripts/bash/vendor-skills.sh \
+    --plugin-dir "$REPO" --json >/dev/null 2>&1)
+[ ! -f "$VS/.goax-root" ] \
+    && pass "vendor — 단일 저장소엔 .goax-root 안 만듦" \
+    || fail "vendor — 불필요한 .goax-root 생성"
+
+# --dry-run 은 아무것도 쓰지 않아야
+VD=$(mktemp -d)
+mkdir -p "$VD/.ax/scripts/bash"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,vendor-skills}.sh "$VD/.ax/scripts/bash/"
+(cd "$VD" && GOAX_PROJECT_DIR="$VD" bash .ax/scripts/bash/vendor-skills.sh \
+    --plugin-dir "$REPO" --dry-run --json >/dev/null 2>&1)
+[ ! -d "$VD/.claude" ] \
+    && pass "vendor --dry-run — 파일 생성 안 함" \
+    || fail "vendor --dry-run 이 .claude/ 를 만듦"
+rm -rf "$VS" "$VD"
 
 # ───────────────────────────────────────────────────────────
 section "24. Layer 2·3 자동 주입 (module-rules-inject)"

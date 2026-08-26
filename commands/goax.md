@@ -13,6 +13,7 @@ goax 의 모든 기능은 **자연어 트리거** 로 호출돼요 (thin wrapper
   "goax 분석" / "goax 마무리"   — onboarding (brownfield 5-step Q1~Q5)
   "진단해줘" / "goax doctor"    — 결손·drift 점검
   "rules 보여줘"                — 룰 통합 인덱스 (Constitution + Spirit + Module)
+  "goax 동봉" / "/vendor"       — plugin 설치 없이 쓰도록 저장소에 동봉
 
 ▸ 작업 분류·구현
   "구현해줘" / "고쳐줘" / "리팩토링" — triage (Size × Risk 30초 분류)

@@ -288,6 +288,7 @@ find_project_root() {
         return 0
     fi
     local dir="${1:-$(pwd)}"
+    local start="$dir"
     while [ "$dir" != "/" ]; do
         if [ -d "$dir/.ax" ]; then
             printf '%s\n' "$dir"
@@ -295,8 +296,45 @@ find_project_root() {
         fi
         dir="$(dirname "$dir")"
     done
-    goax_error "no .ax/ found in any ancestor of $(pwd) (GOAX_PROJECT_DIR=${GOAX_PROJECT_DIR:-unset}, CLAUDE_PROJECT_DIR=${CLAUDE_PROJECT_DIR:-unset})"
+
+    # 4) `.goax-root` 포인터 — ADE 루트 ≠ 프로젝트 루트인 모노레포용.
+    #    세션이 저장소 루트에서 시작하면 .ax/ 가 *하위* 에 있어서 조상 탐색으로는
+    #    영영 못 찾아요 (.claude/skills 는 저장소 루트, .ax 는 projects/<app>/ 처럼).
+    #    그래서 저장소 루트에 "하네스는 여기 있다" 를 적어둬요.
+    dir="$start"
+    while [ "$dir" != "/" ]; do
+        if [ -f "$dir/.goax-root" ]; then
+            local rel
+            rel=$(grep -vE '^[[:space:]]*(#|$)' "$dir/.goax-root" 2>/dev/null | head -1 | tr -d '\r')
+            rel="${rel#./}"; rel="${rel%/}"
+            if [ -n "$rel" ] && [ -d "$dir/$rel/.ax" ]; then
+                printf '%s\n' "$dir/$rel"
+                return 0
+            fi
+            if [ -d "$dir/.ax" ]; then
+                printf '%s\n' "$dir"
+                return 0
+            fi
+        fi
+        dir="$(dirname "$dir")"
+    done
+
+    goax_error "no .ax/ found in any ancestor of $(pwd), and no .goax-root pointer (GOAX_PROJECT_DIR=${GOAX_PROJECT_DIR:-unset}, CLAUDE_PROJECT_DIR=${CLAUDE_PROJECT_DIR:-unset})"
     return 1
+}
+
+# goax_ade_root [start]
+#   ADE 루트 — 에이전트가 스킬을 찾는 곳 (.claude/ 가 있는 곳, 없으면 git 루트).
+#   프로젝트 루트(.ax 가 있는 곳) 와 다를 수 있어요. 단일 저장소면 보통 같아요.
+goax_ade_root() {
+    local dir="${1:-$(pwd)}"
+    local scan="$dir"
+    while [ "$scan" != "/" ]; do
+        [ -d "$scan/.claude" ] && { printf '%s\n' "$scan"; return 0; }
+        scan="$(dirname "$scan")"
+    done
+    git -C "$dir" rev-parse --show-toplevel 2>/dev/null && return 0
+    printf '%s\n' "$dir"
 }
 
 # JSON output — uses jq if available, else manual escape

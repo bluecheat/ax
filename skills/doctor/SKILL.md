@@ -561,6 +561,34 @@ LIST_ADR=$(echo "$DUP_ADR"  | jq -r '.result.duplicates | join(", ")')
    ⚠️  spec 중복 번호 <N_SPEC>건 — <LIST_SPEC>
 ```
 
+### 3.12 동봉본 신선도 — vendored skills (`vendor-skills.sh --check` 위임)
+
+동봉(vendor)을 택한 저장소는 `.claude/` 안의 사본으로 돌아요. plugin 을 올려도
+**자동으로 안 따라와요** — 갱신이 사람의 일이 돼요. 실제로 3개월 전 버전으로
+돌던 프로젝트가 있었고, 그동안의 버그 수정이 하나도 닿지 않았어요.
+
+```bash
+VEN=$(bash "$ROOT/.ax/scripts/bash/vendor-skills.sh" --check \
+        --plugin-dir "$PLUGIN_ROOT" --json 2>/dev/null)
+V_ON=$(echo "$VEN" | jq -r '.result.vendored // false')
+V_VER=$(echo "$VEN" | jq -r '.result.vendored_version // ""')
+V_PLG=$(echo "$VEN" | jq -r '.result.plugin_version // ""')
+V_STALE=$(echo "$VEN" | jq -r '.result.stale // false')
+V_SPLIT=$(echo "$VEN" | jq -r '.result.split // false')
+```
+
+- `vendored=false` → 동봉 안 쓰는 프로젝트. 이 절 전체 생략.
+- `split=true` 인데 `.goax-root` 가 없으면 ❌ — 저장소 루트에서 하네스를 못 찾아요.
+
+보고 (동봉 안 쓰면 생략):
+
+```
+📦 동봉본
+   ⚠️  동봉 v<V_VER> ↔ plugin v<V_PLG> — /vendor 재실행 후 커밋하세요
+   ❌ ADE 루트와 프로젝트 루트가 다른데 .goax-root 가 없어요 — /vendor 재실행
+   ℹ️  plugin 과 동봉이 함께 있어요 — 어느 쪽이 발동할지 예측하기 어려워요
+```
+
 ## 3. 출력
 
 ```
