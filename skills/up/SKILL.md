@@ -119,29 +119,60 @@ MANIFEST="$TPL/MANIFEST"
 # 1. 기본 디렉토리
 mkdir -p .claude
 
+# 1-b. _templates 사용자 수정본 보호 준비
+# `.ax/_templates/` 는 MANIFEST 재귀 복사 대상이라 그냥 두면 덮여요. 그런데
+# .origin 이 "사용자가 도메인에 맞게 고친 템플릿"을 정상으로 인정하는 자산이라
+# (check-templates-drift 의 user_modified), 말없이 덮으면 그 작업이 사라져요.
+# 덮기 전에 수정본 목록을 잡아두고, 덮은 뒤 되돌려 놓아요.
+USER_MODIFIED=""
+if [ -f .ax/_templates/spec/.origin ]; then
+    while IFS= read -r oline; do
+        case "$oline" in ''|\#*) continue ;; esac
+        osha="${oline%% *}"; ofile="${oline##* }"; ofile="${ofile#./}"
+        [ -f ".ax/_templates/spec/$ofile" ] || continue
+        csha=$(shasum -a 256 ".ax/_templates/spec/$ofile" 2>/dev/null | awk '{print $1}')
+        [ "$csha" != "$osha" ] && USER_MODIFIED="$USER_MODIFIED$ofile"$'\n'
+    done < .ax/_templates/spec/.origin
+fi
+UM_BACKUP=""
+if [ -n "$USER_MODIFIED" ]; then
+    UM_BACKUP=$(mktemp -d)
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        mkdir -p "$UM_BACKUP/$(dirname "$f")"
+        cp ".ax/_templates/spec/$f" "$UM_BACKUP/$f"
+    done <<< "$USER_MODIFIED"
+fi
+
 # 2. MANIFEST 읽고 항목별 복사
 while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
         ''|\#*) continue ;;  # 주석·빈 줄 skip
     esac
 
-    # "source -> dest" 또는 "source"
+    # "source -> dest" (stateful seed) 또는 "source" (무조건 복사)
+    SEED_ONLY=false
     if [[ "$line" == *" -> "* ]]; then
         SRC="${line% -> *}"
         DST="${line##* -> }"
+        SEED_ONLY=true      # 런타임 상태 — 이미 있으면 절대 건드리지 않아요
     else
         SRC="$line"
         DST="$line"
     fi
 
     case "$SRC" in
-        */)  # 디렉토리 재귀
+        */)  # 디렉토리 재귀 (cp -R 은 merge — 사용자 spec/ADR/mistake 은 보존됨)
             mkdir -p "$DST"
             cp -R "$TPL/${SRC}." "$DST"
             ;;
         *)   # 단일 파일
             mkdir -p "$(dirname "$DST")"
-            cp "$TPL/$SRC" "$DST"
+            if [ "$SEED_ONLY" = true ] && [ -e "$DST" ]; then
+                :   # 진행 중인 phase·spec_dir 를 idle 로 되돌리면 안 돼요
+            else
+                cp "$TPL/$SRC" "$DST"
+            fi
             ;;
     esac
 done < "$MANIFEST"
@@ -152,13 +183,29 @@ find .ax/hooks -type f -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
 chmod +x .ax/hud/statusline.sh 2>/dev/null || true
 
 # 4. _templates 출고본 sha 기록 (drift 감지용 — doctor가 비교)
+# **plugin 원본**에서 계산해요. 방금 설치한 로컬 디렉토리에서 계산하면,
+# 아래에서 사용자 수정본을 복원한 뒤 .origin 이 그 수정본을 "출고본"으로
+# 기록해버려서 user_modified 가 영원히 false 가 돼요 (드리프트 감지 실명).
 (
-    cd .ax/_templates/spec && \
+    cd "$TPL/.ax/_templates/spec" && \
     find . -type f \( -name '*.md' -o -name '*.yaml' -o -name '*.yml' \) \
         ! -name '.origin' | sort | xargs shasum -a 256 2>/dev/null
 ) > .ax/_templates/spec/.origin
 GOAX_VER=$(cat "$PLUGIN_ROOT/VERSION" 2>/dev/null || echo "unknown")
 echo "# goax_version: $GOAX_VER" >> .ax/_templates/spec/.origin
+
+# 4-b. 사용자 수정본 복원 — plugin 최신본은 옆에 .suggested 로
+if [ -n "$USER_MODIFIED" ] && [ -n "$UM_BACKUP" ]; then
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        if [ -f ".ax/_templates/spec/$f" ]; then
+            cp ".ax/_templates/spec/$f" ".ax/_templates/spec/$f.suggested"
+        fi
+        cp "$UM_BACKUP/$f" ".ax/_templates/spec/$f"
+        echo "[goax] _templates 수정본 보존: $f (plugin 최신본은 $f.suggested)"
+    done <<< "$USER_MODIFIED"
+    rm -rf "$UM_BACKUP"
+fi
 
 # 5. AGENTS.md — Constitution SSOT (multi-CLI, manifest 외 조건부)
 # AGENTS.md 가 현재 SSOT. Claude Code 는 CLAUDE.md 의 @AGENTS.md import,

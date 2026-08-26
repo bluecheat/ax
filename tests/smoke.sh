@@ -1293,6 +1293,41 @@ NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
 rm -rf "$NS2_FX"
 
 # ───────────────────────────────────────────────────────────
+section "20. MANIFEST `->` = stateful seed-only 계약"
+# ───────────────────────────────────────────────────────────
+# up 은 "install or idempotent update" 라 재실행이 destructive 하면 안 돼요.
+# `->` 대상은 런타임 상태(state.json / current-task.json)이고, 덮어쓰면
+# 진행 중인 phase·spec_dir 가 idle 로 리셋돼 작업 맥락이 사라져요.
+
+# (1) up 의 복사 루프가 `->` 항목을 seed-only 로 가드하는가
+if grep -q 'SEED_ONLY=true' "$REPO/skills/up/SKILL.md" \
+   && grep -q 'SEED_ONLY" = true \] && \[ -e "$DST"' "$REPO/skills/up/SKILL.md"; then
+    pass "up §4 — MANIFEST \`->\` 항목 seed-only 가드 존재"
+else
+    fail "up §4 — \`->\` 항목을 무조건 cp 함 (up 재실행이 런타임 상태를 파괴)"
+fi
+
+# (2) `->` 대상은 전부 런타임 상태여야 해요 (.gitignore.template 에 등재).
+#     seed-only 는 "덮지 않는다" 는 뜻이라, 갱신이 필요한 자산을 여기 넣으면
+#     plugin 업데이트가 그 파일에 영원히 반영되지 않아요.
+MF_SEED_BAD=0
+while IFS= read -r mline; do
+    case "$mline" in ''|\#*) continue ;; esac
+    case "$mline" in *" -> "*) ;; *) continue ;; esac
+    mdst="${mline##* -> }"
+    if ! grep -qF "$mdst" "$REPO/templates/default/.gitignore.template"; then
+        fail "MANIFEST \`->\` 대상이 런타임 상태가 아님: $mdst (.gitignore.template 에 없음)"
+        MF_SEED_BAD=$((MF_SEED_BAD+1))
+    fi
+done < "$REPO/templates/default/MANIFEST"
+[ "$MF_SEED_BAD" -eq 0 ] && pass "MANIFEST \`->\` 대상 전부 런타임 상태 (seed-only 적합)"
+
+# (3) check-manifest-install.sh 도 같은 해석이어야 (drift 를 정상으로 취급)
+grep -q 'stateful' "$REPO/templates/default/.ax/scripts/bash/check-manifest-install.sh" \
+    && pass "check-manifest-install — \`->\` stateful 해석 일치" \
+    || fail "check-manifest-install — \`->\` 를 stateful 로 취급하지 않음"
+
+# ───────────────────────────────────────────────────────────
 section "19. bash 호환 lint — macOS(3.2) 에선 통과하고 Linux(5.x) 에선 터지는 문법"
 # ───────────────────────────────────────────────────────────
 # `${#ARR[@]:-0}` 는 bash 3.2 가 조용히 0 을 반환해서 macOS 로컬에선 절대 안 보이고,
