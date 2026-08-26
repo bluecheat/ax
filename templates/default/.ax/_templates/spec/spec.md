@@ -55,11 +55,12 @@
 
 ## 3. 성공 기준 (Acceptance Criteria)
 
-측정 가능한 형태로:
+측정 가능한 형태로. **각 기준에 `AC<n>` ID 를 붙여요** — tasks.md 가 `[AC2]` 로
+참조해서 "이 기준에 대응하는 task 가 없다" 를 기계적으로 잡아요 (`tasks-gate.sh`).
 
-- [ ] <기준 1 — Given/When/Then 또는 정량>
-- [ ] <기준 2>
-- [ ] <기준 3>
+- [ ] **AC1** <기준 1 — Given/When/Then 또는 정량>
+- [ ] **AC2** <기준 2>
+- [ ] **AC3** <기준 3>
 
 ### 비기능 요구 (Non-functional)
 

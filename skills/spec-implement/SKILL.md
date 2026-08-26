@@ -202,8 +202,16 @@ sed -E "/^- \[ \] .*${TASK_ID}([^0-9A-Za-z]|\$)/ s/^- \[ \]/- [x]/" \
 ## 8. 모든 task 완료 시
 
 ```bash
-REMAINING=$(grep -c '^- \[ \]' "$SPEC_DIR/tasks.md" || echo 0)
-if [ "$REMAINING" -eq 0 ]; then
+# 완료 판정은 게이트에 위임해요. 빈 체크박스만 세면 (a) 수용 기준은 안 채워졌는데
+# task 만 끝난 경우, (b) 미완료를 지워서 통과시킨 경우를 구분 못 해요.
+GATE=$(bash .ax/scripts/bash/tasks-gate.sh --spec "$SPEC" --json)
+COMPLETE=$(echo "$GATE" | jq -r '.result.complete')
+if [ "$COMPLETE" != "true" ]; then
+ echo "$GATE" | jq -r '"미완료 \(.result.open) · 대응 task 없는 AC \(.result.ac_uncovered|join(\", \")) · 유실 \(.result.task_count_drop)"'
+ echo "  → 남은 걸 끝내거나, 의도적 보류면 `- [~] T0NN … 보류: <사유>` 로 표기하세요."
+ exit 0
+fi
+if true; then
  echo "🥳 spec $SPEC 구현 완료."
  bash .ax/scripts/bash/reset-task.sh >/dev/null 2>&1 || true
  echo "  ✓ current-task.json reset → phase=idle"

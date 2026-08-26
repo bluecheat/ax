@@ -1314,6 +1314,102 @@ REAL_SC=$(find "$REPO/templates/default/.ax/scripts/bash" -maxdepth 1 -name '*.s
     || fail "CLAUDE.md 는 ${DOC_SC} scripts 라는데 실제는 ${REAL_SC}개"
 
 # ───────────────────────────────────────────────────────────
+section "29. tasks-plan — ready 집합 + [P] 주장 검증"
+# ───────────────────────────────────────────────────────────
+# wave(배리어) 가 아니라 항목별 ready 여야 해요 — "1차 전원 완료 → 2차" 는
+# 가장 느린 하나가 나머지를 붙잡아요.
+TP=$(mktemp -d)
+mkdir -p "$TP"/.ax/scripts/bash "$TP"/.ax/docs/spec/012-x
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-plan}.sh "$TP/.ax/scripts/bash/"
+cat > "$TP/.ax/docs/spec/012-x/tasks.md" <<'TPEOF'
+- [x] T001 [AC1] a — files: x/A.kt
+- [ ] T002 [P] [AC1] b — files: x/B.kt
+      의존: 없음
+- [ ] T003 [AC2] c — files: x/C.kt
+      의존: T001
+- [ ] T004 [AC2] d — files: x/D.kt
+      의존: T003
+- [ ] T005 [P] [AC3] e — files: x/E.kt
+      의존: 없음
+- [ ] T006 [P] [AC3] f — files: x/E.kt
+      의존: 없음
+TPEOF
+TPO=$(GOAX_PROJECT_DIR="$TP" bash "$TP/.ax/scripts/bash/tasks-plan.sh" --spec 012-x --json 2>/dev/null)
+
+echo "$TPO" | jq -e '.result.ready | index("T003")' >/dev/null 2>&1 \
+    && pass "tasks-plan — 의존 완료된 task 가 ready" || fail "tasks-plan — ready 계산 오류"
+echo "$TPO" | jq -e '.result.blocked | index("T004")' >/dev/null 2>&1 \
+    && pass "tasks-plan — 미완료 의존이 있으면 blocked" || fail "tasks-plan — blocked 계산 오류"
+# 항목별 승격이어야 — T003 은 T002 를 기다리지 않아요 (배리어 아님)
+echo "$TPO" | jq -e '(.result.ready | length) >= 3' >/dev/null 2>&1 \
+    && pass "tasks-plan — 항목별 ready (배리어 아님)" || fail "tasks-plan — 배리어처럼 동작"
+# [P] 인데 파일이 겹치면 violation
+echo "$TPO" | jq -e '.result.violations[0].file == "x/E.kt"' >/dev/null 2>&1 \
+    && pass "tasks-plan — [P] 파일 충돌 검출 (주장 검증)" || fail "tasks-plan — [P] 충돌 미검출"
+echo "$TPO" | jq -e '.status == "warning"' >/dev/null 2>&1 \
+    && pass "tasks-plan — 충돌 시 warning" || fail "tasks-plan — 충돌인데 ok 반환"
+
+# wave 라는 개념을 내보내면 안 돼요 (배리어 유혹)
+echo "$TPO" | jq -e 'has("waves") or (.result|has("waves"))' >/dev/null 2>&1 \
+    && fail "tasks-plan — wave 를 출력함 (배리어 모델)" \
+    || pass "tasks-plan — wave 미출력 (파이프라인 모델 유지)"
+rm -rf "$TP"
+
+# ───────────────────────────────────────────────────────────
+section "28. tasks-gate — 완료 게이트 4종"
+# ───────────────────────────────────────────────────────────
+# 완료 판정이 "빈 체크박스 0개" 뿐이면 (a) 수용 기준 미충족 (b) 미완료를 지워서
+# 통과 를 구분 못 해요. 실사용 spec 21개 중 14개가 미완료를 남긴 채 끝나 있었음.
+TG=$(mktemp -d)
+mkdir -p "$TG"/.ax/scripts/bash "$TG"/.ax/docs/spec/012-x
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate}.sh "$TG/.ax/scripts/bash/"
+echo '{}' > "$TG/.ax/state.json"
+printf '## 3. \n- [ ] **AC1** a\n- [ ] **AC2** b\n' > "$TG/.ax/docs/spec/012-x/spec.md"
+printf -- '- [x] T001 [AC1] a — files: a.kt\n- [ ] T002 [AC2] b — files: b.kt\n' > "$TG/.ax/docs/spec/012-x/tasks.md"
+
+tg() { GOAX_PROJECT_DIR="$TG" bash "$TG/.ax/scripts/bash/tasks-gate.sh" --spec 012-x --json 2>/dev/null; }
+
+tg | jq -e '.result.open == 1 and .result.complete == false' >/dev/null 2>&1 \
+    && pass "tasks-gate G1 — 미완료 task 검출" || fail "tasks-gate G1 실패"
+
+# [~] 보류는 미완료로 세지 않아야 (의도적 보류를 표현할 수단이 없으면 게이트가 우회 대상이 됨)
+printf -- '- [x] T001 [AC1] a — files: a.kt\n- [~] T002 [AC2] b — files: b.kt\n      보류: 사유\n' > "$TG/.ax/docs/spec/012-x/tasks.md"
+tg | jq -e '.result.open == 0 and .result.paused == 1 and .result.complete == true' >/dev/null 2>&1 \
+    && pass "tasks-gate — [~] 보류는 미완료가 아님 (complete)" || fail "tasks-gate — 보류 처리 실패"
+
+# G2 커버리지 — AC2 에 대응 task 가 없으면
+printf -- '- [x] T001 [AC1] a — files: a.kt\n' > "$TG/.ax/docs/spec/012-x/tasks.md"
+tg | jq -e '.result.ac_uncovered | index("AC2")' >/dev/null 2>&1 \
+    && pass "tasks-gate G2 — 대응 task 없는 AC 검출" || fail "tasks-gate G2 실패"
+
+# G3 orphan — 어떤 AC 도 참조 안 하는 task
+printf -- '- [x] T001 [AC1] a — files: a.kt\n- [x] T002 [AC2] b — files: b.kt\n- [x] T009 무관 — files: z.kt\n' > "$TG/.ax/docs/spec/012-x/tasks.md"
+tg >/dev/null 2>&1   # 봉인값 3 으로 갱신
+tg | jq -e '.result.orphan_tasks | index("T009")' >/dev/null 2>&1 \
+    && pass "tasks-gate G3 — AC 미참조 orphan task 검출" || fail "tasks-gate G3 실패"
+
+# G4 유실 — task 를 지워서 통과시키려는 시도
+printf -- '- [x] T001 [AC1] a — files: a.kt\n- [x] T002 [AC2] b — files: b.kt\n' > "$TG/.ax/docs/spec/012-x/tasks.md"
+tg | jq -e '.result.task_count_drop == 1 and .result.complete == false' >/dev/null 2>&1 \
+    && pass "tasks-gate G4 — task 삭제로 통과 시도 차단" || fail "tasks-gate G4 실패"
+
+# --strict 는 exit 2
+GOAX_PROJECT_DIR="$TG" bash "$TG/.ax/scripts/bash/tasks-gate.sh" --spec 012-x --strict >/dev/null 2>&1
+[ $? -eq 2 ] && pass "tasks-gate --strict — 위반 시 exit 2" || fail "tasks-gate --strict — exit code 부정확"
+rm -rf "$TG"
+
+# pre-commit 훅 — 활성 spec 없으면 조용해야 (커밋마다 떠들면 우회 대상이 됨)
+TGH=$(mktemp -d)
+mkdir -p "$TGH"/.ax/scripts/bash "$TGH"/.ax/hooks/pre-commit
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate}.sh "$TGH/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/hooks/pre-commit/spec-completion-gate.sh" "$TGH/.ax/hooks/pre-commit/"
+echo '{"phase":"idle"}' > "$TGH/.ax/current-task.json"
+OUT_H=$(CLAUDE_PROJECT_DIR=$TGH bash "$TGH/.ax/hooks/pre-commit/spec-completion-gate.sh" 2>&1)
+[ -z "$OUT_H" ] && pass "spec-completion-gate — phase=idle 이면 조용히 통과" \
+                || fail "spec-completion-gate — idle 인데 출력함: $OUT_H"
+rm -rf "$TGH"
+
+# ───────────────────────────────────────────────────────────
 section "27. mistake — model / session_ref 기록"
 # ───────────────────────────────────────────────────────────
 DM_FX=$(mktemp -d)
