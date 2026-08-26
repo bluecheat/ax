@@ -1293,6 +1293,38 @@ NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
 rm -rf "$NS2_FX"
 
 # ───────────────────────────────────────────────────────────
+section "22. agents/ 프롬프트 규율 — 검증자 성립 조건"
+# ───────────────────────────────────────────────────────────
+# 일을 한 에이전트가 자기 결과를 채점하면 리뷰가 무의미해지고,
+# "틈을 찾으라"는 지시만 받은 리뷰어는 멀쩡한 일에도 뭔가를 만들어 내요.
+# 두 규율이 evaluator 프롬프트에 실제로 적혀 있어야 해요.
+
+if grep -q '새 컨텍스트' "$REPO/agents/evaluator.md"; then
+    pass "evaluator — fresh context 성립 조건 명시"
+else
+    fail "evaluator — 구현 세션이 자기 결과를 평가하는 걸 막는 문구 없음"
+fi
+
+if grep -qE '0건|아무것도 없음' "$REPO/agents/evaluator.md"; then
+    pass "evaluator — '발견 0건' 이 정상 결과임을 명시"
+else
+    fail "evaluator — 빈손 보고를 허용하지 않아 과잉 지적 유발"
+fi
+
+if grep -q '재현 시나리오' "$REPO/agents/evaluator.md"; then
+    pass "evaluator — 지적에 재현 시나리오 요구"
+else
+    fail "evaluator — 근거 없는 인상평을 걸러낼 기준 없음"
+fi
+
+# 두 agent 모두 spirit 로드 선언이 있어야 (skills 와 동일 규약)
+for a in architect evaluator; do
+    grep -q '시작 전 필수' "$REPO/agents/$a.md" \
+        && pass "agents/$a — 시작 전 필수 (spirit 로드) 선언" \
+        || fail "agents/$a — 시작 전 필수 선언 누락"
+done
+
+# ───────────────────────────────────────────────────────────
 section "21. spec-implement 완료 마킹이 실제 tasks.md 형식과 맞는가"
 # ───────────────────────────────────────────────────────────
 # 출고 템플릿은 `- [ ] **T001** — ...` (볼드) 인데, 마킹 sed 가 `- [ ] [T020]`
