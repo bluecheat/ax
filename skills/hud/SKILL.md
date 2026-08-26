@@ -1,6 +1,6 @@
 ---
 name: hud
-description: "goax HUD/statusline 관리 — 'HUD 활성화', 'statusline 설정', 'HUD 갱신' 등. statusline은 .ax/hud/statusline.sh가 .ax/state.json을 읽어 한 줄 출력. 기존 statusLine(omc 등)과 충돌 안 나게 안내."
+description: "goax HUD/statusline 관리 — 'HUD 활성화', 'statusline 설정', 'HUD 갱신' 등. statusline은 .ax/hud/statusline.sh가 .ax/state.json을 읽어 한 줄 출력. 기존 statusLine(omc 등)과 충돌 안 나게 안내. 슬래시로도 호출 가능: '/hud'."
 ---
 
 # hud — 4계층 활성도 시각 신호

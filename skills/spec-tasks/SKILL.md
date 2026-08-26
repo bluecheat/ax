@@ -1,6 +1,6 @@
 ---
 name: spec-tasks
-description: "기존 spec에 tasks.md 추가 + 분해 가이드 — 'tasks 분해', 'tasks.md 작성', '작업 분해', '체크리스트 만들어'. spec.md (§3 acceptance + §7.5 Technical Context) + 관련 ADR 기반. add-spec-files.sh 로 selective cp."
+description: "기존 spec에 tasks.md 추가 + 분해 가이드 — 'tasks 분해', 'tasks.md 작성', '작업 분해', '체크리스트 만들어'. spec.md (§3 acceptance + §7.5 Technical Context) + 관련 ADR 기반. add-spec-files.sh 로 selective cp. 슬래시로도 호출 가능: '/spec-tasks'."
 ---
 
 # spec-tasks — tasks.md 단계

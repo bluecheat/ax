@@ -1,6 +1,6 @@
 ---
 name: spec-validate
-description: "spec 명료성 게이팅 + 진행률 visibility — 'spec 확인', 'goax spec check', '스펙 게이트'. spec.md 의 NEEDS CLARIFICATION + placeholder `<...>` + 빈 필수 섹션 3 항목을 게이팅하고, tasks.md 진행률 + AC 진행률을 visibility 로 노출 (spec-implement 우회 시 누락 즉시 인지)."
+description: "spec 명료성 게이팅 + 진행률 visibility — 'spec 확인', 'goax spec check', '스펙 게이트'. spec.md 의 NEEDS CLARIFICATION + placeholder `<...>` + 빈 필수 섹션 3 항목을 게이팅하고, tasks.md 진행률 + AC 진행률을 visibility 로 노출 (spec-implement 우회 시 누락 즉시 인지). 슬래시로도 호출 가능: '/spec-validate'."
 ---
 
 # goax spec-validate — 명료성 게이팅 + 진행률 visibility

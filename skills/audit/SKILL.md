@@ -1,6 +1,6 @@
 ---
 name: audit
-description: "Mistake Loop **회고·승격** skill (read+aggregate, review phase). 누적된 .ax/mistakes/*.md 를 카테고리·빈도로 분석하고 룰 승격 후보 제시. 트리거: 'goax audit', '실수 회고', '실수 분석', '실수 패턴 분석', 'mistakes 정리', 'mistakes 점검', '재발', '같은 문제', '룰 승격', '룰 강화 후보', '또 그걸', '주간 회고'. **'회고'·'심사'·'정리'·'패턴'·'승격'·'재발' 같은 review 의도 키워드만 매칭** — '기록'·'캡처'·'남겨' 같은 capture 의도는 mistake skill 이 담당. 1건 새로 캡처하지 않음 (mistake skill 위임)."
+description: "Mistake Loop **회고·승격** skill (read+aggregate, review phase). 누적된 .ax/mistakes/*.md 를 카테고리·빈도로 분석하고 룰 승격 후보 제시. 트리거: '/audit', 'goax audit', '실수 회고', '실수 분석', '실수 패턴 분석', 'mistakes 정리', 'mistakes 점검', '재발', '같은 문제', '룰 승격', '룰 강화 후보', '또 그걸', '주간 회고'. **'회고'·'심사'·'정리'·'패턴'·'승격'·'재발' 같은 review 의도 키워드만 매칭** — '기록'·'캡처'·'남겨' 같은 capture 의도는 mistake skill 이 담당. 1건 새로 캡처하지 않음 (mistake skill 위임)."
 ---
 
 # goax audit — Mistake Loop (캡처 → 심사 → 승격)

@@ -1,6 +1,6 @@
 ---
 name: spirit
-description: "Spirit 검증 — 'spirit 점검', 스피릿 분류, 'goax spirit', '가치 룰 lint'. .ax/spirit/{values, tone, rules}의 frontmatter + 토큰 무결성 검사."
+description: "Spirit 검증 — 'spirit 점검', 스피릿 분류, 'goax spirit', '가치 룰 lint'. .ax/spirit/{values, tone, rules}의 frontmatter + 토큰 무결성 검사. 슬래시로도 호출 가능: '/spirit'."
 ---
 
 # goax spirit-check — Spirit 무결성

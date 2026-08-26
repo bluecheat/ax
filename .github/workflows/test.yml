@@ -8,8 +8,18 @@ on:
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    # bash 3.2(macOS 기본) 와 5.x(Linux) 를 둘 다 돌려요.
+    # `${#ARR[@]:-0}` 처럼 3.2 는 조용히 통과시키고 5.x 는 죽는 문법이 있고,
+    # 반대로 `sed -i ''`·`\b` 처럼 GNU 에서만 되는 것도 있어서
+    # 한쪽만 돌리면 반대편 버그가 그대로 배포돼요 (0.4.0 에서 실제로 발생).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: bash 버전 기록
+        run: bash --version | head -1
       - name: Run smoke tests
         run: bash tests/smoke.sh

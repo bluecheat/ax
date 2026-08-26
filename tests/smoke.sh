@@ -1293,6 +1293,22 @@ NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
 rm -rf "$NS2_FX"
 
 # ───────────────────────────────────────────────────────────
+section "23. 모든 skill 에 슬래시 트리거 표기"
+# ───────────────────────────────────────────────────────────
+# 자연어 트리거만으로는 안 잡히는 경우가 실제로 있었어요 — 프로덕션 사용자가
+# 로컬 복사본에 '/adr'·'/spec-implement' 를 손으로 추가했음. autorouting 이
+# 실패해도 사용자가 확실히 부를 수 있는 경로가 description 에 있어야 해요.
+SLASH_MISSING=0
+for sdir in "$REPO"/skills/*/; do
+    sname=$(basename "$sdir")
+    if ! sed -n '/^description:/p' "$sdir/SKILL.md" | grep -qF "'/$sname'"; then
+        fail "skill description 에 슬래시 트리거 누락: $sname ('/$sname')"
+        SLASH_MISSING=$((SLASH_MISSING+1))
+    fi
+done
+[ "$SLASH_MISSING" -eq 0 ] && pass "모든 skill description 에 '/<name>' 트리거 존재"
+
+# ───────────────────────────────────────────────────────────
 section "22. agents/ 프롬프트 규율 — 검증자 성립 조건"
 # ───────────────────────────────────────────────────────────
 # 일을 한 에이전트가 자기 결과를 채점하면 리뷰가 무의미해지고,

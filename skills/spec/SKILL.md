@@ -1,6 +1,6 @@
 ---
 name: spec
-description: "새 spec 디렉토리 생성 — 'spec 만들어줘', 'goax spec new <slug>', '스펙 작성 시작'. .ax/docs/spec/NNN-<slug>/ 에 size×risk에 맞는 tier(standard/full)만큼만 SDD 산출물 생성. plan.md 폐기 — 설계 결정은 ADR 로. tier override: '--tier standard|full' 또는 자연어 '간단/풀패키지'. 결정론은 .ax/scripts/bash/ 위임."
+description: "새 spec 디렉토리 생성 — 'spec 만들어줘', 'goax spec new <slug>', '스펙 작성 시작'. .ax/docs/spec/NNN-<slug>/ 에 size×risk에 맞는 tier(standard/full)만큼만 SDD 산출물 생성. plan.md 폐기 — 설계 결정은 ADR 로. tier override: '--tier standard|full' 또는 자연어 '간단/풀패키지'. 결정론은 .ax/scripts/bash/ 위임. 슬래시로도 호출 가능: '/spec'."
 ---
 
 # goax spec — 새 SDD 디렉토리 (tier-aware, script-backed)

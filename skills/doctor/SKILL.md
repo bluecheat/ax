@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: "goax 설치 상태 진단 — 'goax doctor', 'goax 진단', '하네스 점검', 'goax 상태' 트리거. 4계층 + cross-cut + sensors 결손을 검사하고 다음 단계를 친절히 안내."
+description: "goax 설치 상태 진단 — 'goax doctor', 'goax 진단', '하네스 점검', 'goax 상태' 트리거. 4계층 + cross-cut + sensors 결손을 검사하고 다음 단계를 친절히 안내. 슬래시로도 호출 가능: '/doctor'."
 ---
 
 # goax doctor — 4계층 결손 진단

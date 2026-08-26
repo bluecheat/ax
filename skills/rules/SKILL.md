@@ -1,6 +1,6 @@
 ---
 name: rules
-description: "프로젝트의 모든 룰을 한눈에 — 'goax rules', 'rules 보여줘', '룰 인덱스', 'CRITICAL 룰', 'critical', 'mandatory'. CLAUDE.md(Constitution) + .ax/spirit/rules/(Spirit) + module CLAUDE.md(Layer 2) 통합 인덱스. 작업 시작·PR 직전 위반 검출 흐름 포함."
+description: "프로젝트의 모든 룰을 한눈에 — 'goax rules', 'rules 보여줘', '룰 인덱스', 'CRITICAL 룰', 'critical', 'mandatory'. CLAUDE.md(Constitution) + .ax/spirit/rules/(Spirit) + module CLAUDE.md(Layer 2) 통합 인덱스. 작업 시작·PR 직전 위반 검출 흐름 포함. 슬래시로도 호출 가능: '/rules'."
 ---
 
 # goax rules — 룰 통합 인덱스 + 위반 검출
