@@ -72,9 +72,19 @@ if [ ! -d "$TEMPLATE_DIR" ]; then
     exit "$EXIT_ERROR"
 fi
 
-# NUM 자동 결정
+# NUM 자동 결정 — 계산이 아니라 *예약*이에요.
+# 계산만 하면 여기서 mkdir 까지 사이에 다른 세션이 같은 번호를 가져가요
+# (실사용 리포에서 spec 2 쌍·ADR 7 쌍이 이렇게 겹쳤어요).
+# --reserve 는 번호 원장에 원자적으로 선점하고 디렉토리까지 만들어 줘요.
+RESERVED_BY_US=false
 if [ -z "$NUM" ]; then
-    NUM=$(bash "$SCRIPT_DIR/next-spec-num.sh" 2>/dev/null || echo "001")
+    if command -v jq >/dev/null 2>&1; then
+        RES=$(bash "$SCRIPT_DIR/next-spec-num.sh" --reserve --slug "$SLUG" --json 2>/dev/null || true)
+        NUM=$(printf '%s' "$RES" | jq -r 'select(.status=="ok") | .result.next // empty' 2>/dev/null || true)
+        [ -n "$NUM" ] && RESERVED_BY_US=true
+    fi
+    # jq 없거나 예약 실패 — 계산 fallback (경합 방어는 못 하지만 동작은 함)
+    [ -z "$NUM" ] && NUM=$(bash "$SCRIPT_DIR/next-spec-num.sh" 2>/dev/null || echo "001")
 fi
 
 # 형식 검증
@@ -86,12 +96,24 @@ fi
 DEST="$PROJECT_ROOT/.ax/docs/spec/${NUM}-${SLUG}"
 DEST_REL=".ax/docs/spec/${NUM}-${SLUG}"
 
-# 중복 체크
-if [ -e "$DEST" ]; then
+# 중복 체크 — 단, 바로 위에서 우리가 예약해 만든 디렉토리는 예외예요.
+# (--reserve 가 번호 선점과 동시에 디렉토리를 만들기 때문에, 이 가드가
+#  자기 자신의 예약에 걸리면 항상 실패해요.)
+if [ -e "$DEST" ] && [ "$RESERVED_BY_US" != true ]; then
     if [ "$JSON_MODE" = true ]; then
         json_error "spec dir already exists: $DEST_REL"
     else
         goax_error "spec dir already exists: $DEST_REL"
+        exit "$EXIT_ERROR"
+    fi
+fi
+
+# 예약된 디렉토리는 비어 있어야 정상 — 내용이 있으면 예약이 아니라 기존 spec 이에요
+if [ "$RESERVED_BY_US" = true ] && [ -n "$(ls -A "$DEST" 2>/dev/null)" ]; then
+    if [ "$JSON_MODE" = true ]; then
+        json_error "reserved dir is not empty: $DEST_REL"
+    else
+        goax_error "reserved dir is not empty: $DEST_REL"
         exit "$EXIT_ERROR"
     fi
 fi

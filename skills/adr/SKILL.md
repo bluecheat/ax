@@ -38,9 +38,11 @@ template 구조 (요약):
 KEYWORDS="payment refund"
 grep -rilE "($KEYWORDS)" .ax/docs/adr 2>/dev/null
 
-# 다음 번호 계산 (NNNN 4자리 zero-pad)
+# 다음 번호 *미리보기* (NNNN 4자리 zero-pad) — 아직 확정 아니에요.
+# 확정은 §3 생성 시점의 --reserve 가 해요. 여기서 예약하면 사용자가 취소한
+# ADR 번호가 원장에 남아 영구히 비어요.
 NEXT=$(bash .ax/scripts/bash/next-spec-num.sh --kind adr --json | jq -r '.result.next')
-echo "다음 ADR 번호: $NEXT"
+echo "다음 ADR 번호(예정): $NEXT"
 
 # 폐기·대체된 ADR 확인 (재제안 차단)
 grep -lE "^\| 상태 \|.*폐기|superseded" .ax/docs/adr/*.md 2>/dev/null
@@ -80,12 +82,20 @@ grep -lE "^\| 상태 \|.*폐기|superseded" .ax/docs/adr/*.md 2>/dev/null
 
 [a] 응답 시:
 ```bash
-DEST=".ax/docs/adr/0006-payment-refund-strategy.md"
+# 번호를 원자적으로 예약 + 실물 생성. 경합하면 다음 번호로 물러나므로
+# **반환된 번호를 써야 해요** — §1 의 미리보기 값을 그대로 쓰면 안 돼요.
+SLUG="payment-refund-strategy"
+RES=$(bash .ax/scripts/bash/next-spec-num.sh --kind adr --reserve --slug "$SLUG" --json)
+[ "$(echo "$RES" | jq -r '.status')" = "ok" ] || { echo "$RES" | jq -r '.errors|join("\n")'; exit 1; }
+NUM=$(echo "$RES" | jq -r '.result.next')
+DEST=$(echo "$RES" | jq -r '.result.path')
+echo "$RES" | jq -r '.warnings[]?'        # 경합 시 "0006 대신 0007 로 예약" 안내
+
 cp .ax/_templates/adr/0000-template.md "$DEST"
 
 # 메타 자동 채움 (tmp-mv — BSD/GNU sed 모두 호환)
 sed \
- -e "s/| ADR ID | NNNN |/| ADR ID | 0006 |/" \
+ -e "s/| ADR ID | NNNN |/| ADR ID | $NUM |/" \
  -e "s/| 작성일 | YYYY-MM-DD |/| 작성일 | $(date +%Y-%m-%d) |/" \
  -e "s/<한 줄 결정>/Payment Refund Strategy/" \
  "$DEST" > "$DEST.tmp" && mv "$DEST.tmp" "$DEST"

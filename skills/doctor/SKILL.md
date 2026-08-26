@@ -534,6 +534,33 @@ L_ROOT=$(echo "$RESULT_L" | jq -r '.result.project_root')
    ⚠️  C4 세션 루트 이탈 — 세션을 <L_ROOT> 에서 시작하세요
 ```
 
+### 3.11 번호 무결성 — spec/ADR 중복 (`next-spec-num.sh --check-duplicates` 위임)
+
+번호는 문서를 서로 가리키는 주소예요. 같은 번호가 둘이면 "ADR 0008 참고" 가 어디를 가리키는지 알 수 없어져요.
+
+```bash
+DUP_SPEC=$(bash "$ROOT/.ax/scripts/bash/next-spec-num.sh" --kind spec --check-duplicates --json 2>/dev/null)
+DUP_ADR=$(bash "$ROOT/.ax/scripts/bash/next-spec-num.sh" --kind adr  --check-duplicates --json 2>/dev/null)
+N_SPEC=$(echo "$DUP_SPEC" | jq -r '.result.duplicate_count // 0')
+N_ADR=$(echo "$DUP_ADR"  | jq -r '.result.duplicate_count // 0')
+LIST_SPEC=$(echo "$DUP_SPEC" | jq -r '.result.duplicates | join(", ")')
+LIST_ADR=$(echo "$DUP_ADR"  | jq -r '.result.duplicates | join(", ")')
+```
+
+- 두 검사 모두 **읽기 전용**이에요 — 번호 원장(`.numbers/`)을 만들지 않아요.
+- **자동 수정하지 않아요.** 재번호는 PR·문서의 기존 링크를 깨뜨려서 사람이 판단할 일이에요.
+- 신규 생성은 `--reserve` 가 원자적으로 선점하므로 *앞으로는* 겹치지 않아요. 이 검사가 잡는 건 예약 도입 이전의 잔재예요.
+
+보고 (0 이면 생략):
+
+```
+🔢 번호 무결성
+   ⚠️  ADR 중복 번호 <N_ADR>건 — <LIST_ADR>
+       같은 번호의 문서가 둘 이상이라 상호 참조가 모호해요.
+       재번호는 기존 링크를 깨뜨리니 필요할 때만 사람이 결정하세요.
+   ⚠️  spec 중복 번호 <N_SPEC>건 — <LIST_SPEC>
+```
+
 ## 3. 출력
 
 ```

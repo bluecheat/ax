@@ -1076,11 +1076,82 @@ else
     fail "next-spec-num — overflow 처리 부정확 (exit=$EXIT, out=$OUT)"
 fi
 
-# 정상 케이스 — 998이면 999 반환
-mv "$NS_FX/.ax/docs/spec/999-existing" "$NS_FX/.ax/docs/spec/998-existing"
-NEXT=$(CLAUDE_PROJECT_DIR=$NS_FX bash "$NS_FX/.ax/scripts/bash/next-spec-num.sh" 2>&1)
+# 원장 semantics — 한 번 쓴 번호는 실물을 지워도 회수되지 않아요
+# (ADR 템플릿 "폐기된 ADR 도 ID 재사용 안 함" 과 같은 규약).
+rm -rf "$NS_FX/.ax/docs/spec/999-existing"
+OUT=$(CLAUDE_PROJECT_DIR=$NS_FX bash "$NS_FX/.ax/scripts/bash/next-spec-num.sh" --json 2>&1) || true
+if echo "$OUT" | jq -e '.status == "error"' >/dev/null 2>&1; then
+    pass "next-spec-num — 실물 삭제해도 번호 회수 안 됨 (영구 원장)"
+else
+    fail "next-spec-num — 삭제된 999 를 재사용함: $OUT"
+fi
+
+# 정상 케이스 — 998이면 999 반환 (원장이 없는 새 fixture)
+NS_FX2=$(mktemp -d)
+mkdir -p "$NS_FX2/.ax/scripts/bash" "$NS_FX2/.ax/docs/spec/998-existing"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_FX2/.ax/scripts/bash/"
+NEXT=$(CLAUDE_PROJECT_DIR=$NS_FX2 bash "$NS_FX2/.ax/scripts/bash/next-spec-num.sh" 2>&1)
 [ "$NEXT" = "999" ] && pass "next-spec-num — 998 → 999 정상" \
                     || fail "next-spec-num — 998 다음이 999 아님: $NEXT"
+
+# 동시 예약 경합 — 같은 번호가 두 번 나오면 안 돼요 (실사용 ADR 7 쌍 충돌의 회귀 테스트)
+NS_RACE=$(mktemp -d)
+mkdir -p "$NS_RACE/.ax/scripts/bash" "$NS_RACE/.ax/docs/spec"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_RACE/.ax/scripts/bash/"
+for i in 1 2 3 4 5 6 7 8; do
+    CLAUDE_PROJECT_DIR=$NS_RACE bash "$NS_RACE/.ax/scripts/bash/next-spec-num.sh" \
+        --reserve --slug "feat$i" --json >/dev/null 2>&1 &
+done
+wait
+RACE_TOT=$(ls "$NS_RACE/.ax/docs/spec" 2>/dev/null | grep -cE '^[0-9]' || true)
+RACE_UNIQ=$(ls "$NS_RACE/.ax/docs/spec" 2>/dev/null | grep -E '^[0-9]' | sed -E 's/^([0-9]+).*/\1/' | sort -u | grep -c . || true)
+if [ "${RACE_TOT:-0}" -eq 8 ] && [ "${RACE_TOT:-0}" = "${RACE_UNIQ:-0}" ]; then
+    pass "next-spec-num --reserve — 8개 동시 예약에서 번호 충돌 0"
+else
+    fail "next-spec-num --reserve — 동시 예약 충돌 (생성 ${RACE_TOT}, 고유 ${RACE_UNIQ})"
+fi
+
+# --reserve 는 실물까지 만들고, --dry-run 은 만들지 않아야
+NS_DR=$(mktemp -d)
+mkdir -p "$NS_DR/.ax/scripts/bash" "$NS_DR/.ax/docs/adr"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_DR/.ax/scripts/bash/"
+CLAUDE_PROJECT_DIR=$NS_DR bash "$NS_DR/.ax/scripts/bash/next-spec-num.sh" --kind adr \
+    --reserve --slug ghost --dry-run --json >/dev/null 2>&1
+[ -z "$(ls "$NS_DR/.ax/docs/adr"/[0-9]*.md 2>/dev/null)" ] \
+    && pass "next-spec-num --reserve --dry-run — 실물 생성 안 함" \
+    || fail "next-spec-num --dry-run 이 파일을 생성함"
+CLAUDE_PROJECT_DIR=$NS_DR bash "$NS_DR/.ax/scripts/bash/next-spec-num.sh" --kind adr \
+    --reserve --slug real --json >/dev/null 2>&1
+[ -f "$NS_DR/.ax/docs/adr/0001-real.md" ] \
+    && pass "next-spec-num --reserve — ADR 실물 생성" \
+    || fail "next-spec-num --reserve — ADR 실물 미생성"
+
+# --reserve 는 --slug 없이 거부돼야
+CLAUDE_PROJECT_DIR=$NS_DR bash "$NS_DR/.ax/scripts/bash/next-spec-num.sh" --reserve --json >/dev/null 2>&1
+[ $? -ne 0 ] && pass "next-spec-num --reserve — --slug 누락 시 error" \
+             || fail "next-spec-num --reserve — --slug 없이 통과됨"
+
+# --check-duplicates — 예약 도입 이전 충돌을 진단으로 노출 (자동 수정 안 함)
+NS_DUP=$(mktemp -d)
+mkdir -p "$NS_DUP/.ax/scripts/bash" "$NS_DUP/.ax/docs/adr"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_DUP/.ax/scripts/bash/"
+: > "$NS_DUP/.ax/docs/adr/0001-a.md"; : > "$NS_DUP/.ax/docs/adr/0001-b.md"; : > "$NS_DUP/.ax/docs/adr/0003-c.md"
+DUP_OUT=$(CLAUDE_PROJECT_DIR=$NS_DUP bash "$NS_DUP/.ax/scripts/bash/next-spec-num.sh" \
+    --kind adr --check-duplicates --json 2>/dev/null)
+if echo "$DUP_OUT" | jq -e '.result.duplicate_count == 1 and (.result.duplicates | index("0001"))' >/dev/null 2>&1; then
+    pass "next-spec-num --check-duplicates — 중복 번호 검출"
+else
+    fail "next-spec-num --check-duplicates — 검출 실패: $DUP_OUT"
+fi
+# 진단·dry-run 은 읽기 전용이어야 해요 (사용자 리포에 원장을 몰래 만들면 안 됨)
+CLAUDE_PROJECT_DIR=$NS_DUP bash "$NS_DUP/.ax/scripts/bash/next-spec-num.sh" \
+    --kind adr --reserve --slug ghost --dry-run --json >/dev/null 2>&1
+[ ! -d "$NS_DUP/.ax/docs/adr/.numbers" ] \
+    && pass "next-spec-num — --check-duplicates/--dry-run 은 원장을 쓰지 않음" \
+    || fail "next-spec-num — 읽기 전용 모드가 .numbers 를 생성함"
+rm -rf "$NS_DUP"
+
+rm -rf "$NS_FX2" "$NS_RACE" "$NS_DR"
 
 rm -rf "$NS_FX"
 
@@ -1100,6 +1171,29 @@ else
 fi
 
 rm -rf "$IS_FX"
+
+# init-spec-dir 동시 실행 — 실제 호출 경로의 번호 경합 (E2E).
+# next-spec-num 단위 테스트만으로는 못 잡아요: --reserve 가 디렉토리를 만드는데
+# init-spec-dir 의 "already exists" 가드가 자기 예약에 걸리는 버그가 여기서 나왔어요.
+ISR_FX=$(mktemp -d)
+mkdir -p "$ISR_FX/.ax/scripts/bash" "$ISR_FX/.ax/docs/spec"
+cp "$REPO/templates/default/.ax/scripts/bash/"*.sh "$ISR_FX/.ax/scripts/bash/"
+cp -R "$REPO/templates/default/.ax/_templates" "$ISR_FX/.ax/_templates"
+for i in 1 2 3 4 5 6; do
+    CLAUDE_PROJECT_DIR=$ISR_FX bash "$ISR_FX/.ax/scripts/bash/init-spec-dir.sh" \
+        --json --tier standard --slug "race-$i" >/dev/null 2>&1 &
+done
+wait
+ISR_DIRS=$(ls "$ISR_FX/.ax/docs/spec" 2>/dev/null | grep -E '^[0-9]' || true)
+ISR_TOT=$(printf '%s\n' "$ISR_DIRS" | grep -c . || true)
+ISR_UNIQ=$(printf '%s\n' "$ISR_DIRS" | sed -E 's/^([0-9]+).*/\1/' | sort -u | grep -c . || true)
+ISR_SPEC=$(find "$ISR_FX/.ax/docs/spec" -name spec.md 2>/dev/null | grep -c . || true)
+if [ "${ISR_TOT:-0}" -eq 6 ] && [ "${ISR_TOT:-0}" = "${ISR_UNIQ:-0}" ] && [ "${ISR_SPEC:-0}" -eq 6 ]; then
+    pass "init-spec-dir — 6개 동시 생성: 번호 충돌 0 + spec.md 전부 생성"
+else
+    fail "init-spec-dir 동시 실행 (dir=${ISR_TOT} 고유=${ISR_UNIQ} spec.md=${ISR_SPEC}, 기대 6/6/6)"
+fi
+rm -rf "$ISR_FX"
 
 # 15.5 slug-from-text — JSON escape
 SL_FX=$(mktemp -d)
