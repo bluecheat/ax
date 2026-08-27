@@ -289,8 +289,8 @@ fi
 # ───────────────────────────────────────────────────────────
 section "4.2 MANIFEST 완전성 — templates/default 전체 파일이 MANIFEST 또는 조건부 복사로 커버되는지"
 # ───────────────────────────────────────────────────────────
-# skills/up/SKILL.md §5-§6 이 실제로 처리하는 조건부(manifest 외) 파일 목록.
-# 이 목록과 up SKILL.md 본문이 벌어지면 이 테스트도 같이 갱신해야 함.
+# scripts/provision.sh §5~§6.7 이 실제로 처리하는 조건부(manifest 외) 파일 목록.
+# 이 목록과 provision.sh 가 벌어지면 이 테스트도 같이 갱신해야 함.
 CONDITIONAL_COPIES="AGENTS.md.template CLAUDE.md.template opencode.json.template \
 .claude/settings.json.template .ax/config.yml .ax/search-aliases.yml \
 .ax/mistakes/README.md .ax/spirit/values.md .ax/spirit/tone.md .ax/spirit/README.md \
@@ -475,7 +475,7 @@ while IFS= read -r f; do
         fail "bash 문법 오류: ${f#$REPO/}"
     fi
 done < <(find "$REPO/templates/default/.ax/hooks" "$REPO/templates/default/.ax/hud" \
-              "$REPO/templates/default/.ax/scripts" -name "*.sh" 2>/dev/null)
+              "$REPO/templates/default/.ax/scripts" "$REPO/scripts" -name "*.sh" 2>/dev/null)
 [ "$sh_count" -gt 0 ] && pass "shell 문법 $sh_ok/$sh_count" || fail "shell script 0개 검사"
 
 # ───────────────────────────────────────────────────────────
@@ -1687,19 +1687,42 @@ fi
 rm -rf "$MK_FX"
 
 # ───────────────────────────────────────────────────────────
-section "20. MANIFEST `->` = stateful seed-only 계약"
+section '20. MANIFEST `->` = stateful seed-only 계약'
 # ───────────────────────────────────────────────────────────
 # up 은 "install or idempotent update" 라 재실행이 destructive 하면 안 돼요.
 # `->` 대상은 런타임 상태(state.json / current-task.json)이고, 덮어쓰면
 # 진행 중인 phase·spec_dir 가 idle 로 리셋돼 작업 맥락이 사라져요.
 
-# (1) up 의 복사 루프가 `->` 항목을 seed-only 로 가드하는가
-if grep -q 'SEED_ONLY=true' "$REPO/skills/up/SKILL.md" \
-   && grep -q 'SEED_ONLY" = true \] && \[ -e "$DST"' "$REPO/skills/up/SKILL.md"; then
-    pass "up §4 — MANIFEST \`->\` 항목 seed-only 가드 존재"
+# (1) 재실행이 런타임 상태·사용자 수정본을 보존하는가 — **실제로 두 번 돌려서** 확인.
+#     예전엔 up/SKILL.md 를 grep 하는 문자열 매칭이었는데, 그건 "그 문장이 있다" 만
+#     보증하고 "그렇게 동작한다" 는 보증 못 해요. 지금은 provision.sh 를 진짜 실행해요.
+PROV_T=$(mktemp -d)
+bash "$REPO/scripts/provision.sh" --target "$PROV_T" --json >/dev/null 2>&1
+if [ -f "$PROV_T/.ax/current-task.json" ] && [ -f "$PROV_T/.ax/_templates/spec/spec.md" ]; then
+    if command -v jq >/dev/null 2>&1; then
+        jq '.phase="implementing"' "$PROV_T/.ax/current-task.json" > "$PROV_T/ct.tmp" \
+            && mv "$PROV_T/ct.tmp" "$PROV_T/.ax/current-task.json"
+    else
+        printf '{"phase":"implementing"}\n' > "$PROV_T/.ax/current-task.json"
+    fi
+    printf '\n## 팀 전용 섹션\n' >> "$PROV_T/.ax/_templates/spec/spec.md"
+
+    bash "$REPO/scripts/provision.sh" --target "$PROV_T" --json >/dev/null 2>&1
+
+    if grep -q 'implementing' "$PROV_T/.ax/current-task.json" 2>/dev/null; then
+        pass "provision 재실행 — 진행 중 phase 보존 (MANIFEST \`->\` seed-only)"
+    else
+        fail "provision 재실행이 phase 를 리셋했어요 (진행 중 spec 이 추적에서 빠져요)"
+    fi
+    if grep -q '팀 전용 섹션' "$PROV_T/.ax/_templates/spec/spec.md" 2>/dev/null; then
+        pass "provision 재실행 — _templates 사용자 수정본 보존"
+    else
+        fail "provision 재실행이 _templates 사용자 수정본을 덮었어요"
+    fi
 else
-    fail "up §4 — \`->\` 항목을 무조건 cp 함 (up 재실행이 런타임 상태를 파괴)"
+    fail "provision.sh 설치 실패 — current-task.json / _templates 미생성"
 fi
+rm -rf "$PROV_T"
 
 # (2) `->` 대상은 전부 런타임 상태여야 해요 (.gitignore.template 에 등재).
 #     seed-only 는 "덮지 않는다" 는 뜻이라, 갱신이 필요한 자산을 여기 넣으면
@@ -1733,7 +1756,10 @@ while IFS= read -r hit; do
     fail "bash 호환 lint — \${#ARR[@]:-...} 는 bash 5.x 에서 bad substitution: $hit"
     BASHLINT=$((BASHLINT+1))
 done < <(grep -rn '\${#[A-Za-z_][A-Za-z0-9_]*\[@\*\]:-' \
-            "$REPO/templates" "$REPO/tests" "$REPO/.claude" 2>/dev/null || true)
+            "$REPO/templates" "$REPO/tests" "$REPO/.claude" \
+            "$REPO/skills" "$REPO/commands" 2>/dev/null || true)
+# 반대 방향(3.2 에서만 터지는 문법 — 예: $( ) 안의 case)은 §7·§30 의 `bash -n` 이
+# macOS 매트릭스 잡에서 잡아요. 두 OS 를 다 돌리는 이유가 이 양방향이에요.
 [ "$BASHLINT" -eq 0 ] && pass "bash 호환 lint — \${#ARR[@]:-...} 잔재 0"
 
 # ───────────────────────────────────────────────────────────
@@ -1765,6 +1791,95 @@ if [ -n "$VLINT_OUT" ]; then
     done <<< "$VLINT_OUT"
 fi
 [ "$vlint_violation_count" -eq 0 ] && pass "버전 마커 lint — skills/commands/templates/docs/agents 잔재 0"
+
+# ───────────────────────────────────────────────────────────
+section "30. SKILL.md 인라인 bash 문법 검사 — skills/ 는 §7 의 사각지대"
+# ───────────────────────────────────────────────────────────
+# §7 은 `templates/**/*.sh` **파일** 만 봐요. 그런데 up(266줄)·doctor(228줄) 처럼
+# SKILL.md 안에 사는 bash 가 그보다 많고, 파일이 아니라서 어떤 lint 도 안 닿았어요.
+# 하필 사용자가 제일 먼저 돌리는 설치 코드가 거기 있어요.
+# ```bash 블록을 뽑아 bash -n. 블록 단위라 변수 미정의는 못 잡지만 문법은 잡아요.
+INLINE_DIR=$(mktemp -d)
+inline_total=0
+inline_bad=0
+while IFS= read -r sf; do
+    [ -f "$sf" ] || continue
+    sname=$(basename "$(dirname "$sf")")
+    awk -v out="$INLINE_DIR/$sname" 'BEGIN{i=0}
+        /^```(bash|sh)[[:space:]]*$/ { inb=1; i=i+1; f=out"-"i".sh"; next }
+        /^```/ { inb=0; next }
+        inb { print >> f }
+    ' "$sf"
+done < <(find "$REPO/skills" "$REPO/commands" -name '*.md' 2>/dev/null)
+for bf in "$INLINE_DIR"/*.sh; do
+    [ -f "$bf" ] || continue
+    inline_total=$((inline_total+1))
+    if ! bash -n "$bf" 2>/dev/null; then
+        inline_bad=$((inline_bad+1))
+        fail "SKILL.md 인라인 bash 문법 오류: $(basename "$bf")"
+    fi
+done
+rm -rf "$INLINE_DIR"
+if [ "$inline_total" -eq 0 ]; then
+    fail "SKILL.md 인라인 bash 블록 0개 — 추출 로직이 깨졌어요"
+elif [ "$inline_bad" -eq 0 ]; then
+    pass "SKILL.md 인라인 bash — $inline_total 블록 문법 OK"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "31. triage-search — specs 본문 랭킹 + 대소문자 무시 재채점"
+# ───────────────────────────────────────────────────────────
+# 두 결함의 회귀 방어:
+#  (a) specs 를 디렉토리 *이름* 으로만 매칭 → 슬러그에 없고 본문에만 있는 spec 누락.
+#      슬러그가 영문 kebab-case 규약이라 한국어 프로젝트에선 "정산" 같은 도메인어로
+#      아무것도 못 찾았어요.
+#  (b) 후보는 grep -ril(대소문자 무시)로 뽑고 재채점은 grep -cE(구분)로 해서,
+#      키워드가 대문자로만 나오는 문서가 점수 0 으로 조용히 탈락했어요.
+if ! command -v jq >/dev/null 2>&1; then
+    pass "triage-search 검증 skip (jq 없음)"
+else
+    TS_T=$(mktemp -d)
+    mkdir -p "$TS_T/.ax/scripts/bash" "$TS_T/.ax/docs/adr" "$TS_T/.ax/docs/spec/imported"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" \
+       "$REPO/templates/default/.ax/scripts/bash/triage-search.sh" \
+       "$REPO/templates/default/.ax/scripts/bash/build-index.sh" "$TS_T/.ax/scripts/bash/" 2>/dev/null
+    : > "$TS_T/CLAUDE.md"
+
+    mkdir -p "$TS_T/.ax/docs/spec/003-payment-coupon"      # 슬러그 매칭
+    printf '# 쿠폰\n중복 적용 정책\n' > "$TS_T/.ax/docs/spec/003-payment-coupon/spec.md"
+    mkdir -p "$TS_T/.ax/docs/spec/007-checkout"            # 본문에만 payment
+    printf '# 체크아웃\npayment 흐름 재작성\n' > "$TS_T/.ax/docs/spec/007-checkout/spec.md"
+    mkdir -p "$TS_T/.ax/docs/spec/009-settlement"          # 본문이 한국어
+    printf '# 정산\n정산 배치가 읽어요\n' > "$TS_T/.ax/docs/spec/009-settlement/spec.md"
+    printf '# PG\nPayment gateway 이중화\n' > "$TS_T/.ax/docs/adr/0002-pg.md"   # 대문자만
+    printf '# 외부\npayment 외부 스펙\n' > "$TS_T/.ax/docs/spec/imported/legacy.md"
+
+    TS_OUT=$(cd "$TS_T" && bash .ax/scripts/bash/triage-search.sh --keywords "payment" --json 2>/dev/null)
+    TS_SPECS=$(printf '%s' "$TS_OUT" | jq -r '[.result.specs[].path] | join(" ")' 2>/dev/null)
+    TS_ADRS=$(printf '%s' "$TS_OUT" | jq -r '[.result.adrs[].path]  | join(" ")' 2>/dev/null)
+
+    case "$TS_SPECS" in
+        *007-checkout*) pass "triage-search — 본문에만 있는 spec 도 매칭 (슬러그 한계 해소)" ;;
+        *) fail "triage-search — 본문 매칭 spec 누락: [$TS_SPECS]" ;;
+    esac
+    case "$TS_ADRS" in
+        *0002-pg*) pass "triage-search — 대문자만 등장하는 문서도 점수 유지 (재채점 -i)" ;;
+        *) fail "triage-search — 대소문자 재채점 불일치로 ADR 탈락: [$TS_ADRS]" ;;
+    esac
+    case "$TS_SPECS" in
+        *imported*) fail "triage-search — imported 가 specs 에 섞였어요 (별도 카테고리여야)" ;;
+        *) pass "triage-search — imported 는 specs 에서 제외" ;;
+    esac
+
+    # 한국어 도메인어 — 슬러그가 영문이어도 본문으로 잡혀야 해요
+    TS_KO=$(cd "$TS_T" && bash .ax/scripts/bash/triage-search.sh --keywords "정산" --json 2>/dev/null \
+            | jq -r '[.result.specs[].path] | join(" ")' 2>/dev/null)
+    case "$TS_KO" in
+        *009-settlement*) pass "triage-search — 한국어 키워드로 영문 슬러그 spec 매칭" ;;
+        *) fail "triage-search — 한국어 키워드 매칭 실패: [$TS_KO]" ;;
+    esac
+    rm -rf "$TS_T"
+fi
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"

@@ -190,7 +190,7 @@ process_body() {
         while IFS= read -r f; do
             [ -z "$f" ] && continue
             [ -f "$f" ] || continue
-            c=$(grep -cE "($ALT)" "$f" 2>/dev/null | head -1)
+            c=$(grep -ciE "($ALT)" "$f" 2>/dev/null | head -1)
             [ -z "$c" ] && c=0
             if [ "$c" -gt 0 ] 2>/dev/null; then
                 b=0; key=$c
@@ -211,7 +211,7 @@ process_body() {
         boostbool=false
         [ "${boost:-0}" = "1" ] && boostbool=true
         if [ "$HAS_JQ" = true ]; then
-            snip_json=$(grep -nE "($ALT)" "$f" 2>/dev/null \
+            snip_json=$(grep -niE "($ALT)" "$f" 2>/dev/null \
                 | head -"$SNIPPET_MAX" \
                 | awk -v w="$SNIPPET_WIDTH" '{print substr($0,1,w)}' \
                 | jq -R -s -c 'split("\n") | map(select(. != ""))' 2>/dev/null) || snip_json="[]"
@@ -290,11 +290,87 @@ list_matching_recursive() {
     } | grep -v '^$' | sort -u
 }
 
-# 1) specs: 디렉토리 이름 매칭 (본문 스캔 아님)
-SPECS_J=$(find .ax/docs/spec -maxdepth 2 -type d 2>/dev/null \
-        | grep -iE "($ALT)" 2>/dev/null \
-        | grep -v '^$' | sort -u | head -"$TOPK" \
-        | simple_objs || true)
+# specs 본문 랭킹.
+# 예전엔 디렉토리 *이름* 만 봤어요. 그래서 슬러그에 도메인 단어가 없고 본문에만 있는
+# spec 은 영영 안 나왔어요 — "같은 도메인이면 같이 검토" 가 정확히 여기서 샜어요.
+# 이름 매칭은 강한 신호라 SPEC_NAME_BOOST 로 유지해요(기존 결과 순위 회귀 없음).
+# BM25 인덱스는 이미 spec.md 를 `spec` 카테고리로 색인하고 있었는데 읽는 데가
+# 없었어요 — 대형 코퍼스에선 그 후보도 union 해요.
+# path 는 spec *디렉토리* 그대로 (기존 소비자 계약 유지), snippet 은 최다 매칭 파일에서.
+SPEC_NAME_BOOST=1000
+process_specs() {
+    local ranked
+    ranked=$(
+        {
+            find .ax/docs/spec -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+                | grep -v '/imported$' || true
+            if [ "$USE_INDEX" = true ]; then
+                printf '%s\n' "$IDX_HITS" \
+                    | awk -F"$TAB" '$1=="spec" && $2!=""{print $2}' \
+                    | sed 's#/[^/]*$##' || true
+            fi
+        } | grep -v '^$' | sort -u \
+        | while IFS= read -r d; do
+            [ -d "$d" ] || continue
+            base=${d##*/}
+            namehit=0
+            if printf '%s' "$base" | grep -qiE "($ALT)" 2>/dev/null; then namehit=1; fi
+            total=0; best=""; bestc=0
+            for f in "$d"/*.md; do
+                [ -f "$f" ] || continue
+                c=$(grep -ciE "($ALT)" "$f" 2>/dev/null | head -1) || c=0
+                # bash 3.2 는 $( ) 안의 case 를 파싱 못 해요 (패턴의 ')' 가 치환을
+                # 먼저 닫아버림). 숫자 가드는 test 로 — 실패 시 [ ] 가 2 를 반환해요.
+                if ! [ "${c:-x}" -ge 0 ] 2>/dev/null; then c=0; fi
+                total=$((total + c))
+                if [ "$c" -gt "$bestc" ]; then bestc=$c; best=$f; fi
+            done
+            if [ "$namehit" -eq 0 ] && [ "$total" -eq 0 ]; then continue; fi
+            key=$((total + namehit * SPEC_NAME_BOOST))
+            b=0
+            if [ -n "$BOOST_RE" ]; then
+                if printf '%s' "$d" | grep -qiE "$BOOST_RE" 2>/dev/null; then
+                    b=1
+                elif [ -n "$best" ] && grep -qiE "$BOOST_RE" "$best" 2>/dev/null; then
+                    b=1
+                fi
+                if [ "$b" -eq 1 ]; then key=$((key + BOOST_AMT)); fi
+            fi
+            # 이름만 매칭(본문 0) 이면 예전 score=1 과 같은 값으로 보고
+            if [ "$total" -eq 0 ]; then total=1; fi
+            printf '%s\t%s\t%s\t%s\t%s\n' "$key" "$total" "$b" "$d" "$best"
+        done | sort -t"$TAB" -k1,1 -rn | head -"$TOPK" || true
+    )
+    [ -z "$ranked" ] && { printf '[]'; return; }
+
+    local objs="" n=0 key score boost d best snip_json o boostbool
+    while IFS="$TAB" read -r key score boost d best; do
+        [ -z "$d" ] && continue
+        boostbool=false
+        [ "${boost:-0}" = "1" ] && boostbool=true
+        snip_json="[]"
+        if [ "$HAS_JQ" = true ] && [ -n "$best" ] && [ -f "$best" ]; then
+            snip_json=$(grep -niE "($ALT)" "$best" 2>/dev/null \
+                | head -"$SNIPPET_MAX" \
+                | awk -v w="$SNIPPET_WIDTH" '{print substr($0,1,w)}' \
+                | jq -R -s -c 'split("\n") | map(select(. != ""))' 2>/dev/null) || snip_json="[]"
+            [ -z "$snip_json" ] && snip_json="[]"
+        fi
+        if [ "$HAS_JQ" = true ]; then
+            o=$(jq -nc --arg p "$d" --argjson s "${score:-1}" --argjson sn "$snip_json" \
+                       --argjson b "$boostbool" \
+                '{path:$p, score:$s, snippets:$sn, boosted:$b}' 2>/dev/null) || continue
+        else
+            o="{\"path\":\"$(_json_esc "$d")\",\"score\":${score:-1},\"snippets\":[],\"boosted\":$boostbool}"
+        fi
+        if [ "$n" -eq 0 ]; then objs="$o"; else objs="$objs,$o"; fi
+        n=$((n + 1))
+    done <<< "$ranked"
+    printf '[%s]' "$objs"
+}
+
+# 1) specs: 디렉토리명(boost) + 본문 랭킹 + 스니펫
+SPECS_J=$(process_specs || true)
 [ -z "$SPECS_J" ] && SPECS_J="[]"
 
 # 2) adrs: 본문 랭킹 + 스니펫

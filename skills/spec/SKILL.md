@@ -52,18 +52,22 @@ SLUG_RESULT=$(bash .ax/scripts/bash/slug-from-text.sh --json "payment refund pol
 SLUG=$(echo "$SLUG_RESULT" | jq -r '.result.slug')
 ```
 
-### 1.2 중복 확인 — bash로 빠르게
+### 1.2 중복·관련 자료 확인 — `triage-search.sh` 위임
 
 ```bash
-# 정확 슬러그
+# 정확 슬러그는 바로 판정
 ls -d .ax/docs/spec/*-${SLUG} 2>/dev/null
 
-# 도메인 키워드로 유사 spec
-KEYWORDS="payment refund"
-find .ax/docs/spec -maxdepth 2 -type d 2>/dev/null | grep -iE "($KEYWORDS)"
-grep -lE "($KEYWORDS)" .ax/docs/spec/*/spec.md 2>/dev/null
-grep -lE "($KEYWORDS)" .ax/docs/spec/imported/*/* 2>/dev/null
+# 같은 도메인 자료 — 동의어 확장 + 본문 랭킹 + 스니펫을 한 번에.
+# 도메인어 2~4개. **한글 그대로 넣으세요** (본문이 한국어면 한글이 제일 잘 맞아요).
+KEYWORDS="환불 정산 refund"
+SEARCH=$(bash .ax/scripts/bash/triage-search.sh --keywords "$KEYWORDS" --json)
+echo "$SEARCH" | jq -r '.result.specs[] | "spec \(.score)\t\(.path)"'
+echo "$SEARCH" | jq -r '.result.adrs[]  | "adr  \(.score)\t\(.path)"'
 ```
+
+직접 `grep` 하지 마세요 — 슬러그엔 없고 본문에만 있는 spec 을 놓쳐요.
+`snippets` 로 연관성을 먼저 판단하고, 정말 관련 있는 것만 본문을 Read 하세요.
 
 발견 시 사용자에게 알림: "기존 spec 003-payment-coupon-stack 과 관련 있어 보여요. 새 spec 으로 갈까요, 003 에 추가 (`/spec-tasks 003` 또는 ADR 신규) 할까요?"
 

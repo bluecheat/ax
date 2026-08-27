@@ -34,9 +34,12 @@ template 구조 (요약):
 ## 1. bash 사전 검색 — 큰 프로젝트 대비
 
 ```bash
-# 같은 도메인 ADR이 이미 있나
-KEYWORDS="payment refund"
-grep -rilE "($KEYWORDS)" .ax/docs/adr 2>/dev/null
+# 같은 도메인 ADR·기반 spec 이 이미 있나 — 동의어 확장 + 본문 랭킹 + 스니펫.
+# 도메인어 2~4개. **한글 그대로 넣으세요.** 직접 grep 하면 랭킹도 스니펫도 없어요.
+KEYWORDS="환불 정산 refund"
+SEARCH=$(bash .ax/scripts/bash/triage-search.sh --keywords "$KEYWORDS" --json)
+echo "$SEARCH" | jq -r '.result.adrs[]  | "adr  \(.score)\t\(.path)"'
+echo "$SEARCH" | jq -r '.result.specs[] | "spec \(.score)\t\(.path)"'
 
 # 다음 번호 *미리보기* (NNNN 4자리 zero-pad) — 아직 확정 아니에요.
 # 확정은 §3 생성 시점의 --reserve 가 해요. 여기서 예약하면 사용자가 취소한

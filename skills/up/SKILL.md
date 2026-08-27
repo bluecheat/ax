@@ -95,13 +95,18 @@ bash 휴리스틱이 아니라 **Claude가 코드를 직접 읽어** 다음을 �
 
 `Y`(또는 `네`, `ㅇ`) → 진행. 그 외 → 취소(파일 변경 0).
 
-## 4. 설치 — Bash tool로 cp (MANIFEST 기반)
+## 4. 설치 — `provision.sh` 위임
 
-plugin의 `templates/default/MANIFEST`를 읽어 사용자 프로젝트로 복사. 열거 hardcode 대신 manifest를 SSOT로 사용 — template에 디렉토리 추가 시 MANIFEST만 갱신하면 up 호출 시 자동으로 따라감.
+MANIFEST 를 SSOT 로 `templates/default/` 를 프로젝트에 복사해요. 열거를 hardcode 하지
+않아서, template 에 디렉토리가 늘면 MANIFEST 만 갱신하면 따라와요.
+
+로직은 전부 `scripts/provision.sh` 에 있어요. **여기 인라인하지 마세요** — 마크다운
+안의 bash 는 파일이 아니라서 `bash -n` 도 CI 도 닿지 않아요. 하필 사용자가 제일 먼저
+돌리는 코드예요.
 
 ```bash
-# 0. plugin root 검출 — Claude Code 표준 ${CLAUDE_SKILL_DIR} 우선,
-#    ${CLAUDE_PLUGIN_ROOT}는 비표준이라 호환용 fallback에만 둠.
+# plugin root — Claude Code 표준 ${CLAUDE_SKILL_DIR} 우선,
+# ${CLAUDE_PLUGIN_ROOT} 는 비표준이라 호환용 fallback 에만 둠.
 if [ -n "${CLAUDE_SKILL_DIR:-}" ]; then
     PLUGIN_ROOT="$(cd "${CLAUDE_SKILL_DIR}/../.." && pwd)"
 elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
@@ -112,261 +117,27 @@ else
     exit 1
 fi
 
-TPL="$PLUGIN_ROOT/templates/default"
-MANIFEST="$TPL/MANIFEST"
-[ ! -f "$MANIFEST" ] && { echo "[goax] ERROR: MANIFEST 부재 — $MANIFEST" >&2; exit 1; }
+RESULT=$(bash "$PLUGIN_ROOT/scripts/provision.sh" --json)
 
-# 1. 기본 디렉토리
-mkdir -p .claude
-
-# 1-b. _templates 사용자 수정본 보호 준비
-# `.ax/_templates/` 는 MANIFEST 재귀 복사 대상이라 그냥 두면 덮여요. 그런데
-# .origin 이 "사용자가 도메인에 맞게 고친 템플릿"을 정상으로 인정하는 자산이라
-# (check-templates-drift 의 user_modified), 말없이 덮으면 그 작업이 사라져요.
-# 덮기 전에 수정본 목록을 잡아두고, 덮은 뒤 되돌려 놓아요.
-USER_MODIFIED=""
-if [ -f .ax/_templates/spec/.origin ]; then
-    while IFS= read -r oline; do
-        case "$oline" in ''|\#*) continue ;; esac
-        osha="${oline%% *}"; ofile="${oline##* }"; ofile="${ofile#./}"
-        [ -f ".ax/_templates/spec/$ofile" ] || continue
-        csha=$(shasum -a 256 ".ax/_templates/spec/$ofile" 2>/dev/null | awk '{print $1}')
-        [ "$csha" != "$osha" ] && USER_MODIFIED="$USER_MODIFIED$ofile"$'\n'
-    done < .ax/_templates/spec/.origin
-fi
-UM_BACKUP=""
-if [ -n "$USER_MODIFIED" ]; then
-    UM_BACKUP=$(mktemp -d)
-    while IFS= read -r f; do
-        [ -z "$f" ] && continue
-        mkdir -p "$UM_BACKUP/$(dirname "$f")"
-        cp ".ax/_templates/spec/$f" "$UM_BACKUP/$f"
-    done <<< "$USER_MODIFIED"
-fi
-
-# 2. MANIFEST 읽고 항목별 복사
-while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-        ''|\#*) continue ;;  # 주석·빈 줄 skip
-    esac
-
-    # "source -> dest" (stateful seed) 또는 "source" (무조건 복사)
-    SEED_ONLY=false
-    if [[ "$line" == *" -> "* ]]; then
-        SRC="${line% -> *}"
-        DST="${line##* -> }"
-        SEED_ONLY=true      # 런타임 상태 — 이미 있으면 절대 건드리지 않아요
-    else
-        SRC="$line"
-        DST="$line"
-    fi
-
-    case "$SRC" in
-        */)  # 디렉토리 재귀 (cp -R 은 merge — 사용자 spec/ADR/mistake 은 보존됨)
-            mkdir -p "$DST"
-            cp -R "$TPL/${SRC}." "$DST"
-            ;;
-        *)   # 단일 파일
-            mkdir -p "$(dirname "$DST")"
-            if [ "$SEED_ONLY" = true ] && [ -e "$DST" ]; then
-                :   # 진행 중인 phase·spec_dir 를 idle 로 되돌리면 안 돼요
-            else
-                cp "$TPL/$SRC" "$DST"
-            fi
-            ;;
-    esac
-done < "$MANIFEST"
-
-# 3. 실행 권한 (bash 스크립트)
-chmod +x .ax/scripts/bash/*.sh 2>/dev/null || true
-find .ax/hooks -type f -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
-chmod +x .ax/hud/statusline.sh 2>/dev/null || true
-
-# 4. _templates 출고본 sha 기록 (drift 감지용 — doctor가 비교)
-# **plugin 원본**에서 계산해요. 방금 설치한 로컬 디렉토리에서 계산하면,
-# 아래에서 사용자 수정본을 복원한 뒤 .origin 이 그 수정본을 "출고본"으로
-# 기록해버려서 user_modified 가 영원히 false 가 돼요 (드리프트 감지 실명).
-(
-    cd "$TPL/.ax/_templates/spec" && \
-    find . -type f \( -name '*.md' -o -name '*.yaml' -o -name '*.yml' \) \
-        ! -name '.origin' | sort | xargs shasum -a 256 2>/dev/null
-) > .ax/_templates/spec/.origin
-GOAX_VER=$(cat "$PLUGIN_ROOT/VERSION" 2>/dev/null || echo "unknown")
-echo "# goax_version: $GOAX_VER" >> .ax/_templates/spec/.origin
-
-# 4-b. 사용자 수정본 복원 — plugin 최신본은 옆에 .suggested 로
-if [ -n "$USER_MODIFIED" ] && [ -n "$UM_BACKUP" ]; then
-    while IFS= read -r f; do
-        [ -z "$f" ] && continue
-        if [ -f ".ax/_templates/spec/$f" ]; then
-            cp ".ax/_templates/spec/$f" ".ax/_templates/spec/$f.suggested"
-        fi
-        cp "$UM_BACKUP/$f" ".ax/_templates/spec/$f"
-        echo "[goax] _templates 수정본 보존: $f (plugin 최신본은 $f.suggested)"
-    done <<< "$USER_MODIFIED"
-    rm -rf "$UM_BACKUP"
-fi
-
-# 5. AGENTS.md — Constitution SSOT (multi-CLI, manifest 외 조건부)
-# AGENTS.md 가 현재 SSOT. Claude Code 는 CLAUDE.md 의 @AGENTS.md import,
-# OpenCode 는 AGENTS.md 직접 인식.
-if [ -f AGENTS.md ]; then
-    cp "$TPL/AGENTS.md.template" .ax/AGENTS.md.suggested
-else
-    cp "$TPL/AGENTS.md.template" AGENTS.md
-    # 신규 설치일 때만 [PROJECT_NAME] 치환 — 프로젝트 디렉토리 basename (tmp-mv — BSD/GNU sed 모두 호환)
-    PROJECT_NAME="$(basename "$(pwd)")"
-    sed "s/\[PROJECT_NAME\]/$PROJECT_NAME/g" AGENTS.md > AGENTS.md.tmp && mv AGENTS.md.tmp AGENTS.md
-fi
-
-# 5.1 CLAUDE.md — Claude Code alias (manifest 외 조건부)
-# 본문이 @AGENTS.md import 1줄 + Claude Code 안내. 사용자가 본문을 customize
-# 했으면 .suggested 로 보존 (§7 마이그레이션 안내).
-if [ -f CLAUDE.md ]; then
-    # 이미 alias 형태인지 (1줄 @AGENTS.md 포함 + 20줄 미만) 판별 → 출고본으로 drift 갱신
-    if grep -qE '^@AGENTS\.md\b' CLAUDE.md && [ "$(wc -l < CLAUDE.md | tr -d ' ')" -lt 20 ]; then
-        cp "$TPL/CLAUDE.md.template" CLAUDE.md
-    else
-        # customize 본문 → 보존 + 마이그레이션 안내 (§7)
-        cp "$TPL/CLAUDE.md.template" .ax/CLAUDE.md.suggested
-    fi
-else
-    cp "$TPL/CLAUDE.md.template" CLAUDE.md
-fi
-
-# 5.5 opencode.json — OpenCode 환경 감지 시만 (manifest 외 조건부)
-HAS_OPENCODE=false
-if [ -n "${OPENCODE_CONFIG_DIR:-}" ] \
-   || [ -d ".opencode" ] || [ -d "$HOME/.config/opencode" ] \
-   || command -v opencode >/dev/null 2>&1; then
-    HAS_OPENCODE=true
-fi
-if [ "$HAS_OPENCODE" = true ]; then
-    if [ -f opencode.json ]; then
-        cp "$TPL/opencode.json.template" .ax/opencode.json.suggested
-    else
-        cp "$TPL/opencode.json.template" opencode.json
-    fi
-    echo "✓ OpenCode 환경 감지 — opencode.json 설치"
-    echo "  Hook 시스템 보전: bash .ax/scripts/bash/install-git-hooks.sh"
-fi
-
-# 5.6 git pre-commit wrapper — 모든 환경 (idempotent, exit 2 = 이미 설치라 안전)
-# Claude Code 의 PreToolUse:Bash 는 "에이전트가 실행하는" git commit 만 잡아요.
-# 사람이 터미널에서 직접 커밋하면 완전히 우회되므로, 환경 불문 git hook 을 설치해요.
-# 기존 pre-commit(goax marker 없음)이 있으면 스크립트가 ERROR 로 알리고 건드리지
-# 않아요 (--force 필요) — 아래 `|| true` 가 그 exit 1 을 삼켜 설치 흐름은 계속돼요.
-# husky 등 기존 훅 팀은 이 ERROR 가 정상이에요 (사용자 자산 보존 원칙).
-if [ -d ".git" ] || [ -f ".git" ]; then
-    bash .ax/scripts/bash/install-git-hooks.sh || true
-else
-    echo "  (git 리포 아님 — git pre-commit wrapper 는 git init 후 install-git-hooks.sh 로)"
-fi
-
-# 6. .claude/settings.json — Claude Code mode 한정 (manifest 외 조건부)
-# Claude Code 가 set 한 env (CLAUDE_PROJECT_DIR / CLAUDE_SKILL_DIR) 있으면 무조건 등록.
-# 없으면 (순수 OpenCode 사용자) 건너뜀 — .claude/settings.json 은 OpenCode 에서 무의미.
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ] || [ -n "${CLAUDE_SKILL_DIR:-}" ] || [ -d ".claude" ]; then
-    mkdir -p .claude
-    if [ -f .claude/settings.json ]; then
-        cp "$TPL/.claude/settings.json.template" .ax/settings.json.suggested
-    else
-        cp "$TPL/.claude/settings.json.template" .claude/settings.json
-    fi
-fi
-
-# 6.5 .ax/config.yml — 조건부 (manifest 외, 사용자 customizations 보존)
-# conditional 처리: 기존 .ax/config.yml의 domain_risk·commands·sensors 등
-# 사용자 변경을 plugin re-install이 clobber하지 않도록.
-if [ -f .ax/config.yml ]; then
-    cp "$TPL/.ax/config.yml" .ax/config.yml.suggested
-else
-    mkdir -p .ax
-    cp "$TPL/.ax/config.yml" .ax/config.yml
-fi
-
-# 6.5b .ax/search-aliases.yml — 조건부 (manifest 외, 사용자 동의어 customize 보존)
-# triage-search 키워드 확장용. 사용자가 도메인 동의어를 채우는 자산이라
-# plugin re-install 이 clobber 하지 않도록 config.yml 과 동일 패턴.
-if [ -f .ax/search-aliases.yml ]; then
-    cp "$TPL/.ax/search-aliases.yml" .ax/search-aliases.yml.suggested
-else
-    mkdir -p .ax
-    cp "$TPL/.ax/search-aliases.yml" .ax/search-aliases.yml
-fi
-
-# 6.6 plugin 메타 reference — cp from PLUGIN_ROOT/docs/reference
-# rules-tokens, critical-rules, glossary, triage-matrix, rule-enforcement 등.
-# CLAUDE.md / spirit/rules / modules/README.md 가 `.ax/docs/reference/*` 경로로 참조 →
-# 사용자 프로젝트에 깔려야 그 참조가 valid. 사용자 customize 안 하는 read-only 자료라
-# plugin 갱신 시 항상 덮어쓰기 OK (drift 위험 없음).
-# MANIFEST 에 안 박은 이유: docs/reference 는 plugin repo 루트의 SSOT (templates/default 외).
-mkdir -p .ax/docs/reference
-cp -R "$PLUGIN_ROOT/docs/reference/." .ax/docs/reference/
-echo "✓ .ax/docs/reference: $(ls .ax/docs/reference | wc -l | tr -d ' ')개 reference 파일"
-
-# 6.7 .gitignore — append-if-missing (manifest 외)
-# runtime 파일(.ax/state.json, .ax/current-task.json)·임시본(.ax/*.suggested) 등이
-# PR diff에 들어가 노이즈가 되는 걸 방지. 기존 .gitignore가 있으면 누락된 줄만 추가.
-GITIGNORE_TPL="$TPL/.gitignore.template"
-if [ -f "$GITIGNORE_TPL" ]; then
-    if [ -f .gitignore ]; then
-        # 기존 .gitignore — 누락 entry만 append (idempotent)
-        added=0
-        while IFS= read -r line; do
-            case "$line" in ''|\#*) continue ;; esac
-            grep -qxF "$line" .gitignore || { printf '%s\n' "$line" >> .gitignore; added=$((added+1)); }
-        done < "$GITIGNORE_TPL"
-        [ "$added" -gt 0 ] && echo "✓ .gitignore: $added 줄 추가 (goax runtime 보호)"
-    else
-        cp "$GITIGNORE_TPL" .gitignore
-        echo "✓ .gitignore: 신규 생성"
-    fi
-fi
-
-# 6.8 .ax/mistakes/README.md — 조건부 (manifest 외, 사용자 팀 정책 보존)
-# conditional: 사용자가 mistake 캡처/심사 정책을 README에 추가했을 때
-# plugin re-install이 clobber하지 않도록.
-mkdir -p .ax/mistakes
-if [ -f .ax/mistakes/README.md ]; then
-    cp "$TPL/.ax/mistakes/README.md" .ax/mistakes/README.md.suggested
-else
-    cp "$TPL/.ax/mistakes/README.md" .ax/mistakes/README.md
-fi
-
-# 6.10 .ax/spirit/{values,tone,README}.md — 조건부 (manifest 외)
-# spirit 은 cross-cut Spirit (공유 agent personality) — 팀 가치·톤은 회사·팀별로
-# customize 되는 게 정상. plugin 재호출 이나 doctor → up 흐름에서 사용자
-# 자산을 도자기처럼 깨면 안 됨. 기존 파일이 있으면 `.suggested` 로 옆에 두고 사용자가
-# diff 후 머지 결정. spirit/rules/ 는 plugin 이 출고하는 파일 자체가 없음 (사용자 큐레이션).
-mkdir -p .ax/spirit
-for SPF in values.md tone.md README.md; do
-    if [ -f ".ax/spirit/$SPF" ]; then
-        cp "$TPL/.ax/spirit/$SPF" ".ax/spirit/$SPF.suggested"
-    else
-        cp "$TPL/.ax/spirit/$SPF" ".ax/spirit/$SPF"
-    fi
-done
-
-# 6.9 path-scoped rule injection
-# spirit/rules/<name>.md 의 frontmatter `paths:` 와 편집 대상 파일 path를 매칭해
-# `.ax/hooks/pre-edit/spirit-rules-inject.sh` 가 hook 시점에 additionalContext로 안내.
-# settings.json.template 가 hook을 PreToolUse(Edit|Write|MultiEdit)에 자동 등록.
-echo "✓ path-scoped rule loading — .ax/hooks/pre-edit/spirit-rules-inject.sh"
-
-# 7. 메타 정보
-cat > .ax/version <<META
-goax: $GOAX_VER
-preset: default
-installed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-META
+echo "$RESULT" | jq -r '"✓ 복사 \(.result.copied)건 · seed 유지 \(.result.seeded_kept)건 · reference \(.result.reference_files)개 · git hook \(.result.git_hooks)"'
+echo "$RESULT" | jq -r '.warnings[]? | "⚠ \(.)"'
+echo "$RESULT" | jq -r '.result.suggested[]? | "  · \(.) — 기존 파일 보존, plugin 최신본은 .suggested 로 옆에"'
+echo "$RESULT" | jq -r '.result.preserved[]? | "  · _templates/\(.) 수정본 보존"'
 ```
 
-각 단계마다 `✓` 출력으로 진행 상황 알려요.
+설치 규칙은 3층이고 스크립트가 강제해요:
+
+| 층 | 대상 | 재실행 시 |
+|---|---|---|
+| MANIFEST 무조건 | `.ax/scripts/`, `.ax/hooks/`, `_templates/` … | 덮어써요 (사용자 spec·ADR·mistake 은 `cp -R` merge 라 보존) |
+| MANIFEST `src -> dst` | `state.json`, `current-task.json` | **안 건드려요** — 진행 중인 phase 를 idle 로 되돌리면 그 spec 이 추적에서 조용히 빠져요 |
+| MANIFEST 외 조건부 | `CLAUDE.md`, `AGENTS.md`, `config.yml`, `spirit/*`, `settings.json` … | 내용이 다를 때만 `.suggested` 로 옆에. 같으면 아무것도 안 해요 |
+
+`suggested` 가 비어있지 않으면 §7 마이그레이션 안내로 이어가세요.
 
 > **변수 컨벤션** — `$CLAUDE_PROJECT_DIR`(사용자 프로젝트 루트)·`${CLAUDE_SKILL_DIR}`(skill 자체 위치, plugin root는 `${CLAUDE_SKILL_DIR}/../..`)는 Claude Code 공식 변수예요. `$CLAUDE_PLUGIN_ROOT`는 비표준 — 과거 호환용 fallback에만 둘 것. `$PLUGIN_DIR` 같은 임의 변수는 정의되지 않아요.
 
-> **MANIFEST 갱신 규칙** — `templates/default/`에 새 디렉토리·파일을 추가할 때 `templates/default/MANIFEST`도 같이 갱신. doctor가 MANIFEST vs 사용자 프로젝트 실제 설치 상태를 diff해서 누락 감지. 조건부 복사(CLAUDE.md, .claude/settings.json)는 manifest 외 — installer §5/§6에서 별도 처리.
+> **MANIFEST 갱신 규칙** — `templates/default/`에 새 디렉토리·파일을 추가할 때 `templates/default/MANIFEST`도 같이 갱신. doctor가 MANIFEST vs 사용자 프로젝트 실제 설치 상태를 diff해서 누락 감지. 조건부 복사(CLAUDE.md, .claude/settings.json 등)는 manifest 외 — `scripts/provision.sh` §5~§6.7 에서 처리해요.
 
 ## 5. brownfield면 — onboarding으로 위임
 
