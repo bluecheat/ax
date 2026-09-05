@@ -27,6 +27,13 @@
 | `triage-search.sh` | KEYWORDS 로 6 군데(specs/adrs/mistakes/rules/modules/imported) 검색 + 동의어 확장 + 매칭수 랭킹 + 스니펫 + 도메인 boost | `triage` |
 | `build-memory.sh` | `.ax/` 상태 → `.ax/MEMORY.md` 한 줄 포인터 인덱스 재생성 (triage 가 먼저 read) | `triage` |
 | `build-index.sh` | 역색인 `.ax/.search-index` 빌드 + BM25 query (대형 코퍼스 tier, 재생성 캐시) | `triage-search` |
+| `lanes-hotfiles.sh` | tasks.md 에서 핫 파일(여러 미완료 task 가 쓰는 파일) + `files:` 누락 task 추출 | `parallel` |
+| `zero-init.sh` | 0→1 첫날 팩 설치 (룰은 라이브 `spirit/rules/`, 템플릿은 `_templates/zero/`) — 덮어쓰지 않고 SP 토큰 충돌만 경고 | `zero` |
+| `zero-domain-risk.sh` | `config.yml` 의 `domain_risk` 블록 통째 교체 (`--show/--set/--default`) — 출고 예시 키가 남으면 triage 가 영원히 default_risk 로 흘러요 | `zero` |
+| `zero-probe.sh` | 네거티브 프로브 — 일부러 위반을 만들어 차단이 실제로 도는지 확인 | `zero` |
+| `zero-verify.sh` | `config.yml commands` 를 파이프 없이 실행하고 증거 블록 생성 — 안 돌린 게이트도 보고 (하나도 안 돌면 exit 2) | `zero` |
+| `zero-ablation.sh` | 산문 룰 전체를 끄고 무엇이 깨지는지 재는 ablation (`--off/--on/--status`) — 6개월 주기 | `zero` |
+| `zero-guard-bash.sh` | **(`.ax/hooks/pre-bash/` 에 설치 — 이 디렉터리 밖)** pre-bash 가드: `git add -A` 차단(exit 2) · 검증 명령 파이프 경고. hook 규약이라 `--json` 표준 밖이에요 | (hook) |
 
 ## 표준 (모든 스크립트 공통)
 

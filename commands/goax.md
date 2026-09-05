@@ -16,9 +16,11 @@ goax 의 모든 기능은 **자연어 트리거** 로 호출돼요 (thin wrapper
   "goax 동봉" / "/vendor"       — plugin 설치 없이 쓰도록 저장소에 동봉
 
 ▸ 작업 분류·구현
+  "새 프로젝트 시작" / "0에서 만들자"    — zero (제품·비즈니스 정의 → ADR → 집행 배관)
   "구현해줘" / "고쳐줘" / "리팩토링" — triage (Size × Risk 30초 분류)
   "spec 만들어줘 — <slug>"           — 새 spec 디렉토리 (tier-aware)
   "tasks 분해"                       — tasks.md 분해
+  "병렬로 돌리자" / "레인 나눠줘"     — parallel (가를 수 있는 일인지부터 판정)
   "구현 시작" / "tasks 실행"         — tasks.md 순차 실행
   "spec 확인"                        — NEEDS CLARIFICATION 게이팅
 
