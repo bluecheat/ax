@@ -411,55 +411,75 @@ expected_skills=$(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d | grep -c 
     || fail "skill 디렉토리 ${expected_skills}개인데 SKILL.md 는 ${total_skills}개 — 빈 skill 디렉토리 존재"
 
 # ───────────────────────────────────────────────────────────
-section "6. HUD statusline 우주 이모지 + spec/ADR 진척 (팩트 기반)"
+section "6. HUD statusline — 하네스 위치 한 줄 (OMC 문법)"
 # ───────────────────────────────────────────────────────────
-if grep -q "🪐\|🌟\|⭐\|✦" "$REPO/templates/default/.ax/hud/statusline.sh"; then
-    pass "statusline.sh 우주 이모지 (별·행성)"
+# 이전 HUD 의 세 조각(행성 이모지·S×R·혜성)은 작업 중에 안 변했어요. 지금은 phase 로 체인이 움직여요.
+SL="$REPO/templates/default/.ax/hud/statusline.sh"
+if grep -qE "🪐|🌟|⭐|✦|☄" "$SL"; then
+    fail "statusline.sh — 우주 이모지 잔재 (행성·혜성은 폐기)"
 else
-    fail "statusline.sh 우주 이모지 누락"
+    pass "statusline.sh — 행성·혜성 이모지 0"
 fi
-# 자가 점수 prefix 잔재 검사 (제거됐어야 함)
-LEFT=$(grep -rl "응답 prefix 이모지\|prefix 자가 점수\|하네스 자가 점수" \
-       "$REPO/templates/default/.ax/spirit" "$REPO/skills" "$REPO/agents" 2>/dev/null || true)
-if [ -z "$LEFT" ]; then
-    pass "자가 점수 prefix 제거 완료 (spirit/skills/agents 잔재 0)"
-else
-    fail "자가 점수 prefix 잔재: $(echo $LEFT | tr '\n' ' ')"
-fi
-# stdin JSON 처리 (Claude Code statusline 사양)
-if grep -q "workspace.current_dir" "$REPO/templates/default/.ax/hud/statusline.sh"; then
-    pass "statusline.sh stdin JSON 처리 (workspace.current_dir)"
-else
-    fail "statusline.sh stdin JSON 처리 누락"
-fi
-# spec/ADR 진척 e2e — 임시 .ax/ 만들고 multi-line 출력 검증
+grep -q "workspace.current_dir" "$SL" && pass "statusline.sh stdin JSON 처리 (workspace.current_dir)" || fail "statusline.sh stdin JSON 처리 누락"
+if grep -qE 'bash .*\.sh' "$SL" | grep -v '^#' ; then fail "statusline.sh 가 스크립트를 호출함 (300ms 예산)"; else pass "statusline.sh — 스크립트 호출 없음 (파일 읽기만)"; fi
+
 if command -v jq >/dev/null 2>&1; then
-    HUD_TMP=$(mktemp -d)
-    mkdir -p "$HUD_TMP/.ax/docs/spec/005-test"
-    cat > "$HUD_TMP/.ax/state.json" <<JSON
-{"layers":{"L0_triage":{"active":true},"L1_constitution":{"active":true},"L2_module":{"active":false},"L3_spec_adr":{"active":true,"specs":1}},
-"cross_cut":{"spirit":{"active":true},"mistakes":{"active":false,"count":0,"due_in_days":7}},
-"hud_preset":"full"}
-JSON
-    # .ax/current-task.json 이 triage(size/risk) SSOT — state.json.current_task 는 갖지 않음.
-    # phase=idle(또는 size/risk 미채움)이면 statusline 이 triage fragment 를 숨기므로
-    # phase!=idle + size/risk 둘 다 채워야 e2e 가 triage: 라벨을 검증할 수 있음.
-    cat > "$HUD_TMP/.ax/current-task.json" <<JSON
-{"spec_id":"005","spec_dir":".ax/docs/spec/005-test","spec_tier":"standard","phase":"implementing","size":"M","risk":"L1"}
-JSON
-    cat > "$HUD_TMP/.ax/docs/spec/005-test/spec.md" <<MD
-# Spec
-Related: ADR-0006
-MD
-    printf -- "- [x] T001\n- [x] T002\n- [ ] T003\n" > "$HUD_TMP/.ax/docs/spec/005-test/tasks.md"
-    OUT=$(echo "{\"workspace\":{\"current_dir\":\"$HUD_TMP\"}}" | bash "$REPO/templates/default/.ax/hud/statusline.sh" 2>&1)
-    # compact preset 기본 — triage 라벨 + harness 우주 이모지 + 혜성(mistakes) 검증
-    if echo "$OUT" | grep -q "triage:" && echo "$OUT" | grep -qE "🪐|🌟|⭐|✦" && echo "$OUT" | grep -q "☄"; then
-        pass "statusline e2e — triage + harness 이모지 + 혜성 출력"
-    else
-        fail "statusline e2e 출력 누락: $OUT"
-    fi
-    rm -rf "$HUD_TMP"
+    HUD_FX=$(mktemp -d)
+    mkdir -p "$HUD_FX/.ax/hud" "$HUD_FX/.ax/docs/spec/014-pay" "$HUD_FX/.ax/docs/adr" "$HUD_FX/.ax/mistakes"
+    cp "$SL" "$HUD_FX/.ax/hud/"
+    cp "$REPO/templates/default/.ax/hud/state.json.template" "$HUD_FX/.ax/state.json"
+    cp "$REPO/templates/default/.ax/config.yml" "$HUD_FX/.ax/config.yml"
+    printf 'goax: 0.5.1\n' > "$HUD_FX/.ax/version"
+    printf -- '- [x] T001 [AC1] a\n- [x] T002 [AC1] b\n- [ ] T003 [AC2] c\n' > "$HUD_FX/.ax/docs/spec/014-pay/tasks.md"
+    touch "$HUD_FX/.ax/mistakes/a.md" "$HUD_FX/.ax/mistakes/b.md" "$HUD_FX/.ax/mistakes/README.md"
+    hud_render() { printf '{"workspace":{"current_dir":"%s"}}' "$HUD_FX" | bash "$HUD_FX/.ax/hud/statusline.sh" 2>/dev/null | sed -E $'s/\033\\[[0-9;]*[A-Za-z]//g'; }
+
+    echo '{"phase":"idle"}' > "$HUD_FX/.ax/current-task.json"
+    OUT=$(hud_render)
+    echo "$OUT" | grep -q '\[goax#0.5.1\]' && echo "$OUT" | grep -q 'idle' && echo "$OUT" | grep -q 'mistakes:2' \
+        && pass "HUD idle — 버전 태그 + idle + mistakes:2 (README 제외)" || fail "HUD idle 출력: $OUT"
+
+    echo '{"phase":"triaged","size":"S","risk":"L1","domain":"search"}' > "$HUD_FX/.ax/current-task.json"
+    hud_render | grep -q '즉시 작업' && pass "HUD S×L1 — 즉시 작업 (체인 없음)" || fail "HUD S 사이즈 체인 오표시"
+
+    echo '{"phase":"implementing","size":"M","risk":"L2","domain":"payment","spec_tier":"standard","spec_dir":".ax/docs/spec/014-pay"}' > "$HUD_FX/.ax/current-task.json"
+    OUT=$(hud_render)
+    echo "$OUT" | grep -q 'M×L2' && echo "$OUT" | grep -q 'spec ✓' && echo "$OUT" | grep -q 'tasks ✓' && echo "$OUT" | grep -q 'impl ●' && echo "$OUT" | grep -q '2/3' \
+        && pass "HUD M×L2 implementing — spec ✓ › tasks ✓ › impl ● 2/3" || fail "HUD 체인 오표시: $OUT"
+    echo "$OUT" | grep -q 'review' && fail "HUD — review_required 없는데 review 단계 표시" || pass "HUD — review 단계는 필수일 때만"
+
+    jq '.hud.review_required="required" | .hud.cached_at=(now|todate)' "$HUD_FX/.ax/state.json" > "$HUD_FX/s" && mv "$HUD_FX/s" "$HUD_FX/.ax/state.json"
+    jq '.phase="review" | .spec_tier="full" | .size="L" | .risk="L3"' "$HUD_FX/.ax/current-task.json" > "$HUD_FX/ct" && mv "$HUD_FX/ct" "$HUD_FX/.ax/current-task.json"
+    printf '# ADR — spec 014\n' > "$HUD_FX/.ax/docs/adr/0001-x.md"
+    OUT=$(hud_render)
+    echo "$OUT" | grep -q 'adr ✓' && echo "$OUT" | grep -q 'impl ✓' && echo "$OUT" | grep -q 'review ●' \
+        && pass "HUD L×L3 full review — adr ✓ · impl ✓ · review ●" || fail "HUD full tier/review 오표시: $OUT"
+    echo "$OUT" | grep -q '(stale)' && fail "HUD — 캐시가 방금인데 stale" || pass "HUD — 캐시 신선하면 stale 없음"
+
+    jq '.hud.cached_at="2026-01-01T00:00:00Z" | .hud.plugin_version="0.9.0"' "$HUD_FX/.ax/state.json" > "$HUD_FX/s" && mv "$HUD_FX/s" "$HUD_FX/.ax/state.json"
+    OUT=$(hud_render)
+    echo "$OUT" | grep -q '(stale)' && pass "HUD — 캐시 30분 초과면 (stale)" || fail "HUD — stale 미표시: $OUT"
+    echo "$OUT" | grep -q -- '-> 0.9.0 goax up' && pass "HUD — plugin 이 새로우면 '-> X goax up' 힌트" || fail "HUD — 업데이트 힌트 없음: $OUT"
+
+    jq '.phase="spec_blocked"' "$HUD_FX/.ax/current-task.json" > "$HUD_FX/ct" && mv "$HUD_FX/ct" "$HUD_FX/.ax/current-task.json"
+    hud_render | grep -q 'spec ●' && pass "HUD spec_blocked — spec ● (노랑)" || fail "HUD spec_blocked 오표시"
+
+    sed -i.bak 's/^  preset: focused/  preset: full/' "$HUD_FX/.ax/config.yml" && rm -f "$HUD_FX/.ax/config.yml.bak"
+    N=$(hud_render | grep -c .)
+    [ "$N" -eq 2 ] && pass "HUD preset full — 2줄 (둘째 줄에 spec·tier·다음)" || fail "HUD full 프리셋 줄 수 $N"
+    sed -i.bak 's/^  preset: full/  preset: minimal/' "$HUD_FX/.ax/config.yml" && rm -f "$HUD_FX/.ax/config.yml.bak"
+    OUT=$(hud_render)
+    [ "$(echo "$OUT" | grep -c .)" -eq 1 ] && ! echo "$OUT" | grep -q 'tasks' \
+        && pass "HUD preset minimal — 1줄, 현재 단계만" || fail "HUD minimal 프리셋 출력: $OUT"
+
+    RAW=$(printf '{"workspace":{"current_dir":"%s"}}' "$HUD_FX" | bash "$HUD_FX/.ax/hud/statusline.sh" 2>/dev/null)
+    [ "$(printf '%s' "$RAW" | tail -c 1 | od -An -c | tr -d ' ')" != "" ] || true
+    printf '{"workspace":{"current_dir":"%s"}}' "$HUD_FX" | bash "$HUD_FX/.ax/hud/statusline.sh" 2>/dev/null | tail -c 1 | od -An -tx1 | grep -q '0a' \
+        && pass "HUD — 출력이 개행으로 끝남 (합치기 안전)" || fail "HUD — 마지막 개행 없음"
+
+    LONG=$(COLUMNS=40 hud_render | head -1)
+    [ "${#LONG}" -le 40 ] && pass "HUD — COLUMNS=40 이면 ' | ' 경계에서 잘림 (${#LONG}자)" || fail "HUD — 폭 초과 (${#LONG}자)"
+    rm -rf "$HUD_FX"
 fi
 
 # ───────────────────────────────────────────────────────────
@@ -510,7 +530,7 @@ for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
          check-spec-clarity slug-from-text check-templates-drift check-manifest-install promote-mistake \
          check-rule-enforcement check-sensor-liveness \
          build-memory build-index \
-         tasks-plan tasks-gate lanes-hotfiles lanes-dispatch; do
+         tasks-plan tasks-gate lanes-hotfiles lanes-dispatch spec-review; do
     f="$SCRIPTS_DIR/$s.sh"
     if [ -f "$f" ]; then
         # bash -n 통과
@@ -541,6 +561,7 @@ for cmd in \
     "tier-from-state.sh --json" \
     "tier-from-state.sh --json --size L --risk L3" \
     "tier-from-state.sh --json --size M --risk L3" \
+    "tier-from-state.sh --json --size L --risk L1" \
     "init-spec-dir.sh --json --tier standard --slug e2e-test --dry-run" \
     "slug-from-text.sh --json 'End To End Test'" \
     "check-templates-drift.sh --json" \
@@ -2002,6 +2023,58 @@ grep -q 'goax:evaluator' "$REPO/skills/spec-implement/SKILL.md" \
 grep -q '^verdict:' "$REPO/agents/evaluator.md" \
     && pass "evaluator — review.md 첫 줄 verdict 계약 명시" \
     || fail "evaluator — verdict 계약 없음 (게이트가 읽을 것이 없음)"
+
+# ───────────────────────────────────────────────────────────
+section "33. spec-review — 합의 리뷰 원장 (리뷰어별 파일 · sha 고정 · Size 축)"
+# ───────────────────────────────────────────────────────────
+# 한 파일에 둘이 쓰면 첫 줄 verdict 로 "둘 다 진행" 을 못 담고 뒤에 쓰는 쪽이 앞 절을 읽어요.
+# 그래서 리뷰어별 파일이고, 스크립트가 집계해요. 필수 여부는 Size 축만 (L/XL 필수 · M 선택 · S 없음).
+SR=$(mktemp -d)
+mkdir -p "$SR/.ax/scripts/bash" "$SR/.ax/docs/spec/014-x"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,spec-review,tier-from-state}.sh "$SR/.ax/scripts/bash/"
+printf '# Spec\n## 3.\n- [ ] **AC1** a\n' > "$SR/.ax/docs/spec/014-x/spec.md"
+echo '{"phase":"spec","spec_dir":".ax/docs/spec/014-x","size":"L","risk":"L1"}' > "$SR/.ax/current-task.json"
+sr() { GOAX_PROJECT_DIR="$SR" bash "$SR/.ax/scripts/bash/spec-review.sh" --spec 014-x "$@" 2>/dev/null; }
+
+for sz in S:none M:optional L:required XL:required; do
+    got=$(GOAX_PROJECT_DIR="$SR" bash "$SR/.ax/scripts/bash/tier-from-state.sh" --json --size "${sz%%:*}" --risk L2 2>/dev/null | jq -r '.result.spec_review')
+    [ "$got" = "${sz##*:}" ] || fail "tier-from-state spec_review — ${sz%%:*} 가 $got (기대 ${sz##*:})"
+done
+pass "tier-from-state — spec_review 는 Size 축만 (S none · M optional · L/XL required)"
+
+sr --status --json | jq -e '.result.required=="required" and .result.pass==false' >/dev/null 2>&1 \
+    && pass "spec-review — L 은 리뷰 파일 없으면 미통과" || fail "spec-review — 필수인데 빈 상태를 통과시킴"
+SHA=$(sr --snapshot --json | jq -r '.result.sha')
+[ "$(sr --status --json | jq -r '.result.round')" = "1" ] && pass "spec-review --snapshot — round 1, sha 고정" || fail "spec-review --snapshot 라운드 기록 실패"
+printf 'verdict: 진행\nsha: %s\n' "$SHA" > "$SR/.ax/docs/spec/014-x/review-spec.architect.md"
+printf 'verdict: 보강 필요\nsha: %s\n' "$SHA" > "$SR/.ax/docs/spec/014-x/review-spec.evaluator.md"
+sr --status --json | jq -e '.result.pass==false and .result.evaluator.verdict=="보강 필요"' >/dev/null 2>&1 \
+    && pass "spec-review — 한쪽이 보강 필요면 미통과" || fail "spec-review — 보강 필요를 통과시킴"
+printf 'verdict: 진행\nsha: %s\n' "$SHA" > "$SR/.ax/docs/spec/014-x/review-spec.evaluator.md"
+sr --status --json | jq -e '.result.pass==true' >/dev/null 2>&1 \
+    && pass "spec-review — 둘 다 진행 + sha 일치 → 통과" || fail "spec-review — 정상 합의를 미통과로 봄"
+printf -- '- [ ] **AC2** b\n' >> "$SR/.ax/docs/spec/014-x/spec.md"
+sr --status --json | jq -e '.result.pass==false and .result.architect.sha_match==false' >/dev/null 2>&1 \
+    && pass "spec-review — 리뷰 뒤 spec 변경 → sha 불일치로 미통과" || fail "spec-review — sha 불일치를 못 잡음"
+sr --merge --json >/dev/null 2>&1; [ -f "$SR/.ax/docs/spec/014-x/review-spec.md" ] \
+    && pass "spec-review --merge — 합본 생성" || fail "spec-review --merge 실패"
+echo '{"phase":"spec","spec_dir":".ax/docs/spec/014-x","size":"M","risk":"L3"}' > "$SR/.ax/current-task.json"
+rm -f "$SR/.ax/docs/spec/014-x"/review-spec.*.md
+sr --status --json | jq -e '.result.required=="optional" and .result.pass==true' >/dev/null 2>&1 \
+    && pass "spec-review — M 은 리뷰 없으면 선택 통과 (risk 는 안 봄)" || fail "spec-review — M×L3 에 필수를 강제함"
+rm -rf "$SR"
+
+# 엣지 연결 — 보내는 쪽만 적고 받는 쪽이 모르면 산문 약속이에요.
+grep -q 'spec-review.sh' "$REPO/skills/spec-validate/SKILL.md" && grep -q 'goax:architect' "$REPO/skills/spec-validate/SKILL.md" \
+    && pass "spec-validate — 합의 리뷰가 spec-review.sh + architect 를 실제로 호출" || fail "spec-validate — 합의 리뷰 엣지 없음"
+grep -q '^verdict:' "$REPO/agents/architect.md" && grep -q 'review-spec.architect.md' "$REPO/agents/architect.md" \
+    && pass "architect — spec 리뷰 verdict 파일 계약 명시" || fail "architect — spec 리뷰 계약 없음"
+grep -q 'review-spec.evaluator.md' "$REPO/agents/evaluator.md" \
+    && pass "evaluator — spec 모드 파일 계약 명시" || fail "evaluator — spec 모드 없음"
+grep -q '\.phase = "implementing"' "$REPO/skills/spec-implement/SKILL.md" && grep -q '\.phase = "review"' "$REPO/skills/spec-implement/SKILL.md" \
+    && pass "spec-implement — phase implementing/review 를 실제로 씀 (HUD 가 움직이는 조건)" || fail "spec-implement — phase 기록 없음 (HUD 가 tasks 에 멈춤)"
+grep -q 'hud' "$REPO/templates/default/.ax/hud/state.json.template" && grep -q 'hud.plugin_version' "$REPO/docs/state-ownership.md" \
+    && pass "state.json hud 캐시 — template · ownership 문서 동기화" || fail "state.json hud 캐시 3-way 동기화 누락"
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"

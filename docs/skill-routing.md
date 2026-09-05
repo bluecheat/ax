@@ -53,11 +53,22 @@ add-spec-files.sh --add research,data-model  → 점진 확장
 ## Workflow phase (current-task.json)
 
 ```
-idle → triaged → spec → spec_checked
-           → spec_blocked (명료성 게이트 — NEEDS / placeholder / 빈 섹션)
-   → tasks → implementing → done
-   → blocked (사용자 결정 대기)
+idle → triaged → spec → spec_checked → tasks → implementing → review → idle
+                   ↘ spec_blocked (명료성 게이트 — NEEDS / placeholder / 빈 섹션, 또는 합의 리뷰 미통과)
 ```
+
+| phase | 누가 쓰나 | HUD 체인 |
+|---|---|---|
+| `triaged` | triage | `spec ●` |
+| `spec` | spec | `spec ●` |
+| `spec_blocked` | spec-validate (게이트 실패) | `spec ●` 노랑 |
+| `spec_checked` | spec-validate (명료성 + 합의 리뷰 통과) | `tasks ●` |
+| `tasks` | spec-tasks | `impl ○ 0/N` — 다음: spec-implement |
+| `implementing` | spec-implement §1.6 | `impl ● n/N` |
+| `review` | spec-implement §8.1 (evaluator 대기) | `review ●` |
+| `idle` | spec-implement §8.2 (`reset-task.sh`) | `idle` |
+
+`done`·`blocked` 는 폐기됐어요 — 완료는 `reset-task.sh` 가 곧바로 idle 로 닫고, 막힘은 `blocked_by` 배열이 표현해요.
 
 각 skill이 phase 갱신. `doctor`가 phase 보고 결손 진단.
 

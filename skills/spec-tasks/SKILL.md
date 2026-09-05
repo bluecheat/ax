@@ -131,7 +131,8 @@ jq '.phase = "tasks" | .updated_at = (now | todate)' .ax/current-task.json \
  📍 다음
   1. tasks.md 를 spec.md §3 acceptance + §7.5 Technical Context + ADR 기반으로 분해
   2. 각 task에 file path + [P] 마커
-  3. 구현 단계로: "/spec-implement"
+  3. L/XL 이면 "/spec-validate" 를 한 번 더 — evaluator 가 tasks.md 까지 봐요 (컨텍스트 기준 분해인가 · files: 가 실제인가 · [P] 근거)
+  4. 구현 단계로: "/spec-implement"
 ```
 
 ## 절대 금지

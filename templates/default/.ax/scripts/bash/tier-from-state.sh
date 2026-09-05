@@ -18,8 +18,12 @@
 #   S × * · M × L0~L2 → optional
 #   M × L3 · L × * · XL × * → required
 #
+# spec_review (spec 합의 리뷰 — spec-validate 가 spec-review.sh 로 강제). **Size 축만** 봐요:
+#   S → none · M → optional (--consensus 로 강제) · L / XL → required
+#   risk 는 안 봐요 — risk 는 evaluator(G6) 가 이미 반영해서 두 축을 다 걸면 이중 반영이에요.
+#
 # Output (--json):
-#   {"status":"ok","result":{"tier":"full","size":"L","risk":"L3","evaluator":"required","reason":"..."}}
+#   {"status":"ok","result":{"tier":"full","size":"L","risk":"L3","evaluator":"required","spec_review":"required","reason":"..."}}
 
 set -euo pipefail
 
@@ -153,9 +157,16 @@ case "$SIZE-$RISK" in
     *)             EVALUATOR="optional" ;;
 esac
 
+# spec 합의 리뷰 필수 여부 — Size 축만 (사용자 결정: "옷 사이즈로")
+case "$SIZE" in
+    L|XL) SPEC_REVIEW="required" ;;
+    M)    SPEC_REVIEW="optional" ;;
+    *)    SPEC_REVIEW="none" ;;
+esac
+
 if [ "$JSON_MODE" = true ]; then
-    RESULT=$(printf '{"tier":"%s","size":"%s","risk":"%s","evaluator":"%s","reason":"%s"}' \
-                    "$TIER" "$SIZE" "$RISK" "$EVALUATOR" "$REASON")
+    RESULT=$(printf '{"tier":"%s","size":"%s","risk":"%s","evaluator":"%s","spec_review":"%s","reason":"%s"}' \
+                    "$TIER" "$SIZE" "$RISK" "$EVALUATOR" "$SPEC_REVIEW" "$REASON")
     json_output "ok" "$RESULT" "use --tier $TIER for spec"
 else
     echo "$TIER"

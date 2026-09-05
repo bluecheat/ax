@@ -1,117 +1,262 @@
 #!/usr/bin/env bash
-# .ax/hud/statusline.sh — goax HUD (단일 디자인, preset 없음)
-# .claude/settings.json의 statusLine.command 에서 호출
-# Claude Code statusline 공식: stdin JSON, multi-line, ANSI colors
-# https://code.claude.com/docs/en/statusline
+# .ax/hud/statusline.sh — goax HUD. 하네스 위치만, OMC HUD 의 문법으로
+# .claude/settings.json 의 statusLine.command 에서 호출 (Claude Code statusline 사양: stdin JSON, ANSI, 멀티라인)
 #
-# 표시:
-#   triage: <Size>×<Risk>    — 색상 매트릭스로 작업 위험도 즉시 인지
-#   harness: <evolution>     — 4계층 종합 활성도 (우주 진화 한 글자)
-#   ☄<n>                     — mistakes count (혜성, 우주 메타포 일관)
+# 보여주는 것 (한 줄, 프리셋 full 이면 둘째 줄):
+#   [goax#0.5.1] | M×L2 · payment | spec ✓ › tasks ✓ › impl ● [######----]7/12 › review ○ | mistakes:3
+#   ┬──────────   ┬──────────────   ┬──────────────────────────────────────────────────   ┬──────────
+#   설치 버전      triage 결과        워크플로 체인 — 지금 어느 단계인지                          실수 누적
+#   (plugin 이 새로우면 `-> 0.5.2 goax up`)
 #
-# 우주 진화 단계 (4계층 활성 수 합산):
-#   0/4: ·  (특이점)
-#   1/4: ✦  (별 첫 빛)
-#   2/4: ⭐  (항성)
-#   3/4: 🌟  (빛나는 별)
-#   4/4: 🪐  (우아한 행성)
+# 안 보여주는 것: 모델·ctx%·에이전트 수·todo (OMC HUD 몫) · 레인·게이트·경보 (skill 출력·doctor 몫)
 #
-# IMPORTANT: state.json read-only. 갱신은 .ax/scripts/bash/update-state.sh.
-# state.json schema·ownership: docs/state-ownership.md (plugin repo).
+# 구조는 OMC HUD 를 그대로 옮겼어요 — 요소를 각각 렌더해 배열에 담고 레이아웃 순서로 조립,
+# 프리셋이 최대 줄 수를 정하고, 폭을 넘치면 ` | ` 경계에서 잘라요.
+#   preset  minimal (1줄, 짧게) · focused (1줄, 기본) · full (2줄 — 둘째 줄에 spec 슬러그·tier·다음 단계)
+#   bars    ascii (#-) 기본 · unicode (█░)
+#   설정: .ax/config.yml 의 hud: { preset, bars }. 키가 없으면 focused · ascii.
+#
+# 읽는 파일: .ax/current-task.json · .ax/state.json(hud 캐시) · .ax/version · <spec>/tasks.md · .ax/mistakes/
+# 스크립트는 하나도 안 불러요 — statusline 은 300ms 디바운스에 새 이벤트가 오면 취소돼서 50ms 안에 끝나야 해요.
+# jq 3회 + awk 1패스 + find 1회. state.json 은 read-only (docs/state-ownership.md 규칙 2).
+#
+# stdin 은 전부 읽어요 (workspace.current_dir 이 필요). 다른 statusline 과 합칠 땐 합성 스크립트가
+# stdin 을 변수로 받아 양쪽에 각각 먹여야 해요 — hud skill 의 [c] 참고. 출력은 개행으로 끝나요.
 
 set -u
 
-# stdin JSON (Claude Code statusline 사양)
+RESET=$'\033[0m'; DIM=$'\033[2m'; BOLD=$'\033[1m'
+RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; CYAN=$'\033[36m'
+
 INPUT=$(cat 2>/dev/null || echo '{}')
+WS_DIR="."
 if command -v jq >/dev/null 2>&1; then
-    WS_DIR=$(echo "$INPUT" | jq -r '.workspace.current_dir // "."' 2>/dev/null || echo ".")
-else
-    WS_DIR="."
+    WS_DIR=$(printf '%s' "$INPUT" | jq -r '.workspace.current_dir // "."' 2>/dev/null || echo ".")
 fi
 
-S="$WS_DIR/.ax/state.json"
-
-# goax 미설치 / jq 없음 — fallback
-if [ ! -f "$S" ] || ! command -v jq >/dev/null 2>&1; then
-    printf "\033[2mgoax\033[0m"
+# goax 미설치 / jq 없음 — 조용한 fallback
+if [ ! -d "$WS_DIR/.ax" ] || ! command -v jq >/dev/null 2>&1; then
+    printf '%sgoax%s\n' "$DIM" "$RESET"
     exit 0
 fi
 
-# ─── harness 진화 단계 (4계층 종합) ───
-ACTIVE=0
-for layer in L0_triage L1_constitution L2_module L3_spec_adr; do
-    A=$(jq -r ".layers.${layer}.active // false" "$S" 2>/dev/null)
-    [ "$A" = "true" ] && ACTIVE=$((ACTIVE+1))
+CT="$WS_DIR/.ax/current-task.json"
+S="$WS_DIR/.ax/state.json"
+CFG="$WS_DIR/.ax/config.yml"
+
+# ── 설정 — config.yml hud: 블록 (없으면 focused · ascii) ──
+PRESET="focused"; BARS="ascii"
+if [ -f "$CFG" ]; then
+    _hud=$(awk '/^hud:/{f=1;next} f && /^[^[:space:]]/{exit} f' "$CFG" 2>/dev/null)
+    # 값 앞 공백을 먼저 떼고, 그다음 공백·주석부터 끝까지 잘라요 (순서가 바뀌면 값이 통째로 사라져요)
+    _p=$(printf '%s\n' "$_hud" | awk -F: '/^[[:space:]]+preset:/{v=$2; sub(/^[[:space:]]+/,"",v); sub(/[[:space:]#].*$/,"",v); print v; exit}')
+    _b=$(printf '%s\n' "$_hud" | awk -F: '/^[[:space:]]+bars:/{v=$2; sub(/^[[:space:]]+/,"",v); sub(/[[:space:]#].*$/,"",v); print v; exit}')
+    case "$_p" in minimal|focused|full) PRESET="$_p" ;; esac
+    case "$_b" in ascii|unicode) BARS="$_b" ;; esac
+fi
+case "$PRESET" in full) MAX_LINES=2 ;; *) MAX_LINES=1 ;; esac
+
+# ── 상태 읽기 — jq 는 파일당 1회, 필드는 탭으로 한꺼번에 ──
+# 구분자는 탭이 아니라 US(0x1f) — bash 의 read 는 IFS 가 공백류(탭 포함)면 빈 필드를 건너뛰어 값이 한 칸씩 밀려요
+US=$'\x1f'
+PHASE="idle"; SIZE=""; RISK=""; DOMAIN=""; TIER=""; SPEC_DIR=""
+if [ -f "$CT" ]; then
+    IFS="$US" read -r PHASE SIZE RISK DOMAIN TIER SPEC_DIR <<EOF
+$(jq -r '[(.phase // "idle"), (.size // ""), (.risk // ""), (.domain // ""), (.spec_tier // ""), (.spec_dir // "")] | join("\u001f")' "$CT" 2>/dev/null)
+EOF
+fi
+[ "$PHASE" = "null" ] && PHASE="idle"
+[ "$SIZE" = "null" ] && SIZE=""; [ "$RISK" = "null" ] && RISK=""; [ "$DOMAIN" = "null" ] && DOMAIN=""
+[ "$TIER" = "null" ] && TIER=""; [ "$SPEC_DIR" = "null" ] && SPEC_DIR=""
+
+PLUGIN_VER=""; REVIEW_REQ=""; CACHED_AT=""
+if [ -f "$S" ]; then
+    IFS="$US" read -r PLUGIN_VER REVIEW_REQ CACHED_AT <<EOF
+$(jq -r '[(.hud.plugin_version // ""), (.hud.review_required // ""), (.hud.cached_at // "")] | join("\u001f")' "$S" 2>/dev/null)
+EOF
+fi
+
+INSTALLED=""
+[ -f "$WS_DIR/.ax/version" ] && INSTALLED=$(grep -E '^goax:' "$WS_DIR/.ax/version" 2>/dev/null | head -1 | awk '{print $2}' | tr -d '[:space:]')
+[ -z "$INSTALLED" ] && [ -f "$WS_DIR/.ax/version" ] && INSTALLED=$(head -1 "$WS_DIR/.ax/version" | tr -d '[:space:]')
+
+# ── 요소 ──────────────────────────────────────────────────
+# 각 함수는 자기 조각을 출력하거나, 보여줄 게 없으면 아무것도 출력하지 않아요 (OMC 의 요소 맵과 같아요).
+
+seg_version() {
+    local tag="[goax#${INSTALLED:-?}]"
+    if [ -n "$PLUGIN_VER" ] && [ -n "$INSTALLED" ] && [ "$PLUGIN_VER" != "$INSTALLED" ]; then
+        # plugin 이 더 새로우면 (sort -V 로 큰 쪽이 plugin 이면) 업데이트 힌트 — OMC 의 "-> X omc update" 그대로
+        local newest; newest=$(printf '%s\n%s\n' "$INSTALLED" "$PLUGIN_VER" | sort -V | tail -1)
+        if [ "$newest" = "$PLUGIN_VER" ]; then
+            printf '%s%s%s %s-> %s goax up%s' "$BOLD" "$tag" "$RESET" "$YELLOW" "$PLUGIN_VER" "$RESET"
+            return
+        fi
+    fi
+    printf '%s%s%s' "$BOLD" "$tag" "$RESET"
+}
+
+risk_color() { case "$1" in L3) printf '%s' "$RED" ;; L2) printf '%s' "$YELLOW" ;; L1) printf '%s' "$GREEN" ;; *) printf '%s' "$DIM" ;; esac; }
+size_color() { case "$1" in XL) printf '%s' "$RED" ;; L) printf '%s' "$YELLOW" ;; M) printf '%s' "$CYAN" ;; *) printf '%s' "$DIM" ;; esac; }
+
+seg_triage() {
+    [ "$PHASE" = "idle" ] && { printf '%sidle%s' "$DIM" "$RESET"; return; }
+    [ -z "$SIZE" ] && [ -z "$RISK" ] && return
+    local out=""
+    [ -n "$SIZE" ] && out="$(size_color "$SIZE")${SIZE}${RESET}"
+    [ -n "$RISK" ] && out="${out}${DIM}×${RESET}$(risk_color "$RISK")${RISK}${RESET}"
+    if [ "$PRESET" != "minimal" ] && [ -n "$DOMAIN" ] && [ "$DOMAIN" != "default" ]; then
+        out="${out} ${DIM}·${RESET} ${DOMAIN}"
+    fi
+    printf '%s' "$out"
+}
+
+# tasks.md 진행 — awk 한 패스 (done|total)
+TASK_DONE=0; TASK_TOTAL=0
+if [ -n "$SPEC_DIR" ] && [ -f "$WS_DIR/$SPEC_DIR/tasks.md" ]; then
+    IFS='|' read -r TASK_DONE TASK_TOTAL <<EOF
+$(awk '/^- \[[xX]\] /{d++} /^- \[[ xX~]\] /{t++} END{printf "%d|%d", d+0, t+0}' "$WS_DIR/$SPEC_DIR/tasks.md" 2>/dev/null)
+EOF
+fi
+
+bar() {   # $1 done $2 total → 10칸
+    local d="$1" t="$2" fill=0 empty=10 f e
+    [ "$t" -gt 0 ] && fill=$(( d * 10 / t )); empty=$(( 10 - fill ))
+    if [ "$BARS" = "unicode" ]; then f='█'; e='░'; else f='#'; e='-'; fi
+    local i out=""
+    i=0; while [ $i -lt $fill ]; do out="$out$f"; i=$((i+1)); done
+    out="$out$DIM"
+    i=0; while [ $i -lt $empty ]; do out="$out$e"; i=$((i+1)); done
+    printf '%s[%s%s%s]' "$GREEN" "$out" "$RESET" "$GREEN"
+}
+
+# 단계 기호: ✓ 완료(초록) · ● 진행(시안 bold, blocked 면 노랑) · ○ 남음(dim)
+step() {   # $1 name $2 state(done|cur|todo|blocked) $3 extra
+    local n="$1" st="$2" x="${3:-}"
+    case "$st" in
+        done)    printf '%s%s ✓%s' "$GREEN" "$n" "$RESET" ;;
+        cur)     printf '%s%s%s ●%s' "$BOLD$CYAN" "$n" "$RESET$CYAN" "$RESET" ;;
+        blocked) printf '%s%s ●%s' "$YELLOW" "$n" "$RESET" ;;
+        *)       printf '%s%s ○%s' "$DIM" "$n" "$RESET" ;;
+    esac
+    [ -n "$x" ] && printf ' %s' "$x"
+}
+
+# ADR 단계 (full tier) — 이 spec 을 참조하는 ADR 이 있나
+adr_done() {
+    local id; id=$(basename "${SPEC_DIR:-}" | cut -d- -f1)
+    [ -n "$id" ] && [ -d "$WS_DIR/.ax/docs/adr" ] && grep -lq -- "$id" "$WS_DIR/.ax/docs/adr/"[0-9]*.md 2>/dev/null
+}
+
+NEXT_STEP=""
+seg_flow() {
+    [ "$PHASE" = "idle" ] && return
+    case "$SIZE" in
+        S) case "$RISK" in L3) printf '%s사람 게이트 + ADR%s' "$YELLOW" "$RESET" ;; *) printf '%s즉시 작업 — spec 불필요%s' "$DIM" "$RESET" ;; esac; return ;;
+    esac
+    # 단계 상태
+    local spec_st tasks_st impl_st review_st adr_st
+    case "$PHASE" in
+        triaged|spec)            spec_st=cur ;;
+        spec_blocked)            spec_st=blocked ;;
+        *)                       spec_st=done ;;
+    esac
+    case "$PHASE" in
+        spec_checked)            tasks_st=cur ;;
+        tasks|implementing|review) tasks_st=done ;;
+        *)                       tasks_st=todo ;;
+    esac
+    case "$PHASE" in
+        implementing)            impl_st=cur ;;
+        review)                  impl_st=done ;;
+        *)                       impl_st=todo ;;
+    esac
+    case "$PHASE" in review) review_st=cur ;; *) review_st=todo ;; esac
+    if [ "$TIER" = "full" ]; then adr_st=todo; adr_done && adr_st=done; fi
+
+    # 진행 표시는 impl 이 현재 단계일 때만 — 완료된 단계 옆의 2/3 는 거짓말이고, 시작 전 단계엔 0/N 이면 충분해요
+    local prog=""
+    if [ "$TASK_TOTAL" -gt 0 ]; then
+        case "$impl_st" in
+            cur)  if [ "$PRESET" = "minimal" ]; then prog="${TASK_DONE}/${TASK_TOTAL}"
+                  else prog="$(bar "$TASK_DONE" "$TASK_TOTAL")${TASK_DONE}/${TASK_TOTAL}${RESET}"; fi ;;
+            todo) [ "$tasks_st" = done ] && prog="${DIM}${TASK_DONE}/${TASK_TOTAL}${RESET}" ;;
+        esac
+    fi
+    local sep="${DIM} › ${RESET}"
+    if [ "$PRESET" = "minimal" ]; then
+        # 현재 단계 하나만
+        case "$PHASE" in
+            triaged|spec|spec_blocked) step spec "$spec_st" ;;
+            spec_checked) step tasks cur ;;
+            tasks) step impl todo "$prog" ;;
+            implementing) step impl cur "$prog" ;;
+            review) step review cur ;;
+        esac
+        return
+    fi
+    local out; out="$(step spec "$spec_st")"
+    [ "$TIER" = "full" ] && out="${out}${sep}$(step adr "$adr_st")"
+    out="${out}${sep}$(step tasks "$tasks_st")${sep}$(step impl "$impl_st" "$prog")"
+    [ "$REVIEW_REQ" = "required" ] && out="${out}${sep}$(step review "$review_st")"
+    printf '%s' "$out"
+    case "$PHASE" in
+        triaged|spec|spec_blocked) NEXT_STEP="spec-validate" ;;
+        spec_checked) NEXT_STEP="spec-tasks" ;;
+        tasks) NEXT_STEP="spec-implement" ;;
+        implementing) NEXT_STEP="tasks-gate" ;;
+        review) NEXT_STEP="evaluator 리뷰" ;;
+    esac
+}
+
+seg_mistakes() {
+    local n=0
+    [ -d "$WS_DIR/.ax/mistakes" ] && n=$(find "$WS_DIR/.ax/mistakes" -maxdepth 1 -name '*.md' ! -name 'README.md' 2>/dev/null | wc -l | tr -d ' ')
+    local c="$DIM"
+    [ "$n" -ge 5 ] && c="$YELLOW"; [ "$n" -ge 10 ] && c="$RED"; [ "$n" -gt 0 ] && [ "$n" -lt 5 ] && c=""
+    printf '%smistakes:%s%s%s%s' "$DIM" "$RESET" "$c" "$n" "$RESET"
+}
+
+seg_stale() {   # hud 캐시가 30분 넘게 오래됐거나 없으면 — 거짓 초록을 안 만들려고
+    [ "$PHASE" = "idle" ] && return
+    local now_s cache_s
+    now_s=$(date +%s)
+    cache_s=0
+    if [ -n "$CACHED_AT" ]; then
+        cache_s=$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$CACHED_AT" +%s 2>/dev/null \
+                  || date -u -d "$CACHED_AT" +%s 2>/dev/null || echo 0)
+    fi
+    if [ "$cache_s" -eq 0 ] || [ $((now_s - cache_s)) -gt 1800 ]; then printf '%s(stale)%s' "$DIM" "$RESET"; fi
+}
+
+seg_detail() {   # full 프리셋 둘째 줄
+    [ "$PHASE" = "idle" ] && return
+    local slug; slug=$(basename "${SPEC_DIR:-}")
+    [ -n "$slug" ] && [ "$slug" != "." ] || return
+    printf '%s%s · tier %s · 다음: %s%s' "$DIM" "$slug" "${TIER:-?}" "${NEXT_STEP:-?}" "$RESET"
+}
+
+# ── 조립 — 레이아웃 순서, 빈 조각은 빠짐, 폭 넘치면 ` | ` 경계에서 잘라요 ──
+SEP="${DIM} | ${RESET}"
+MAIN=()
+for f in seg_version seg_triage seg_flow seg_mistakes seg_stale; do
+    piece=$("$f")
+    [ -n "$piece" ] && MAIN+=("$piece")
 done
 
-case "$ACTIVE" in
-    4) HARNESS="🪐"; HC="\033[36m" ;;  # 우아한 행성 + cyan
-    3) HARNESS="🌟"; HC="\033[32m" ;;  # 빛나는 별 + green
-    2) HARNESS="⭐"; HC="\033[33m" ;;  # 항성 + yellow
-    1) HARNESS="✦";  HC="\033[33m" ;;  # 별 첫 빛 + yellow
-    *) HARNESS="·";  HC="\033[2m"  ;;  # 특이점 + dim
-esac
-HARNESS_FRAG=$(printf "\033[2mharness:\033[0m %b%s\033[0m" "$HC" "$HARNESS")
+visible_width() { printf '%s' "$1" | sed -E $'s/\033\\[[0-9;]*[A-Za-z]//g' | wc -m | tr -d ' '; }
 
-# ─── triage (current-task.json) ───
-# state.json 은 .current_task 를 갖지 않음 — triage 상태는 .ax/current-task.json 이 SSOT.
-# phase=idle(또는 파일 부재/size·risk 미채움)이면 triage fragment 자체를 숨김.
-CT="$WS_DIR/.ax/current-task.json"
-SIZE=""
-RISK=""
-if [ -f "$CT" ]; then
-    CT_PHASE=$(jq -r '.phase // "idle"' "$CT" 2>/dev/null)
-    if [ -n "$CT_PHASE" ] && [ "$CT_PHASE" != "idle" ] && [ "$CT_PHASE" != "null" ]; then
-        CT_SIZE=$(jq -r '.size // empty' "$CT" 2>/dev/null)
-        CT_RISK=$(jq -r '.risk // empty' "$CT" 2>/dev/null)
-        [ -n "$CT_SIZE" ] && [ "$CT_SIZE" != "null" ] && SIZE="$CT_SIZE"
-        [ -n "$CT_RISK" ] && [ "$CT_RISK" != "null" ] && RISK="$CT_RISK"
-    fi
-fi
-
-# Risk 색상 — L3 red / L2 yellow / L1 green / L0 dim
-case "$RISK" in
-    L3) RC="\033[31m" ;;
-    L2) RC="\033[33m" ;;
-    L1) RC="\033[32m" ;;
-    L0) RC="\033[2m"  ;;
-    *)  RC=""         ;;
-esac
-
-# Size 색상 — XL red / L yellow / M cyan / S dim
-case "$SIZE" in
-    XL) SC="\033[31m" ;;
-    L)  SC="\033[33m" ;;
-    M)  SC="\033[36m" ;;
-    S)  SC="\033[2m"  ;;
-    *)  SC=""         ;;
-esac
-
-TRIAGE_FRAG=""
-if [ -n "$SIZE" ] && [ -n "$RISK" ]; then
-    TRIAGE_FRAG=$(printf "\033[2mtriage:\033[0m %b%s\033[0m\033[2m×\033[0m%b%s\033[0m" \
-        "$SC" "$SIZE" "$RC" "$RISK")
-elif [ -n "$RISK" ]; then
-    TRIAGE_FRAG=$(printf "\033[2mtriage:\033[0m %b%s\033[0m" "$RC" "$RISK")
-elif [ -n "$SIZE" ]; then
-    TRIAGE_FRAG=$(printf "\033[2mtriage:\033[0m %b%s\033[0m" "$SC" "$SIZE")
-fi
-
-# ─── mistakes ☄ ───
-MIS=$(jq -r '.cross_cut.mistakes.count // 0' "$S" 2>/dev/null)
-if [ "$MIS" -ge 10 ]; then
-    MIS_FRAG=$(printf "\033[31m☄%s\033[0m" "$MIS")
-elif [ "$MIS" -ge 5 ]; then
-    MIS_FRAG=$(printf "\033[33m☄%s\033[0m" "$MIS")
-elif [ "$MIS" -gt 0 ]; then
-    MIS_FRAG="☄${MIS}"
-else
-    MIS_FRAG="\033[2m☄0\033[0m"
-fi
-
-# ─── 조합 (단일 줄) ───
+COLS="${COLUMNS:-0}"
 LINE=""
-[ -n "$TRIAGE_FRAG" ] && LINE="$TRIAGE_FRAG | "
-LINE="${LINE}${HARNESS_FRAG} | $MIS_FRAG"
+for piece in "${MAIN[@]}"; do
+    cand="$LINE"; [ -n "$cand" ] && cand="${cand}${SEP}"; cand="${cand}${piece}"
+    if [ "$COLS" -gt 0 ] && [ "$(visible_width "$cand")" -gt "$COLS" ] && [ -n "$LINE" ]; then break; fi
+    LINE="$cand"
+done
+printf '%s\n' "$LINE"
 
-printf "%b" "$LINE"
+if [ "$MAX_LINES" -ge 2 ]; then
+    detail=$(seg_detail)
+    [ -n "$detail" ] && printf '%s\n' "$detail"
+fi
+exit 0

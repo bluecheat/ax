@@ -5,6 +5,7 @@
 #   - layers.{L0~L3}.active + 메트릭 (rules, signals, modules, specs, adrs)
 #   - cross_cut.{spirit,mistakes}.active + 메트릭
 #   - sensors_mode (config.yml)
+#   - hud.{plugin_version, review_required, cached_at} — statusline 캐시 (statusline 은 스크립트를 못 불러요)
 #   - updated_at
 #
 # 모든 skill의 마무리에서 호출. ad-hoc jq 대신 이 스크립트 한 줄.
@@ -164,6 +165,27 @@ fi
 
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
+# ─── HUD 캐시 — statusline 이 스크립트를 못 부르니 여기서 계산해 둬요 ──
+# plugin_version   plugin 의 VERSION (skill 컨텍스트에서만 알 수 있어요 — ${CLAUDE_SKILL_DIR})
+# review_required  활성 task 의 evaluator 필수 여부 (SSOT: tier-from-state.sh — statusline 이 매트릭스를 복제하지 않게)
+# cached_at        30분 넘으면 statusline 이 (stale) 을 붙여요
+PLUGIN_VER=""
+if [ -n "${CLAUDE_SKILL_DIR:-}" ] && [ -f "${CLAUDE_SKILL_DIR}/../../VERSION" ]; then
+    PLUGIN_VER=$(tr -d '[:space:]' < "${CLAUDE_SKILL_DIR}/../../VERSION")
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/VERSION" ]; then
+    PLUGIN_VER=$(tr -d '[:space:]' < "${CLAUDE_PLUGIN_ROOT}/VERSION")
+fi
+REVIEW_REQ=""
+if [ -f "$WS/.ax/current-task.json" ]; then
+    _phase=$(jq -r '.phase // "idle"' "$WS/.ax/current-task.json" 2>/dev/null || echo idle)
+    if [ "$_phase" != "idle" ]; then
+        REVIEW_REQ=$(GOAX_PROJECT_DIR="$WS" bash "$SCRIPT_DIR/tier-from-state.sh" --json 2>/dev/null \
+                     | jq -r '.result.evaluator // empty' 2>/dev/null || true)
+    fi
+fi
+HUD_PIPE=" | .hud.cached_at = \$now | .hud.review_required = (if \$rreq == \"\" then null else \$rreq end)"
+[ -n "$PLUGIN_VER" ] && HUD_PIPE="$HUD_PIPE | .hud.plugin_version = \$pver"
+
 # ─── jq filter ─────────────────────────────────────────
 
 VERSION_PIPE=""
@@ -190,7 +212,7 @@ JQ_FILTER='
 | .cross_cut.mistakes.active = ($ml | test("true"))
 | .cross_cut.mistakes.count = ($misc | tonumber)
 | .sensors_mode = $smode
-'"$LAST_AUDIT_PIPE$DUE_DAYS_PIPE$VERSION_PIPE"
+'"$LAST_AUDIT_PIPE$DUE_DAYS_PIPE$VERSION_PIPE$HUD_PIPE"
 
 JQ_ARGS=(
     --arg now      "$NOW"
@@ -212,6 +234,8 @@ JQ_ARGS=(
     --arg misc     "$MIS_COUNT"
     --arg smode    "$SENSORS_MODE"
     --arg ver      "$GOAX_VER"
+    --arg rreq     "$REVIEW_REQ"
+    --arg pver     "$PLUGIN_VER"
 )
 
 case "$MODE" in

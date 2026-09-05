@@ -66,6 +66,17 @@ CONFLICT_N=$(echo "$LEDGER" | jq '.result.lane_file_conflicts | length')
 사용자가 "레인으로 돌려" 라고 했는데 `레인:` 이 없으면 `/lane` 로 먼저 배정해요. 배정은
 판단이라 여기서 대신 정하지 않아요 — 원장에 없는 배정은 다음 세션이 못 봐요.
 
+## 1.6 phase 기록 — HUD 가 여기서 움직여요
+
+구현이 시작됐다는 사실을 파일에 적어요. 이 한 줄이 없으면 statusline 이 구현 내내 `tasks` 에
+멈춰 있어요 (이전 판까지의 실제 결함 — spec-implement 가 phase 를 안 썼어요).
+
+```bash
+jq '.phase = "implementing" | .updated_at = (now | todate)' .ax/current-task.json \
+ > .ax/current-task.json.tmp && mv .ax/current-task.json.tmp .ax/current-task.json
+bash .ax/scripts/bash/update-state.sh >/dev/null 2>&1 || true    # HUD 캐시 (review 단계 표시 여부)
+```
+
 ## 2. Friction 모드 결정 — Confirmation Friction Policy 적용
 
 policy SSOT: `.ax/docs/reference/confirmation-policy.md` (Decision Rules C1~C5).
@@ -349,9 +360,16 @@ fi
   `started_at` 부터 `git log --since`) + 워킹 트리 (`git diff HEAD`)
 - 산출물 — `$SPEC_DIR/review.md` 에 직접 쓰고, **첫 줄은 `verdict: 진행 | 보강 필요 | 재논의 필요`**
 
+띄우기 전에 phase 를 `review` 로 적어요 — HUD 체인의 `review ●` 가 여기서 켜져요:
+
+```bash
+jq '.phase = "review" | .updated_at = (now | todate)' .ax/current-task.json \
+ > .ax/current-task.json.tmp && mv .ax/current-task.json.tmp .ax/current-task.json
+```
+
 evaluator 가 파일을 직접 써요. 코디네이터는 결과를 받아 적지 않아요 — 받아 적는 순간 검사받는
 쪽이 검사 기록을 쓰게 돼요. 돌아오면 `tasks-gate.sh` 를 다시 돌려요. G6 이 review.md 의 첫 줄을
-읽어 판정해요.
+읽어 판정해요. `보강 필요` 로 §3 에 돌아갈 땐 phase 를 다시 `implementing` 으로 되돌려요.
 
 ### 8.2 완료
 

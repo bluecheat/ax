@@ -242,67 +242,30 @@ Full compatibility detail, troubleshooting, and TypeScript plugin roadmap: [`doc
 
 ---
 
-## HUD — One-line Layer Status (fact-based)
+## HUD — one line, harness position only
 
-The statusline has a **single design** (no presets). Three core signals on one line:
+The statusline shows **where you are in the harness** and nothing else. Model, context %, agents and todos belong to OMC HUD; lanes, gates and alerts belong to skill output and `doctor`.
 
 ```
-triage: M×L3 | harness: 🪐 | ☄3       ← task active
-harness: 🪐 | ☄3                       ← no task (idle)
+[goax#0.5.1] | M×L2 · payment | spec ✓ › tasks ✓ › impl ● [######----]7/12 › review ○ | mistakes:3
 ```
 
-### Signal 1 — `triage: <Size>×<Risk>` (color matrix)
+| Segment | Meaning |
+|---|---|
+| `[goax#0.5.1]` | Installed version. `[goax#0.5.1] -> 0.5.2 goax up` when the plugin is newer |
+| `M×L2 · payment` | Triage result (Size×Risk, domain). `idle` when nothing is active |
+| `spec ✓ › tasks ✓ › impl ● 7/12 › review ○` | Workflow chain for M+ work. `✓` done · `●` current · `○` next. S shows `즉시 작업` instead. Full tier adds `adr`; `review` appears only when the evaluator is required |
+| `mistakes:3` | Accumulated mistakes (yellow ≥5, red ≥10) |
 
-Instantly read current task size · risk by color:
+Presets follow OMC HUD naming — `minimal` / `focused` (default) / `full` — via `.ax/config.yml` `hud.preset`. The script reads files only (no subprocess scripts) so it fits the 300ms statusline debounce; heavier values are cached by `update-state.sh` and flagged `(stale)` after 30 minutes.
 
-- **Size**: S=dim · M=cyan · L=yellow · XL=red
-- **Risk**: L0=dim · L1=green · L2=yellow · L3=red
-
-All 16 matrix combinations are color-distinct.
-
-### Signal 2 — `harness: <evolution>` (4-layer aggregate)
-
-Plugin's 4-layer activation as *cosmic evolution* stages:
-
-| Active | Emoji | Meaning | Color |
-|---|---|---|---|
-| 0/4 | `·` | Singularity (origin) | dim |
-| 1/4 | `✦` | First starlight | yellow |
-| 2/4 | `⭐` | Stellar formation | yellow |
-| 3/4 | `🌟` | Shining star | green |
-| 4/4 | `🪐` | Elegant planet (complete) | cyan |
-
-### Signal 3 — `☄<n>` (mistakes count)
-
-Cumulative mistake count. Cosmic metaphor stays consistent (comet = collision event):
-
-- 0=dim · 1–4=plain · 5–9=yellow · 10+=red
-
-### Live Refresh
-
-The statusline auto-refreshes *after each assistant message* (Claude Code spec). For periodic refresh during idle, add `refreshInterval` to `.claude/settings.json`:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": ".ax/hud/statusline.sh",
-    "refreshInterval": 5
-  }
-}
-```
-
-Re-runs every 5s — instantly reflects spec/tasks progress when background work updates them.
-
-### How to Activate
+Enable:
 
 ```
 /hud setup
 ```
 
-Or add `statusLine` directly to `.claude/settings.json`. If another plugin's statusLine conflicts, `setup` offers a merge option.
-
----
+If another statusline (e.g. OMC) is already configured, `setup` offers a combined script that feeds stdin to **both** commands — concatenating two commands does not work, the first one consumes stdin.
 
 ## Updates
 

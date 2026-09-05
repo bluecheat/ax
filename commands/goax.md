@@ -22,7 +22,7 @@ goax 의 모든 기능은 **자연어 트리거** 로 호출돼요 (thin wrapper
   "tasks 분해"                       — tasks.md 분해
   "병렬로 돌리자" / "레인 나눠줘"     — lane (가를 수 있는 일인지부터 판정)
   "구현 시작" / "tasks 실행"         — tasks.md 실행 (레인 배정 있으면 코디네이터 모드) + 완료 게이트·evaluator
-  "spec 확인"                        — NEEDS CLARIFICATION 게이팅
+  "spec 확인" / "합의 리뷰"           — NEEDS CLARIFICATION 게이팅 + L/XL 은 architect → evaluator 합의 리뷰
 
 ▸ 결정·회고
   "ADR 작성" / "결정 기록"           — ADR 새 파일
@@ -31,7 +31,7 @@ goax 의 모든 기능은 **자연어 트리거** 로 호출돼요 (thin wrapper
 
 ▸ Spirit / HUD
   "spirit 점검"                      — frontmatter + 토큰 무결성 검사
-  "/hud setup"                       — statusline 활성화
+  "/hud setup" / "/hud preset full"  — statusline (하네스 위치 한 줄, OMC 문법)
 
 각 트리거는 SKILL.md frontmatter 의 키워드 매칭으로 동작해요. autorouting 이
 실패하면 더 구체적인 동의어를 시도하거나 위 인덱스의 키워드를 그대로 사용하세요.
