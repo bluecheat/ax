@@ -45,6 +45,10 @@ DONE=$(printf '%s' "$OUT" | jq -r '.result.done // 0')
 TOTAL=$(printf '%s' "$OUT" | jq -r '.result.total // 0')
 UNCOV=$(printf '%s' "$OUT" | jq -r '.result.ac_uncovered | join(", ")')
 DROP=$(printf '%s' "$OUT" | jq -r '.result.task_count_drop // 0')
+UNREP=$(printf '%s' "$OUT" | jq -r '(.result.dispatched_unreported // []) | join(", ")')
+NOREP=$(printf '%s' "$OUT" | jq -r '(.result.done_without_report // []) | join(", ")')
+REQ=$(printf '%s' "$OUT" | jq -r '.result.review_required // false')
+VERDICT=$(printf '%s' "$OUT" | jq -r '.result.review_verdict // ""')
 VIOL=$(printf '%s' "$OUT" | jq -r '.result.violations // 0')
 
 [ "${VIOL:-0}" -eq 0 ] && exit 0
@@ -57,6 +61,13 @@ printf '\n' >&2
 if [ "${DROP:-0}" -gt 0 ]; then
     printf '\033[31m  · task %s개가 사라졌어요\033[0m — 미완료를 지워서 통과시키는 건 안 돼요.\n' "$DROP" >&2
     printf '    의도적으로 범위를 줄인 거면 spec.md 의 수용 기준도 같이 줄이세요.\n' >&2
+fi
+[ -n "$UNREP" ] && printf '  · 보고 안 받은 디스패치: %s — 산출물을 받고 lanes-dispatch.sh --report 로 기록하세요\n' "$UNREP" >&2
+[ -n "$NOREP" ] && printf '\033[31m  · 보고 없이 완료 표시: %s\033[0m — 레인이 자기 체크박스를 켰어요. 코디네이터가 검증 뒤에 켜야 해요\n' "$NOREP" >&2
+if [ "$REQ" = "true" ] && [ -z "$VERDICT" ]; then
+    printf '  · evaluator 리뷰 필수 (size×risk) — review.md 가 없어요. 새 컨텍스트로 evaluator 를 띄우세요\n' >&2
+elif [ -n "$VERDICT" ] && [ "$VERDICT" != "진행" ]; then
+    printf '  · evaluator verdict "%s" — 지적을 task 로 옮기거나 재논의한 뒤 커밋하세요\n' "$VERDICT" >&2
 fi
 
 if [ "$MODE" = "fail" ]; then

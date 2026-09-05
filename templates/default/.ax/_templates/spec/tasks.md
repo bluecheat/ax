@@ -31,6 +31,12 @@
 | `[AC2]` | 이 task 가 충족하는 spec.md §3 의 수용 기준 |
 | `files:` | 건드리는 파일. **모든 task 에 필수** — 겹침 검사가 이 값으로만 성립해요 |
 | `의존:` | 앞선 task ID. 없으면 `없음`·`none`·`-` 중 하나 (파서가 이 셋만 인정) |
+| `레인:` | 소유 레인 — **`lanes-dispatch.sh --assign` 이 써요.** 손으로 안 적어요 |
+| `디스패치:` | 레인에 넘긴 시각 — `--dispatch` 가 써요 |
+| `보고:` | 코디네이터가 산출물을 **받은** 시각 — `--report` 가 써요. 이게 없으면 `[x]` 여도 완료가 아니에요 (G5) |
+
+아래 세 줄이 **레인 원장**이에요. 세션의 기억 대신 파일이 "누구에게 뭘 보냈고 뭘 받았는지" 를
+들고 있어요. 레인 배정이 하나도 없으면 단일 레인이고, `spec-implement` 가 순차로 돌아요.
 
 체크박스 상태는 셋이에요: `[ ]` 미완료 · `[x]` 완료 · `[~]` **의도적 보류**.
 보류는 사유를 같이 적어요 — 게이트가 "누락" 과 "의도적 보류" 를 구분해야 하니까요.
@@ -91,6 +97,14 @@ bash .ax/scripts/bash/lanes-hotfiles.sh --spec <NNN-slug> --json
 
 표가 비면 "핫 파일 없음" 이라고 한 줄 적어요 — 안 뽑은 것과 없는 것은 달라요.
 
+소유 레인을 정했으면 **원장에도** 적어요 — 표는 사람이 읽고, 원장은 기계가 읽어요:
+
+```bash
+bash .ax/scripts/bash/lanes-dispatch.sh --spec <NNN-slug> --assign "T010=A,T011=A,T020=B" --json
+```
+
+`lane_file_conflicts` 가 비어야 해요. 같은 파일을 두 레인이 갖고 있으면 `--dispatch` 가 거부돼요.
+
 ---
 
 ## 2. 진행 상황
@@ -101,7 +115,12 @@ bash .ax/scripts/bash/lanes-hotfiles.sh --spec <NNN-slug> --json
 bash .ax/scripts/bash/tasks-gate.sh --spec <NNN-slug> --json
 ```
 
-`[ ]` 미완료 수, AC 커버리지 간극, 매핑 없는 orphan task 를 한 번에 알려줘요.
+`[ ]` 미완료 수, AC 커버리지 간극, 매핑 없는 orphan task, 원장 불일치(보고 안 받은 디스패치 ·
+보고 없이 켜진 체크박스), evaluator verdict 를 한 번에 알려줘요.
+
+완료는 `complete: true` 하나예요. size L 이상 · M×L3 이면 새 컨텍스트 evaluator 가
+`review.md` 첫 줄에 `verdict: 진행` 을 써야 거기 도달해요 — 체크박스를 채운 세션이
+검사까지 하면 게이트가 아니에요.
 
 > 워크플로우 안내 (다음 단계) 는 `/spec-implement` skill 출력의 `📍 다음` 으로 제공돼요.
 > 환경 검증·배포는 이 문서 범위 밖 — 별도 운영 채널.

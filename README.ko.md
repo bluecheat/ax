@@ -113,7 +113,10 @@ GOAX 가 깔아주는 자산은 두 결로 나뉘어요:
 ```
 "spec 만들어줘 payment-refund"   → spec.md + tasks.md
 "tasks 분해"                      → tasks 분해 ([P] 병렬 마커)
-"구현 시작"                       → tasks.md 순차 실행 + - [x] 마킹
+"구현 시작"                       → tasks.md 실행: 순차, 또는 레인 배정이 있으면 코디네이터 모드
+                                  (lanes-dispatch.sh 원장) → 완료 게이트 G1~G6
+                                  (L · M×L3 은 새 컨텍스트 evaluator 필수)
+"레인 나눠줘"                     → lane — 가를 수 있는 일인지부터 판정
 # 설계 결정은 ADR (.ax/docs/adr/NNNN-*.md) 로
 ```
 

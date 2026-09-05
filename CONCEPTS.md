@@ -250,6 +250,12 @@ Spirit:        SP-<CATEGORY>-<id>       (예: SP-SEC-001)
 - Generator: 메인 persona (engineer-generalist, refactorer 등)
 - Evaluator: 별도 sub-agent (`agents/evaluator.md`) — docs/spec/ADR만 보고 비평
 
+**어디서 성립하나**: `spec-implement` §8 이 task 0건 남은 시점에 evaluator 를 새 컨텍스트로 띄우고
+(대화를 넘기지 않고 spec·ADR·diff 만), evaluator 가 `<spec>/review.md` 첫 줄에 `verdict:` 를 직접
+써요. `tasks-gate.sh` G6 이 그 줄을 읽어 완료를 판정해요 — size L 이상 · M×L3 은 필수. 평가 기록을
+구현 세션이 쓰지 않는 것, 그게 분리의 실체예요. 같은 이유로 병렬 레인의 완료도 레인의 자기보고가
+아니라 코디네이터가 원장(`lanes-dispatch.sh`)에 `보고:` 를 찍고 검증 명령을 다시 돌린 뒤예요 (G5).
+
 ### 5.4 SDD — Spec-Driven Development
 
 **왜**: 코드는 *어떻게*를 말하지만 *무엇*과 *왜*를 말하지 않아요. Spec과 ADR이 그 자리를 채워요.

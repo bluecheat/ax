@@ -113,7 +113,10 @@ The `spec` skill doesn't generate every artifact upfront. The triage result deci
 ```
 "create spec payment-refund"   → spec.md + tasks.md
 "break into tasks"              → tasks breakdown ([P] parallel marker)
-"start implementation"          → run tasks.md sequentially + - [x] marking
+"start implementation"          → run tasks.md: sequential, or as lane coordinator when
+                                  tasks carry lane assignments (lanes-dispatch.sh ledger)
+                                  → completion gate G1–G6 (+ fresh-context evaluator for L / M×L3)
+"split into lanes"              → lane — first asks whether the work can be split at all
 # Design decisions go to ADR (.ax/docs/adr/NNNN-*.md)
 ```
 

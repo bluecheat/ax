@@ -10,19 +10,29 @@
 # 구분하지 못했어요. 실사용 리포에서 spec 21개 중 14개가 미완료 task 를 남긴 채
 # 끝나 있었는데, 아무도 그걸 알려주지 않았어요.
 #
-# 검사 4종:
+# 검사 6종:
 #   G1 미완료  `- [ ]` 가 남아 있나 (`- [~]` 보류는 제외 — 의도적 보류는 정상)
 #   G2 커버리지 spec.md §3 의 AC 중 대응 task 가 없는 것 (spec-kit /analyze 의 coverage gap)
 #   G3 orphan  어떤 AC 도 참조하지 않는 task
 #   G4 유실    task 총 수가 봉인값보다 줄었나 — "미완료를 지워서 통과" 방어
+#   G5 원장    디스패치됐는데 보고가 없는 task · 보고 없이 [x] 가 된 task (lanes-dispatch.sh 필드)
+#   G6 검증자  review.md 의 `verdict:` — 필수(size L 이상 · M×L3)인데 없거나 `진행` 이 아니면 미완료
 #
 # G2/G3 는 spec.md 에 `AC<n>` ID 가 있을 때만 검사해요 (없는 기존 spec 은 생략).
 # G4 는 `.ax/state.json` 의 spec별 봉인값과 비교해요. 봉인값이 없으면 현재 수를 기록만.
+# G5 는 `레인:`·`디스패치:`·`보고:` 필드가 있는 task 만 봐요 — 단일 레인 spec 은 영향 없어요.
+# G6 의 필수 여부는 활성 spec(current-task.json 의 spec_dir) 일 때만 size×risk 로 판정하고,
+#    매트릭스 SSOT 는 tier-from-state.sh 예요. verdict 가 `보강 필요`·`재논의 필요` 면
+#    필수가 아니어도 막아요 — 받은 리뷰를 무시하고 완료할 수는 없어요.
+#
+# 왜 G5·G6 인가 — 체크박스를 채우는 쪽과 검사받는 쪽이 같으면 게이트가 아니라 자기보고예요.
+# G5 는 "보고를 받았는가" 를, G6 은 "다른 컨텍스트가 봤는가" 를 파일에서 확인해요.
 #
 # Output (--json):
 #   {"status":"ok|warning","result":{"spec":"012-x","total":12,"done":9,"open":2,
 #     "paused":1,"ac_total":3,"ac_uncovered":["AC3"],"orphan_tasks":["T007"],
-#     "task_count_drop":0,"complete":false},...}
+#     "task_count_drop":0,"dispatched_unreported":["T011"],"done_without_report":[],
+#     "review_required":true,"review_verdict":"진행","complete":false},...}
 #
 # Exit: 0 통과 / 2 위반 (--strict 일 때만) / 1 error
 
@@ -63,11 +73,11 @@ if [ -z "$SPEC" ] && [ "$ALL" != true ]; then
     fi
 fi
 
-# ── 한 spec 검사 → "spec|total|done|open|paused|ac_total|uncovered|orphans|drop" ──
+# ── 한 spec 검사 → "spec|total|done|open|paused|ac_total|uncovered|orphans|drop|unreported|noreport|verdict|required" ──
 check_spec() {
     local dir="$1" name; name=$(basename "$dir")
     local tasks="$dir/tasks.md" spec="$dir/spec.md"
-    [ -f "$tasks" ] || { printf '%s|0|0|0|0|0|||0\n' "$name"; return 0; }
+    [ -f "$tasks" ] || { printf '%s|0|0|0|0|0|||0|||%s|false\n' "$name" ""; return 0; }
 
     local total done_n open_n paused
     total=$(grep -cE '^- \[[ x~X]\] ' "$tasks" 2>/dev/null || true);  total=${total:-0}
@@ -118,9 +128,48 @@ EOF
         fi
     fi
 
-    printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+    # G5 원장 — lanes-dispatch.sh 가 쓰는 continuation 필드를 같은 규칙으로 읽어요
+    local unreported="" noreport=""
+    local ledger
+    ledger=$(awk '
+        function flush() { if (id != "") printf "%s|%s|%s|%s\n", id, st, disp, rep; id=""; st=""; disp=""; rep="" }
+        /^- \[[ x~X]\] / {
+            flush(); st = "open"
+            if ($0 ~ /^- \[[xX]\]/) st = "done"; else if ($0 ~ /^- \[~\]/) st = "paused"
+            if (match($0, /T[0-9][0-9][0-9]+/)) id = substr($0, RSTART, RLENGTH)
+            next
+        }
+        id != "" && /^[ \t]+디스패치:/ { v = $0; sub(/^[ \t]*디스패치:[ ]*/, "", v); gsub(/[ \t]+$/, "", v); disp = v; next }
+        id != "" && /^[ \t]+보고:/     { v = $0; sub(/^[ \t]*보고:[ ]*/, "", v);     gsub(/[ \t]+$/, "", v); rep = v;  next }
+        END { flush() }
+    ' "$tasks" 2>/dev/null || true)
+    unreported=$(printf '%s\n' "$ledger" | awk -F'|' '$2=="open" && $3!="" && $4==""{printf "%s ", $1}')
+    noreport=$(printf '%s\n' "$ledger"   | awk -F'|' '$2=="done" && $3!="" && $4==""{printf "%s ", $1}')
+
+    # G6 검증자 — review.md 첫 `verdict:` 줄. 파일은 evaluator 가 써요 (코디네이터가 대신 쓰지 않아요)
+    local verdict="" required=false
+    if [ -f "$dir/review.md" ]; then
+        verdict=$(grep -m1 -E '^verdict:' "$dir/review.md" 2>/dev/null \
+                  | sed -E 's/^verdict:[[:space:]]*//; s/[[:space:]]+$//' || true)
+    fi
+    local TF="$PROJECT_ROOT/.ax/current-task.json"
+    if command -v jq >/dev/null 2>&1 && [ -f "$TF" ]; then
+        local sd; sd=$(basename "$(jq -r '.spec_dir // "/"' "$TF" 2>/dev/null || echo /)")
+        if [ "$sd" = "$name" ]; then
+            local sz rk ev
+            sz=$(jq -r '.size // empty' "$TF" 2>/dev/null || true)
+            rk=$(jq -r '.risk // empty' "$TF" 2>/dev/null || true)
+            if [ -n "$sz" ] && [ -n "$rk" ]; then
+                ev=$(bash "$SCRIPT_DIR/tier-from-state.sh" --json --size "$sz" --risk "$rk" 2>/dev/null \
+                     | jq -r '.result.evaluator // empty' 2>/dev/null || true)
+                [ "$ev" = "required" ] && required=true
+            fi
+        fi
+    fi
+
+    printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
         "$name" "$total" "$done_n" "$open_n" "$paused" "$ac_total" \
-        "${uncovered% }" "${orphans% }" "$drop"
+        "${uncovered% }" "${orphans% }" "$drop" "${unreported% }" "${noreport% }" "$verdict" "$required"
 }
 
 TARGETS=""
@@ -148,14 +197,26 @@ $TARGETS
 EOF
 
 # 집계 + 보고
+# verdict 가 게이트를 막는가 — 필수인데 없거나, 무엇이든 `진행` 이 아니면 막아요
+review_blocks() {   # $1 verdict · $2 required
+    if [ "$2" = "true" ]; then
+        [ "$1" = "진행" ] && return 1 || return 0
+    fi
+    [ -n "$1" ] && [ "$1" != "진행" ] && return 0
+    return 1
+}
+
 FIRST=""; TOTAL_OPEN=0
-while IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans drop; do
+while IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans drop unreported noreport verdict required; do
     [ -z "$name" ] && continue
-    [ -z "$FIRST" ] && FIRST="$name|$total|$done_n|$open_n|$paused|$ac_total|$uncovered|$orphans|$drop"
+    [ -z "$FIRST" ] && FIRST="$name|$total|$done_n|$open_n|$paused|$ac_total|$uncovered|$orphans|$drop|$unreported|$noreport|$verdict|$required"
     TOTAL_OPEN=$((TOTAL_OPEN + open_n))
     [ "$open_n" -gt 0 ] && VIOLATIONS=$((VIOLATIONS + 1))
     [ -n "$uncovered" ] && VIOLATIONS=$((VIOLATIONS + 1))
     [ "$drop" -gt 0 ] && VIOLATIONS=$((VIOLATIONS + 1))
+    [ -n "$unreported" ] && VIOLATIONS=$((VIOLATIONS + 1))
+    [ -n "$noreport" ] && VIOLATIONS=$((VIOLATIONS + 1))
+    review_blocks "$verdict" "$required" && VIOLATIONS=$((VIOLATIONS + 1))
     if [ "$JSON_MODE" != true ]; then
         printf '%s: %s/%s 완료' "$name" "$done_n" "$total"
         [ "$paused" -gt 0 ] && printf ' (보류 %s)' "$paused"
@@ -163,6 +224,12 @@ while IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans
         [ -n "$uncovered" ] && printf '  ⚠ 대응 task 없는 AC: %s' "$uncovered"
         [ -n "$orphans" ] && printf '  · AC 미참조 task: %s' "$orphans"
         [ "$drop" -gt 0 ] && printf '  ❌ task %s개 사라짐' "$drop"
+        [ -n "$unreported" ] && printf '  ⚠ 보고 안 받은 디스패치: %s' "$unreported"
+        [ -n "$noreport" ] && printf '  ❌ 보고 없이 완료 표시: %s' "$noreport"
+        if review_blocks "$verdict" "$required"; then
+            [ -z "$verdict" ] && printf '  ⚠ evaluator 리뷰 필수 — review.md 없음' \
+                              || printf '  ⚠ evaluator verdict: %s' "$verdict"
+        fi
         printf '\n'
     fi
 done <<EOF
@@ -170,21 +237,35 @@ $ROWS
 EOF
 
 if [ "$JSON_MODE" = true ]; then
-    IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans drop <<EOF
+    IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans drop unreported noreport verdict required <<EOF
 $FIRST
 EOF
-    UNC_J="[]"; ORP_J="[]"
+    UNC_J="[]"; ORP_J="[]"; UNR_J="[]"; NOR_J="[]"; VER_J="null"
     if command -v jq >/dev/null 2>&1; then
-        [ -n "$uncovered" ] && UNC_J=$(printf '%s' "$uncovered" | tr ' ' '\n' | jq -Rn '[inputs|select(length>0)]')
-        [ -n "$orphans" ]   && ORP_J=$(printf '%s' "$orphans"   | tr ' ' '\n' | jq -Rn '[inputs|select(length>0)]')
+        [ -n "$uncovered" ]  && UNC_J=$(printf '%s' "$uncovered"  | tr ' ' '\n' | jq -Rn '[inputs|select(length>0)]')
+        [ -n "$orphans" ]    && ORP_J=$(printf '%s' "$orphans"    | tr ' ' '\n' | jq -Rn '[inputs|select(length>0)]')
+        [ -n "$unreported" ] && UNR_J=$(printf '%s' "$unreported" | tr ' ' '\n' | jq -Rn '[inputs|select(length>0)]')
+        [ -n "$noreport" ]   && NOR_J=$(printf '%s' "$noreport"   | tr ' ' '\n' | jq -Rn '[inputs|select(length>0)]')
+        [ -n "$verdict" ]    && VER_J=$(jq -n --arg v "$verdict" '$v')
     fi
     COMPLETE=false
-    [ "${open_n:-1}" -eq 0 ] && [ -z "$uncovered" ] && [ "${drop:-0}" -eq 0 ] && COMPLETE=true
-    RESULT=$(printf '{"spec":"%s","total":%s,"done":%s,"open":%s,"paused":%s,"ac_total":%s,"ac_uncovered":%s,"orphan_tasks":%s,"task_count_drop":%s,"complete":%s,"violations":%s}' \
+    if [ "${open_n:-1}" -eq 0 ] && [ -z "$uncovered" ] && [ "${drop:-0}" -eq 0 ] \
+       && [ -z "$unreported" ] && [ -z "$noreport" ] && ! review_blocks "$verdict" "$required"; then
+        COMPLETE=true
+    fi
+    RESULT=$(printf '{"spec":"%s","total":%s,"done":%s,"open":%s,"paused":%s,"ac_total":%s,"ac_uncovered":%s,"orphan_tasks":%s,"task_count_drop":%s,"dispatched_unreported":%s,"done_without_report":%s,"review_required":%s,"review_verdict":%s,"complete":%s,"violations":%s}' \
         "${name:-}" "${total:-0}" "${done_n:-0}" "${open_n:-0}" "${paused:-0}" "${ac_total:-0}" \
-        "$UNC_J" "$ORP_J" "${drop:-0}" "$COMPLETE" "$VIOLATIONS")
+        "$UNC_J" "$ORP_J" "${drop:-0}" "$UNR_J" "$NOR_J" "${required:-false}" "$VER_J" "$COMPLETE" "$VIOLATIONS")
     if [ "$VIOLATIONS" -gt 0 ]; then
-        json_output "warning" "$RESULT" "완료 조건 미충족 ${VIOLATIONS}건 — 미완료 task 는 끝내거나 [~] 로 사유와 함께 보류 처리하세요"
+        if review_blocks "$verdict" "$required" && [ "${open_n:-0}" -eq 0 ]; then
+            [ -z "$verdict" ] \
+                && json_output "warning" "$RESULT" "task 는 끝났지만 evaluator 리뷰가 필수예요 — 새 컨텍스트로 evaluator 를 띄워 review.md 를 받으세요" \
+                || json_output "warning" "$RESULT" "evaluator verdict '${verdict}' — 지적을 task 로 옮겨 처리하거나 재논의하세요"
+        elif [ -n "$unreported" ] || [ -n "$noreport" ]; then
+            json_output "warning" "$RESULT" "레인 원장 불일치 — 산출물을 받고 lanes-dispatch.sh --report 로 기록한 뒤에만 체크박스를 켜세요"
+        else
+            json_output "warning" "$RESULT" "완료 조건 미충족 ${VIOLATIONS}건 — 미완료 task 는 끝내거나 [~] 로 사유와 함께 보류 처리하세요"
+        fi
     else
         json_output "ok" "$RESULT" "완료 조건 충족"
     fi

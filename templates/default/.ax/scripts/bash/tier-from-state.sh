@@ -14,8 +14,12 @@
 #   L     × L3      → full     (+ research/data-model/quickstart + ADR)
 #   XL    × *       → full
 #
+# evaluator (완료 시 새 컨텍스트 리뷰 — spec-implement 가 tasks-gate G6 으로 강제):
+#   S × * · M × L0~L2 → optional
+#   M × L3 · L × * · XL × * → required
+#
 # Output (--json):
-#   {"status":"ok","result":{"tier":"full","size":"L","risk":"L3","reason":"..."}}
+#   {"status":"ok","result":{"tier":"full","size":"L","risk":"L3","evaluator":"required","reason":"..."}}
 
 set -euo pipefail
 
@@ -143,9 +147,15 @@ case "$SIZE-$RISK" in
     *)              TIER="standard"; REASON="unknown — default standard" ;;
 esac
 
+# evaluator 필수 여부 — triage 매트릭스와 agents/evaluator.md ("L 이상 강제, M 이하 선택") 의 SSOT
+case "$SIZE-$RISK" in
+    M-L3|L-*|XL-*) EVALUATOR="required" ;;
+    *)             EVALUATOR="optional" ;;
+esac
+
 if [ "$JSON_MODE" = true ]; then
-    RESULT=$(printf '{"tier":"%s","size":"%s","risk":"%s","reason":"%s"}' \
-                    "$TIER" "$SIZE" "$RISK" "$REASON")
+    RESULT=$(printf '{"tier":"%s","size":"%s","risk":"%s","evaluator":"%s","reason":"%s"}' \
+                    "$TIER" "$SIZE" "$RISK" "$EVALUATOR" "$REASON")
     json_output "ok" "$RESULT" "use --tier $TIER for spec"
 else
     echo "$TIER"

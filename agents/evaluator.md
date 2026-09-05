@@ -44,20 +44,37 @@ Generator/Evaluator 모델 — Generator의 self-praise bias 제거.
 
 ## 호출 시점
 
+- **`spec-implement` §8** — `tasks-gate.sh` 가 task 0건 남았다고 판정한 직후. size L 이상 ·
+  M×L3 은 **필수**(`tier-from-state.sh` 의 `evaluator: required`), 그 외는 선택. 필수인데
+  review.md 가 없으면 게이트 G6 이 완료를 막아요
 - 모든 PR 직전 (L 이상 강제, M 이하 선택)
 - CodeRabbit과 영역 회피 — Evaluator는 "비어있는 것", CodeRabbit은 "잘못된 것"
 
 ## 입력
 
-- 변경 파일 + diff
-- 관련 `.ax/docs/adr/*.md`, `.ax/docs/spec/*.md`
+- 변경 파일 + diff (브리프가 지목한 범위 — `git diff <base>...HEAD` 또는 spec 시작 이후)
+- 관련 `.ax/docs/adr/*.md`, `.ax/docs/spec/<NNN-slug>/spec.md`
+- 산출물 경로 — `.ax/docs/spec/<NNN-slug>/review.md`
 - (선택) PR description
 
 여기 없는 것 — 특히 구현 세션의 대화 맥락 — 은 받지 않아요 (§성립 조건 1).
 
-## 출력
+## 출력 — `review.md` 파일로, 첫 줄은 verdict
+
+결과를 대화로만 돌려주지 않고 **`<spec dir>/review.md` 에 직접 써요.** 코디네이터가 받아 적으면
+검사받는 쪽이 검사 기록을 쓰는 게 되니까요. `tasks-gate.sh` G6 이 이 파일의 **첫 줄**을 읽어요:
+
+```
+verdict: 진행 | 보강 필요 | 재논의 필요
+```
+
+- `진행` — 발견 0건이거나, 있어도 정확성·spec 적합성에 영향 없음
+- `보강 필요` — 지적이 task 로 옮겨져야 해요. 각 지적에 재현 시나리오 + 어느 AC 인지
+- `재논의 필요` — spec 자체가 틀렸거나 ADR 과 어긋나요. 코드로 못 고쳐요
 
 ```markdown
+verdict: 보강 필요
+
 ## Evaluator Review
 
 ### Spec 적합성
@@ -70,17 +87,22 @@ Generator/Evaluator 모델 — Generator의 self-praise bias 제거.
 - 거부된 패턴 재출현 여부
 
 ### 종합
-- 진행 / 보강 필요 / 재논의 필요
+- 보강 필요: <지적 n건 — 각각 AC 와 재현 시나리오>
 ```
 
 발견이 없으면:
 
 ```markdown
+verdict: 진행
+
 ## Evaluator Review
 
 발견 0건 — spec 적합성·엣지 케이스·drift 모두 이상 없어요.
 (검토 범위: <본 파일들>)
 ```
+
+기존 review.md 가 있으면 덮어써요 — 재리뷰의 기록은 최신 것 하나면 돼요. 이전 지적이 처리됐는지는
+tasks.md 의 task 로 남아요.
 
 ## 안티 패턴
 
@@ -89,3 +111,5 @@ Generator/Evaluator 모델 — Generator의 self-praise bias 제거.
 - 모든 변경에 똑같은 체크리스트 → 도메인별 컨텍스트 무시
 - **재현 시나리오 없는 지적** → 발견이 아니라 인상평
 - **빈손으로 끝내기 싫어서 채운 항목** → 과잉 설계의 출발점
+- **verdict 없이 끝내기** → 게이트가 못 읽어요. 첫 줄이 `verdict:` 가 아니면 리뷰가 없던 게 돼요
+- **결과를 대화로만 돌려주기** → review.md 에 직접 써요. 코디네이터가 옮겨 적는 구조가 자기보고예요

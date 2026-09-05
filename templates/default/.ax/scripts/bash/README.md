@@ -9,7 +9,7 @@
 |---|---|---|
 | `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log) | (sourced by all) |
 | `next-spec-num.sh` | 다음 spec NNN / ADR NNNN 번호 계산 (`--kind spec\|adr`) | `spec`, `adr` |
-| `tier-from-state.sh` | current-task.json + config.yml → tier 결정 (`--reset` 는 `reset-task.sh` 경유) | `spec` |
+| `tier-from-state.sh` | current-task.json + config.yml → tier 결정 + evaluator 필수 여부 (`--reset` 는 `reset-task.sh` 경유) | `spec`, `tasks-gate.sh` |
 | `init-spec-dir.sh` | tier별 selective spec 디렉토리 생성 | `spec` |
 | `add-spec-files.sh` | 기존 spec에 tasks/research 등 점진 추가 | `spec-tasks`, `spec --add` |
 | `slug-from-text.sh` | 영문 텍스트 → kebab-case 정규화·검증 | `spec` |
@@ -27,7 +27,10 @@
 | `triage-search.sh` | KEYWORDS 로 6 군데(specs/adrs/mistakes/rules/modules/imported) 검색 + 동의어 확장 + 매칭수 랭킹 + 스니펫 + 도메인 boost | `triage` |
 | `build-memory.sh` | `.ax/` 상태 → `.ax/MEMORY.md` 한 줄 포인터 인덱스 재생성 (triage 가 먼저 read) | `triage` |
 | `build-index.sh` | 역색인 `.ax/.search-index` 빌드 + BM25 query (대형 코퍼스 tier, 재생성 캐시) | `triage-search` |
-| `lanes-hotfiles.sh` | tasks.md 에서 핫 파일(여러 미완료 task 가 쓰는 파일) + `files:` 누락 task 추출 | `parallel` |
+| `tasks-plan.sh` | tasks.md → ready / blocked / parallel + `[P]` 파일 겹침 violations. 항목별 승격 — wave(배리어) 없음, 자동 실행 없음 | `lane`, `spec-implement` |
+| `tasks-gate.sh` | spec 완료 게이트 G1~G6 — 미완료 · AC 커버리지 · orphan · 유실 · 레인 원장 · evaluator verdict(`review.md`) | `spec-implement`, `lane`, pre-commit hook |
+| `lanes-hotfiles.sh` | tasks.md 에서 핫 파일(여러 미완료 task 가 쓰는 파일) + `files:` 누락 task 추출 | `lane` |
+| `lanes-dispatch.sh` | 레인 디스패치 원장 — `--assign / --dispatch / --report / --status`. tasks.md 의 `레인:`·`디스패치:`·`보고:` 필드를 쓰고, 파일 소유 충돌이면 dispatch 거부 | `lane`, `spec-implement` |
 | `zero-init.sh` | 0→1 첫날 팩 설치 (룰은 라이브 `spirit/rules/`, 템플릿은 `_templates/zero/`) — 덮어쓰지 않고 SP 토큰 충돌만 경고 | `zero` |
 | `zero-domain-risk.sh` | `config.yml` 의 `domain_risk` 블록 통째 교체 (`--show/--set/--default`) — 출고 예시 키가 남으면 triage 가 영원히 default_risk 로 흘러요 | `zero` |
 | `zero-probe.sh` | 네거티브 프로브 — 일부러 위반을 만들어 차단이 실제로 도는지 확인 | `zero` |

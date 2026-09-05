@@ -20,8 +20,8 @@ goax 의 모든 기능은 **자연어 트리거** 로 호출돼요 (thin wrapper
   "구현해줘" / "고쳐줘" / "리팩토링" — triage (Size × Risk 30초 분류)
   "spec 만들어줘 — <slug>"           — 새 spec 디렉토리 (tier-aware)
   "tasks 분해"                       — tasks.md 분해
-  "병렬로 돌리자" / "레인 나눠줘"     — parallel (가를 수 있는 일인지부터 판정)
-  "구현 시작" / "tasks 실행"         — tasks.md 순차 실행
+  "병렬로 돌리자" / "레인 나눠줘"     — lane (가를 수 있는 일인지부터 판정)
+  "구현 시작" / "tasks 실행"         — tasks.md 실행 (레인 배정 있으면 코디네이터 모드) + 완료 게이트·evaluator
   "spec 확인"                        — NEEDS CLARIFICATION 게이팅
 
 ▸ 결정·회고

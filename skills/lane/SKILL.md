@@ -1,22 +1,22 @@
 ---
-name: parallel
-description: "작업을 병렬 레인으로 가르고 게이트로 검증 — '병렬로 돌리자', 'parallel', '레인 나눠줘', '갈래로 쪼개', '동시에 진행', '나눠서 돌려줘', '에이전트 몇 개로', '핫 파일', '파일 소유권'. 먼저 **가를 수 있는 일인지** 판정하고 (아니면 단일 레인), 조사 국면은 역할/도메인으로, 실행 국면은 파일 소유권으로 가르고, tasks-plan.sh 의 violations 가 비어야 통과. 실행 자체는 spec-implement 가 해요. 슬래시로도 호출 가능: '/parallel'."
+name: lane
+description: "작업을 레인으로 가르고 게이트로 검증 — '/lane', 'lane', '레인', '병렬로 돌리자', 'parallel', '레인 나눠줘', '갈래로 쪼개', '동시에 진행', '나눠서 돌려줘', '에이전트 몇 개로', '핫 파일', '파일 소유권'. 먼저 **가를 수 있는 일인지** 판정하고 (아니면 단일 레인), 조사 국면은 역할/도메인으로, 실행 국면은 파일 소유권으로 가르고, tasks-plan.sh 의 violations 가 비어야 통과. 실행 자체는 spec-implement 가 해요. 슬래시로도 호출 가능: '/lane'."
 ---
 
-# parallel — 레인 설계 + 게이트
+# lane — 레인 설계 + 게이트
 
 ## 시작 전 필수
 `.ax/spirit/values.md`, `tone.md` 따라요.
 
 ## 발동 트리거
-- `/parallel`
+- `/lane` (옛 이름 `parallel` 은 트리거 단어로만 남아요)
 - "병렬로 돌리자", "레인 나눠줘", "갈래로 쪼개줄래", "에이전트 몇 개로"
 - "이거 동시에 할 수 있어?", "핫 파일 뽑아줘"
 - `spec-tasks` 를 막 끝냈고 `spec-implement` 로 들어가기 직전
 
 ## 0. 이 skill 의 범위
 
-`spec-tasks` (분해) → **`parallel`** (가르기 + 게이트) → `spec-implement` (실행).
+`spec-tasks` (분해) → **`lane`** (가르기 + 게이트) → `spec-implement` (실행).
 
 이 skill 은 **가르는 법**과 **정지 조건**만 담당해요. task 를 실제로 돌리는 건
 `spec-implement` 이고, 여기서 에이전트를 띄우지 않아요. 레인을 설계하고 게이트를
@@ -24,6 +24,10 @@ description: "작업을 병렬 레인으로 가르고 게이트로 검증 — '�
 
 > **"병렬로 가지 마세요" 도 이 skill 의 정당한 출력이에요.** 레인을 그리는 게 목적이
 > 아니라, 가를 수 있는 일인지 판정하고 가를 수 있을 때만 깨끗하게 가르는 게 목적이에요.
+
+레인 배정의 결과는 tasks.md 의 **원장**에 남아요 — task 마다 `레인:` 필드를
+`lanes-dispatch.sh --assign` 이 써요 (§6). `spec-implement` 는 그 필드가 있어야 레인 모드로
+돌고, 없으면 단일 레인 순차예요. 대화에만 있는 배정은 배정이 아니에요.
 
 ---
 
@@ -61,7 +65,7 @@ description: "작업을 병렬 레인으로 가르고 게이트로 검증 — '�
 레인 표를 그리지 말고 그렇게 답하고 끝내요.
 
 ```
-🚦 parallel — 단일 레인 권장
+🚦 lane — 단일 레인 권장
 
  ▸ 사유  cross-cutting (검증 규칙을 4개 레이어에 동시 주입) — 사전 분할 불가
  ▸ 근거  경계가 파일이 아니라 한 덩어리 결정이에요. 나누면 레인마다 다른 규칙을 만들어요
@@ -172,6 +176,17 @@ B 가 오늘 세션이 실제로 쓴 방법이에요. 표면 컴포넌트 5개�
 
 소유자 배정은 **판단**이에요 — 스크립트는 경합 사실만 주고 누가 가질지는 정하지 않아요.
 
+정했으면 **원장에 적어요.** 표는 사람이 읽고, 원장은 `spec-implement` 와 `tasks-gate.sh` 가 읽어요:
+
+```bash
+bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --assign "T010=A,T011=A,T020=B" --json
+```
+
+`result.lane_file_conflicts` 가 비어야 해요 — 같은 파일을 두 레인이 갖고 있으면 나중에
+`--dispatch` 가 거부돼요. 레인 이름은 짧게(A·B·C 또는 역할명), task 하나는 레인 하나예요.
+옮기려면 `--force`. 배정하지 않은 task 는 코디네이터가 직접 하는 몫이에요 — 떼어낸 배럴
+task(정책 B)가 보통 여기예요.
+
 ## 7. 게이트 — `violations` 가 비어야 통과
 
 ```bash
@@ -263,7 +278,10 @@ bash .ax/scripts/bash/tasks-plan.sh --spec "$SPEC" --json
 
 ## 11. 산출물 수신 확인 — idle 은 완료가 아니에요
 
-레인이 조용해지면 **받은 것**을 세요. 안 왔으면 재요청하되, 이렇게 적어요:
+레인이 조용해지면 **받은 것**을 세요. "받은 것" 은 원장의 `보고:` 필드예요 —
+`spec-implement` 가 보고를 받을 때마다 `lanes-dispatch.sh --report` 로 찍고, `--status` 의
+`dispatched_unreported` 가 아직 안 온 것을 세요. 세션의 기억으로 세지 마세요.
+안 왔으면 재요청하되, 이렇게 적어요:
 
 > 다시 하지 말고 **이미 만든 결과를 그대로 전송**하세요.
 
@@ -289,6 +307,12 @@ bash .ax/scripts/bash/tasks-gate.sh --spec "$SPEC" --json
 
 게이트는 미완료 체크박스뿐 아니라 대응 task 없는 AC(`ac_uncovered`)와 task 유실
 (`task_count_drop`) 도 봐요. 미완료를 지워서 통과시키는 길이 막혀 있어요.
+
+레인 모드에선 원장도 봐요 — `dispatched_unreported`(보고 안 받은 디스패치)와
+`done_without_report`(보고 없이 켜진 체크박스)가 비어야 해요. 레인이 자기 체크박스를 켜면
+여기서 잡혀요. 그리고 size L 이상 · M×L3 이면 새 컨텍스트 evaluator 의 `review.md`
+첫 줄이 `verdict: 진행` 이어야 `complete` 예요 (G6). 체크박스를 채운 세션이 검사까지
+하면 게이트가 아니라 자기보고라서요.
 
 ### 12.2 통합 검증 — 파일이 안 겹쳤다고 합쳐서 도는 건 아니에요
 
@@ -337,6 +361,8 @@ pnpm typecheck && pnpm test        # 프로젝트의 전체 검증 (.ax/config.y
   task 가 나중에 만들 충돌은 안 잡혀요. 핫 파일 표가 그 자리를 메워요.
 - **어떤 게이트도 의미적 충돌은 못 봐요.** 셋 다 파일 이름만 비교해요. §12.2 가
   사람 몫으로 남는 이유예요.
+- **원장 필드 표기는 고정이에요** — `레인:`·`디스패치:`·`보고:` 셋뿐이고 `lanes-dispatch.sh` 만
+  써요. 손으로 적으면 형식이 어긋나 게이트가 못 읽고, 못 읽으면 "이상 없음" 으로 보여요.
 
 ## 절대 금지
 
@@ -347,6 +373,8 @@ pnpm typecheck && pnpm test        # 프로젝트의 전체 검증 (.ax/config.y
 - **레인 idle 을 완료로 읽기** — 완료는 `tasks-gate.sh` 의 `complete` + 통합 검증
 - **통합 검증 없이 완료 선언** — 파일이 안 겹친 건 물리적 충돌이 없었다는 뜻뿐이에요
 - **핫 파일 표를 대화에만 남기기** — 다음 세션이 못 봐요. `tasks.md` 에 박아요
+- **레인 배정을 원장 없이 두기** — `--assign` 을 안 거치면 `spec-implement` 는 단일 레인으로 돌아요.
+  설계한 레인이 조용히 사라져요
 - **레인에 커밋 권한 주기** — 합치는 건 한 사람이. `git add -A` 는 특히 금지
 - **`files:` 없이 task 를 두고 병렬 판정하기** — 검사가 안 닿는데 통과로 보여요
 - **조사 레인에 편집 권한 주기** — 소유권 축이 무너져요
@@ -355,7 +383,7 @@ pnpm typecheck && pnpm test        # 프로젝트의 전체 검증 (.ax/config.y
 ## 출력
 
 ```
-🚦 parallel (spec 014-surface)
+🚦 lane (spec 014-surface)
 
  ▸ 분할 가능  예 — cross-cutting 아님, 순차 의존 국소적
  ▸ 국면  실행 — 파일 소유권으로 가름 (탐색 완료, files: 채워짐)
@@ -369,9 +397,9 @@ pnpm typecheck && pnpm test        # 프로젝트의 전체 검증 (.ax/config.y
  📍 다음
   1. tasks.md 에 핫 파일 표 추가 + T010~T014 에서 배럴 제거, T009 신설
   2. tasks-plan.sh 재실행 → violations 0 확인
-  3. 레인 브리프 작성 (소유/금지 파일 + 정지 조건 + 공유 이름 보고 + SendMessage)
-  4. 실행은 "/spec-implement"
-  5. 레인 전원 종료 후 통합 검증 1회 (§12.2) — 여기까지가 완료
+  3. lanes-dispatch.sh --assign "T010=A,…" → lane_file_conflicts 0 확인 (원장 기록)
+  4. 실행은 "/spec-implement" — 원장을 보고 레인 모드로 돌아요 (브리프·디스패치·보고 기록은 거기서)
+  5. 레인 전원 종료 후 통합 검증 1회 (§12.2) + evaluator (size 에 따라) — 여기까지가 완료
 ```
 
 ## state.json 갱신
@@ -386,4 +414,4 @@ jq '.last_skill = "parallel" | .skill_calls = ((.skill_calls // 0) + 1) | .updat
 - `skills/spec-tasks/SKILL.md` — 분해 단계. `[P]` 를 붙이는 규칙이 여기 있어요
 - `skills/spec-implement/SKILL.md` — 실행 단계. 레인이 통과한 뒤에 와요
 - `agents/lane-scout.md` · `agents/lane-worker.md` — 조사 / 실행 레인 에이전트
-- `.ax/scripts/bash/lanes-hotfiles.sh` · `tasks-plan.sh` · `tasks-gate.sh`
+- `.ax/scripts/bash/lanes-hotfiles.sh` · `lanes-dispatch.sh` · `tasks-plan.sh` · `tasks-gate.sh`
