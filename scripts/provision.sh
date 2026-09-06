@@ -160,6 +160,13 @@ while IFS= read -r line || [ -n "$line" ]; do
     fi
 done < "$MANIFEST"
 
+# ── 2.5 다른 도구의 상태 잔재 제거 ─────────────────────────────────────
+# plugin 디렉토리 안에서 세션을 연 적이 있으면 OMC 같은 도구가 그 안에 .omc/ 를 만들어요. cp -R 은
+# 그걸 그대로 실어 날라 사용자 프로젝트의 .ax/ 안에 남의 상태가 들어가요. 출고물이 아니니 지워요.
+if [ "$DRY_RUN" != true ]; then
+    find .ax -type d -name .omc -prune -exec rm -rf {} + 2>/dev/null || true
+fi
+
 # ── 3. 실행 권한 ────────────────────────────────────────────────────────
 if [ "$DRY_RUN" != true ]; then
     chmod +x .ax/scripts/bash/*.sh 2>/dev/null || true

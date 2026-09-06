@@ -11,3 +11,5 @@
 
 # hook 런타임 마커 (세션당 재생성)
 .ax/.triage-nudged
+.ax/.session/
+.ax/.ablation-last

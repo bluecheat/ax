@@ -15,9 +15,10 @@ set -uo pipefail
 
 # stdin JSON 파싱
 INPUT="$(cat 2>/dev/null || true)"
-TARGET_PATH=""
+TARGET_PATH=""; SID=""
 if [ -n "$INPUT" ] && command -v jq >/dev/null 2>&1; then
     TARGET_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' 2>/dev/null || true)
+    SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
 fi
 TARGET_PATH="${TARGET_PATH:-${CLAUDE_EDIT_PATH:-${1:-}}}"
 [ -z "$TARGET_PATH" ] && exit 0
@@ -34,6 +35,7 @@ if [ -f "$COMMON" ]; then
     source "$COMMON"
 fi
 type goax_normalize_path >/dev/null 2>&1 || goax_normalize_path() { printf '%s' "${1:-}"; }
+type goax_inject_fresh >/dev/null 2>&1 || goax_inject_fresh() { return 0; }
 
 TARGET_ABS=$(goax_normalize_path "$TARGET_PATH" "$PROJECT_ROOT")
 ROOT_ABS=$(goax_normalize_path "$PROJECT_ROOT" "$PROJECT_ROOT")
@@ -116,9 +118,17 @@ done
 # 매칭 없으면 silent
 [ ${#MATCHED[@]} -eq 0 ] && exit 0
 
+# 세션 내 중복 제거 — 같은 룰 포인터를 편집마다 다시 밀면 컨텍스트만 먹어요 (한 세션 1,200회 실측).
+# 세션 id 가 없으면 예전처럼 매번 주입. 4시간 지나면 다시 줘요 (compaction 대비).
+FRESH=()
+for m in "${MATCHED[@]}"; do
+    goax_inject_fresh "$SID" "spirit:$m" && FRESH+=("$m")
+done
+[ ${#FRESH[@]} -eq 0 ] && exit 0
+
 # additionalContext 생성 (룰 파일 경로 알림 — Claude가 필요 시 Read)
 LIST=""
-for m in "${MATCHED[@]}"; do
+for m in "${FRESH[@]}"; do
     LIST+="- $m"$'\n'
 done
 CTX="📋 Path-scoped spirit rules apply to ${TARGET_REL} — Read these before editing if not yet:"$'\n'"$LIST"

@@ -7,7 +7,7 @@
 
 | 스크립트 | 용도 | 호출하는 skill |
 |---|---|---|
-| `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log) | (sourced by all) |
+| `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log, `goax_inject_fresh` 세션 내 중복 주입 제거) | (sourced by all) |
 | `next-spec-num.sh` | 다음 spec NNN / ADR NNNN 번호 계산 (`--kind spec\|adr`) | `spec`, `adr` |
 | `tier-from-state.sh` | current-task.json + config.yml → tier 결정 + evaluator 필수 여부 + spec_review 필수 여부(Size 축만) (`--reset` 는 `reset-task.sh` 경유) | `spec`, `tasks-gate.sh`, `spec-review.sh`, `update-state.sh` |
 | `init-spec-dir.sh` | tier별 selective spec 디렉토리 생성 | `spec` |
@@ -29,7 +29,7 @@
 | `status-note.sh` | 세션 간 인계 노트 `.ax/docs/STATUS.md` — `--show/--init/--add/--done/--set <now|next|open|renamed>`. 형식 고정 · 40줄 상한 · 끝난 항목은 지움 | `triage`(읽기), `spec-implement`, `zero`, `onboarding` |
 | `spirit-lint.sh` | Spirit 무결성 — 필수 파일 · frontmatter · `## SP-CAT-NNN:` 헤더 형식 · 토큰 중복(spirit ↔ modules) · placeholder. 자동 수정 없음 | `doctor` ("spirit 점검") |
 | `rules-index.sh` | 룰 통합 인덱스 — Constitution(🔴/🟡/🔵 시그널 라인) + Spirit + Module 의 `SP-*` 를 한 목록으로. `--level/--source/--category/--find` | `doctor` ("rules 보여줘"), `/goax` |
-| `doctor-scan.sh` | doctor 의 인라인 진단 셋 — 마이그레이션 잔재 · template 기준 hook 등록 · 문서↔실제 메커니즘 · **도달 지도**(룰 소스별 배관 생사) | `doctor` |
+| `doctor-scan.sh` | doctor 의 인라인 진단 셋 — 마이그레이션 잔재 · template 기준 hook 등록(파일 + **이벤트 키**) · 문서↔실제 메커니즘 · **도달 지도**(룰 소스별 배관 생사) · **인계 노트 기한**(STATUS.md `- [ ] YYYY-MM-DD`, I3 규칙) | `doctor` |
 | `constitution-apply.sh` | onboarding Q5 의 Constitution 블록 적용 — `--block` prepend(기존 본문 `---` 아래 보존) · `--scan-duplicates` · `--drop-exact`(사용자 [a] 뒤에만) · `--append-index` | `onboarding` |
 | `tasks-plan.sh` | tasks.md → ready / blocked / parallel + `[P]` 파일 겹침 violations. 항목별 승격 — wave(배리어) 없음, 자동 실행 없음 | `lane`, `spec-implement` |
 | `tasks-gate.sh` | spec 완료 게이트 G1~G6 — 미완료 · AC 커버리지 · orphan · 유실 · 레인 원장 · evaluator verdict(`review.md`) | `spec-implement`, `lane`, pre-commit hook |
@@ -40,7 +40,7 @@
 | `zero-domain-risk.sh` | `config.yml` 의 `domain_risk` 블록 통째 교체 (`--show/--set/--default`) — 출고 예시 키가 남으면 triage 가 영원히 default_risk 로 흘러요 | `zero` |
 | `zero-probe.sh` | 네거티브 프로브 — 일부러 위반을 만들어 차단이 실제로 도는지 확인 | `zero` |
 | `zero-verify.sh` | `config.yml commands` 를 파이프 없이 실행하고 증거 블록 생성 — 안 돌린 게이트도 보고 (하나도 안 돌면 exit 2) | `zero` |
-| `zero-ablation.sh` | 산문 룰 전체를 끄고 무엇이 깨지는지 재는 ablation (`--off/--on/--status`) — 6개월 주기 | `zero` |
+| `zero-ablation.sh` | 산문 룰 전체를 끄고 무엇이 깨지는지 재는 ablation (`--off/--on/--status`) — `--on` 이 회차를 기록하고 다음 기한(+180일)을 STATUS.md 에 체크박스로 (doctor 가 추적) | `zero`, `doctor` |
 | `zero-guard-bash.sh` | **(`.ax/hooks/pre-bash/` 에 설치 — 이 디렉터리 밖)** pre-bash 가드: `git add -A` 차단(exit 2) · 검증 명령 파이프 경고. hook 규약이라 `--json` 표준 밖이에요 | (hook) |
 
 ## 표준 (모든 스크립트 공통)

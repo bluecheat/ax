@@ -70,7 +70,7 @@
        │ .ax/spirit/{values, tone, rules}      │ .ax/mistakes/ — 수동 캡처 (mistake skill)
        │ → 모든 sub-agent 공통 태도              │ → /audit 심사 → 룰 승격
 
-Sensors (결정론적):  .ax/hooks/{user-prompt, pre-bash, pre-edit, post-edit, pre-commit}/*.sh
+Sensors (결정론적):  .ax/hooks/{user-prompt, pre-bash, pre-edit, post-edit, pre-commit, subagent-start, stop}/*.sh
 Scripts (결정론적):   .ax/scripts/bash/*.sh — --json 표준
 ```
 

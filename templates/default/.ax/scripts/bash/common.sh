@@ -132,6 +132,33 @@ redact_secrets() {
     '
 }
 
+# ─── 세션 내 중복 주입 제거 ─────────────────────────────────────────
+# goax_inject_fresh <session_id> <key>
+#   같은 세션에서 같은 포인터를 이미 주입했으면 1 (건너뛰어요), 아니면 마커를 찍고 0.
+#   실측(statusface 프로젝트 한 세션): path-scoped 룰 포인터가 1,200회 주입 · 편집 파일은 196개 ·
+#   주입 본문 529KB — 같은 룰 파일 경로가 편집마다 다시 들어갔어요. 서브에이전트 하나가 168회 받은 적도.
+#   마커: .ax/.session/<sid>/injected/<key>. TTL GOAX_INJECT_TTL(기본 4시간) — compaction 뒤엔 다시 줄 여지.
+#   세션 id 가 없으면(수동 실행·옛 런타임) 항상 0 — dedupe 없이 예전처럼 동작해요.
+#   하루 넘은 세션 디렉토리는 지나가며 지워요.
+goax_inject_fresh() {
+    local sid="${1:-}" key="${2:-}" root ttl dir f now mt
+    [ -n "$sid" ] && [ -n "$key" ] || return 0
+    root="${CLAUDE_PROJECT_DIR:-$(find_project_root 2>/dev/null || pwd)}"
+    sid=$(printf '%s' "$sid" | tr -c 'A-Za-z0-9_-' '_')
+    key=$(printf '%s' "$key" | tr -c 'A-Za-z0-9_.-' '_')
+    ttl="${GOAX_INJECT_TTL:-14400}"
+    dir="$root/.ax/.session/$sid/injected"
+    mkdir -p "$dir" 2>/dev/null || return 0
+    find "$root/.ax/.session" -mindepth 1 -maxdepth 1 -type d -mmin +1440 -exec rm -rf {} + 2>/dev/null || true
+    f="$dir/$key"
+    if [ -f "$f" ]; then
+        now=$(date +%s); mt=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
+        [ $((now - mt)) -lt "$ttl" ] && return 1
+    fi
+    : > "$f" 2>/dev/null || true
+    return 0
+}
+
 # ─── 경로 정규화 / 경계 매칭 ────────────────────────────────────────
 # 보호 경로 검사처럼 "이 경로가 저 경로 안에 있나" 를 판정하는 곳은 반드시 이 둘을
 # 거쳐야 해요. 문자열 접두 비교만 하면 `./x`·`a/../x` 같은 표기 변형으로 우회되고,

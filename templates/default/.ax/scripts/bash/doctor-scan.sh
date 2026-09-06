@@ -10,6 +10,8 @@
 #   hooks       settings.json.template(SSOT) 이 선언한 .ax/hooks/*.sh 전부가 .claude/settings.json 에 등록됐는지
 #               (파일 자체가 없으면 missing_files — 초기 설치 미완). PLUGIN_DIR 없으면 skip
 #   doc_actual  CLAUDE.md/AGENTS.md 가 설명하는 path-scoped 메커니즘(hook vs 폐기된 shim) ↔ 실제 설치 상태
+#   hooks.events settings.json 에 template 의 이벤트 키(UserPromptSubmit·PreToolUse·PostToolUse·SubagentStart·Stop)가 다 있는지
+#   handoff     인계 노트(.ax/docs/STATUS.md)의 `- [ ] YYYY-MM-DD …` 기한 — ≤7일 임박 · 초과 (I3 와 같은 규칙)
 #   reach       도달 지도 — 룰 소스마다 "어떤 배관으로 세션에 닿는가, 그 배관이 살아 있는가":
 #                 constitution   AGENTS.md 본문이 Claude Code 에 닿으려면 CLAUDE.md 가 있고 @AGENTS.md 를 import 해야 해요.
 #                                AGENTS.md 만 있으면 Constitution 이 어디에도 안 가요 (Claude Code 는 AGENTS.md 를 안 읽어요)
@@ -138,6 +140,18 @@ INJ_REG=false
 MOD_REG=false
 [ -f .ax/hooks/pre-edit/module-rules-inject.sh ] && [ "$SETTINGS_PRESENT" = true ] \
     && grep -q 'module-rules-inject\.sh' "$SETTINGS" 2>/dev/null && MOD_REG=true
+# 이벤트 키 자체가 있는지 — Stop·SubagentStart 처럼 나중에 생긴 이벤트는 파일이 있어도 키가 없으면 안 돌아요
+EV_EXP=""; EV_REG=""; EV_MISS=""
+if [ "$HOOKS_CHECKED" = true ]; then
+    EV_EXP=$(jq -r '.hooks // {} | keys[]' "$TPL" 2>/dev/null | sort)
+    [ "$SETTINGS_PRESENT" = true ] && EV_REG=$(jq -r '.hooks // {} | keys[]' "$SETTINGS" 2>/dev/null | sort)
+    while IFS= read -r ev; do
+        [ -z "$ev" ] && continue
+        printf '%s\n' "$EV_REG" | grep -qx -- "$ev" || EV_MISS="${EV_MISS}${ev}
+"
+    done <<< "$EV_EXP"
+fi
+EVM_N=$(printf '%s' "$EV_MISS" | grep -c . || true); FINDINGS=$((FINDINGS + EVM_N))
 EX_N=$(printf '%s' "$EXPECTED" | grep -c . || true); RG_N=$(printf '%s' "$REGISTERED" | grep -c . || true)
 MS_N=$(printf '%s' "$MISSING" | grep -c . || true); MF_N=$(printf '%s' "$MISSING_FILES" | grep -c . || true)
 FINDINGS=$((FINDINGS + MS_N))
@@ -146,9 +160,12 @@ HOOKS=$(jq -nc --argjson chk "$HOOKS_CHECKED" --argjson sp "$SETTINGS_PRESENT" \
     --argjson ms "$(printf '%s' "$MISSING" | to_json_arr)" --argjson mf "$(printf '%s' "$MISSING_FILES" | to_json_arr)" \
     --arg exn "$EX_N" --arg rgn "$RG_N" --arg msn "$MS_N" --arg mfn "$MF_N" \
     --arg sc "$SCOPED_N" --argjson ir "$INJ_REG" --argjson mr "$MOD_REG" \
+    --argjson ee "$(printf '%s' "$EV_EXP" | to_json_arr)" --argjson er "$(printf '%s' "$EV_REG" | to_json_arr)" \
+    --argjson em "$(printf '%s' "$EV_MISS" | to_json_arr)" --arg emn "$EVM_N" \
     '{checked:$chk,settings_present:$sp,expected:$ex,registered:$rg,missing:$ms,missing_files:$mf,
       total:($exn|tonumber),registered_n:($rgn|tonumber),missing_n:($msn|tonumber),missing_files_n:($mfn|tonumber),
-      path_scoped_rules:($sc|tonumber),spirit_inject_registered:$ir,module_inject_registered:$mr}')
+      path_scoped_rules:($sc|tonumber),spirit_inject_registered:$ir,module_inject_registered:$mr,
+      events:{expected:$ee,registered:$er,missing:$em,missing_n:($emn|tonumber)}}')
 
 # ── doc_actual — Constitution 이 설명하는 메커니즘 ↔ 실제 ─────────
 DOC_FILES=""; [ -f CLAUDE.md ] && DOC_FILES="CLAUDE.md"; [ -f AGENTS.md ] && DOC_FILES="$DOC_FILES AGENTS.md"
@@ -217,8 +234,30 @@ if [ "${MOD_N:-0}" -gt 0 ]; then
     else add_reach module ".ax/modules/" "module-rules-inject.sh" false "모듈 룰 ${MOD_N}개인데 module-rules-inject.sh 가 미설치/미등록 — 편집 시점 자동 주입이 안 돼요 (triage 키워드 매칭만 남아요)" "$MOD_N"; fi
 fi
 
-RESULT=$(jq -nc --argjson m "$MIG" --argjson h "$HOOKS" --argjson d "$DOC" --argjson r "$REACH" --arg n "$FINDINGS" \
-    '{migration:$m,hooks:$h,doc_actual:$d,reach:$r,findings:($n|tonumber)}')
+# ── handoff — 인계 노트의 기한 (`- [ ] YYYY-MM-DD …`) — I3 와 같은 규칙: ≤7일 임박 · 초과 ──
+# zero 의 "1순위 가정 검증" 과 "룰 ablation 재검토" 가 여기 살아요. 날짜가 문서 안에만 있으면 아무도 안 봐요.
+to_epoch() { date -j -u -f '%Y-%m-%d' "$1" +%s 2>/dev/null || date -u -d "$1" +%s 2>/dev/null || echo ""; }
+NOTE=".ax/docs/STATUS.md"; DL_JSON="[]"; DL_IMM=0; DL_OVER=0; NOTE_PRESENT=false
+if [ -f "$NOTE" ]; then
+    NOTE_PRESENT=true
+    TODAY_E=$(to_epoch "$(date +%F)")
+    while IFS= read -r ln; do
+        [ -z "$ln" ] && continue
+        d=$(printf '%s' "$ln" | sed -E 's/^- \[ \] ([0-9]{4}-[0-9]{2}-[0-9]{2}).*/\1/')
+        txt=$(printf '%s' "$ln" | sed -E 's/^- \[ \] [0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]]*//')
+        de=$(to_epoch "$d"); [ -n "$de" ] && [ -n "$TODAY_E" ] || continue
+        days=$(( (de - TODAY_E) / 86400 ))
+        st=ok; [ "$days" -le 7 ] && st=imminent; [ "$days" -lt 0 ] && st=overdue
+        [ "$st" = imminent ] && DL_IMM=$((DL_IMM + 1)); [ "$st" = overdue ] && DL_OVER=$((DL_OVER + 1))
+        DL_JSON=$(printf '%s' "$DL_JSON" | jq -c --arg d "$d" --arg t "$txt" --arg n "$days" --arg s "$st" '. + [{date:$d,text:$t,days_left:($n|tonumber),status:$s}]')
+    done < <(grep -E '^- \[ \] [0-9]{4}-[0-9]{2}-[0-9]{2}' "$NOTE" 2>/dev/null || true)
+fi
+FINDINGS=$((FINDINGS + DL_IMM + DL_OVER))
+HANDOFF=$(jq -nc --argjson p "$NOTE_PRESENT" --argjson d "$DL_JSON" --arg i "$DL_IMM" --arg o "$DL_OVER" \
+    '{present:$p,deadlines:$d,imminent:($i|tonumber),overdue:($o|tonumber)}')
+
+RESULT=$(jq -nc --argjson m "$MIG" --argjson h "$HOOKS" --argjson d "$DOC" --argjson r "$REACH" --argjson ho "$HANDOFF" --arg n "$FINDINGS" \
+    '{migration:$m,hooks:$h,doc_actual:$d,reach:$r,handoff:$ho,findings:($n|tonumber)}')
 if [ "$JSON_MODE" = true ]; then
     if [ "$FINDINGS" -eq 0 ]; then json_output "ok" "$RESULT" "잔재·미등록·불일치·도달 결손 없음"
     else json_output "warning" "$RESULT" "finding ${FINDINGS}건 — doctor 가 옵션으로 제시해요 (자동 수정 안 함)"; fi
@@ -237,7 +276,10 @@ if [ "$HOOKS_CHECKED" = true ]; then
     printf '%s/%s 등록\n' "$RG_N" "$EX_N"
     [ "$MS_N" -gt 0 ] && printf '   ⚠ 미등록: %s\n' "$(printf '%s' "$MISSING" | tr '\n' ' ')"
     [ "$MF_N" -gt 0 ] && printf '   ✗ 파일 자체가 없음 (초기 설치 미완 → /up): %s\n' "$(printf '%s' "$MISSING_FILES" | tr '\n' ' ')"
+    [ "$EVM_N" -gt 0 ] && printf '   ⚠ 이벤트 키 미등록: %s — settings.json 에 그 이벤트가 아예 없어요\n' "$(printf '%s' "$EV_MISS" | tr '\n' ' ')"
 else printf 'skip (plugin 경로 미도출 — --plugin-dir)\n'; fi
+printf '\n📅 인계 노트 기한 — 임박 %s · 초과 %s\n' "$DL_IMM" "$DL_OVER"
+printf '%s' "$DL_JSON" | jq -r '.[] | select(.status!="ok") | "   ⚠ \(.status) \(.date) (\(.days_left)일) — \(.text)"'
 printf '\n📑 문서 ↔ 실제 — %s건\n' "$MM_N"
 printf '%s' "$MM" | sed '/^$/d; s/^/   ⚠ /'
 printf '\n🗺  도달 지도\n'

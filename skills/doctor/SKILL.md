@@ -53,6 +53,7 @@ grep -h "^category:" "$ROOT"/.ax/mistakes/*.md 2>/dev/null | awk '{print $2}' | 
 | **Sensors — Liveness** | 장치 생사 C1~C4 | `check-sensor-liveness.sh` (§3.10) |
 | **번호 무결성** | spec/ADR 중복 번호 | `next-spec-num.sh --check-duplicates` (§3.11) |
 | **동봉본** | vendored skills 신선도 | `vendor-skills.sh --check` (§3.12) |
+| **인계 노트** | STATUS.md 기한(`- [ ] YYYY-MM-DD`) 임박·초과 — zero 의 가정 검증 · ablation 재검토 | `doctor-scan.sh handoff` (§3.6~) |
 
 각 항목 ✅ / ⚠️ / ❌. 규칙은 §4.
 
@@ -124,6 +125,8 @@ H_TOT=$(echo "$SCAN" | jq -r '.result.hooks.total'); H_REG=$(echo "$SCAN" | jq -
 H_MISS=$(echo "$SCAN" | jq -r '.result.hooks.missing | join("\n")'); H_MF=$(echo "$SCAN" | jq -r '.result.hooks.missing_files | join("\n")')
 D_MM=$(echo "$SCAN" | jq -r '.result.doc_actual.mismatches | join("\n")')
 R_BAD=$(echo "$SCAN" | jq -r '.result.reach[] | select(.reached==false) | "\(.source) (\(.count)) — \(.reason)"')
+E_MISS=$(echo "$SCAN" | jq -r '.result.hooks.events.missing | join(", ")')
+D_BAD=$(echo "$SCAN" | jq -r '.result.handoff.deadlines[] | select(.status!="ok") | "\(.status) \(.date) (\(.days_left)일) — \(.text)"')
 ```
 
 **3.6 마이그레이션 잔재** (0건이면 생략):
@@ -141,6 +144,8 @@ R_BAD=$(echo "$SCAN" | jq -r '.result.reach[] | select(.reached==false) | "\(.so
 🪝  Sensors — settings.json hook 등록
    ⚠️  template hook <H_REG>/<H_TOT> 등록 — 미등록: <H_MISS 한 줄씩>
    ❌ 초기 설치 미완 — .ax/hooks/ 안에 없는 항목: <H_MF 한 줄씩>   ← 비었으면 생략. /up 재실행으로만 복원
+   ⚠️  이벤트 키 미등록: <E_MISS>   ← settings.json 에 그 이벤트가 아예 없어요. Stop·SubagentStart 는 나중 판에 생긴 hook —
+       파일은 /up 이 깔았는데 키가 없으면 안 돌아요. .ax/settings.json.suggested 머지 또는 template 을 읽어 jq 로 append
 ```
 다음 단계 `[s] ✅ template hook 등록 — 1순위 bash .ax/scripts/bash/register-spirit-hook.sh (path-scoped inject, idempotent) → 나머지는 .ax/settings.json.suggested 머지 또는 template 을 읽어 jq 로 append (백업 후, 사용자 키 보존). 파일 자체가 없으면 /up`. hook 셋은 template 이 정해요 — doctor 는 이름을 hardcode 하지 않아요.
 
@@ -159,6 +164,14 @@ R_BAD=$(echo "$SCAN" | jq -r '.result.reach[] | select(.reached==false) | "\(.so
    ✗ module (2) — module-rules-inject.sh 미등록 — triage 키워드 매칭만 남아요
 ```
 다음 단계 `[reach] ✅ 배관 잇기 — constitution: CLAUDE.md 에 '@AGENTS.md' 한 줄 / spirit-universal: Constitution CONVENTION 절에 @import / scoped·module: [s] hook 등록`. **라벨이 완벽해도 배관이 끊기면 룰은 0개예요** — 이 표가 doctor 에서 가장 먼저 봐야 할 줄이에요.
+
+**인계 노트 기한** (`D_BAD` 비었으면 생략) — `.ax/docs/STATUS.md` 의 `- [ ] YYYY-MM-DD …` 를 I3 와 같은 규칙(≤7일 임박 · 초과)으로 봐요. zero 의 "1순위 가정 검증" 과 "룰 ablation 재검토" 가 여기 살아요 — 날짜가 문서 안에만 있으면 아무도 안 봐요.
+```
+📅  인계 노트 기한
+   ⚠️  overdue 2026-03-01 (-12일) — 룰 ablation 재검토 (.ax/_templates/zero/ablation.md)
+   ⚠️  imminent 2026-09-10 (4일) — 1순위 위험 가정 "…" 을 …으로 검증
+```
+다음 단계 `[k] ✅ 기한 처리 — 하거나(ablation 이면 zero-ablation.sh --off → 실제 작업 5회 → --on, 이게 다음 기한을 다시 적어요) 날짜를 옮기거나(status-note.sh --done next "…" · --add next "- [ ] <새 날짜> …"). 세 번 넘게 미루면 그 항목은 할 생각이 없는 거예요 — 지우세요`.
 
 ### 3.7 Spirit lint — `spirit-lint.sh`
 

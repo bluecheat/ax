@@ -70,7 +70,7 @@
        │ .ax/spirit/{values, tone, rules}      │ .ax/mistakes/ — manually captured (mistake skill)
        │ → shared attitude across sub-agents   │ → /audit review → promote to rule
 
-Sensors (deterministic):  .ax/hooks/{user-prompt, pre-bash, pre-edit, post-edit, pre-commit}/*.sh
+Sensors (deterministic):  .ax/hooks/{user-prompt, pre-bash, pre-edit, post-edit, pre-commit, subagent-start, stop}/*.sh
 Scripts (deterministic):  .ax/scripts/bash/*.sh — --json standard
 ```
 

@@ -4,6 +4,7 @@
 
 ## 버전
 
+- [0.5.4](0.5.4.md) — hook 도달 범위: SubagentStart 포인터 · Stop 게이트 · 주입 중복 제거(실측 1,200회) · 인계 노트 기한 추적
 - [0.5.3](0.5.3.md) — 산문이던 진단을 스크립트로(rules·spirit 폐기, doctor-scan 도달 지도) + 세션 간 인계 노트 STATUS.md
 - [0.5.2](0.5.2.md) — 계획 시점의 합의 리뷰(architect → evaluator, Size 축) + 하네스 위치만 보여주는 HUD
 - [0.5.1](0.5.1.md) — 문서가 앞서 있던 엣지 셋을 코드로: 레인 원장 · 레인 모드 · evaluator 게이트

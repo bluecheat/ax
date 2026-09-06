@@ -152,6 +152,8 @@ for f in \
     templates/default/.ax/hooks/pre-edit/spirit-check.sh \
     templates/default/.ax/hooks/post-edit/lint-changed.sh \
     templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh \
+    templates/default/.ax/hooks/subagent-start/harness-pointer.sh \
+    templates/default/.ax/hooks/stop/spec-gate.sh \
     templates/default/.ax/_templates/adr/0000-template.md \
     templates/default/.ax/_templates/spec/spec.md \
     templates/default/.ax/_templates/spec/tasks.md \
@@ -233,7 +235,7 @@ fi
 section "4.1 settings.json.template ↔ .ax/hooks/ 양방향 cross-check"
 # ───────────────────────────────────────────────────────────
 # 정방향: settings.json.template 이 참조하는 .ax/... 경로가 실제로 존재하는지.
-# 역방향: .ax/hooks/{user-prompt,pre-bash,pre-edit,post-edit}/*.sh 가 모두 등록됐는지
+# 역방향: .ax/hooks/{user-prompt,pre-bash,pre-edit,post-edit,subagent-start,stop}/*.sh 가 모두 등록됐는지
 #         (pre-commit/ 은 grep-on-commit.sh + install-git-hooks.sh 체이닝으로 별도 등록되므로 예외).
 # 실제 구조는 hooks[phase][n]['hooks'][m]['command'] 깊이이고 command 는
 # `bash "${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-bash/block-destructive.sh"` 형태라 .ax/ 부분만 추출.
@@ -255,7 +257,7 @@ lines = []
 for path in sorted(registered):
     full = os.path.join(tpl, path)
     lines.append("FWD|%s|%d" % (path, 1 if os.path.isfile(full) else 0))
-for phase in ["user-prompt", "pre-bash", "pre-edit", "post-edit"]:
+for phase in ["user-prompt", "pre-bash", "pre-edit", "post-edit", "subagent-start", "stop"]:
     for f in sorted(glob.glob(os.path.join(tpl, ".ax/hooks", phase, "*.sh"))):
         rel = os.path.relpath(f, tpl)
         lines.append("REV|%s|%d" % (rel, 1 if rel in registered else 0))
@@ -2214,6 +2216,107 @@ grep -q 'constitution-apply.sh' "$REPO/skills/onboarding/SKILL.md" && grep -q 'z
     && pass "onboarding — Q5 prepend 와 Q2 카운트가 스크립트" || fail "onboarding — 산문 prepend/awk 카운트 잔재"
 [ -f "$REPO/templates/default/.ax/scripts/bash/build-index.sh" ] || grep -q 'search-index' "$REPO/templates/default/.gitignore.template" \
     && fail ".gitignore.template 에 .search-index 잔재" || pass ".gitignore.template — .search-index 제거"
+
+# ───────────────────────────────────────────────────────────
+section "35. hook 도달 범위 — Stop 게이트 · SubagentStart 포인터 · 주입 중복 제거 · 이벤트 키 · 인계 기한 · .omc 잔재"
+# ───────────────────────────────────────────────────────────
+# 하네스가 메인 세션 안에서만 돌았어요. 서브에이전트는 Constitution 을 모른 채 떴고, 커밋 없이 턴이 끝나면
+# 완료 게이트는 아무도 안 봤고, 같은 룰 포인터가 한 세션에 1,200회 들어갔어요 (실측). 셋 다 파일로 고정해요.
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§35 skip (jq 없음)"
+else
+    HX=$(mktemp -d)
+    mkdir -p "$HX/.ax/scripts/bash" "$HX/.ax/hooks/stop" "$HX/.ax/hooks/subagent-start" "$HX/.ax/hooks/pre-edit" \
+             "$HX/.ax/docs/spec/014-x" "$HX/.ax/spirit/rules" "$HX/.ax/modules/order" "$HX/.claude" "$HX/src"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate,tier-from-state,lanes-dispatch,status-note,doctor-scan,zero-ablation}.sh "$HX/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/hooks/stop/spec-gate.sh" "$HX/.ax/hooks/stop/"
+    cp "$REPO/templates/default/.ax/hooks/subagent-start/harness-pointer.sh" "$HX/.ax/hooks/subagent-start/"
+    cp "$REPO/templates/default/.ax/hooks/pre-edit/"{spirit-rules-inject,module-rules-inject}.sh "$HX/.ax/hooks/pre-edit/"
+    cp "$REPO/templates/default/.ax/spirit/"{values,tone}.md "$HX/.ax/spirit/"
+    printf '# Spec\n## 3.\n- [ ] **AC1** a\n' > "$HX/.ax/docs/spec/014-x/spec.md"
+    printf '# tasks\n- [ ] T001 [AC1] do — files: src/A.kt\n' > "$HX/.ax/docs/spec/014-x/tasks.md"
+    echo '{"phase":"implementing","spec_dir":".ax/docs/spec/014-x","size":"M","risk":"L1"}' > "$HX/.ax/current-task.json"
+    printf '# X\n🔴 **`AX:CRITICAL:001`** — x\n' > "$HX/AGENTS.md"; printf '@AGENTS.md\n' > "$HX/CLAUDE.md"
+    printf -- '---\ncategory: naming\npaths:\n  - "**/*.kt"\n---\n## SP-NAM-001: kebab\n' > "$HX/.ax/spirit/rules/naming.md"
+    printf -- '---\nmodule: order\napplies_to: [code]\npaths:\n  - "src/**"\n---\n## SP-ORD-001: x\n' > "$HX/.ax/modules/order/rules.md"
+    echo '{"hooks":{"PreToolUse":[]}}' > "$HX/.claude/settings.json"
+    hx() { CLAUDE_PROJECT_DIR="$HX" bash "$HX/$1" 2>/dev/null; }
+    STOP=.ax/hooks/stop/spec-gate.sh
+
+    # Stop 게이트
+    O=$(printf '{"session_id":"s1","hook_event_name":"Stop","stop_hook_active":false}' | hx $STOP)
+    echo "$O" | jq -e '.decision=="block" and (.reason|test("status-note.sh"))' >/dev/null 2>&1 \
+        && pass "stop 게이트 — implementing + 미완료 → decision:block, reason 에 인계 노트 명령" || fail "stop 게이트 — block 안 함: ${O:0:120}"
+    [ -z "$(printf '{"session_id":"s1","stop_hook_active":true}' | hx $STOP)" ] \
+        && pass "stop 게이트 — stop_hook_active=true (재시도) 면 통과 (무한 루프 없음)" || fail "stop 게이트 — 재시도를 또 잡음"
+    for i in 1 2 3 4 5 6 7 8 9; do LAST=$(printf '{"session_id":"s2","stop_hook_active":false}' | hx $STOP); done
+    [ -z "$LAST" ] && [ "$(cat "$HX/.ax/.session/s2/stop-blocks")" = "8" ] \
+        && pass "stop 게이트 — 세션당 8회 상한 뒤 통과" || fail "stop 게이트 — 상한 없이 계속 잡음"
+    CLAUDE_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/status-note.sh" --set now "spec 014-x 에서 멈춤 — T001" --json >/dev/null 2>&1
+    [ -z "$(printf '{"session_id":"s3","stop_hook_active":false}' | hx $STOP)" ] \
+        && pass "stop 게이트 — 인계 노트에 spec 이 적혀 있으면 통과 (멈추는 게 의도)" || fail "stop 게이트 — 인계 노트를 무시"
+    CLAUDE_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/status-note.sh" --set now "" --json >/dev/null 2>&1
+    echo '{"phase":"spec","spec_dir":".ax/docs/spec/014-x"}' > "$HX/.ax/current-task.json"
+    [ -z "$(printf '{"session_id":"s4","stop_hook_active":false}' | hx $STOP)" ] \
+        && pass "stop 게이트 — 계획 단계(phase=spec)엔 안 잡음" || fail "stop 게이트 — 계획 단계를 잡음"
+    echo '{"phase":"implementing","spec_dir":".ax/docs/spec/014-x","size":"M","risk":"L1"}' > "$HX/.ax/current-task.json"
+    printf 'sensors:\n  mode: off\n' > "$HX/.ax/config.yml"
+    [ -z "$(printf '{"session_id":"s5","stop_hook_active":false}' | hx $STOP)" ] \
+        && pass "stop 게이트 — sensors.mode=off 면 침묵" || fail "stop 게이트 — off 에서도 잡음"
+    rm -f "$HX/.ax/config.yml"
+
+    # SubagentStart 포인터
+    O=$(printf '{"session_id":"s1","hook_event_name":"SubagentStart","agent_type":"Explore"}' | hx .ax/hooks/subagent-start/harness-pointer.sh)
+    echo "$O" | jq -e '.hookSpecificOutput.hookEventName=="SubagentStart" and (.hookSpecificOutput.additionalContext|test("AGENTS.md") and test("values.md") and test("014-x"))' >/dev/null 2>&1 \
+        && pass "subagent-start — Explore 에 Constitution·Spirit·현재 spec 경로 (hookEventName 중첩 OK)" || fail "subagent-start — 포인터 누락: ${O:0:120}"
+    [ -z "$(printf '{"agent_type":"goax:evaluator"}' | hx .ax/hooks/subagent-start/harness-pointer.sh)" ] \
+        && pass "subagent-start — goax 자기 에이전트는 건너뜀 (이미 spirit 선언)" || fail "subagent-start — 자기 에이전트에도 주입"
+    echo "$O" | jq -e '(.hookSpecificOutput.additionalContext|length) < 600' >/dev/null 2>&1 \
+        && pass "subagent-start — 경로만 (600자 미만, 본문 주입 아님)" || fail "subagent-start — 본문을 밀어 넣음"
+
+    # 주입 중복 제거
+    J='{"session_id":"d1","tool_input":{"file_path":"'"$HX"'/src/A.kt"}}'
+    O1=$(printf '%s' "$J" | hx .ax/hooks/pre-edit/spirit-rules-inject.sh); O2=$(printf '%s' "$J" | hx .ax/hooks/pre-edit/spirit-rules-inject.sh)
+    echo "$O1" | jq -e '.hookSpecificOutput.additionalContext|test("naming.md")' >/dev/null 2>&1 && [ -z "$O2" ] \
+        && pass "spirit-rules-inject — 같은 세션 두 번째는 침묵 (1,200회 실측의 원인 제거)" || fail "spirit-rules-inject — 중복 주입: [$O2]"
+    [ -n "$(printf '{"session_id":"d2","tool_input":{"file_path":"'"$HX"'/src/A.kt"}}' | hx .ax/hooks/pre-edit/spirit-rules-inject.sh)" ] \
+        && pass "spirit-rules-inject — 다른 세션은 다시 주입" || fail "spirit-rules-inject — 세션 경계를 넘어 억제"
+    [ -n "$(printf '{"tool_input":{"file_path":"'"$HX"'/src/A.kt"}}' | hx .ax/hooks/pre-edit/spirit-rules-inject.sh)" ] \
+        && pass "spirit-rules-inject — session_id 없으면 예전처럼 매번 (수동 실행 호환)" || fail "spirit-rules-inject — session_id 없을 때 침묵"
+    M1=$(printf '%s' "$J" | hx .ax/hooks/pre-edit/module-rules-inject.sh); M2=$(printf '%s' "$J" | hx .ax/hooks/pre-edit/module-rules-inject.sh)
+    echo "$M1" | jq -e '.hookSpecificOutput.additionalContext|test("Layer 2") and test("Layer 3")' >/dev/null 2>&1 && [ -z "$M2" ] \
+        && pass "module-rules-inject — 모듈·spec 포인터도 세션당 한 번" || fail "module-rules-inject — 중복 주입: [$M2]"
+
+    # doctor-scan — 이벤트 키 · 인계 노트 기한
+    printf '## 다음\n- [ ] 2020-01-01 룰 ablation 재검토\n- [ ] 2099-01-01 far\n' > "$HX/.ax/docs/STATUS.md"
+    DS=$(GOAX_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/doctor-scan.sh" --json --plugin-dir "$REPO" 2>/dev/null)
+    echo "$DS" | jq -e '(.result.hooks.events.missing|index("Stop"))!=null and (.result.hooks.events.missing|index("SubagentStart"))!=null' >/dev/null 2>&1 \
+        && pass "doctor-scan — settings.json 에 Stop·SubagentStart 키가 없으면 events.missing" || fail "doctor-scan — 이벤트 키 검사 없음"
+    echo "$DS" | jq -e '.result.handoff.overdue==1 and .result.handoff.imminent==0 and .result.handoff.deadlines[0].status=="overdue"' >/dev/null 2>&1 \
+        && pass "doctor-scan — 인계 노트 기한 초과 1 · 먼 기한은 ok (I3 규칙)" || fail "doctor-scan — 기한 판정 불일치: $(echo "$DS" | jq -c .result.handoff)"
+
+    # zero-ablation — 회차 기록 + 다음 기한
+    GOAX_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/zero-ablation.sh" --off --json >/dev/null 2>&1
+    AB=$(GOAX_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/zero-ablation.sh" --on --json 2>/dev/null)
+    echo "$AB" | jq -e '.result.last_round!="" and .result.next_due!=""' >/dev/null 2>&1 && grep -q '^- \[ \] 20[0-9][0-9]-[0-9][0-9]-[0-9][0-9] 룰 ablation 재검토' "$HX/.ax/docs/STATUS.md" \
+        && ! grep -q '2020-01-01 룰 ablation' "$HX/.ax/docs/STATUS.md" \
+        && pass "zero-ablation --on — 회차 기록 + 다음 기한(+180일)을 STATUS.md 체크박스로 (옛 기한은 제거)" || fail "zero-ablation — 회차/기한 기록 실패: $(echo "$AB" | jq -c .result)"
+    rm -rf "$HX"
+fi
+
+# .omc 잔재 — plugin 디렉토리에서 세션을 열면 OMC 가 templates/ 안에 상태를 만들어요. tracked 되면 안 되고,
+# 로컬 설치(cp -R)도 실어 나르면 안 돼요.
+git -C "$REPO" ls-files templates | grep -q '/\.omc/' && fail "templates/ 안에 .omc/ 가 tracked 됨" || pass "templates/ — .omc/ tracked 파일 0"
+grep -q "name .omc -prune" "$REPO/scripts/provision.sh" && pass "provision.sh — 복사 뒤 .omc 잔재 제거" || fail "provision.sh — .omc 잔재를 사용자 프로젝트로 실어 나름"
+grep -q "not -path '\*/.omc/\*'" "$REPO/templates/default/.ax/scripts/bash/check-manifest-install.sh" && pass "check-manifest-install — .omc 열거 제외" || fail "check-manifest-install — .omc 를 출고분으로 셈"
+
+# 엣지 연결 — 새 hook 이 template 에 등록돼야 doctor 도 사용자 설치도 따라가요
+grep -q '"SubagentStart"' "$REPO/templates/default/.claude/settings.json.template" && grep -q '"Stop"' "$REPO/templates/default/.claude/settings.json.template" \
+    && pass "settings.json.template — SubagentStart · Stop 이벤트 등록" || fail "settings.json.template — 새 이벤트 미등록"
+grep -q 'events.missing' "$REPO/skills/doctor/SKILL.md" && grep -q 'handoff.deadlines' "$REPO/skills/doctor/SKILL.md" \
+    && pass "doctor — 이벤트 키 · 인계 노트 기한을 실제로 읽음" || fail "doctor — 새 검사 결과를 안 읽음"
+grep -q 'goax_inject_fresh' "$REPO/templates/default/.ax/hooks/pre-edit/spirit-rules-inject.sh" && grep -q 'goax_inject_fresh' "$REPO/templates/default/.ax/hooks/pre-edit/module-rules-inject.sh" \
+    && pass "주입 훅 둘 다 goax_inject_fresh 로 세션 dedupe" || fail "주입 훅 dedupe 누락"
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"
