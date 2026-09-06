@@ -106,8 +106,11 @@ else
     NEEDS_COUNT=$(printf '%s\n' "$NEEDS_LINES" | wc -l | tr -d ' ')
 fi
 
-# 2. placeholder `<...>` 검사 — 표 row · URL 제외
-PLACEHOLDER_LINES=$(grep -nE "<[가-힣A-Za-z0-9 _·,/\.\-]+>" "$TMP_BODY" 2>/dev/null \
+# 2. placeholder `<...>` 검사 — 표 row · URL · 이메일 제외
+# 문자 클래스에 한글 범위(`[가-힣…]`)를 쓰지 않아요 — GNU grep 은 C.UTF-8 에서 그 범위를
+# "Invalid collation character" 로 거부하고, 2>/dev/null 에 삼켜져 placeholder 가 0건으로 보였어요
+# (macOS BSD grep 은 통과라 CI 의 ubuntu 에서만 드러났어요). 부정 클래스는 로케일과 무관해요.
+PLACEHOLDER_LINES=$(grep -nE "<[^<>=\"'()]+>" "$TMP_BODY" 2>/dev/null \
     | grep -vE "^[0-9]+:[[:space:]]*\|" \
     | grep -vE "<https?://" \
     | grep -vE "<[A-Za-z][A-Za-z0-9.+-]*@" \
