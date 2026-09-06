@@ -15,7 +15,14 @@ description: "goax 프로젝트 install or idempotent update — '/up', 'goax up
 - 프로젝트에 `.ax/`가 없는데 사용자가 goax 관련 작업을 요청
 - doctor 가 plugin 갱신 감지 후 재호출 안내 (`/up` 으로 idempotent backfill)
 
-이미 `.ax/`가 있으면 — 기본 동작은 idempotent update. doctor 진단부터 원하면 `/doctor` 호출.
+**install 인지 update 인지는 `.ax/` 존재로 먼저 갈라요** (분석보다 먼저 봐요):
+
+```bash
+[ -d .ax ] && MODE=update || MODE=install
+```
+
+`MODE=update` 면 — 기본 동작은 idempotent update, brownfield 재판정 없이 곧장 §4 설치로 (§5 참고).
+doctor 진단부터 원하면 `/doctor` 호출.
 
 ## 시작 전 필수 — Spirit 자동 주입
 
@@ -141,7 +148,14 @@ echo "$RESULT" | jq -r '.result.preserved[]? | "  · _templates/\(.) 수정본 �
 
 ## 5. brownfield면 — onboarding으로 위임
 
-기존 자산이 있으면(CLAUDE.md, hooks, modules > 1, external spec 중 하나라도) `.ax/.onboarding-pending` 마커를 작성하고 onboarding skill로 자연스럽게 이어가요:
+**`MODE=install` 일 때만 판정해요.** `MODE=update` 면 이 판정을 다시 하지 않아요 — 두 번째
+호출부터는 goax 자신이 깐 `CLAUDE.md`(`@AGENTS.md` alias)·`.ax/hooks/`가 항상 존재해서, 판정
+근거를 그대로 재사용하면 재호출마다 매번 brownfield 로 떨어져 onboarding 이 반복 발동해요.
+
+판정 근거는 **§1 분석 시점의 기존 자산**이고 goax 산출물은 제외해요 — customize 안 된
+`CLAUDE.md`(1줄 alias)나 `.ax/hooks/*.sh`(goax 가 이번에 깐 것) 는 brownfield 신호가 아니에요.
+기존 자산이 있으면(§1 분석에서 발견한, goax 설치 이전부터 있던 CLAUDE.md, hooks, modules > 1,
+external spec 중 하나라도) `.ax/.onboarding-pending` 마커를 작성하고 onboarding skill로 자연스럽게 이어가요:
 
 ```
 ✓ 골격 설치 완료.

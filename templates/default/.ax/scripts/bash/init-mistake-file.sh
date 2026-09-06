@@ -64,10 +64,15 @@ if [ "$SHOW_HELP" = true ]; then
 fi
 
 # 필수 인자 검증
+# `${arg,,}` 는 bash 4+ 문법이라 macOS 기본 bash 3.2 에선 "bad substitution" 이에요.
+# 이 스크립트는 `set -uo`(−e 없음)라 그 줄만 죽고 루프가 그대로 이어졌고, 결과로
+# `--category ""` 도 status ok · 빈 category 파일이 만들어졌어요 (audit 집계가 무의미해져요).
+# bash -n 은 통과해서 smoke 도 못 봤어요. 그래서 tr 로 바꾸고 반드시 exit 1 로 세워요.
 for arg in CATEGORY SLUG SEVERITY DETECTED_BY SOURCE; do
     if [ -z "${!arg}" ]; then
-        if [ "$JSON_MODE" = true ]; then json_error "--${arg,,} required"
-        else goax_error "--$(echo "$arg" | tr '[:upper:]' '[:lower:]') required"; exit "$EXIT_ERROR"; fi
+        opt=$(printf '%s' "$arg" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+        if [ "$JSON_MODE" = true ]; then json_error "--${opt} required"; fi   # json_error 는 exit 1
+        goax_error "--${opt} required"; exit "$EXIT_ERROR"
     fi
 done
 
@@ -96,10 +101,12 @@ fi
 mkdir -p "$MISTAKES"
 
 # SLUG 정규화 — 영숫자만, cut 30 + trailing dash 제거. 한글 only 면 md5 hash 8자.
+# LC_ALL=C — 파일명은 ASCII 로 고정해요. UTF-8 로케일에선 `[[:lower:]]` 가 `é` 같은 글자도
+# 포함해서 한글이 아닌 비ASCII 가 파일명에 새어 들어와요.
 DATE=$(date +%F)
 SLUG_NORM=$(printf '%s' "$SLUG" \
         | tr '[:upper:]' '[:lower:]' \
-        | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' \
+        | LC_ALL=C sed 's/[^[:lower:][:digit:]]/-/g; s/--*/-/g; s/^-//; s/-$//' \
         | cut -c1-30 \
         | sed 's/-$//')
 if [ -z "$SLUG_NORM" ]; then

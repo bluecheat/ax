@@ -178,12 +178,14 @@ your-project/
 │   ├── modules/                           # Layer 2 — per-module domain rules (instances only)
 │   │   ├── README.md
 │   │   └── <module-name>/rules.md         # onboarding Q5 stubs only L2/L3 domains
-│   ├── hooks/                             # Sensors (deterministic)
+│   ├── hooks/                             # Sensors (deterministic) — 7 dirs, 13 files
 │   │   ├── user-prompt/triage-nudge.sh    # idle-phase reminder (Claude Code only)
 │   │   ├── pre-bash/{block-destructive,grep-on-commit}.sh
-│   │   ├── pre-edit/{check-protected-paths,spirit-check,spirit-rules-inject}.sh
-│   │   ├── pre-commit/{critical-rule-grep,check-mistake-secrets}.sh
-│   │   └── post-edit/lint-changed.sh
+│   │   ├── pre-edit/{check-protected-paths,module-rules-inject,spirit-check,spirit-rules-inject}.sh
+│   │   ├── post-edit/lint-changed.sh
+│   │   ├── pre-commit/{critical-rule-grep,check-mistake-secrets,spec-completion-gate}.sh
+│   │   ├── subagent-start/harness-pointer.sh   # hands Constitution/Spirit/spec paths to sub-agents
+│   │   └── stop/spec-gate.sh              # blocks turn end once if an active spec fails its gate
 │   ├── scripts/bash/*.sh                  # deterministic tools (--json standard)
 │   │   └── install-git-hooks.sh           # OpenCode mode — git pre-commit chain installer
 │   ├── _templates/                        # Layer 3 — all templates in one place

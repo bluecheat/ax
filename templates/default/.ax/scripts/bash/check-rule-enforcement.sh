@@ -6,7 +6,7 @@
 #
 # Sources (read-only):
 #   - $ROOT/AGENTS.md (또는 CLAUDE.md)  (inline 룰: 🔴/🟡/🔵 + 다음 라인 - enforced_by:)
-#   - $ROOT/.ax/spirit/rules/*.md   (frontmatter enforced_by/enforced_kind)
+#   - $ROOT/.ax/spirit/rules/*.md   (frontmatter severity/enforced_by/enforced_kind)
 #   - $ROOT/.ax/modules/*/rules.md  (frontmatter)
 #   - $ROOT/.ax/docs/adr/*.md       (deadline checklist: - [ ] YYYY-MM-DD ...)
 #
@@ -22,13 +22,20 @@
 #         자기 무력화). 프로젝트 전용 chain 훅이 있을 때만 git:pre-commit-chain 인정.
 #       external 라벨만 있고 트리거가 없으면 "누군가 손으로 돌릴 때만" 도는 거짓 약속
 #
+# 미작성 예시(placeholder) 제외:
+#   enforced_by 가 아직 `<...>` 나 `YYYY-MM-DD`/`NNNN` 자리표시자면 위반이 아니라
+#   "안 채운 자리" 예요. 출고 AGENTS.md 의 예시 룰이 여기 걸려서, 위반으로 세면
+#   갓 설치한 프로젝트가 첫날부터 --strict 로 빨개져요. warnings 로 빼고
+#   result.placeholder_rules 에 담아요 — 값을 채우면 그때부터 검사 대상이에요.
+#
 # JSON output schema (--json):
 #   { status: ok|warning|error,
 #     result: {
 #       i1_violations: [...], i2_violations: [...],
 #       i3_imminent: [...], i3_overdue: [...],
 #       i5_file_missing: [...], i5_not_registered: [...],
-#       i6_no_trigger: [...], trigger_surfaces: [...],
+#       i6_no_trigger: [...], placeholder_rules: [...],
+#       trigger_surfaces: [...],
 #       rule_count: N, source_files: [...]
 #     },
 #     next_step, warnings, errors }
@@ -60,7 +67,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,42p' "${BASH_SOURCE[0]}" | sed 's/^# //; s/^#//'
+    sed -n '2,49p' "${BASH_SOURCE[0]}" | sed 's/^# //; s/^#//'
     exit "$EXIT_OK"
 fi
 
@@ -136,14 +143,31 @@ extract_inline() {
 }
 
 # ─── (2) frontmatter 추출 — spirit/rules + modules/*/rules.md ─────
-# 출력 동일 TSV. label 은 frontmatter 에 명시 안 되면 "convention" 으로 가정 (spirit 기본).
+# 출력 동일 TSV. label 은 frontmatter `severity:` 에서 읽어요 (critical/mandatory,
+# 그 외·부재는 "convention"). 이걸 안 읽으면 frontmatter 룰 전면이 I1 사각지대가 돼요.
 extract_frontmatter() {
     local file="$1"
     awk -v file="$file" '
-        BEGIN { c=0; in_fm=0; eb=""; ek=""; cat="" }
+        BEGIN { c=0; in_fm=0; eb=""; ek=""; cat=""; sev="" }
         /^---$/ { c++; if (c==2) { print_record(); exit } next }
         c==1 {
+            # YAML 인라인 주석 제거 — 안 걷어내면 주석이 값으로 들어와요
+            # (출고 _templates/spirit/*.md 가 필드마다 설명 주석을 답니다).
+            # `#` 앞에 공백을 요구해서 값 안의 `#` (글롭 앵커 등) 은 안 건드려요.
+            ln=$0; sub(/(^|[[:space:]])#.*$/, "", ln)
+            sub(/[[:space:]]+$/, "", ln); $0=ln
+
+            # 새 키가 시작되면 배열 수집을 닫아요. **이 검사가 opener 보다 뒤에 있으면
+            # `enforced_by:` 자기 자신이 새 키로 읽혀 같은 줄에서 in_fm 이 꺼져요** —
+            # 배열 형식(`enforced_by:` + `- item`)이 통째로 안 읽히던 원인이에요.
+            if (in_fm && /^[a-zA-Z]/) in_fm=0
+
             if (/^category:/) { cat=$0; sub(/^category:[[:space:]]*/, "", cat) }
+            if (/^severity:/) {
+                sev=$0; sub(/^severity:[[:space:]]*/, "", sev)
+                gsub(/["'"'"']/, "", sev); gsub(/[[:space:]]/, "", sev)
+                sev=tolower(sev)
+            }
             if (/^enforced_by:[[:space:]]*[^[:space:]]/) {
                 # scalar 형식: enforced_by: hook:...
                 eb=$0; sub(/^enforced_by:[[:space:]]*/, "", eb)
@@ -156,17 +180,19 @@ extract_frontmatter() {
                 v=$0; sub(/^[[:space:]]+-[[:space:]]+/, "", v)
                 if (eb=="") eb=v; else eb=eb "+" v
             }
-            if (in_fm && /^[a-zA-Z]/) in_fm=0
             if (/^enforced_kind:/) {
                 ek=$0; sub(/^enforced_kind:[[:space:]]*/, "", ek)
             }
         }
-        function print_record() {
+        function print_record(   lab) {
             if (eb != "" || ek != "") {
                 # rule_id 는 파일 basename 기반 — frontmatter 룰은 파일 = 카테고리
                 file_id=file; sub(/.*\//, "", file_id); sub(/\.md$/, "", file_id)
                 rid="SPIRIT:" toupper(file_id)
-                printf "%s\t%s\t%s\t%s\t%s\n", rid, "convention", eb, ek, file
+                lab = "convention"
+                if (sev == "critical") lab = "critical"
+                else if (sev == "mandatory") lab = "mandatory"
+                printf "%s\t%s\t%s\t%s\t%s\n", rid, lab, eb, ek, file
             }
         }
     ' "$file"
@@ -196,6 +222,18 @@ I3_OVERDUE=()
 I5_FILE=()  # hook:<path> 파일 부재
 I5_REG=()   # hook:<path> 파일 OK 인데 settings.json 미등록
 I6=()       # external:* 인데 자동 실행 트리거(CI/git hook) 부재
+PLACEHOLDERS=()  # enforced_by 가 아직 자리표시자 — 위반이 아니라 미작성
+
+# enforced_by 가 `<...>` / YYYY-MM-DD / NNNN 이면 아직 안 채운 예시예요.
+# 출고 AGENTS.md 의 예시 룰이 여기 해당 — 위반으로 세면 --strict 가 첫날부터
+# 빨개져서 아무도 안 켜요. 값을 채우는 순간 자동으로 검사 대상이 돼요.
+is_placeholder_eb() {
+    case "$1" in
+        *"<"*">"*)           return 0 ;;
+        *YYYY-MM-DD*|*NNNN*) return 0 ;;
+    esac
+    return 1
+}
 
 # I6 준비 — 리포에 존재하는 자동 트리거 표면을 한 번만 수집.
 # external:<tool> 의 내용까지는 도구별이라 검증 못 하지만, "무엇이 그걸 자동으로
@@ -254,6 +292,12 @@ date_diff_days() {
 
 while IFS=$'\t' read -r rid label eb ek file; do
     [ -z "$rid" ] && continue
+
+    # 미작성 예시는 어떤 invariant 도 판정하지 않아요 (보고만)
+    if is_placeholder_eb "$eb"; then
+        PLACEHOLDERS+=("$rid|$eb|placeholder|$file")
+        continue
+    fi
 
     # I1: CRITICAL 인데 enforced_by 가 hook:* 또는 external:* 가 아님
     if [ "$label" = "critical" ]; then
@@ -328,16 +372,26 @@ if [ "$JSON_MODE" = true ]; then
         --argjson i5f "$(arr_to_json ${I5_FILE[@]+"${I5_FILE[@]}"})" \
         --argjson i5r "$(arr_to_json ${I5_REG[@]+"${I5_REG[@]}"})" \
         --argjson i6 "$(arr_to_json ${I6[@]+"${I6[@]}"})" \
+        --argjson ph "$(arr_to_json ${PLACEHOLDERS[@]+"${PLACEHOLDERS[@]}"})" \
         --argjson ts "$(if [ "${#TRIGGER_SURFACES[@]}" -eq 0 ]; then echo "[]"; else printf '%s\n' "${TRIGGER_SURFACES[@]}" | jq -R . | jq -s .; fi)" \
         --argjson rc "$RULE_COUNT" \
-        '{i1_violations: $i1, i2_violations: $i2, i3_imminent: $i3im, i3_overdue: $i3od, i5_file_missing: $i5f, i5_not_registered: $i5r, i6_no_trigger: $i6, trigger_surfaces: $ts, rule_count: $rc}')
+        '{i1_violations: $i1, i2_violations: $i2, i3_imminent: $i3im, i3_overdue: $i3od, i5_file_missing: $i5f, i5_not_registered: $i5r, i6_no_trigger: $i6, placeholder_rules: $ph, trigger_surfaces: $ts, rule_count: $rc}')
+
+    if [ "${#PLACEHOLDERS[@]}" -gt 0 ]; then
+        warnings_json=$(printf 'placeholder %d건 — enforced_by 가 아직 예시 자리표시자예요 (실제 값으로 채우면 검사 대상)\n' "${#PLACEHOLDERS[@]}" | jq -R . | jq -sc .)
+    else
+        warnings_json="[]"
+    fi
 
     if [ "$TOTAL_VIOLATIONS" -eq 0 ]; then
-        json_output "ok" "$result" "all invariants pass"
+        json_output "ok" "$result" "all invariants pass" "$warnings_json"
     else
-        json_output "warning" "$result" "$TOTAL_VIOLATIONS violations — see i*_violations arrays"
+        json_output "warning" "$result" "$TOTAL_VIOLATIONS violations — see i*_violations arrays" "$warnings_json"
     fi
 else
+    if [ "${#PLACEHOLDERS[@]}" -gt 0 ]; then
+        goax_warn "placeholder ${#PLACEHOLDERS[@]}건 — enforced_by 가 아직 예시 자리표시자예요 (채우면 검사 대상)"
+    fi
     if [ "$TOTAL_VIOLATIONS" -eq 0 ]; then
         goax_log "✓ rule enforcement invariants pass ($RULE_COUNT 룰 검사)"
     else

@@ -8,7 +8,9 @@
 #
 # 무엇을 하나 — 차단이 아니라 **한 턴 더** 주는 거예요. 세 가지 중 하나를 하고 끝내라고 해요:
 #   (1) 남은 task 를 마저   (2) 의도적 보류면 `- [~] … 보류: <사유>`   (3) 여기서 멈추는 거면 인계 노트
-# (3) 이 적혀 있으면(STATUS.md "지금 상태" 에 spec 이름) 다시 안 잡아요 — 멈추는 게 의도인 거니까요.
+# (3) 이 적혀 있으면(STATUS.md "지금 상태" 에 spec 이름 + 24시간 안의 시각) 다시 안 잡아요 —
+#     멈추는 게 의도인 거니까요. 시각을 보는 이유는 옛 노트 한 줄이 새 세션의 게이트를
+#     영구히 침묵시키면 안 되기 때문이에요 (status-note.sh --set now 가 시각을 같이 박아요).
 #
 # 안전장치 셋:
 #   - `stop_hook_active=true` (이미 한 번 붙잡은 뒤의 재시도) → 즉시 통과. 무한 루프는 공식 계약이 막아요
@@ -46,11 +48,32 @@ SPEC_DIR=$(jq -r '.spec_dir // empty' "$TASK_FILE" 2>/dev/null || true)
 [ -n "$SPEC_DIR" ] || exit 0
 SPEC=$(basename "$SPEC_DIR")
 
-# 인계 노트에 이미 적혀 있으면 멈추는 게 의도예요 — 다시 안 잡아요
+# 인계 노트에 이미 적혀 있으면 멈추는 게 의도예요 — 다시 안 잡아요.
+# 단 **24시간 안에 찍힌 노트만** 인정해요. 예전엔 "지금 상태" 에 spec 이름이 있기만 하면
+# 통과라서, 몇 주 전 노트 한 줄이 새 세션의 게이트를 영구히 침묵시켰어요 (다른 session_id 로
+# 몇 번을 불러도 빈 출력). `status-note.sh --set now` 가 줄 끝에 (YYYY-MM-DDTHH:MMZ) 를 박아요 —
+# 시각이 아예 없는 옛 노트는 인정하지 않아요.
 NOTE="$PROJECT_ROOT/.ax/docs/STATUS.md"
-if [ -f "$NOTE" ] && awk '/^## /{inb=($0 ~ /^## 지금 상태/)} inb' "$NOTE" | grep -qF "$SPEC"; then
-    exit 0
+if [ -f "$NOTE" ]; then
+    NOW_SEC=$(awk '/^## /{inb=($0 ~ /^## 지금 상태/)} inb' "$NOTE")
+    if printf '%s' "$NOW_SEC" | grep -qF "$SPEC"; then
+        NOTE_TS=$(printf '%s' "$NOW_SEC" \
+            | grep -oE '\([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z\)' | tail -1 | tr -d '()')
+        if [ -n "$NOTE_TS" ]; then
+            NOTE_E=$(date -j -u -f '%Y-%m-%dT%H:%MZ' "$NOTE_TS" +%s 2>/dev/null \
+                  || date -u -d "$NOTE_TS" +%s 2>/dev/null || echo "")
+            if [ -n "$NOTE_E" ]; then
+                AGE=$(( $(date -u +%s) - NOTE_E )); [ "$AGE" -lt 0 ] && AGE=0
+                [ "$AGE" -lt 86400 ] && exit 0
+            fi
+        fi
+    fi
 fi
+
+# .ax/.session 24시간 스윕 — 이 청소가 pre-edit 훅에만 있어서 Edit 없는 세션은 아무것도 못 지웠어요.
+# 턴 종료는 어느 세션이든 반드시 지나는 지점이라 여기 한 줄이 제일 확실해요.
+find "$PROJECT_ROOT/.ax/.session" -mindepth 1 -maxdepth 1 -type d -mmin +1440 \
+     -exec rm -rf {} + 2>/dev/null || true
 
 # 세션당 상한 — 같은 세션에서 계속 잡으면 게이트가 아니라 성가심이에요
 CAP="${GOAX_STOP_GATE_MAX:-8}"
@@ -89,7 +112,7 @@ REASON="[goax] spec ${SPEC} 가 ${PHASE} 인데 완료 게이트 미통과 — $
  (3) 여기서 멈추는 거면 인계 노트에 적고 끝내세요 — 다음 세션이 대화가 아니라 파일에서 읽어요:
      bash .ax/scripts/bash/status-note.sh --set now \"spec ${SPEC} ${PHASE} 에서 멈춤 — <어디까지 · 왜>\"
      bash .ax/scripts/bash/status-note.sh --add next \"<다음 세션이 처음 할 일>\"
-인계 노트의 '지금 상태' 에 ${SPEC} 가 적혀 있으면 이 게이트는 다시 잡지 않아요. (세션당 최대 ${CAP}회 · $((COUNT + 1))/${CAP} · sensors.mode=off 면 침묵)"
+인계 노트의 '지금 상태' 에 ${SPEC} 가 **24시간 안에** 적혀 있으면 이 게이트는 다시 잡지 않아요 (시각은 status-note.sh 가 박아요). (세션당 최대 ${CAP}회 · $((COUNT + 1))/${CAP} · sensors.mode=off 면 침묵)"
 
 jq -nc --arg r "$REASON" '{decision:"block", reason:$r}'
 exit 0

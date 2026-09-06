@@ -4,7 +4,8 @@
 # Usage:
 #   bash constitution-apply.sh --block <file> [--target AGENTS.md|CLAUDE.md] [--dry-run] [--json]
 #       블록 파일을 대상 상단에 prepend 하고 기존 본문은 `---` 아래 그대로 보존해요.
-#       블록의 첫 `## ` 헤더가 이미 대상에 있으면 적용된 걸로 보고 skip (exit 2). 덮어쓰려면 --force
+#       블록의 **룰 토큰**(`AX:MANDATORY:002` · `SP-OPS-001`)이 대상에 전부 있을 때만 적용된 걸로
+#       보고 skip (exit 2). 토큰이 없는 블록은 룰 라인, 그것도 없으면 첫 `## ` 헤더로. 덮어쓰려면 --force
 #   bash constitution-apply.sh --scan-duplicates --block <file> [--target …] [--json]
 #       블록의 룰 라인 ↔ 기존 본문의 정확 일치(normalize 뒤 구 줄 ⊆ 신 룰 줄) 목록만 — 지우지 않아요
 #   bash constitution-apply.sh --drop-exact --block <file> [--target …] [--dry-run] [--json]
@@ -44,7 +45,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'   # 2..'# Exit:' 줄까지
     exit "$EXIT_OK"
 fi
 fail() { if [ "$JSON_MODE" = true ]; then json_error "$1"; fi; goax_error "$1"; exit "$EXIT_ERROR"; }
@@ -95,9 +96,34 @@ scan_dups() {
 
 case "$MODE" in
   prepend)
+    # "이미 적용됨" 판정 — 예전엔 블록의 첫 `## ` 헤더 **텍스트 하나**만 봤어요.
+    # `## META — 핵심 가드레일` 처럼 대상에 흔히 있는 제목이면 룰이 하나도 안 들어갔는데도
+    # skip 으로 나가서, onboarding Q5 로 정한 룰이 조용히 사라졌어요.
+    # 그래서 블록이 실어나르는 **룰 토큰**(AX:MANDATORY:002 · SP-OPS-001)이 대상에
+    # **전부** 있을 때만 skip 해요. 토큰이 없는 블록은 룰 라인 자체로, 그것도 없으면 헤더로.
     FIRST_H2=$(grep -m1 -E '^## ' "$BLOCK" || true)
-    if [ -f "$TARGET" ] && [ -n "$FIRST_H2" ] && grep -qxF "$FIRST_H2" "$TARGET" && [ "$FORCE" = false ]; then
-        skip "$TARGET 에 이미 '$FIRST_H2' 가 있어요 — 적용된 것으로 봐요 (--force 로 덮어쓰기)"
+    if [ -f "$TARGET" ] && [ "$FORCE" = false ]; then
+        TOKENS=$(LC_ALL=C grep -oE '([[:upper:]][[:upper:]]*:[[:upper:]][[:upper:]]*:[0-9][0-9][0-9]|SP-[[:upper:]][[:upper:]]*-[0-9][0-9][0-9])' "$BLOCK" | sort -u || true)
+        PROBES=0; MISSING=0
+        if [ -n "$TOKENS" ]; then
+            for tok in $TOKENS; do       # 토큰엔 공백이 없어요 — 단어 분리로 충분
+                PROBES=$((PROBES + 1))
+                grep -qF -- "$tok" "$TARGET" || MISSING=$((MISSING + 1))
+            done
+        else
+            while IFS= read -r rl; do
+                [ -z "$rl" ] && continue
+                PROBES=$((PROBES + 1))
+                grep -qxF -- "$rl" "$TARGET" || MISSING=$((MISSING + 1))
+            done < <(rule_lines)
+        fi
+        if [ "$PROBES" -gt 0 ] && [ "$MISSING" -eq 0 ]; then
+            skip "$TARGET 에 이 블록의 룰 ${PROBES}개가 전부 있어요 — 적용된 것으로 봐요 (--force 로 덮어쓰기)"
+        fi
+        # 룰이 한 줄도 없는 블록(헤더·산문만) 은 예전처럼 첫 헤더로 판정해요
+        if [ "$PROBES" -eq 0 ] && [ -n "$FIRST_H2" ] && grep -qxF -- "$FIRST_H2" "$TARGET"; then
+            skip "$TARGET 에 이미 '$FIRST_H2' 가 있어요 — 적용된 것으로 봐요 (--force 로 덮어쓰기)"
+        fi
     fi
     OLD_LINES=0; [ -f "$TARGET" ] && OLD_LINES=$(wc -l < "$TARGET" | tr -d ' ')
     NEW_LINES=$(wc -l < "$BLOCK" | tr -d ' ')
@@ -120,8 +146,14 @@ case "$MODE" in
   scan|drop)
     [ -f "$TARGET" ] || fail "$TARGET 이 없어요"
     DUPS=$(scan_dups)
-    DN=$(printf '%s' "$DUPS" | grep -c . || true)
-    DJ=$(printf '%s' "$DUPS" | grep -v '^$' | jq -Rc 'split("\t") | {rule:.[0],old_line:(.[1]|tonumber),old_text:.[2]}' | jq -sc .)
+    DN=$(printf '%s' "$DUPS" | grep -c . || true); DN=${DN:-0}
+    # 중복 0건이 가장 흔한 경우인데, 예전엔 여기서 죽었어요 — 빈 입력의 `grep -v` 는 exit 1 이고
+    # pipefail × set -e 가 그걸 그대로 받아서 json_error 도 못 찍고 stdout·stderr 둘 다 빈 채 exit 1.
+    # --json 계약(항상 envelope 한 줄)이 가장 흔한 경로에서 깨져 있었어요.
+    DJ='[]'
+    if [ "$DN" -gt 0 ]; then
+        DJ=$(printf '%s\n' "$DUPS" | grep -v '^$' | jq -Rc 'split("\t") | {rule:.[0],old_line:(.[1]|tonumber),old_text:.[2]}' | jq -sc .)
+    fi
     if [ "$MODE" = "scan" ]; then
         RES=$(jq -nc --arg t "$TARGET" --argjson d "$DJ" '{target:$t,mode:"scan",duplicates:$d,count:($d|length)}')
         if [ "$JSON_MODE" = true ]; then

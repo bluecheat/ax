@@ -69,17 +69,47 @@ echo "[goax] CRITICAL 룰 검사 (mode=$SENSOR_MODE) — 대상 $(echo "$STAGED"
 # 있는 룰은 그쪽을 pre-commit/CI 에서 직접 실행하는 별도 훅 파일로 두세요 —
 # .ax/hooks/pre-commit/ 의 *.sh 는 전부 자동 chain 되고, exit 2 가 커밋을 차단해요.
 
-# secrets 검출 — xargs -I{} sh -c '...{}...'는 파일명에 `"`/백틱/`$` 들어가면 명령 주입 가능 → while-read 안전 loop으로 변경
-SECRETS_HIT=0
+# ─── secrets 검출 ───────────────────────────────────────────────────
+# 옛 정규식은 `(password|secret|api[_-]?key|token).*=.*["']` 하나였어요. 대소문자를 가리고
+# `=` 와 따옴표를 둘 다 요구해서, 실검체 9종(AKIA·ghp_·xox·sk_live·sk-·PEM·JWT·`PASSWORD=`·`password:`)
+# 을 **전부** 놓쳤어요 — `templates/zero/probe/examples/secret-scan.sh` 가 자기 프로브에서
+# PROBE FAILED 를 냈고요. `common.sh` 의 `redact_secrets` 는 이 토큰 형태들을 이미 알고 있었는데
+# 여기서 안 쓰고 있었어요 (redact 는 sed 치환용이라 검출용으로 그대로 못 씀 → 같은 패턴 세트를 여기 둬요).
+#
+# 두 갈래로 봐요:
+#   ① 토큰 형태 — 발급처가 형식을 정해둔 것. 대소문자 그대로 봐야 오탐이 안 늘어요
+#   ② 일반 key=value — 대소문자 무시. 값 첫 글자에서 `$`·`<`·`{`·`%`·`(` 를 빼서
+#      `${GITHUB_TOKEN}`·`<from env>` 같은 참조 표기를 오탐하지 않아요. 값은 6자 이상이라
+#      `secret: null`·`token_count = 0` 도 안 걸려요
+SECRET_SHAPES='AKIA[0-9A-Z]{16}
+gh[posru]_[A-Za-z0-9]{20,}
+github_pat_[A-Za-z0-9_]{20,}
+xox[abprs]-[A-Za-z0-9-]{10,}
+(sk|pk|rk)_live_[A-Za-z0-9]{16,}
+sk-(ant|proj)-[A-Za-z0-9_-]{20,}
+sk-[A-Za-z0-9]{20,}
+AIza[0-9A-Za-z_-]{35}
+npm_[A-Za-z0-9]{30,}
+whsec_[A-Za-z0-9]{20,}
+-----BEGIN [A-Z ]*PRIVATE KEY-----
+eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'
+SECRET_KV='(password|passwd|secret|api[_-]?key|access[_-]?key|token|bearer)[[:space:]]*[:=][[:space:]]*['"'"'"]?[^[:space:]'"'"'"$<{%(][^[:space:]'"'"'"]{5,}'
+
+SECRET_FILES=""
 while IFS= read -r f; do
     [ -z "$f" ] || [ ! -f "$f" ] && continue
-    if grep -lE "(password|secret|api[_-]?key|token).*=.*[\"']" "$f" 2>/dev/null >/dev/null; then
-        SECRETS_HIT=1
-        break
-    fi
+    hit=""
+    while IFS= read -r pat; do
+        [ -z "$pat" ] && continue
+        if grep -qIE -e "$pat" "$f" 2>/dev/null; then hit="$pat"; break; fi
+    done <<< "$SECRET_SHAPES"
+    [ -z "$hit" ] && grep -qIEi -e "$SECRET_KV" "$f" 2>/dev/null && hit="key=value"
+    # 매칭된 줄은 안 찍어요 — 시크릿을 stderr·로그로 다시 흘리면 검출한 의미가 없어요
+    [ -n "$hit" ] && SECRET_FILES="${SECRET_FILES}${f}"$'\n'
 done <<< "$STAGED"
-if [ "$SECRETS_HIT" -eq 1 ]; then
-    report "secrets" "Secrets 추정 패턴 발견 — staged 파일 점검"
+if [ -n "$SECRET_FILES" ]; then
+    SECRET_N=$(printf '%s' "$SECRET_FILES" | grep -c . || true)
+    report "secrets" "Secrets 추정 패턴 — ${SECRET_N}개 파일: $(printf '%s' "$SECRET_FILES" | tr '\n' ' ')"
 fi
 
 if [ "$VIOLATIONS" -gt 0 ]; then

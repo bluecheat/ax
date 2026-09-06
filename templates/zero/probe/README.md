@@ -27,12 +27,13 @@ bash .ax/scripts/bash/zero-probe.sh --only secret-scan
 ## 시작하는 법
 
 `.ax/_templates/zero/probes/` 의 예시를 `.ax/probes/` 로 복사해서 프로젝트에 맞게 고쳐요.
-예시 셋이 세 가지 전형을 덮습니다.
+예시 넷이 네 가지 전형을 덮습니다.
 
 | 예시 | 무엇을 재나 |
 |---|---|
 | `dependency-direction.sh` | 코드 위반을 만들고 **lint 가 막는지** |
 | `secret-scan.sh` | 위반 파일을 스테이지하고 **pre-commit 훅이 막는지** |
+| `version-bump.sh` | 릴리즈 없는 버전 증가를 스테이지하고 **pre-commit 훅이 막는지** |
 | `ci-actually-ran.sh` | CI 가 성공했는지가 아니라 **게이트 출력이 로그에 있는지** |
 
 첫날엔 2~3개면 충분해요. 게이트를 하나 새로 깔 때마다 프로브도 하나 늘려요 —
@@ -77,5 +78,6 @@ grep -rn "from '\.\./\.\./app" packages/core/src && exit 1
 ```
 probe: core→react import → eslint exit 2 (차단 확인)
 probe: 시크릿 스테이지 → pre-commit exit 1 (차단 확인)
+probe: 0.1.0 → 0.1.1 스테이지 → pre-commit exit 1 (차단 확인)
 probe: CI 로그에 게이트 출력 4줄 (실행 확인)
 ```

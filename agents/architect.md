@@ -1,6 +1,6 @@
 ---
 name: architect
-description: "아키텍처 결정·검토 sub-agent. 시스템 설계·모듈 의존·트레이드오프 비교·ADR 초안 작성에 활용. PR 머지 전 구조적 위반 검토에도 호출 가능."
+description: "아키텍처 결정·검토 sub-agent. 시스템 설계·모듈 의존·트레이드오프 비교·ADR 초안 작성에 활용. PR 머지 전 구조적 위반 검토에도 호출 가능. spec-validate 의 합의 리뷰(spec 리뷰)에서 evaluator 와 순차·독립으로도 호출돼요 — 트리거: '합의 리뷰', 'spec 리뷰', 'architect 리뷰'."
 ---
 
 # architect — 아키텍처 sub-agent

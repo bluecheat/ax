@@ -19,7 +19,7 @@
 | L0 | 사용자 영향 미미, 롤백 자유 | lint + 변경 파일 테스트 |
 | L1 | 사용자 노출, 캐시 영향 없음 | + structural-check |
 | L2 | 트랜잭션 / 노출 + 캐시 | + integration tag + traffic estimation |
-| L3 | 비가역 손실 가능 영역 — 결제·정산, 의료 PHI·EHR, 안전·제어, 회계·장부 무결성, 인증·자격증명 등 | + 사람 architect 게이트 (강제) |
+| L3 | 비가역 손실 가능 영역 — 결제·정산, 의료 PHI·EHR, 안전·제어, 회계·장부 무결성, 인증·자격증명 등 | + evaluator 필수(G6) + 사람 게이트(per_task) — architect 는 이 Risk 축이 아니라 **Size 축**(L/XL 필수, M 선택)으로 `spec-validate` §2.5 합의 리뷰가 불러요 |
 
 ## 매트릭스 — 권장 액션 + Friction
 
@@ -27,8 +27,8 @@
 |---|---|---|---|---|
 | **S** | 즉시 · autopilot | 즉시+lint · autopilot | 즉시+ADR · phase_gate | 게이트+ADR · per_task |
 | **M** | inline · autopilot | inline+lint · phase_gate | standard · phase_gate | standard+evaluator · per_task |
-| **L** | standard · phase_gate | standard · phase_gate | standard+evaluator · phase_gate | full+게이트 · per_task |
-| **XL** | full+단계분할 · phase_gate | full+단계분할 · phase_gate | full+단계분할 · phase_gate | full+단계분할+단계당 ADR · per_task |
+| **L** | standard+evaluator · phase_gate | standard+evaluator · phase_gate | standard+evaluator · phase_gate | full+게이트+evaluator · per_task |
+| **XL** | full+단계분할+evaluator · phase_gate | full+단계분할+evaluator · phase_gate | full+단계분할+evaluator · phase_gate | full+단계분할+단계당 ADR+evaluator · per_task |
 
 > 각 셀: `권장 액션 · friction 모드`. friction 의미는 `confirmation-policy.md` 참조.
 > - `autopilot` — 메뉴 X, 자동 진행, 실패 시에만 halt
@@ -62,12 +62,16 @@
 
 spec 경로 (M×L2 이상, L, XL):
 ```
-[/triage] → [spec] → [spec-tasks] → [spec-implement] → [hooks] → [evaluator] → [commit]
+[/triage] → [spec] → [spec-validate] → [spec-tasks] → [lane] → [spec-implement] → [hooks] → [commit]
 ```
+
+`[spec-validate]` 안에서 Size 축(L·XL 필수, M 은 `--consensus` 선택)이 architect·evaluator 합의
+리뷰를 돌려요 — architect 는 Risk(L3) 가 아니라 **Size** 로 트리거돼요. `spec-implement` 완료
+직전엔 별도로 evaluator(G6, size L 이상·M×L3 필수)가 한 번 더 봐요.
 
 L3 또는 아키텍처 영향:
 ```
-+ [adr] · [architect] 게이트
++ [adr] · 사람 게이트(per_task, task 단위 [y/n])
 ```
 
 ## 관련 룰

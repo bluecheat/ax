@@ -6,8 +6,18 @@ applies_to: [code]                  # code | pr | commit | review (필요한 것
 paths:                              # 이 룰이 적용될 파일 글롭 — **비우면 자동 주입이 안 돼요**
   - "**/*.__EXT__"                  # 편집 대상이 여기 매칭되면 훅이 이 파일 경로를 주입
                                     # (pre-edit/spirit-rules-inject.sh)
+severity: convention                # critical | mandatory | convention
+                                    # 생략하면 convention 으로 봐요. critical 은 enforced_by 가
+                                    # hook:*/external:* 일 때만 정직해요 (invariant I1)
+enforced_by:                        # 무엇이 이 룰을 실제로 막나 — **이 줄이 없으면 검사에서
+  - human:pr-review                 # 통째로 빠져요** (위반이 아니라 무검사). 쓸 수 있는 값:
+                                    # hook:<경로> · external:<도구> · human:<게이트> · TODO:<YYYY-MM-DD>
+enforced_kind: human                # block | warn | arch | human | missing
 # adr: .ax/docs/adr/NNNN-*.md           # 결정 근거 ADR (선택)
 ---
+
+<!-- severity/enforced_by/enforced_kind 의 schema 와 invariant: .ax/docs/reference/rule-enforcement.md
+     doctor 가 매 호출마다 check-rule-enforcement.sh 로 추적해요. -->
 
 # __Category Title__
 

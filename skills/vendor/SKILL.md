@@ -98,7 +98,7 @@ echo "$RESULT" | jq -r '.result | "\(.count)개 동봉 (v\(.version)), 포인터
 ✓ 동봉 완료 — v0.4.0, 20개
 
 다음 단계
- 1. 커밋하세요 — .claude/ 와 .goax-root 가 저장소에 들어가야 팀원에게 닿아요
+ 1. 커밋해요 — .claude/ 와 .goax-root 가 저장소에 들어가야 팀원에게 닿아요
       git add .claude .goax-root && git commit -m "chore: goax 0.4.0 동봉"
  2. 팀원은 clone 후 바로 사용 — plugin 설치 불필요
  3. plugin 갱신 시 /vendor 재실행 → 커밋 (doctor 가 stale 을 알려줘요)

@@ -178,12 +178,14 @@ your-project/
 │   ├── modules/                           # Layer 2 — 모듈별 도메인 룰 (인스턴스만)
 │   │   ├── README.md
 │   │   └── <module-name>/rules.md         # onboarding Q5가 L2/L3 도메인만 stub
-│   ├── hooks/                             # Sensors (결정론)
+│   ├── hooks/                             # Sensors (결정론) — 7 디렉토리, 13 파일
 │   │   ├── user-prompt/triage-nudge.sh    # idle phase 시 reminder (Claude Code 전용)
 │   │   ├── pre-bash/{block-destructive,grep-on-commit}.sh
-│   │   ├── pre-edit/{check-protected-paths,spirit-check,spirit-rules-inject}.sh
-│   │   ├── pre-commit/{critical-rule-grep,check-mistake-secrets}.sh
-│   │   └── post-edit/lint-changed.sh
+│   │   ├── pre-edit/{check-protected-paths,module-rules-inject,spirit-check,spirit-rules-inject}.sh
+│   │   ├── post-edit/lint-changed.sh
+│   │   ├── pre-commit/{critical-rule-grep,check-mistake-secrets,spec-completion-gate}.sh
+│   │   ├── subagent-start/harness-pointer.sh   # sub-agent 에게 Constitution/Spirit/spec 경로 전달
+│   │   └── stop/spec-gate.sh              # 활성 spec 이 게이트 실패 시 턴 종료를 한 번 막음
 │   ├── scripts/bash/*.sh                  # 결정론 도구 (--json 표준)
 │   │   └── install-git-hooks.sh           # OpenCode mode — git pre-commit chain 설치
 │   ├── _templates/                        # Layer 3 — 모든 template 한 곳

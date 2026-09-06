@@ -21,8 +21,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# 1. 일부러 위반 만들기 — 문서에서 흔히 쓰는 가짜 AWS 키 형태
-printf 'AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n' > "$FIXTURE"
+# 1. 일부러 위반 만들기 — 표기를 셋으로 넓혀요. 스캐너마다 잡는 형태가 달라서,
+#    하나만 넣으면 "우리 게이트가 막는다" 가 아니라 "그 한 형태만 막는다" 를 재게 돼요.
+#    셋 다 공개 문서에서 쓰는 가짜 값이에요 (실제 크리덴셜 아님).
+{
+    printf 'AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n'
+    printf 'API_KEY=sk-PROBEFIXTURE0000000000000000\n'
+    printf 'password: PROBEFIXTURE-not-a-real-secret\n'
+} > "$FIXTURE"
 git add -f "$FIXTURE" 2>/dev/null || { echo "스테이지 실패 — skip"; exit 2; }
 
 # 2. 훅만 직접 실행 — 커밋을 만들지 않아요. 파이프 없이

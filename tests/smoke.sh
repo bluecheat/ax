@@ -2,6 +2,9 @@
 # tests/smoke.sh — goax Plugin 구조 검증
 # 검증: 파일 구조·JSON 유효성·skill/agent frontmatter·shell 문법·jq syntax·hook 경로 양방향
 #       cross-check·MANIFEST 완전성·버전 마커 lint·scripts/bash 런타임 e2e
+#
+# 섹션 번호는 **논리 그룹**이에요 — 파일에 적힌 순서와 다릅니다 (§26 이 §18 위에 있어요).
+# 찾을 땐 번호가 아니라 `grep -n '^section '` 으로 보세요.
 
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -404,7 +407,10 @@ while IFS= read -r f; do
         fail "frontmatter description 누락: ${f#$REPO/}"
     fi
 done < <(find "$REPO/skills" -name SKILL.md)
-pass "skill frontmatter ($ok_skills/$total_skills)"
+# 루프가 fail 을 냈는데 뒤에서 무조건 pass 를 찍으면 초록이 거짓말을 해요 — 루프 결과로 게이팅.
+[ "$ok_skills" -eq "$total_skills" ] \
+    && pass "skill frontmatter ($ok_skills/$total_skills)" \
+    || fail "skill frontmatter — description 누락 $((total_skills - ok_skills))개 ($ok_skills/$total_skills)"
 # 하드코딩 대신 실제 디렉토리 수와 대조 — skill 추가 때마다 이 줄을 고치는 건
 # 계약이 아니라 잡일이에요. 여기서 잡고 싶은 건 "SKILL.md 없는 빈 디렉토리" 예요.
 expected_skills=$(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d | grep -c . || true)
@@ -553,7 +559,8 @@ for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
          check-spec-clarity slug-from-text check-templates-drift check-manifest-install promote-mistake \
          check-rule-enforcement check-sensor-liveness \
          build-memory spirit-lint rules-index doctor-scan status-note constitution-apply \
-         tasks-plan tasks-gate lanes-hotfiles lanes-dispatch spec-review; do
+         tasks-plan tasks-gate lanes-hotfiles lanes-dispatch spec-review \
+         zero-init zero-probe zero-verify zero-domain-risk; do
     f="$SCRIPTS_DIR/$s.sh"
     if [ -f "$f" ]; then
         # bash -n 통과
@@ -606,6 +613,25 @@ for cmd in \
 done
 popd >/dev/null || true
 rm -rf "$TMP_E2E"
+
+# zero-* 4개는 오래 §9 명시 목록 밖이라 실행권한·`--help`·JSON 계약 검사를 못 받았어요
+# (`bash -n` 은 §7 의 glob 이 이미 훑고 있었고요). 실행 계약까지 여기서 고정해요.
+TMP_Z=$(mktemp -d)
+mkdir -p "$TMP_Z/.ax/scripts/bash"
+cp "$SCRIPTS_DIR/"{common,zero-init,zero-probe,zero-verify,zero-domain-risk}.sh "$TMP_Z/.ax/scripts/bash/"
+printf 'sensors:\n  mode: warning\ndomain_risk:\n  payment: L3\ndefault_risk: L0\n' > "$TMP_Z/.ax/config.yml"
+for zc in "zero-init.sh --json --dry-run" "zero-probe.sh --json" "zero-verify.sh --json" "zero-domain-risk.sh --show --json"; do
+    zname="${zc%% *}"
+    # --help 은 `# Exit:` 계약 줄까지 보여줘야 해요 (sed 범위가 짧으면 계약이 잘려요)
+    bash "$TMP_Z/.ax/scripts/bash/$zname" --help 2>/dev/null | grep -q '^Exit:' \
+        && pass "$zname --help — Exit: 계약 노출" || fail "$zname --help — Exit: 줄 없음 (sed 범위 확인)"
+    zout=$(GOAX_PROJECT_DIR="$TMP_Z" bash "$TMP_Z/.ax/scripts/bash/"$zc 2>/dev/null) || true
+    echo "$zout" | jq -e 'has("status") and has("result") and has("next_step") and (.warnings|type=="array") and (.errors|type=="array")' >/dev/null 2>&1 \
+        && pass "$zc → {status,result,next_step,warnings,errors}" \
+        || fail "$zc → --json 스키마 불일치: ${zout:0:120}"
+done
+rm -rf "$TMP_Z"
+
 [ -e "$SCRIPTS_DIR/build-index.sh" ] && fail "build-index.sh — 제거됐어야 함 (BM25 분기 폐기)" || pass "build-index.sh 제거됨 (되살릴 조건: .ax/docs 2,000 파일 실측)"
 grep -q 'build-index' "$REPO/templates/default/.ax/scripts/bash/triage-search.sh" \
     && fail "triage-search.sh 에 build-index 분기 잔재" || pass "triage-search.sh — BM25 union 분기 제거"
@@ -1445,9 +1471,14 @@ printf -- '- [x] T001 [AC1] a — files: a.kt\n- [x] T002 [AC2] b — files: b.k
 tg | jq -e '.result.task_count_drop == 1 and .result.complete == false' >/dev/null 2>&1 \
     && pass "tasks-gate G4 — task 삭제로 통과 시도 차단" || fail "tasks-gate G4 실패"
 
-# --strict 는 exit 2
+# exit 계약 — `1 = 위반` / `2 = 검사 못 함`. 둘을 같은 코드로 두면 호출자가
+# "게이트가 막았다" 와 "게이트가 안 돌았다" 를 구분 못 해요 (예전엔 위반도 2 였어요).
 GOAX_PROJECT_DIR="$TG" bash "$TG/.ax/scripts/bash/tasks-gate.sh" --spec 012-x --strict >/dev/null 2>&1
-[ $? -eq 2 ] && pass "tasks-gate --strict — 위반 시 exit 2" || fail "tasks-gate --strict — exit code 부정확"
+[ $? -eq 1 ] && pass "tasks-gate --strict — 위반 시 exit 1" || fail "tasks-gate --strict — exit code 부정확"
+TG_NOPE=$(GOAX_PROJECT_DIR="$TG" bash "$TG/.ax/scripts/bash/tasks-gate.sh" --spec 999-nope --json 2>/dev/null); TG_NOPE_RC=$?
+[ "$TG_NOPE_RC" -eq 2 ] && echo "$TG_NOPE" | jq -e '.status=="skipped"' >/dev/null 2>&1 \
+    && pass "tasks-gate — 없는 spec 은 status:skipped + exit 2 (위반과 구분)" \
+    || fail "tasks-gate — 없는 spec 이 exit $TG_NOPE_RC (기대 2): ${TG_NOPE:0:80}"
 
 # G5 원장 — 체크박스를 채운 쪽과 검사받는 쪽이 같으면 게이트가 아니라 자기보고예요.
 # 레인이 조용해진 것(idle)과 산출물을 받은 것(보고:)은 달라요 — 8 레인 idle 인데 24/36 이었어요.
@@ -2011,9 +2042,10 @@ ld --dispatch A --dry-run --json | jq -e '.result.dry_run == true and .result.ch
     && ! grep -q '디스패치:' "$LDX/.ax/docs/spec/012-x/tasks.md" \
     && pass "lanes-dispatch --dry-run — 변경 예정 수만 보고, 파일 불변" || fail "lanes-dispatch --dry-run — 파일을 건드림"
 
-# dispatch → dispatched_unreported 3
-ld --dispatch A --json | jq -e '(.result.dispatched_unreported | length) == 3 and .status == "warning"' >/dev/null 2>&1 \
-    && pass "lanes-dispatch --dispatch — 디스패치: 기록 + 보고 대기 3" || fail "lanes-dispatch --dispatch 실패"
+# dispatch → dispatched_unreported 3. status 는 ok — 방금 보낸 걸 "보고 안 받았다" 고
+# 경고하면 성공 경로가 항상 warning 이라 경고가 신호를 잃어요 (배열은 사실대로 3).
+ld --dispatch A --json | jq -e '(.result.dispatched_unreported | length) == 3 and .status == "ok"' >/dev/null 2>&1 \
+    && pass "lanes-dispatch --dispatch — 디스패치: 기록 + 보고 대기 3 (성공은 status ok)" || fail "lanes-dispatch --dispatch 실패"
 
 # report 일부 → 남은 것만 대기
 ld --report T010 --json | jq -e '.result.dispatched_unreported == ["T011","T021"]' >/dev/null 2>&1 \
@@ -2064,11 +2096,15 @@ printf '# Spec\n## 3.\n- [ ] **AC1** a\n' > "$SR/.ax/docs/spec/014-x/spec.md"
 echo '{"phase":"spec","spec_dir":".ax/docs/spec/014-x","size":"L","risk":"L1"}' > "$SR/.ax/current-task.json"
 sr() { GOAX_PROJECT_DIR="$SR" bash "$SR/.ax/scripts/bash/spec-review.sh" --spec 014-x "$@" 2>/dev/null; }
 
+sr_matrix_bad=0
 for sz in S:none M:optional L:required XL:required; do
     got=$(GOAX_PROJECT_DIR="$SR" bash "$SR/.ax/scripts/bash/tier-from-state.sh" --json --size "${sz%%:*}" --risk L2 2>/dev/null | jq -r '.result.spec_review')
-    [ "$got" = "${sz##*:}" ] || fail "tier-from-state spec_review — ${sz%%:*} 가 $got (기대 ${sz##*:})"
+    [ "$got" = "${sz##*:}" ] || { fail "tier-from-state spec_review — ${sz%%:*} 가 $got (기대 ${sz##*:})"; sr_matrix_bad=$((sr_matrix_bad+1)); }
 done
-pass "tier-from-state — spec_review 는 Size 축만 (S none · M optional · L/XL required)"
+# 루프 결과로 게이팅 — 무조건 pass 면 위 fail 을 초록이 덮어요
+[ "$sr_matrix_bad" -eq 0 ] \
+    && pass "tier-from-state — spec_review 는 Size 축만 (S none · M optional · L/XL required)" \
+    || fail "tier-from-state — spec_review 매트릭스 $sr_matrix_bad 셀 불일치"
 
 sr --status --json | jq -e '.result.required=="required" and .result.pass==false' >/dev/null 2>&1 \
     && pass "spec-review — L 은 리뷰 파일 없으면 미통과" || fail "spec-review — 필수인데 빈 상태를 통과시킴"
@@ -2317,6 +2353,516 @@ grep -q 'events.missing' "$REPO/skills/doctor/SKILL.md" && grep -q 'handoff.dead
     && pass "doctor — 이벤트 키 · 인계 노트 기한을 실제로 읽음" || fail "doctor — 새 검사 결과를 안 읽음"
 grep -q 'goax_inject_fresh' "$REPO/templates/default/.ax/hooks/pre-edit/spirit-rules-inject.sh" && grep -q 'goax_inject_fresh' "$REPO/templates/default/.ax/hooks/pre-edit/module-rules-inject.sh" \
     && pass "주입 훅 둘 다 goax_inject_fresh 로 세션 dedupe" || fail "주입 훅 dedupe 누락"
+
+# ───────────────────────────────────────────────────────────
+section "36. 원장 동시성 — 두 레인이 같은 파일에 동시에 쓸 때"
+# ───────────────────────────────────────────────────────────
+# 코디네이터는 레인 보고를 **동시에** 받아요. `read → 바꿔서 tmp → mv` 는 원자적이지
+# 않아서, 락이 없으면 뒤에 쓰는 쪽이 앞의 보고를 통째로 덮어써요. 실측(수정 전):
+# `--report A` ‖ `--report B` 를 10회 돌리면 매회 8건 중 4건이 사라졌고, tasks-gate 를
+# 두 spec 으로 동시에 돌리면 state.json 의 task_seal 키 하나가 유실됐어요.
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§36 skip (jq 없음)"
+else
+    CC=$(mktemp -d)
+    mkdir -p "$CC"/.ax/scripts/bash "$CC"/.ax/docs/spec/030-a "$CC"/.ax/docs/spec/031-b
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,lanes-dispatch,tasks-gate,tier-from-state}.sh "$CC/.ax/scripts/bash/"
+    echo '{}' > "$CC/.ax/state.json"; echo '{"phase":"idle"}' > "$CC/.ax/current-task.json"
+    printf '## 3. \n- [ ] **AC1** a\n' > "$CC/.ax/docs/spec/030-a/spec.md"
+    printf '## 3. \n- [ ] **AC1** b\n' > "$CC/.ax/docs/spec/031-b/spec.md"
+    printf -- '- [x] T001 [AC1] z — files: z.kt\n' > "$CC/.ax/docs/spec/031-b/tasks.md"
+    LEDGER="$CC/.ax/docs/spec/030-a/tasks.md"
+    seed_ledger() {
+        : > "$LEDGER"
+        for i in 1 2 3 4; do printf -- '- [ ] T00%s [AC1] t%s — files: f%s.kt\n      레인: A\n      디스패치: 2026-01-01T00:00Z\n' "$i" "$i" "$i" >> "$LEDGER"; done
+        for i in 5 6 7 8; do printf -- '- [ ] T00%s [AC1] t%s — files: f%s.kt\n      레인: B\n      디스패치: 2026-01-01T00:00Z\n' "$i" "$i" "$i" >> "$LEDGER"; done
+    }
+
+    lost_reports=0
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        seed_ledger
+        GOAX_PROJECT_DIR="$CC" bash "$CC/.ax/scripts/bash/lanes-dispatch.sh" --spec 030-a --report A --json >/dev/null 2>&1 &
+        GOAX_PROJECT_DIR="$CC" bash "$CC/.ax/scripts/bash/lanes-dispatch.sh" --spec 030-a --report B --json >/dev/null 2>&1 &
+        wait
+        [ "$(grep -c '^      보고:' "$LEDGER")" -eq 8 ] || lost_reports=$((lost_reports+1))
+    done
+    [ "$lost_reports" -eq 0 ] \
+        && pass "lanes-dispatch --report — 두 레인 동시 보고 10회, 보고 8건 전부 보존" \
+        || fail "lanes-dispatch --report — 동시 보고에서 유실 $lost_reports/10회 (락 없음)"
+
+    echo '{}' > "$CC/.ax/state.json"
+    seal_lost=0
+    for i in 1 2 3 4 5; do
+        GOAX_PROJECT_DIR="$CC" bash "$CC/.ax/scripts/bash/tasks-gate.sh" --spec 030-a --json >/dev/null 2>&1 &
+        GOAX_PROJECT_DIR="$CC" bash "$CC/.ax/scripts/bash/tasks-gate.sh" --spec 031-b --json >/dev/null 2>&1 &
+        wait
+        [ "$(jq -r '.task_seal | keys | length' "$CC/.ax/state.json" 2>/dev/null)" = "2" ] || seal_lost=$((seal_lost+1))
+    done
+    [ "$seal_lost" -eq 0 ] \
+        && pass "tasks-gate — 두 spec 동시 실행 5회, state.json task_seal 양쪽 보존" \
+        || fail "tasks-gate — 동시 실행에서 task_seal 유실 $seal_lost/5회 (state.json 락 없음)"
+    rm -rf "$CC"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "37. 출고 SDD 템플릿 ↔ 파서 — 코드펜스 예시를 실 task/마커로 세면 안 돼요"
+# ───────────────────────────────────────────────────────────
+# `_templates/spec/tasks.md` 의 "한 줄 형식" 예시는 코드펜스 안에 있는데, 파서 6개가
+# 펜스를 몰라서 가짜 T001 을 실 task 로 셌어요 — 출고 템플릿을 그대로 복사한 spec 에서
+# tasks-plan 이 T001 을 ready·blocked 양쪽에 넣고 tasks-gate total 이 하나 부풀었어요.
+# spec.md 쪽은 반대 방향 — 안내문의 이름 언급을 마커로 세서 "성실히 채운 spec" 이
+# 영원히 fail 이었어요. 둘 다 출고 파일 그대로로 고정해요.
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§37 skip (jq 없음)"
+else
+    TPL=$(mktemp -d)
+    mkdir -p "$TPL"/.ax/scripts/bash "$TPL"/.ax/docs/spec/012-x
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate,tasks-plan,lanes-dispatch,lanes-hotfiles,check-spec-clarity,tier-from-state}.sh "$TPL/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/_templates/spec/tasks.md" "$TPL/.ax/docs/spec/012-x/tasks.md"
+    cp "$REPO/templates/default/.ax/_templates/spec/spec.md"  "$TPL/.ax/docs/spec/012-x/spec.md"
+    echo '{}' > "$TPL/.ax/state.json"; echo '{"phase":"idle"}' > "$TPL/.ax/current-task.json"
+    tpl() { GOAX_PROJECT_DIR="$TPL" bash "$TPL/.ax/scripts/bash/$1" --spec 012-x "${@:2}" 2>/dev/null; }
+
+    # 출고 tasks.md 의 실 task 는 T001~T004 (T004 는 [~] 보류) — 펜스 예시는 세면 안 돼요
+    tpl tasks-gate.sh --json | jq -e '.result.total == 4 and .result.open == 3 and .result.paused == 1' >/dev/null 2>&1 \
+        && pass "tasks-gate — 출고 tasks.md 그대로: total 4 (펜스 예시 미포함)" || fail "tasks-gate — 펜스 예시를 실 task 로 셈"
+    tpl tasks-plan.sh --json | jq -e '.result.ready == ["T001","T002"] and .result.blocked == ["T003"]' >/dev/null 2>&1 \
+        && pass "tasks-plan — 출고 tasks.md 그대로: ready/blocked 에 T001 중복 없음" || fail "tasks-plan — T001 이 ready·blocked 양쪽에 (펜스 예시)"
+    tpl lanes-dispatch.sh --json | jq -e '.result.unassigned_open == ["T001","T002","T003"]' >/dev/null 2>&1 \
+        && pass "lanes-dispatch --status — unassigned_open 에 T001 하나" || fail "lanes-dispatch — unassigned_open 에 T001 중복"
+    tpl lanes-hotfiles.sh --json | jq -e '(.result.hot_files | length) == 0' >/dev/null 2>&1 \
+        && pass "lanes-hotfiles — 출고 tasks.md 는 핫 파일 0 (펜스 경로 미수집)" || fail "lanes-hotfiles — 펜스 안 경로를 핫 파일로"
+    # check-spec-clarity 의 진행률 분모는 `[x]`+`[ ]` 라 보류(T004)를 빼고 3 이에요.
+    # 펜스를 세던 시절엔 4 였으니, 3 이 곧 회귀 고정이에요.
+    tpl check-spec-clarity.sh --json | jq -e '.result.tasks_progress.total == 3 and .result.tasks_progress.open == 3' >/dev/null 2>&1 \
+        && pass "check-spec-clarity — tasks 진행률 분모 3 (펜스 예시 제외 · [~] 보류 제외)" || fail "check-spec-clarity — 진행률에 펜스 예시 포함"
+
+    # 성실히 채운 spec 은 통과해야 해요 — 안 그러면 게이트가 우회 대상이 돼요
+    mkdir -p "$TPL/.ax/docs/spec/050-fill"
+    FILLED="$TPL/.ax/docs/spec/050-fill/spec.md"
+    # 산문에서 마커 *이름* 을 언급하는 줄이 핵심이에요 — 옛 정규식은 `**` 없이도 잡아서
+    # 이 줄 하나로 "다 채운 spec" 이 영원히 fail 이었어요. 마커는 `**…**` 형식일 때만이에요.
+    cat > "$FILLED" <<'FILLEOF'
+# Spec — 리뷰 스코어
+
+> NEEDS CLARIFICATION 항목은 §8 에서 전부 해소했어요.
+
+## 1. 문제
+
+### 1.1 한 줄 정의
+리뷰 점수를 계산해 목록 API 로 노출해요.
+
+## 2. 범위
+- 포함: 점수 계산 · API 노출
+- 제외: 캐시 계층
+
+## 3. 성공 기준
+- [ ] **AC1** 점수가 0~100 범위로 계산돼요
+- [ ] **AC2** 목록 API 응답에 점수가 실려요
+
+## 4. 사용자 시나리오
+판매자가 상품 목록에서 자기 리뷰 점수를 봐요.
+FILLEOF
+    cp "$FILLED" "$TPL/filled.base"
+    csc() { GOAX_PROJECT_DIR="$TPL" bash "$TPL/.ax/scripts/bash/check-spec-clarity.sh" --spec 050-fill --json 2>/dev/null; }
+    csc >/dev/null 2>&1
+    [ $? -eq 0 ] && csc | jq -e '.result.needs_clarification == 0 and .result.placeholders == 0 and .result.empty_sections == []' >/dev/null 2>&1 \
+        && pass "check-spec-clarity — 성실히 채운 spec 은 exit 0 (안내문을 마커로 안 셈)" || fail "check-spec-clarity — 채운 spec 을 막음"
+    printf '\n**NEEDS CLARIFICATION**: 점수 상한?\n' >> "$FILLED"
+    csc >/dev/null 2>&1
+    [ $? -eq 1 ] && csc | jq -e '.result.needs_clarification == 1' >/dev/null 2>&1 \
+        && pass "check-spec-clarity — 진짜 마커 1개면 exit 1" || fail "check-spec-clarity — 마커를 못 잡음"
+    cp "$TPL/filled.base" "$FILLED"; printf '\n담당: <이름>\n' >> "$FILLED"
+    csc >/dev/null 2>&1
+    [ $? -eq 1 ] && csc | jq -e '.result.placeholders == 1' >/dev/null 2>&1 \
+        && pass "check-spec-clarity — placeholder 1개면 exit 1" || fail "check-spec-clarity — placeholder 를 못 잡음"
+    rm -rf "$TPL"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "38. lanes-dispatch 원장 계약 — 트랜잭션 · 경로 정규화 · 재디스패치"
+# ───────────────────────────────────────────────────────────
+# 원장이 반쯤 적히면 "누구에게 뭘 보냈나" 를 아무도 못 믿어요. 그리고 같은 파일을
+# `./src/a.ts` 와 `src/a.ts` 로 적으면 소유 충돌 검사가 조용히 꺼졌어요.
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§38 skip (jq 없음)"
+else
+    LDG=$(mktemp -d)
+    mkdir -p "$LDG"/.ax/scripts/bash "$LDG"/.ax/docs/spec/040-x
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,lanes-dispatch}.sh "$LDG/.ax/scripts/bash/"
+    LT="$LDG/.ax/docs/spec/040-x/tasks.md"
+    cat > "$LT" <<'LGEOF'
+- [ ] T001 [AC1] a — files: ./src/a.ts
+      의존: 없음
+- [ ] T002 [AC1] b — files: src/a.ts
+      의존: 없음
+- [ ] T003 [AC2] c — files: src/c.ts
+      의존: 없음
+LGEOF
+    lg() { GOAX_PROJECT_DIR="$LDG" bash "$LDG/.ax/scripts/bash/lanes-dispatch.sh" --spec 040-x "$@" 2>/dev/null; }
+
+    # 트랜잭션 — 하나라도 거부되면 아무것도 안 써요 (반영분 + 거부분이 섞이면 안 돼요)
+    cp "$LT" "$LDG/before.md"
+    lg --assign "T001=A,T999=B" --json > "$LDG/out.json" 2>&1; LG_RC=$?
+    [ "$LG_RC" -eq 1 ] && jq -e '.status=="error" and .result.applied==[] and (.result.rejected|length)==1 and .result.rejected[0].task=="T999"' "$LDG/out.json" >/dev/null 2>&1 \
+        && cmp -s "$LT" "$LDG/before.md" \
+        && pass "lanes-dispatch --assign — 하나라도 거부되면 exit 1 + 파일 무변경 (2패스)" \
+        || fail "lanes-dispatch --assign — 부분 적용 (exit=$LG_RC, 파일 변경 여부 확인)"
+
+    # 경로 정규화 — `./src/a.ts` 와 `src/a.ts` 는 같은 파일이에요
+    lg --assign "T001=A,T002=B,T003=A" --json | jq -e '.status=="warning" and (.result.lane_file_conflicts|length)==1
+        and .result.lane_file_conflicts[0].file=="src/a.ts"' >/dev/null 2>&1 \
+        && pass "lanes-dispatch --assign — ./src/a.ts 와 src/a.ts 를 같은 파일로 (충돌 검출)" \
+        || fail "lanes-dispatch --assign — 경로 표기 차이로 충돌 검사가 꺼짐"
+
+    # 성공한 디스패치는 status ok — 방금 보낸 걸 경고하면 warning 이 신호를 잃어요
+    lg --assign "T002=A" --force --json >/dev/null 2>&1
+    lg --dispatch A --json | jq -e '.status=="ok" and (.result.dispatched_unreported|length)==3' >/dev/null 2>&1 \
+        && pass "lanes-dispatch --dispatch — 정상 디스패치는 status ok" || fail "lanes-dispatch --dispatch — 성공인데 warning"
+
+    # 보고까지 받은 task 는 재전송 안 해요 (--dispatch 가 보고 기록을 지우던 회귀)
+    lg --report T001 --json >/dev/null 2>&1
+    lg --dispatch A --json | jq -e '.result.changed==2 and (.next_step|test("T001"))' >/dev/null 2>&1 \
+        && grep -q '^      보고:' "$LT" \
+        && pass "lanes-dispatch --dispatch — 보고까지 받은 task 는 건너뜀 (보고 기록 보존)" \
+        || fail "lanes-dispatch --dispatch — 보고된 task 를 재전송하거나 보고를 지움"
+    lg --dispatch A --force --json | jq -e '.result.changed==3' >/dev/null 2>&1 \
+        && pass "lanes-dispatch --dispatch --force — 보고된 것까지 재전송" || fail "lanes-dispatch --force — 재전송 안 함"
+    rm -rf "$LDG"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "39. 계약 표면 — spec-review tier/sha/라운드 · tasks-gate --all · --dry-run"
+# ───────────────────────────────────────────────────────────
+# `--dry-run` 이 파일을 쓰면 그건 dry-run 이 아니에요. sha 가 spec.md 만 보면
+# tasks.md 를 전면 재작성해도 "리뷰 유효" 가 되고요. 빈 상태 파일에 죽으면 안 되고.
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§39 skip (jq 없음)"
+else
+    SRV=$(mktemp -d)
+    mkdir -p "$SRV"/.ax/scripts/bash "$SRV"/.ax/docs/spec/020-a "$SRV"/.ax/docs/spec/021-b
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,spec-review,tasks-gate,tier-from-state}.sh "$SRV/.ax/scripts/bash/"
+    printf '# S\n## 3.\n- [ ] **AC1** a\n' > "$SRV/.ax/docs/spec/020-a/spec.md"
+    printf -- '- [ ] T001 [AC1] a — files: a.kt\n' > "$SRV/.ax/docs/spec/020-a/tasks.md"
+    printf '# S\n## 3.\n- [ ] **AC1** b\n' > "$SRV/.ax/docs/spec/021-b/spec.md"
+    printf -- '- [x] T001 [AC1] b — files: b.kt\n' > "$SRV/.ax/docs/spec/021-b/tasks.md"
+    echo '{}' > "$SRV/.ax/state.json"; echo '{"phase":"idle"}' > "$SRV/.ax/current-task.json"
+    srv() { GOAX_PROJECT_DIR="$SRV" bash "$SRV/.ax/scripts/bash/spec-review.sh" --spec 020-a "$@" 2>/dev/null; }
+    TIER="$SRV/.ax/docs/spec/020-a/.tier"
+
+    # 비활성 spec 은 SSOT(current-task.json)를 못 써요 → `.tier` 로 보수 판정
+    echo 'tier: full' > "$TIER"
+    srv --status --json | jq -e '.result.required=="required" and (.result.required_source|test("full"))' >/dev/null 2>&1 \
+        && pass "spec-review — 비활성 spec + .tier=full → required (.tier 를 실제로 읽음)" || fail "spec-review — .tier 무시 (size 오보)"
+    echo 'tier: standard' > "$TIER"
+    srv --status --json | jq -e '.result.required=="optional"' >/dev/null 2>&1 \
+        && pass "spec-review — .tier=standard → optional" || fail "spec-review — standard 를 required 로"
+    rm -f "$TIER"
+    srv --status --json | jq -e '.result.required=="required" and (.result.required_source|test("보수"))' >/dev/null 2>&1 \
+        && pass "spec-review — .tier 를 못 읽으면 보수적으로 required (모르면 닫아요)" || fail "spec-review — 모를 때 열어줌"
+    echo 'tier: full' > "$TIER"
+
+    # sha 는 spec.md + tasks.md 둘 다 — tasks.md 만 바꿔도 리뷰가 낡아요
+    SHA_1=$(srv --snapshot --json | jq -r '.result.sha')
+    printf -- '- [ ] T002 [AC1] b — files: b.kt\n' >> "$SRV/.ax/docs/spec/020-a/tasks.md"
+    srv --status --json | jq -e --arg s "$SHA_1" '.result.sha != $s and (.result.changed_files|index("tasks.md"))' >/dev/null 2>&1 \
+        && pass "spec-review — tasks.md 만 바뀌어도 sha 불일치 + changed_files 로 어디가 바뀌었는지" \
+        || fail "spec-review — sha 가 spec.md 만 봐서 tasks.md 재작성을 못 잡음"
+
+    # 라운드 상한 — 넘으면 warning (차단은 아니에요, exit 0 유지)
+    srv --snapshot --json >/dev/null 2>&1; srv --snapshot --json >/dev/null 2>&1
+    SRV_OUT=$(srv --snapshot --json); SRV_RC=$?
+    echo "$SRV_OUT" | jq -e '.status=="warning" and .result.round_exceeded==true and (.warnings|length)==1' >/dev/null 2>&1 && [ "$SRV_RC" -eq 0 ] \
+        && pass "spec-review --snapshot — 라운드 상한 초과는 warning (exit 0 유지)" || fail "spec-review — 라운드 상한이 침묵"
+
+    # --dry-run 은 어떤 파일도 안 만들어요
+    cp "$SRV/.ax/docs/spec/020-a/.review-round" "$SRV/round.before"
+    srv --snapshot --dry-run --json >/dev/null 2>&1
+    srv --merge --dry-run --json >/dev/null 2>&1
+    cmp -s "$SRV/.ax/docs/spec/020-a/.review-round" "$SRV/round.before" && [ ! -f "$SRV/.ax/docs/spec/020-a/review-spec.md" ] \
+        && pass "spec-review --dry-run — .review-round 불변 + 합본 미생성" || fail "spec-review --dry-run — 파일을 씀"
+
+    # 빈 상태 파일에 죽지 않아요 (jq --argjson 이 빈 문자열로 터지던 회귀)
+    : > "$SRV/.ax/docs/spec/020-a/.review-round"
+    SRV_OUT=$(srv --status --json); SRV_RC=$?
+    echo "$SRV_OUT" | jq -e '.result.round==0' >/dev/null 2>&1 && [ "$SRV_RC" -eq 0 ] \
+        && pass "spec-review — 빈 .review-round 도 JSON (round 0)" || fail "spec-review — 빈 상태 파일에 죽음: ${SRV_OUT:0:80}"
+
+    # tasks-gate --all — 합계만 주면 어느 spec 이 문제인지 몰라요
+    GOAX_PROJECT_DIR="$SRV" bash "$SRV/.ax/scripts/bash/tasks-gate.sh" --all --json 2>/dev/null \
+        | jq -e '.result.spec_count==2 and (.result.specs|length)==2 and (.result.specs|map(.spec)|sort)==["020-a","021-b"] and .result.total==3' >/dev/null 2>&1 \
+        && pass "tasks-gate --all — result.specs 배열 + 합계" || fail "tasks-gate --all — spec별 내역 없음"
+
+    # tasks-gate --dry-run 은 봉인값을 안 올려요 (dry-run 이 G4 기준선을 오염시키던 회귀)
+    echo '{}' > "$SRV/.ax/state.json"
+    GOAX_PROJECT_DIR="$SRV" bash "$SRV/.ax/scripts/bash/tasks-gate.sh" --spec 020-a --dry-run --json >/dev/null 2>&1
+    jq -e '(.task_seal // {}) == {}' "$SRV/.ax/state.json" >/dev/null 2>&1 \
+        && pass "tasks-gate --dry-run — task_seal 갱신 없음" || fail "tasks-gate --dry-run — 봉인값을 씀"
+    GOAX_PROJECT_DIR="$SRV" bash "$SRV/.ax/scripts/bash/tasks-gate.sh" --spec 020-a --json >/dev/null 2>&1
+    jq -e '.task_seal["020-a"] == 2' "$SRV/.ax/state.json" >/dev/null 2>&1 \
+        && pass "tasks-gate — 일반 실행은 봉인값 기록 (dry-run 과 구분)" || fail "tasks-gate — 일반 실행도 기록 안 함"
+    rm -rf "$SRV"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "40. 룰 집행 · zero 가드 — severity 를 읽는가, 갓 설치가 CI 초록인가"
+# ───────────────────────────────────────────────────────────
+# I1(🔴 은 hook/external 만) 검사가 spirit/module 룰 전체에서 죽어 있었어요 — 추출기가
+# label 을 "convention" 리터럴로 고정해서 `severity: critical` 이 아예 안 읽혔거든요.
+# 반대로 갓 설치한 프로젝트는 출고 예시(`<...>`) 때문에 `--strict` 가 항상 빨간불이라
+# CI 에 켤 수가 없었고요. 둘 다 실행으로 고정해요.
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§40 skip (jq 없음)"
+else
+    RE=$(mktemp -d)
+    mkdir -p "$RE/.ax/scripts/bash" "$RE/.ax/spirit/rules"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$RE/.ax/scripts/bash/"
+    printf '# X\n' > "$RE/AGENTS.md"
+    printf -- '---\ncategory: sec\nseverity: critical\nenforced_by: human:code-review\n---\n## SP-SEC-001: 시크릿 금지\n' > "$RE/.ax/spirit/rules/sec.md"
+    GOAX_PROJECT_DIR="$RE" bash "$RE/.ax/scripts/bash/check-rule-enforcement.sh" --json 2>/dev/null \
+        | jq -e '(.result.i1_violations|length)==1 and .result.i1_violations[0].rule_id=="SPIRIT:SEC"' >/dev/null 2>&1 \
+        && pass "check-rule-enforcement I1 — spirit frontmatter 의 severity: critical 을 실제로 읽음" \
+        || fail "check-rule-enforcement I1 — severity 미파싱 (frontmatter 룰 전체가 사각지대)"
+    printf -- '---\ncategory: sec\nseverity: mandatory\nenforced_by: human:code-review\n---\n## SP-SEC-001: 시크릿 금지\n' > "$RE/.ax/spirit/rules/sec.md"
+    GOAX_PROJECT_DIR="$RE" bash "$RE/.ax/scripts/bash/check-rule-enforcement.sh" --json 2>/dev/null \
+        | jq -e '.result.i1_violations == []' >/dev/null 2>&1 \
+        && pass "check-rule-enforcement I1 — 🟡 로 낮추면 human:* 허용" || fail "check-rule-enforcement I1 — mandatory 도 잡음"
+    rm -rf "$RE"
+
+    # 갓 provision 한 프로젝트가 --strict 초록이어야 CI 예시(harness job)를 켤 수 있어요
+    STRICT_T=$(mktemp -d)
+    bash "$REPO/scripts/provision.sh" --target "$STRICT_T" --json >/dev/null 2>&1
+    STRICT_OUT=$(GOAX_PROJECT_DIR="$STRICT_T" bash "$STRICT_T/.ax/scripts/bash/check-rule-enforcement.sh" --json --strict 2>/dev/null); STRICT_RC=$?
+    [ "$STRICT_RC" -eq 0 ] && echo "$STRICT_OUT" | jq -e '(.result.i1_violations|length)==0 and (.result.i2_violations|length)==0 and (.result.placeholder_rules|length)>0' >/dev/null 2>&1 \
+        && pass "check-rule-enforcement --strict — 갓 설치는 exit 0 (출고 예시는 placeholder_rules 로)" \
+        || fail "check-rule-enforcement --strict — 갓 설치가 exit $STRICT_RC (CI 에 켤 수 없음)"
+    rm -rf "$STRICT_T"
+
+    # zero-guard-bash — 실행은 막고 *언급* 은 통과. 언급까지 막으면 룰을 문서에 못 적어요.
+    ZGP=$(mktemp -d); mkdir -p "$ZGP/.ax/hooks"
+    zg_rc() { printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$1" \
+        | CLAUDE_PROJECT_DIR="$ZGP" bash "$REPO/templates/zero/hooks/zero-guard-bash.sh" >/dev/null 2>&1; echo $?; }
+    zg_block() { [ "$(zg_rc "$1")" = "2" ] && pass "zero-guard-bash 차단: $2" || fail "zero-guard-bash 미차단: $2"; }
+    zg_pass()  { [ "$(zg_rc "$1")" = "0" ] && pass "zero-guard-bash 통과: $2" || fail "zero-guard-bash 오탐 차단: $2"; }
+    zg_block '"git add -A"'                                  'git add -A'
+    zg_block '"git add --all"'                               'git add --all'
+    zg_block '"cd x && git add -A"'                          '세그먼트 뒤 git add -A'
+    zg_pass  '"git commit -m \"docs: never git add -A\""'    '커밋 메시지 안의 인용'
+    zg_pass  '"echo \"git add -A\""'                         'echo 인용'
+    zg_pass  '"grep -rn \"git add -A\" docs/"'               'grep 인자 인용'
+    zg_pass  '"# git add -A"'                                '# 주석'
+    rm -rf "$ZGP"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "41. 설치기 · 훅 안전망 — 심링크 · 시크릿 · 상위 경로 · jq 부재 · 인계 기한 · 이벤트 키"
+# ───────────────────────────────────────────────────────────
+# 안전망이 *조용히* 꺼진 상태가 제일 나빠요 — 아무도 모르니까요. 여기 6개는 전부
+# "무경고로 통과했다" 가 회귀 내용이에요 (프로젝트 밖 쓰기 · 시크릿 9종 미탐 ·
+# `rm -rf ../..` 무음 · jq 없으면 무음 · 영구 유효한 인계 노트 · 이벤트 키 무시).
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§41 skip (jq 없음)"
+else
+    # C1 — .ax/hooks 가 프로젝트 밖 심링크면 밖으로 쓰지 않고 경고해요
+    SYM_P=$(mktemp -d); SYM_OUT=$(mktemp -d)
+    mkdir -p "$SYM_P/.ax"; ln -s "$SYM_OUT" "$SYM_P/.ax/hooks"
+    SYM_R=$(bash "$REPO/scripts/provision.sh" --target "$SYM_P" --json 2>/dev/null)
+    echo "$SYM_R" | jq -e '.status=="warning" and (.warnings|length)>0' >/dev/null 2>&1 \
+        && [ "$(find "$SYM_OUT" -type f 2>/dev/null | wc -l | tr -d ' ')" = "0" ] && [ -L "$SYM_P/.ax/hooks" ] \
+        && pass "provision — .ax/hooks 심링크: 밖에 파일 0 + warning + 링크 원형 보존" \
+        || fail "provision — 심링크 너머로 씀: $(find "$SYM_OUT" -type f 2>/dev/null | wc -l | tr -d ' ')개"
+    rm -rf "$SYM_P" "$SYM_OUT"
+
+    # C3/C4 — 상위 경로 rm 과 jq 부재
+    HK=$(mktemp -d)
+    mkdir -p "$HK/.ax/scripts/bash" "$HK/.ax/hooks/pre-bash" "$HK/.ax/hooks/pre-edit"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$HK/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/hooks/pre-bash/block-destructive.sh" "$HK/.ax/hooks/pre-bash/"
+    cp "$REPO/templates/default/.ax/hooks/pre-edit/check-protected-paths.sh" "$HK/.ax/hooks/pre-edit/"
+    bd_err() { printf '{"tool_input":{"command":"%s"}}' "$1" \
+        | CLAUDE_PROJECT_DIR="$HK" bash "$HK/.ax/hooks/pre-bash/block-destructive.sh" 2>&1 >/dev/null; }
+    # warning 모드라 exit 0 이에요 — stderr 유무로 판정해요
+    parent_missed=0
+    for pc in 'rm -rf ..' 'rm -rf ../*' 'rm -rf ../..' 'rm -rf ../../etc' 'rm -rf ../../../'; do
+        [ -n "$(bd_err "$pc")" ] || { fail "block-destructive — '$pc' 무음 (더 위험한 쪽이 통과)"; parent_missed=$((parent_missed+1)); }
+    done
+    [ "$parent_missed" -eq 0 ] && pass "block-destructive — 상위 경로 rm 5종 전부 경고 (../.. 포함)" || true
+    parent_fp=0
+    for pc in 'rm -rf ./dist' 'rm -rf node_modules' 'rm -rf /tmp/build-cache'; do
+        [ -z "$(bd_err "$pc")" ] || { fail "block-destructive — 일상 명령 '$pc' 오탐"; parent_fp=$((parent_fp+1)); }
+    done
+    [ "$parent_fp" -eq 0 ] && pass "block-destructive — 일상 rm 3종은 그대로 통과 (오탐 0)" || true
+
+    # PATH 에 `cat` 만 남겨요 — 훅은 stdin 을 읽어야 "jq 가 없다" 갈래에 도달해요.
+    # bash·훅은 절대경로로 부르니 PATH 가 비어도 돌아요.
+    NOJQ=$(mktemp -d); ln -s "$(command -v cat)" "$NOJQ/cat"
+    JQ_E1=$(printf '{"tool_input":{"command":"rm -rf /etc"}}' \
+        | PATH="$NOJQ" CLAUDE_PROJECT_DIR="$HK" "$BASH" "$HK/.ax/hooks/pre-bash/block-destructive.sh" 2>&1 >/dev/null)
+    JQ_E2=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"'"$HK"'/.ax/config.yml"}}' \
+        | PATH="$NOJQ" CLAUDE_PROJECT_DIR="$HK" "$BASH" "$HK/.ax/hooks/pre-edit/check-protected-paths.sh" 2>&1 >/dev/null)
+    case "$JQ_E1$JQ_E2" in
+        *"jq 없음"*"jq 없음"*) pass "훅 — jq 없는 PATH 에서 침묵하지 않고 '안전망 비활성' 을 알림 (fail-open 유지)" ;;
+        *) fail "훅 — jq 부재를 조용히 통과: [$JQ_E1][$JQ_E2]" ;;
+    esac
+    rm -rf "$NOJQ" "$HK"
+
+    # C5/C6 — 인계 노트 24시간 · 훅을 다른 이벤트로 옮기면 missing
+    ST=$(mktemp -d)
+    mkdir -p "$ST/.ax/scripts/bash" "$ST/.ax/hooks/stop" "$ST/.ax/docs/spec/014-x" "$ST/.claude"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate,tier-from-state,status-note,doctor-scan}.sh "$ST/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/hooks/stop/spec-gate.sh" "$ST/.ax/hooks/stop/"
+    printf '# S\n## 3.\n- [ ] **AC1** a\n' > "$ST/.ax/docs/spec/014-x/spec.md"
+    printf -- '- [ ] T001 [AC1] a — files: a.kt\n' > "$ST/.ax/docs/spec/014-x/tasks.md"
+    echo '{"phase":"implementing","spec_dir":".ax/docs/spec/014-x","size":"M","risk":"L1"}' > "$ST/.ax/current-task.json"
+    echo '{"hooks":{}}' > "$ST/.claude/settings.json"
+    CLAUDE_PROJECT_DIR="$ST" bash "$ST/.ax/scripts/bash/status-note.sh" --set now "spec 014-x 에서 멈춤 — T001" --json >/dev/null 2>&1
+    grep -qE '\([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z\)$' "$ST/.ax/docs/STATUS.md" \
+        && pass "status-note --set now — 마지막 줄에 (YYYY-MM-DDTHH:MMZ) 시각" || fail "status-note --set now — 시각 없음 (기한 판정 불가)"
+    [ -z "$(printf '{"session_id":"f1","stop_hook_active":false}' | CLAUDE_PROJECT_DIR="$ST" bash "$ST/.ax/hooks/stop/spec-gate.sh" 2>/dev/null)" ] \
+        && pass "stop 게이트 — 방금 쓴 인계 노트는 인정 (통과)" || fail "stop 게이트 — 신선한 노트를 무시"
+    # 시각만 과거로 바꿔요 — 노트 내용은 그대로인데 24시간이 지났어요
+    sed 's/([0-9-]*T[0-9:]*Z)$/(2020-01-01T00:00Z)/' "$ST/.ax/docs/STATUS.md" > "$ST/status.tmp" && mv "$ST/status.tmp" "$ST/.ax/docs/STATUS.md"
+    printf '{"session_id":"f2","stop_hook_active":false}' | CLAUDE_PROJECT_DIR="$ST" bash "$ST/.ax/hooks/stop/spec-gate.sh" 2>/dev/null \
+        | jq -e '.decision=="block"' >/dev/null 2>&1 \
+        && pass "stop 게이트 — 24시간 지난 인계 노트는 불인정 (영구 통과증 아님)" || fail "stop 게이트 — 오래된 노트로 영구 통과"
+
+    printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash .ax/hooks/stop/spec-gate.sh"}]}],"Stop":[]}}' > "$ST/.claude/settings.json"
+    GOAX_PROJECT_DIR="$ST" bash "$ST/.ax/scripts/bash/doctor-scan.sh" --json --plugin-dir "$REPO" 2>/dev/null \
+        | jq -e '.result.hooks.missing | index("Stop .ax/hooks/stop/spec-gate.sh")' >/dev/null 2>&1 \
+        && pass "doctor-scan — 훅을 다른 이벤트로 옮기면 (이벤트,경로) 쌍이 missing" \
+        || fail "doctor-scan — 경로만 보고 이벤트 키를 무시 (Stop 훅이 안 도는데 통과)"
+    rm -rf "$ST"
+
+    # C2 — 시크릿 검출. 옛 정규식은 `=` 와 따옴표를 둘 다 요구해서 실검체 9종을 전부 놓쳤어요.
+    SEC=$(mktemp -d)
+    pushd "$SEC" >/dev/null || fail "SEC pushd 실패"
+    git init -q . >/dev/null 2>&1
+    mkdir -p .ax/scripts/bash .ax/hooks/pre-commit fx
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" .ax/scripts/bash/
+    cp "$REPO/templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh" .ax/hooks/pre-commit/
+    printf '# C\n' > CLAUDE.md; printf 'sensors:\n  mode: fail\n' > .ax/config.yml
+    # 토큰 형태 픽스처는 소스에 리터럴로 두지 않고 실행 시점에 이어 붙여요 — GitHub push protection 이 이 파일을 시크릿으로 막아요
+    printf 'AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n'                         > fx/hit1.txt
+    printf 'TOKEN=%s_%s\n' ghp 1234567890abcdefghijABCDEFGHIJ12               > fx/hit2.txt
+    printf 'const t = "%s_%s";\n' ghp abcdefghij1234567890ABCDEFGHIJ         > fx/hit3.txt
+    printf 'SLACK=%s-%s\n' xoxb 123456789012-abcdefghijkl                     > fx/hit4.txt
+    printf 'stripe_key = %s_%s_%s\n' sk live abcdefghij1234567890ABCD          > fx/hit5.txt
+    printf 'API_KEY=%s-%s\n' sk abcdefghij1234567890ABCDEFGH                   > fx/hit6.txt
+    printf -- '-----BEGIN RSA PRIVATE KEY-----\nMIIEow==\n'                   > fx/hit7.txt
+    printf 'auth: %s.%s.%s\n' eyJhbGciOiJIUzI1NiJ9 eyJzdWIiOiIxMjM0NTY3ODkwIn0 abcdefg > fx/hit8.txt
+    printf 'PASSWORD=hunter2xyz\n'                                            > fx/hit9.txt
+    printf 'token_count = 0\nmax_tokens = 4096\n'                             > fx/miss1.txt
+    printf 'secret: null\napi_key: null\n'                                    > fx/miss2.txt
+    printf 'password: <from env>\ntoken: ${GITHUB_TOKEN}\n'                   > fx/miss3.txt
+    printf 'The api key is rotated every quarter and the password policy is strict.\n' > fx/miss4.txt
+    sec_missed=0
+    for i in 1 2 3 4 5 6 7 8 9; do
+        git reset -q >/dev/null 2>&1; git add "fx/hit$i.txt" >/dev/null 2>&1
+        CLAUDE_PROJECT_DIR="$SEC" bash .ax/hooks/pre-commit/critical-rule-grep.sh >/dev/null 2>&1
+        [ $? -eq 2 ] || sec_missed=$((sec_missed+1))
+    done
+    [ "$sec_missed" -eq 0 ] \
+        && pass "critical-rule-grep — 시크릿 실검체 9종 (AKIA·ghp_ ×2·xox·sk_live·sk-·PEM·JWT·PASSWORD=) 전부 차단" \
+        || fail "critical-rule-grep — 시크릿 $sec_missed/9종 미탐"
+    git reset -q >/dev/null 2>&1; git add fx/miss1.txt fx/miss2.txt fx/miss3.txt fx/miss4.txt >/dev/null 2>&1
+    CLAUDE_PROJECT_DIR="$SEC" bash .ax/hooks/pre-commit/critical-rule-grep.sh >/dev/null 2>&1
+    [ $? -eq 0 ] && pass "critical-rule-grep — 오탐 4종 (token_count·null·\${ENV}·산문) 통과" || fail "critical-rule-grep — 오탐 차단"
+    git reset -q >/dev/null 2>&1; git add fx/hit1.txt >/dev/null 2>&1
+    SEC_ERR=$(CLAUDE_PROJECT_DIR="$SEC" bash .ax/hooks/pre-commit/critical-rule-grep.sh 2>&1 >/dev/null)
+    printf '%s' "$SEC_ERR" | grep -q 'AKIAIOSFODNN7EXAMPLE' \
+        && fail "critical-rule-grep — 매칭 줄을 그대로 출력 (시크릿이 컨텍스트·로그로 새요)" \
+        || pass "critical-rule-grep — 파일 이름만 보고, 매칭 줄은 안 찍음"
+    popd >/dev/null || true
+    rm -rf "$SEC"
+
+    # 출고 프로브가 자기 게이트에 대해 PASS 해야 해요 (예전엔 PROBE FAILED 였어요)
+    PRB=$(mktemp -d)
+    pushd "$PRB" >/dev/null || fail "PRB pushd 실패"
+    git init -q . >/dev/null 2>&1
+    bash "$REPO/scripts/provision.sh" --target "$PRB" --json >/dev/null 2>&1
+    printf 'sensors:\n  mode: fail\n' > .ax/config.yml
+    mkdir -p .ax/probes; cp "$REPO/templates/zero/probe/examples/secret-scan.sh" .ax/probes/
+    if [ -x .git/hooks/pre-commit ]; then
+        CLAUDE_PROJECT_DIR="$PRB" bash .ax/probes/secret-scan.sh >/dev/null 2>&1
+        [ $? -eq 0 ] && [ ! -f .probe-secret.txt ] \
+            && pass "probe/secret-scan.sh — 게이트가 프로브 검체를 차단 (PASS) + 픽스처 정리" \
+            || fail "probe/secret-scan.sh — PROBE FAILED (secrets 게이트가 뚫림) 또는 픽스처 잔존"
+    else
+        fail "probe/secret-scan.sh — provision 이 .git/hooks/pre-commit 을 안 깔아서 프로브를 못 돌림"
+    fi
+    popd >/dev/null || true
+    rm -rf "$PRB"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "42. zero · onboarding 스크립트 — 조용한 성공이 데이터를 지우던 자리"
+# ───────────────────────────────────────────────────────────
+# 여기 6개는 전부 `status:"ok"` + exit 0 으로 끝나면서 데이터를 지우거나 아무것도 안
+# 했어요. bash 문법 검사로는 안 잡혀요 (D6 은 런타임 bad substitution) — 실행만이 잡아요.
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§42 skip (jq 없음)"
+else
+    ZD=$(mktemp -d)
+    mkdir -p "$ZD/.ax/scripts/bash" "$ZD/.ax/spirit/rules" "$ZD/.ax/mistakes" "$ZD/.ax/docs"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,zero-domain-risk,zero-ablation,zero-verify,constitution-apply,init-mistake-file,detect-model}.sh "$ZD/.ax/scripts/bash/"
+    printf 'sensors:\n  mode: warning\ndomain_risk:\n  payment: L3\n  order: L2\n  product: L1\n  search: L0\ndefault_risk: L0\n' > "$ZD/.ax/config.yml"
+    # macOS 면 /bin/bash (3.2) 로 불러요 — 이 회귀는 bash 3.2 × en_US collation 조합에서
+    # 터졌고, `bash` 가 5.x 로 잡히는 환경에선 통과해 버려요.
+    OLDBASH=/bin/bash; [ -x "$OLDBASH" ] || OLDBASH="$BASH"
+    zdr() { GOAX_PROJECT_DIR="$ZD" "$OLDBASH" "$ZD/.ax/scripts/bash/zero-domain-risk.sh" "$@" 2>/dev/null; }
+    zdr_keys() { zdr --show --json | jq -r '.result.before.keys'; }
+
+    cp "$ZD/.ax/config.yml" "$ZD/config.before"
+    zdr --set "Payment=L2" --json >/dev/null 2>&1; ZD_RC=$?
+    [ "$ZD_RC" -eq 1 ] && cmp -s "$ZD/.ax/config.yml" "$ZD/config.before" && [ "$(zdr_keys)" = "4" ] \
+        && pass "zero-domain-risk --set — 대문자 키는 exit 1 + domain_risk 4개 보존 ([a-z] collation)" \
+        || fail "zero-domain-risk --set — 'Payment=L2' 가 exit $ZD_RC, keys=$(zdr_keys) (기대 1 / 4)"
+    zdr --set "new=oops=L3" --json >/dev/null 2>&1; ZD_RC=$?
+    [ "$ZD_RC" -eq 1 ] && cmp -s "$ZD/.ax/config.yml" "$ZD/config.before" \
+        && pass "zero-domain-risk --set — 'new=oops=L3' 는 exit 1 + 파일 무변경" \
+        || fail "zero-domain-risk --set — 깨진 입력이 exit $ZD_RC + 파일 변경"
+    zdr --set "checkout=L2,orders-api=L3" --json >/dev/null 2>&1; ZD_RC=$?
+    [ "$ZD_RC" -eq 0 ] && [ "$(zdr_keys)" = "2" ] \
+        && pass "zero-domain-risk --set — 정상 입력은 반영 (checkout·orders-api)" || fail "zero-domain-risk --set — 정상 입력 실패 (exit $ZD_RC)"
+
+    ca() { GOAX_PROJECT_DIR="$ZD" bash "$ZD/.ax/scripts/bash/constitution-apply.sh" "$@" 2>/dev/null; }
+    printf '# X — Constitution\n\n## META — 핵심 가드레일\n\n🔴 **`AX:CRITICAL:001`** — 결제 API 는 멱등성 키 필수\n' > "$ZD/block.md"
+    printf '# old\n\n## Database\n무관한 줄\n' > "$ZD/CLAUDE.md"
+    CA_OUT=$(ca --scan-duplicates --block "$ZD/block.md" --target CLAUDE.md --json); CA_RC=$?
+    [ "$CA_RC" -eq 0 ] && echo "$CA_OUT" | jq -e '.status=="ok" and .result.count==0 and .result.duplicates==[]' >/dev/null 2>&1 \
+        && pass "constitution-apply --scan-duplicates — 중복 0건도 JSON (빈 grep 의 pipefail 로 죽지 않음)" \
+        || fail "constitution-apply --scan-duplicates — 중복 0건에 exit $CA_RC / 출력 [${CA_OUT:0:80}]"
+    ca --block "$ZD/block.md" --target CLAUDE.md --json >/dev/null 2>&1
+    printf '# X — Constitution\n\n## META — 핵심 가드레일\n\n🔴 **`AX:CRITICAL:009`** — 새 룰\n' > "$ZD/block2.md"
+    ca --block "$ZD/block2.md" --target CLAUDE.md --json | jq -e '.result.applied==true' >/dev/null 2>&1 \
+        && pass "constitution-apply — 헤더가 같아도 룰 토큰이 새로우면 적용 (헤더로 판정 안 함)" \
+        || fail "constitution-apply — 같은 헤더면 새 룰을 통째로 건너뜀"
+    ca --block "$ZD/block2.md" --target CLAUDE.md --json >/dev/null 2>&1
+    [ $? -eq 2 ] && pass "constitution-apply — 같은 블록 재적용은 exit 2 (idempotent 유지)" || fail "constitution-apply — 재적용을 막지 않음"
+
+    za() { GOAX_PROJECT_DIR="$ZD" bash "$ZD/.ax/scripts/bash/zero-ablation.sh" "$@" 2>/dev/null; }
+    printf -- '---\ncategory: ops\n---\n## SP-OPS-001: 원본\n' > "$ZD/.ax/spirit/rules/ops.md"
+    za --off --json >/dev/null 2>&1
+    printf -- '---\ncategory: ops\n---\n## SP-OPS-002: 사용자가 그 사이에 새로 쓴 것\n' > "$ZD/.ax/spirit/rules/ops.md"
+    ZA_OUT=$(za --on --json)
+    echo "$ZA_OUT" | jq -e '.status=="warning" and (.warnings|length)==1 and .result.active==["ops"]' >/dev/null 2>&1 \
+        && grep -q 'SP-OPS-002' "$ZD/.ax/spirit/rules/ops.md" && [ -f "$ZD/.ax/spirit/rules/ops.md.ablated" ] \
+        && pass "zero-ablation --on — 목적지가 생겼으면 덮지 않고 warning (.ablated 보존)" \
+        || fail "zero-ablation --on — 사용자 편집을 덮어씀: $(echo "$ZA_OUT" | jq -c .result)"
+
+    printf 'commands:\n  test: '"'"'test "a b" = "a b"'"'"'\n' > "$ZD/.ax/config.yml"
+    GOAX_PROJECT_DIR="$ZD" bash "$ZD/.ax/scripts/bash/zero-verify.sh" --json 2>/dev/null \
+        | jq -e '.result.passed==1 and (.result.checks[] | select(.name=="test") | .exit==0)' >/dev/null 2>&1 \
+        && pass "zero-verify — 따옴표가 든 명령을 원형대로 실행 (tr -d 로 벗기지 않음)" \
+        || fail "zero-verify — 따옴표를 지워서 명령이 깨짐"
+
+    IMF_OUT=$(GOAX_PROJECT_DIR="$ZD" "$OLDBASH" "$ZD/.ax/scripts/bash/init-mistake-file.sh" --category "" --json 2>&1); IMF_RC=$?
+    [ "$IMF_RC" -eq 1 ] && echo "$IMF_OUT" | jq -e '.status=="error"' >/dev/null 2>&1 \
+        && [ "$(find "$ZD/.ax/mistakes" -type f 2>/dev/null | wc -l | tr -d ' ')" = "0" ] \
+        && pass "init-mistake-file — --category '' 는 exit 1 + 파일 미생성 (bad substitution 아님)" \
+        || fail "init-mistake-file — 빈 --category 가 exit $IMF_RC: ${IMF_OUT:0:100}"
+    rm -rf "$ZD"
+fi
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"

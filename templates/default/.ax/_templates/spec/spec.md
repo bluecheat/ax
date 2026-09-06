@@ -28,12 +28,12 @@
 ### 1.2 사용자 가치
 <누가 / 어떤 상황에서 / 무엇을 얻는가>
 
-### 1.3 MVP 경계 (NEEDS CLARIFICATION 마커 사용)
+### 1.3 MVP 경계 (미해결 마커 사용)
 - [ ] 포함: <명확히 들어가는 것>
 - [ ] **NEEDS CLARIFICATION**: <불확실한 것 — 결정 필요>
 - [ ] 제외 (Out of scope): <이번 버전에서 안 다루는 것>
 
-> NEEDS CLARIFICATION이 1개라도 남아있으면 `goax spec check`가 fail. 모두 해소 후 tasks 단계로.
+> 미해결 마커가 1개라도 남아있으면 `goax spec check`가 fail. 모두 해소 후 tasks 단계로.
 
 ---
 
@@ -55,7 +55,7 @@
 
 ## 3. 성공 기준 (Acceptance Criteria)
 
-측정 가능한 형태로. **각 기준에 `AC<n>` ID 를 붙여요** — tasks.md 가 `[AC2]` 로
+측정 가능한 형태로. **각 기준에 `AC1`, `AC2` … 처럼 ID 를 붙여요** — tasks.md 가 `[AC2]` 로
 참조해서 "이 기준에 대응하는 task 가 없다" 를 기계적으로 잡아요 (`tasks-gate.sh`).
 
 - [ ] **AC1** <기준 1 — Given/When/Then 또는 정량>
@@ -75,39 +75,47 @@
 
 ## 4. 사용자 시나리오 (User Scenarios)
 
-```
-시나리오 1: <성공 경로>
-  주어진: <초기 상태>
-  사용자가: <행동>
-  결과: <기대 결과>
+각 시나리오를 *주어진 / 사용자가 / 결과* 세 줄로. 코드펜스로 감싸지 마세요 —
+펜스 안은 게이트가 본문으로 안 세서 "빈 섹션" 으로 잡혀요 (`check-spec-clarity.sh`).
 
-시나리오 2: <엣지 케이스>
-  ...
-
-시나리오 3: <실패 경로>
-  ...
-```
+- **시나리오 1 (성공 경로)**
+  - 주어진: <초기 상태>
+  - 사용자가: <행동>
+  - 결과: <기대 결과>
+- **시나리오 2 (엣지 케이스)**
+  - 주어진: <초기 상태>
+  - 사용자가: <행동>
+  - 결과: <기대 결과>
+- **시나리오 3 (실패 경로)**
+  - 주어진: <초기 상태>
+  - 사용자가: <행동>
+  - 결과: <실패 처리 방식>
 
 ---
 
 ## 5. 도메인 / 데이터 (선택 — 클 때만)
 
+> **안 쓰면 섹션째 지우세요.** 아래 예시를 그대로 두는 건 괜찮지만, 형식을
+> `<...>` placeholder 로 바꿔 놓고 안 채우면 `goax spec check` 가 fail 해요.
+
 데이터 모델이 복잡하면 [`data-model.md`](data-model.md)로 분리.
 
-핵심 엔티티만 여기에:
-- **<Entity>**: <의미>
-- ...
+핵심 엔티티만 여기에. 예: **`Order`** — 주문 1건 (상태·금액·아이템),
+**`OrderItem`** — 주문 안의 상품 1줄. 이 자리를 프로젝트 엔티티로 갈아 끼우세요.
 
 ---
 
 ## 6. 인터페이스 (선택 — API 있을 때)
 
+> **안 쓰면 섹션째 지우세요.** 아래 예시를 그대로 두는 건 괜찮지만, 형식을
+> `<...>` placeholder 로 바꿔 놓고 안 채우면 `goax spec check` 가 fail 해요.
+
 API/이벤트가 있으면 [`contracts/`](contracts/) 디렉토리로:
 - `contracts/api.yaml` (OpenAPI)
 - `contracts/events.md` (이벤트 스키마)
 
-핵심 endpoint만 여기에:
-- `POST /v1/<resource>` — <목적>
+핵심 endpoint만 여기에. 예: `POST /v1/orders` — 주문 생성,
+`GET /v1/orders/{id}` — 단건 조회. 이 자리를 프로젝트 endpoint 로 갈아 끼우세요.
 
 ---
 
@@ -135,7 +143,7 @@ API/이벤트가 있으면 [`contracts/`](contracts/) 디렉토리로:
 
 ## 8. 보류 (Open Questions)
 
-→ NEEDS CLARIFICATION의 모음. 해소되면 1️⃣.3에서 체크.
+→ 미해결 마커의 모음. 해소되면 §1.3에서 체크.
 
 - [ ] **NEEDS CLARIFICATION**: <질문 1>
 - [ ] **NEEDS CLARIFICATION**: <질문 2>

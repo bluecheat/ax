@@ -18,7 +18,11 @@
 #
 # 읽는 파일: .ax/current-task.json · .ax/state.json(hud 캐시) · .ax/version · <spec>/tasks.md · .ax/mistakes/
 # 스크립트는 하나도 안 불러요 — statusline 은 300ms 디바운스에 새 이벤트가 오면 취소돼서 50ms 안에 끝나야 해요.
-# jq 3회 + awk 1패스 + find 1회. state.json 은 read-only (docs/state-ownership.md 규칙 2).
+# 실측 외부 명령 (bash -x 추적): COLUMNS 없이 focused 16회 · full 17회, COLUMNS 이 있으면 21회
+# (폭 계산이 조각마다 awk 를 한 번 더 불러서 awk 5 → 10). 내역은 jq 3 · awk 5 · tr 2 ·
+# find·date·cat·grep·head·wc 각 1 (+ full 이면 basename 1).
+# ("jq 3회 + awk 1패스 + find 1회" 라고 적혀 있었는데 실제와 달랐어요 — 예산을 재려면 숫자가 맞아야 해요.)
+# state.json 은 read-only (docs/state-ownership.md 규칙 2).
 #
 # stdin 은 전부 읽어요 (workspace.current_dir 이 필요). 다른 statusline 과 합칠 땐 합성 스크립트가
 # stdin 을 변수로 받아 양쪽에 각각 먹여야 해요 — hud skill 의 [c] 참고. 출력은 개행으로 끝나요.
@@ -111,11 +115,12 @@ seg_triage() {
     printf '%s' "$out"
 }
 
-# tasks.md 진행 — awk 한 패스 (done|total)
+# tasks.md 진행 — awk 한 패스 (done|total). ``` 펜스 안은 형식 설명이라 건너뛰어요 —
+# 세면 진행률이 부풀어서 갓 만든 spec 이 이미 뭔가 한 것처럼 보여요.
 TASK_DONE=0; TASK_TOTAL=0
 if [ -n "$SPEC_DIR" ] && [ -f "$WS_DIR/$SPEC_DIR/tasks.md" ]; then
     IFS='|' read -r TASK_DONE TASK_TOTAL <<EOF
-$(awk '/^- \[[xX]\] /{d++} /^- \[[ xX~]\] /{t++} END{printf "%d|%d", d+0, t+0}' "$WS_DIR/$SPEC_DIR/tasks.md" 2>/dev/null)
+$(awk '/^[[:space:]]*```/{fence=!fence; next} fence{next} /^- \[[xX]\] /{d++} /^- \[[ xX~]\] /{t++} END{printf "%d|%d", d+0, t+0}' "$WS_DIR/$SPEC_DIR/tasks.md" 2>/dev/null)
 EOF
 fi
 
@@ -244,7 +249,40 @@ for f in seg_version seg_triage seg_flow seg_mistakes seg_stale; do
     [ -n "$piece" ] && MAIN+=("$piece")
 done
 
-visible_width() { printf '%s' "$1" | sed -E $'s/\033\\[[0-9;]*[A-Za-z]//g' | wc -m | tr -d ' '; }
+# 가시 폭 — ANSI 를 걷어내고 한글·CJK 를 2칸으로 세요. `wc -m` 은 글자 수라 한글 도메인·슬러그가
+# 1칸으로 잡혀서, 실제로는 넘치는 줄이 안 잘렸어요. LC_ALL=C 로 awk 를 바이트 모드로 돌린 뒤
+# UTF-8 을 직접 디코드해요 — 로케일에 안 흔들리고, sed|wc|tr 3프로세스를 awk 1개로 줄여요.
+# 폭 2 는 한글 자모/음절 · CJK · 전각만. ✓ ● › ⚠ 같은 Ambiguous 기호는 1칸 그대로예요 (기존 동작 유지).
+_HUD_WIDTH_AWK=$'
+BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i }
+function wide(c) {
+    return (c >= 4352  && c <= 4447)  ||
+           (c >= 11904 && c <= 42191) ||
+           (c >= 44032 && c <= 55203) ||
+           (c >= 63744 && c <= 64255) ||
+           (c >= 65072 && c <= 65135) ||
+           (c >= 65280 && c <= 65376) ||
+           (c >= 65504 && c <= 65510)
+}
+{
+    s = $0
+    gsub(/\033\\[[0-9;]*[A-Za-z]/, "", s)
+    n = length(s); i = 1
+    while (i <= n) {
+        b = ord[substr(s, i, 1)]
+        if (b < 128)      { w += 1; i += 1 }
+        else if (b < 224) { w += 1; i += 2 }
+        else if (b < 240) {
+            cp = (b % 16) * 4096 + (ord[substr(s, i+1, 1)] % 64) * 64 + (ord[substr(s, i+2, 1)] % 64)
+            w += wide(cp) ? 2 : 1
+            i += 3
+        }
+        else { w += 2; i += 4 }
+    }
+}
+END { print w+0 }'
+
+visible_width() { printf '%s' "$1" | LC_ALL=C awk "$_HUD_WIDTH_AWK"; }
 
 COLS="${COLUMNS:-0}"
 LINE=""

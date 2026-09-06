@@ -78,13 +78,19 @@ lines_to_json() {   # stdin(줄 목록) → JSON array
     fi
 }
 
+# 키 정규식 — 읽기·검증·재작성 세 곳이 **이 하나**를 봐요.
+# `[a-z]` 브래킷은 en_US.UTF-8 collation 에서 대문자를 삼켜요 (`Payment` 이 통과).
+# 그래서 POSIX 클래스로 쓰고 LC_ALL=C 로 ASCII 에 고정해요.
+KEY_RE='[[:lower:]][[:lower:][:digit:]-]*'
+PAIR_RE="^${KEY_RE}=L[0-3]$"
+
 # domain_risk 블록 읽기 — `domain_risk:` 다음부터 첫 비들여쓰기 줄 전까지.
 # awk range(/start/,/end/) 는 start 가 end 패턴에도 매칭되면 1줄로 붕괴해요.
 # `domain_risk:` 자체가 ^[^[:space:]] 라서 정확히 그 함정이라, flag 로 우회해요.
 read_pairs() {
     awk '/^domain_risk:/{f=1;next} f && /^[^[:space:]]/{exit} f' "$1" \
-        | grep -E '^[[:space:]]+[a-z][a-z0-9-]*:[[:space:]]*L[0-3]' \
-        | sed -E 's/^[[:space:]]+([a-z][a-z0-9-]*):[[:space:]]*(L[0-3]).*/\1=\2/' || true
+        | LC_ALL=C grep -E '^[[:space:]]+'"$KEY_RE"':[[:space:]]*L[0-3]' \
+        | LC_ALL=C sed -E 's/^[[:space:]]+('"$KEY_RE"'):[[:space:]]*(L[0-3]).*/\1=\2/' || true
 }
 
 BEFORE=$(read_pairs "$CONFIG")
@@ -123,30 +129,31 @@ if [ "$NEW_N" -eq 0 ]; then
     goax_error "$MSG"; exit "$EXIT_ERROR"
 fi
 
+# 검증은 **재작성과 같은 전체 매치 하나**로 해요. 예전엔 검증이 부분 매치 글롭 3개,
+# 재작성이 sed 전체 매치라 둘이 어긋났고, 어긋난 입력이 status ok 로 데이터를 깼어요:
+#   `Payment=L2`  → collation 때문에 검증만 통과 → sed 거부 → domain_risk 4개가 통째로 소실
+#   `new=oops=L3` → 검증이 중간 토큰을 버려 통과 → 들여쓰기 없는 깨진 YAML 삽입
 BAD=""
 SEEN=""
 while IFS= read -r pair; do
     [ -z "$pair" ] && continue
+    if printf '%s\n' "$pair" | LC_ALL=C grep -qE "$PAIR_RE"; then
+        k="${pair%%=*}"
+        case " $SEEN " in
+            *" $k "*) BAD="$BAD [$pair: 키 중복]"; continue ;;
+        esac
+        SEEN="$SEEN $k"
+        continue
+    fi
+    # 여기부터는 **왜** 떨어졌는지 메시지만 갈라요 — 판정은 위 전체 매치가 이미 했어요
     case "$pair" in
         *=*) ;;
         *) BAD="$BAD [$pair: key=LEVEL 형식이 아니에요]"; continue ;;
     esac
-    k="${pair%%=*}"; v="${pair##*=}"
-    case "$k" in
-        [a-z]*) ;;
-        *) BAD="$BAD [$pair: 키는 영소문자로 시작]"; continue ;;
+    case "${pair##*=}" in
+        L0|L1|L2|L3) BAD="$BAD [$pair: 키는 영문 kebab-case 만 (영소문자로 시작, a-z0-9- 만)]" ;;
+        *)           BAD="$BAD [$pair: 레벨은 L0~L3]" ;;
     esac
-    case "$k" in
-        *[!a-z0-9-]*) BAD="$BAD [$pair: 키는 영문 kebab-case 만]"; continue ;;
-    esac
-    case "$v" in
-        L0|L1|L2|L3) ;;
-        *) BAD="$BAD [$pair: 레벨은 L0~L3]"; continue ;;
-    esac
-    case " $SEEN " in
-        *" $k "*) BAD="$BAD [$pair: 키 중복]"; continue ;;
-    esac
-    SEEN="$SEEN $k"
 done <<PAIRS
 $NEW_PAIRS
 PAIRS
@@ -169,7 +176,17 @@ else
 fi
 
 # ── 블록 재작성 ──────────────────────────────────────────────────
-BLOCK=$(printf '%s\n' "$NEW_PAIRS" | sed -E 's/^([a-z][a-z0-9-]*)=(L[0-3])$/  \1: \2/')
+BLOCK=$(printf '%s\n' "$NEW_PAIRS" | LC_ALL=C sed -E 's/^('"$KEY_RE"')=(L[0-3])$/  \1: \2/')
+
+# 변환 안 된 줄이 하나라도 있으면 **파일을 쓰지 않아요.**
+# 예전엔 원문(`Payment=L2`)이 그대로 블록에 실려 깨진 YAML 이 나갔는데, 그걸
+# warning 한 줄 + status ok 로 보고했어요. 재작성 실패는 경고가 아니라 에러예요.
+UNCONVERTED=$(printf '%s\n' "$BLOCK" | LC_ALL=C grep -vE '^  '"$KEY_RE"': L[0-3]$' | grep -v '^$' || true)
+if [ -n "$UNCONVERTED" ]; then
+    MSG="domain_risk 블록을 못 만들었어요 (변환 안 된 줄: $(printf '%s' "$UNCONVERTED" | tr '\n' ' ')) — config.yml 은 그대로 뒀어요"
+    if [ "$JSON_MODE" = true ]; then json_error "$MSG"; fi
+    goax_error "$MSG"; exit "$EXIT_ERROR"
+fi
 
 TMP="$CONFIG.tmp.$$"
 HAS_BLOCK=false

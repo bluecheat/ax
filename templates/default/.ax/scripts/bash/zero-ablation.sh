@@ -81,6 +81,9 @@ selected() {   # $1 = basename without .md — --rules 로 좁혔으면 그 안�
 CHANGED=0
 ACTIVE=""
 ABLATED=""
+WARNS=""
+add_warn() { WARNS="${WARNS}${WARNS:+
+}$1"; }
 
 if [ -d "$RULES_DIR" ]; then
     for f in "$RULES_DIR"/*.md; do
@@ -100,6 +103,16 @@ if [ -d "$RULES_DIR" ]; then
         [ -f "$f" ] || continue
         base=$(basename "$f" .md.ablated)
         if [ "$MODE" = "on" ]; then
+            # 목적지에 파일이 있으면 **덮어쓰지 않아요.** 꺼져 있는 동안 사용자가 같은 이름으로
+            # 새로 쓴 룰이에요 — mv 로 되돌리면 그 편집이 조용히 사라져요. `.ablated` 를 그대로
+            # 두고 경고만 내요 (두 파일을 합치는 건 사람의 판단). 여기서 continue 하면
+            # 위 루프가 이미 ACTIVE 에 넣은 이름을 한 번 더 넣지도 않아요.
+            if [ -e "$RULES_DIR/$base.md" ]; then
+                add_warn "$base.md 가 이미 있어서 $base.md.ablated 를 안 되돌렸어요 — 두 파일을 직접 합치세요"
+                ABLATED="${ABLATED}${base}
+"
+                continue
+            fi
             [ "$DRY_RUN" = true ] || mv "$f" "$RULES_DIR/$base.md"
             CHANGED=$((CHANGED + 1))
             ACTIVE="${ACTIVE}${base}
@@ -152,13 +165,18 @@ if [ "$MODE" = "status" ] && [ -z "$LAST_ROUND" ]; then
     NEXT="$NEXT · 아직 한 회차도 안 돌았어요 — 첫 기한은 zero §13 이 STATUS.md 에 적어요"
 fi
 
+# 되돌리지 못한 게 있으면 ok 로 넘기지 않아요 — 사용자가 합쳐야 끝나는 상태예요
+STATUS="ok"; [ -n "$WARNS" ] && STATUS="warning"
+
 if [ "$JSON_MODE" = true ]; then
     AJ=$(printf '%s' "$ACTIVE" | lines_to_json)
     BJ=$(printf '%s' "$ABLATED" | lines_to_json)
+    WJ=$(printf '%s' "$WARNS" | lines_to_json)
     RESULT=$(printf '{"mode":"%s","active":%s,"ablated":%s,"changed":%s,"dry_run":%s,"last_round":"%s","next_due":"%s"}' \
                     "$MODE" "$AJ" "$BJ" "$CHANGED" "$DRY_RUN" "$LAST_ROUND" "$NEXT_DUE")
-    json_output "ok" "$RESULT" "$NEXT"
+    json_output "$STATUS" "$RESULT" "$NEXT" "$WJ"
 else
+    printf '%s' "$WARNS" | while IFS= read -r l; do [ -n "$l" ] && goax_warn "$l"; done
     printf '%s\n' "$NEXT"
     [ -n "$LAST_ROUND" ] && printf '마지막 회차 %s · 다음 기한 %s\n' "$LAST_ROUND" "$NEXT_DUE"
 fi

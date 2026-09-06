@@ -252,12 +252,20 @@ case "$MODE" in
         printf '  sensors  mode=%s\n' "$SENSORS_MODE" >&2
         ;;
     update|*)
+        # state.json 은 tasks-gate.sh(task_seal) 와 같은 파일이라 같은 락(`$S.lock`)으로 직렬화해요 —
+        # 락 없이 read→jq→mv 를 하면 동시 실행 시 한쪽 갱신이 통째로 사라져요 (실측 task_seal 5/10 유실)
+        if ! goax_lock "$S.lock"; then
+            goax_error "state.json 락을 못 잡았어요: $S.lock — 다른 프로세스가 쓰는 중이거나 락이 남아 있어요"
+            exit 1
+        fi
         TMP="$S.tmp.$$"
         if jq "${JQ_ARGS[@]}" "$JQ_FILTER" "$S" > "$TMP" 2>/dev/null; then
             mv "$TMP" "$S"
+            goax_unlock "$S.lock"
             goax_log "state.json updated — L:$L0_ACTIVE/$L1_ACTIVE/$L2_ACTIVE/$L3_ACTIVE Sp:$SP_ACTIVE Ml:$ML_ACTIVE mode:$SENSORS_MODE"
         else
             rm -f "$TMP"
+            goax_unlock "$S.lock"
             goax_error "jq update 실패 — state.json 그대로"
             exit 1
         fi

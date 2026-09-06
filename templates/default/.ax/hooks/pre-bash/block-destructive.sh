@@ -27,7 +27,14 @@ if [ -n "$INPUT" ] && command -v jq >/dev/null 2>&1; then
     CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || true)
 fi
 CMD="${CMD:-${CLAUDE_BASH_COMMAND:-${1:-}}}"
-[ -z "$CMD" ] && exit 0
+if [ -z "$CMD" ]; then
+    # stdin 은 왔는데 명령을 못 뽑았으면 jq 가 없는 거예요. fail-open 은 유지하되 침묵하진 않아요 —
+    # 조용히 통과하면 `rm -rf /etc` 가 아무 출력 없이 exit 0 이고, 안전망이 꺼진 걸 아무도 몰라요.
+    if [ -n "$INPUT" ] && ! command -v jq >/dev/null 2>&1; then
+        printf '[goax] jq 없음 — 이 안전망이 비활성 상태예요 (파괴적 명령 차단)\n' >&2
+    fi
+    exit 0
+fi
 
 # 정규화 — 표기 변형 흡수 (`rm -rf "/"`, `rm  -rf   /`, 탭 구분 등).
 # 따옴표 제거는 의도적: 셸이 어차피 벗겨내므로 인용 여부로 우회되면 안 돼요.
@@ -116,7 +123,11 @@ fi
 RECOVERABLE_HIT=""
 
 # 2-a. 재귀 rm + 상위 경로(..) — 범위가 의도보다 넓을 가능성
-if matches "$RM_INVOKED" && matches "$RM_RECURSIVE" && matches ' (\.\.|\.\./\*)( |$)'; then
+# 옛 매처 ' (\.\.|\.\./\*)( |$)' 는 `..` 뒤에 `/` 가 오면 미매칭이라 `rm -rf ..` 는 잡고
+# 더 위험한 `rm -rf ../..`·`../../etc`·`../../../` 는 그냥 통과시켰어요 (위험도 역전).
+# 이제 `..` 로 시작하는 경로 전체를 봐요: `..`, `../*`, `../..`, `../../etc`, `../../../`, `../foo`.
+PARENT_TARGET=' (\.\.(/\.\.)*(/[^ ]*)?|\.\./\*)( |$)'
+if matches "$RM_INVOKED" && matches "$RM_RECURSIVE" && matches "$PARENT_TARGET"; then
     RECOVERABLE_HIT="재귀 rm + 상위 디렉토리(..)"
 fi
 

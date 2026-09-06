@@ -7,7 +7,9 @@
 # 검사 (doctor SKILL.md 3.6 · 3.7(3) · 3.8 이 산문 bash 로 하던 것 + 신규 도달 지도):
 #   migration   .gitignore 누락 엔트리 · spirit/rules/output-style.md 잔재 · 미처리 .suggested ·
 #               spec README.md 잔재 · 빈 checklists/contracts 디렉토리
-#   hooks       settings.json.template(SSOT) 이 선언한 .ax/hooks/*.sh 전부가 .claude/settings.json 에 등록됐는지
+#   hooks       settings.json.template(SSOT) 이 선언한 (이벤트 키, .ax/hooks/*.sh) **쌍** 전부가
+#               .claude/settings.json 의 같은 이벤트 아래 있는지 — 훅은 등록된 이벤트에서만 발화하니
+#               Stop 훅이 PreToolUse 에 적혀 있으면 미등록이에요
 #               (파일 자체가 없으면 missing_files — 초기 설치 미완). PLUGIN_DIR 없으면 skip
 #   doc_actual  CLAUDE.md/AGENTS.md 가 설명하는 path-scoped 메커니즘(hook vs 폐기된 shim) ↔ 실제 설치 상태
 #   hooks.events settings.json 에 template 의 이벤트 키(UserPromptSubmit·PreToolUse·PostToolUse·SubagentStart·Stop)가 다 있는지
@@ -43,7 +45,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "$EXIT_OK"
 fi
 if ! command -v jq >/dev/null 2>&1; then
@@ -106,24 +108,41 @@ MIG=$(jq -nc --argjson gi "$(printf '%s' "$GI_MISSING" | to_json_arr)" --argjson
 TPL="$PLUGIN_DIR/templates/default/.claude/settings.json.template"
 EXPECTED=""; REGISTERED=""; MISSING=""; MISSING_FILES=""; HOOKS_CHECKED=false
 SETTINGS_PRESENT=false; [ -f "$SETTINGS" ] && SETTINGS_PRESENT=true
+# (이벤트, 경로) **쌍**으로 봐요. 예전엔 basename 이 settings.json 어딘가에 있기만 하면 등록으로 쳤어요 —
+# Stop 훅을 PreToolUse 로 옮기고 Stop 을 빈 배열로 둬도 "이상 없음" 이 나왔어요. 훅은 등록된 이벤트에서만
+# 발화하니, 파일 이름이 어디 적혔는지가 아니라 **어느 이벤트 아래** 적혔는지가 검사 대상이에요.
+hook_pairs() {   # hook_pairs <settings.json> → "<Event> <.ax/hooks/….sh>" 줄 목록
+    jq -r '(.hooks // {}) | to_entries[] | .key as $ev
+           | (.value // []) | .[]? | (.hooks // []) | .[]? | (.command // empty)
+           | "\($ev) \(.)"' "$1" 2>/dev/null \
+      | sed -nE 's#^([A-Za-z]+) .*(\.ax/hooks/[^"'"'"' ]+\.sh).*$#\1 \2#p' | sort -u
+}
 if [ -n "$PLUGIN_DIR" ] && [ -f "$TPL" ]; then
     HOOKS_CHECKED=true
-    while IFS= read -r hp; do
-        [ -z "$hp" ] && continue
-        EXPECTED="${EXPECTED}${hp}
+    REG_PAIRS=""
+    [ "$SETTINGS_PRESENT" = true ] && REG_PAIRS=$(hook_pairs "$SETTINGS")
+    while IFS= read -r pair; do
+        [ -z "$pair" ] && continue
+        hp="${pair#* }"
+        EXPECTED="${EXPECTED}${pair}
 "
         if [ ! -f "$hp" ]; then
-            MISSING_FILES="${MISSING_FILES}${hp}
-"; MISSING="${MISSING}${hp}
+            # 파일 부재는 이벤트와 무관하니 경로 기준으로 한 번만 세요
+            case "
+$MISSING_FILES" in *"
+$hp
+"*) ;; *) MISSING_FILES="${MISSING_FILES}${hp}
+" ;; esac
+            MISSING="${MISSING}${pair}
 "
-        elif [ "$SETTINGS_PRESENT" = true ] && grep -q "$(basename "$hp")" "$SETTINGS" 2>/dev/null; then
-            REGISTERED="${REGISTERED}${hp}
+        elif printf '%s\n' "$REG_PAIRS" | grep -qxF -- "$pair"; then
+            REGISTERED="${REGISTERED}${pair}
 "
         else
-            MISSING="${MISSING}${hp}
+            MISSING="${MISSING}${pair}
 "
         fi
-    done < <(grep -oE '\.ax/hooks/[^"]+\.sh' "$TPL" | sort -u)
+    done <<< "$(hook_pairs "$TPL")"
 fi
 # path-scoped spirit 룰 수 (paths: 에 항목이 하나라도 있는 파일)
 SCOPED_N=0; UNIVERSAL_N=0; SCOPED_FILES=""; UNIVERSAL_FILES=""
@@ -273,8 +292,8 @@ printf '\n🧹 마이그레이션 잔재 — %s건\n' "$MIG_N"
 [ "$SE_N" -gt 0 ] && printf '   ⚠ spec 빈 디렉토리 %s건\n' "$SE_N"
 printf '\n🪝 hook 등록 — '
 if [ "$HOOKS_CHECKED" = true ]; then
-    printf '%s/%s 등록\n' "$RG_N" "$EX_N"
-    [ "$MS_N" -gt 0 ] && printf '   ⚠ 미등록: %s\n' "$(printf '%s' "$MISSING" | tr '\n' ' ')"
+    printf '%s/%s 등록 (이벤트 키 + 경로 쌍)\n' "$RG_N" "$EX_N"
+    [ "$MS_N" -gt 0 ] && printf '%s' "$MISSING" | sed '/^$/d; s/^/   ⚠ 미등록: /'
     [ "$MF_N" -gt 0 ] && printf '   ✗ 파일 자체가 없음 (초기 설치 미완 → /up): %s\n' "$(printf '%s' "$MISSING_FILES" | tr '\n' ' ')"
     [ "$EVM_N" -gt 0 ] && printf '   ⚠ 이벤트 키 미등록: %s — settings.json 에 그 이벤트가 아예 없어요\n' "$(printf '%s' "$EV_MISS" | tr '\n' ' ')"
 else printf 'skip (plugin 경로 미도출 — --plugin-dir)\n'; fi
