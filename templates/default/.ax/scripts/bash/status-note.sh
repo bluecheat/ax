@@ -159,6 +159,14 @@ emit_show() {
     fi
 }
 
+# 변이 모드는 "바꿀지 말지를 정하는 첫 읽기" 부터 락 안이에요 — ensure_file 의 절 추가도,
+# --add 의 중복 판정도 읽고 나서 쓰는 자리라 락 밖이면 두 세션이 서로를 덮어써요.
+# dry-run 은 아무것도 안 쓰니까 락도 안 잡아요 (락 디렉토리 자체가 부작용이에요).
+LOCK="$FILE.lock"
+if [ "$MODE" != show ] && [ "$DRY_RUN" != true ]; then
+    goax_lock "$LOCK" "${GOAX_LOCK_TIMEOUT:-10}" || fail "다른 프로세스가 $REL 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
+fi
+
 case "$MODE" in
     show) emit_show ;;
     init)
@@ -169,13 +177,13 @@ case "$MODE" in
             [ "$JSON_MODE" = true ] && json_output "ok" '{"path":"'"$REL"'","initialized":true}' "4절 골격 준비됨 — --add 로 채워요" || goax_log "$REL 준비됨 (4절)"
         fi ;;
     add)
-        ensure_file
         line="$TEXT"; case "$line" in -*|'- '*) ;; *) line="- $line" ;; esac
         if section_lines "$SEC" | grep -qxF -- "$line"; then
             [ "$JSON_MODE" = true ] && json_output "ok" '{"path":"'"$REL"'","added":false,"reason":"duplicate"}' "이미 있는 줄이라 그대로 뒀어요" || goax_log "이미 있는 줄 — 추가 안 함"
         elif [ "$DRY_RUN" = true ]; then
             [ "$JSON_MODE" = true ] && json_output "ok" '{"path":"'"$REL"'","added":false,"dry_run":true}' "dry-run — 안 썼어요" || goax_log "dry-run — 안 썼어요"
         else
+            ensure_file
             { section_lines "$SEC"; printf '%s\n' "$line"; } | replace_section "$SEC"
             n=$(wc -l < "$FILE" | tr -d ' ')
             if [ "$n" -gt "$CAP" ]; then
@@ -197,16 +205,17 @@ case "$MODE" in
             [ "$JSON_MODE" = true ] && json_output "ok" '{"path":"'"$REL"'","removed":'"$removed"'}' "$(sec_title "$SEC") 에서 ${removed}줄 제거" || goax_log "$(sec_title "$SEC") 에서 ${removed}줄 제거"
         fi ;;
     set)
-        ensure_file
         body=$(printf '%b' "$TEXT")
         if [ "$SEC" = now ] && [ -n "$body" ]; then body=$(printf '%s\n' "$body" | stamp_now); fi
         if [ "$DRY_RUN" = true ]; then
             [ "$JSON_MODE" = true ] && json_output "ok" '{"path":"'"$REL"'","dry_run":true}' "dry-run — 안 썼어요" || goax_log "dry-run — 안 썼어요"
         else
+            ensure_file
             printf '%s' "$body" | replace_section "$SEC"
             n=$(wc -l < "$FILE" | tr -d ' ')
             st=ok; [ "$n" -gt "$CAP" ] && st=warning
             [ "$JSON_MODE" = true ] && json_output "$st" '{"path":"'"$REL"'","replaced":true,"lines":'"$n"',"over_cap":'"$([ "$st" = warning ] && echo true || echo false)"'}' "$(sec_title "$SEC") 교체 — ${n}줄" || goax_log "$(sec_title "$SEC") 교체 — ${n}줄"
         fi ;;
 esac
+if [ "$MODE" != show ] && [ "$DRY_RUN" != true ]; then goax_unlock "$LOCK"; fi
 exit "$EXIT_OK"

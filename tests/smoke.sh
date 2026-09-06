@@ -219,14 +219,16 @@ python3 -c "import json; json.load(open('$REPO/templates/default/.ax/current-tas
     && pass "current-task.json.template JSON valid" \
     || fail "current-task.json.template JSON invalid"
 
-# .gitignore.template — runtime 엔트리 4종 모두 포함하는지 검증.
+# .gitignore.template — runtime 엔트리 5종 모두 포함하는지 검증.
+# `*.lock/` 는 슬래시가 **필수**예요 — `goax_lock` 은 mkdir + 안에 pid 파일이라 디렉토리
+# 전용이고, 슬래시를 빼면 남의 프로젝트의 `Cargo.lock`·`Gemfile.lock` 이 조용히 사라져요.
 GI_TPL="$REPO/templates/default/.gitignore.template"
 if [ -f "$GI_TPL" ]; then
     missing=0
-    for entry in ".ax/state.json" ".ax/current-task.json" ".ax/*.suggested" ".ax/.onboarding-pending"; do
+    for entry in ".ax/state.json" ".ax/current-task.json" ".ax/*.suggested" ".ax/.onboarding-pending" "*.lock/"; do
         grep -qxF "$entry" "$GI_TPL" || { fail ".gitignore.template 누락 엔트리: $entry"; missing=$((missing+1)); }
     done
-    [ "$missing" -eq 0 ] && pass ".gitignore.template — runtime 엔트리 4종 모두 포함"
+    [ "$missing" -eq 0 ] && pass ".gitignore.template — runtime 엔트리 5종 모두 포함"
 fi
 
 # 잔재 검증 — spirit/rules/output-style.md (plugin meta로 분류되어 출고에서 제거됨)
@@ -984,6 +986,8 @@ rm -rf "$PM_FX"
 # ───────────────────────────────────────────────────────────
 section "15. PR #1085 review fixes — security/correctness/escape"
 # ───────────────────────────────────────────────────────────
+# §15/§41 분담: 여기는 git/원격/sudo 계열 경고 7종 + CATASTROPHIC 16종 + 무해 9종(무음).
+# 상위 경로(..) 계열 경고 5종 · 일상 rm 3종(무음) · jq 부재는 §41 담당이에요 — 섞지 마세요.
 
 # 15.1 block-destructive — rm variants + git push variants
 # capture-mistake.sh 폐기 후 — block-destructive 가 더 이상 호출 안 함.
@@ -1001,14 +1005,28 @@ assert_blocked() {
     if [ "$exit_code" -eq 2 ]; then pass "block-destructive 차단: $label ('$cmd')"
     else fail "block-destructive 미차단 (exit=$exit_code): $label ('$cmd')"; fi
 }
-assert_passed() {
-    local cmd="$1"; local label="$2"
-    local exit_code
-    echo "{\"tool_input\":{\"command\":\"$cmd\"}}" \
-        | CLAUDE_PROJECT_DIR=$BD_FX bash "$BD_FX/.ax/hooks/pre-bash/block-destructive.sh" >/dev/null 2>&1
+assert_warned() {
+    local cmd="$1"; local label="$2"; local err exit_code
+    # local 선언과 대입을 나눠요 — `local err=$(...)` 로 합치면 $? 가 항상 0 이에요
+    err=$(echo "{\"tool_input\":{\"command\":\"$cmd\"}}" \
+        | CLAUDE_PROJECT_DIR=$BD_FX bash "$BD_FX/.ax/hooks/pre-bash/block-destructive.sh" 2>&1 >/dev/null)
     exit_code=$?
-    if [ "$exit_code" -eq 0 ]; then pass "block-destructive 통과: $label ('$cmd')"
-    else fail "block-destructive 잘못 차단 (exit=$exit_code): $label ('$cmd')"; fi
+    if [ "$exit_code" -eq 0 ] && printf '%s' "$err" | grep -q '\[goax hook\]'; then
+        pass "block-destructive 경고: $label ('$cmd')"
+    else
+        fail "block-destructive 경고 없음 (exit=$exit_code, stderr='$err'): $label ('$cmd')"
+    fi
+}
+assert_passed() {
+    local cmd="$1"; local label="$2"; local err exit_code
+    err=$(echo "{\"tool_input\":{\"command\":\"$cmd\"}}" \
+        | CLAUDE_PROJECT_DIR=$BD_FX bash "$BD_FX/.ax/hooks/pre-bash/block-destructive.sh" 2>&1 >/dev/null)
+    exit_code=$?
+    if [ "$exit_code" -eq 0 ] && [ -z "$err" ]; then
+        pass "block-destructive 통과: $label ('$cmd')"
+    else
+        fail "block-destructive 잘못 차단/경고 (exit=$exit_code, stderr='$err'): $label ('$cmd')"
+    fi
 }
 
 # CATASTROPHIC — 항상 차단
@@ -1020,13 +1038,16 @@ assert_blocked 'rm -r -f /'  'rm -r -f / (multi-chunk)'
 assert_blocked 'rm -rf -- /' 'rm -rf -- / (end-of-options sentinel)'
 assert_blocked 'mkfs.ext4 /dev/sda1' 'mkfs.* (디스크 포맷)'
 
-# RECOVERABLE — warning mode에선 통과 (exit 0)
-assert_passed 'git push --force'                      'EOL --force (이전 미매칭)'
-assert_passed 'git push --force-with-lease'           '--force-with-lease (recoverable)'
-assert_passed 'git push origin main --force'          'remote/ref 사이에 --force (이전 우회 케이스)'
-assert_passed 'git push origin -f'                    'remote 다음 -f'
+# RECOVERABLE — warning mode에선 경고 (stderr `[goax hook]` + exit 0)
+assert_warned 'git push --force'                      'EOL --force (이전 미매칭)'
+assert_warned 'git push --force-with-lease'           '--force-with-lease (recoverable)'
+assert_warned 'git push origin main --force'          'remote/ref 사이에 --force (이전 우회 케이스)'
+assert_warned 'git push origin -f'                    'remote 다음 -f'
+assert_warned 'git reset --hard origin/main'          'git reset --hard (히스토리 되돌리기)'
+assert_warned 'git clean -xfd'                        'git clean -xfd (무시 파일까지 삭제)'
+assert_warned 'sudo rm -rf /tmp/x'                    'sudo rm (권한 상승 삭제)'
 
-# 안전 명령 — 통과
+# 안전 명령 — 통과 (stderr 무음까지)
 assert_passed 'rm /tmp/x'    'rm 단일 파일 (no -r)'
 assert_passed 'rm -v /tmp/x' 'rm -v 단일 파일 (verbose only)'
 assert_passed 'ls -la'       'ls (무관)'
@@ -1294,6 +1315,23 @@ else
 fi
 
 rm -rf "$SL_FX"
+
+# 15.6 §15/§41 경계 — 절대 행이 아니라 section "…" 마커로 범위를 뽑아요.
+# (절대 행 범위는 이 파일이 편집될 때마다 움직여서 어서션이 조용히 무효화돼요.)
+S15_PARENT_HITS=$(awk '/^section "15\./{f=1} /^section "16\./{f=0} f' "$REPO/tests/smoke.sh" \
+    | grep -c 'rm -rf \.\.' || true)
+if [ "${S15_PARENT_HITS:-0}" -eq 0 ]; then
+    pass "§15/§41 경계 — §15 안에 상위 경로(..) 계열 명령 없음"
+else
+    fail "§15/§41 경계 — §15 안에 상위 경로(..) 계열 명령이 섞여 있음 (${S15_PARENT_HITS}건)"
+fi
+S41_PUSH_HITS=$(awk '/^section "41\./{f=1} /^section "42\./{f=0} f' "$REPO/tests/smoke.sh" \
+    | grep -c 'git push' || true)
+if [ "${S41_PUSH_HITS:-0}" -eq 0 ]; then
+    pass "§15/§41 경계 — §41 안에 git push 문자열 없음"
+else
+    fail "§15/§41 경계 — §41 안에 git push 문자열이 섞여 있음 (${S41_PUSH_HITS}건)"
+fi
 
 # ───────────────────────────────────────────────────────────
 section "16. install-git-hooks.sh — OpenCode mode hook 보전"
@@ -2657,6 +2695,8 @@ fi
 # ───────────────────────────────────────────────────────────
 section "41. 설치기 · 훅 안전망 — 심링크 · 시크릿 · 상위 경로 · jq 부재 · 인계 기한 · 이벤트 키"
 # ───────────────────────────────────────────────────────────
+# §15/§41 분담: 여기는 상위 경로(..) 계열 경고 5종 + 일상 rm 3종(무음) + jq 부재 담당이에요.
+# git/원격/sudo 계열 경고 7종 + CATASTROPHIC 16종 + 무해 9종(무음)은 §15 담당 — 섞지 마세요.
 # 안전망이 *조용히* 꺼진 상태가 제일 나빠요 — 아무도 모르니까요. 여기 6개는 전부
 # "무경고로 통과했다" 가 회귀 내용이에요 (프로젝트 밖 쓰기 · 시크릿 9종 미탐 ·
 # `rm -rf ../..` 무음 · jq 없으면 무음 · 영구 유효한 인계 노트 · 이벤트 키 무시).
@@ -2792,6 +2832,115 @@ else
     fi
     popd >/dev/null || true
     rm -rf "$PRB"
+
+    # ── 시크릿 패턴 SSOT ─────────────────────────────────────────────
+    # 패턴이 훅 상수와 common.sh 의 sed 두 곳에 있어서 여덟 축이 이미 갈라져 있었어요
+    # (웹훅·pg_key 는 마스킹만, passwd·access_key 는 검출만, AWS·Stripe·JWT 정량자가 서로 달랐음).
+    # 이제 `goax_secret_rules` 표 하나에서 검출과 마스킹이 같이 나와요.
+    SR_ERR=$(bash -c 'source "'"$REPO"'/templates/default/.ax/scripts/bash/common.sh"
+        goax_secret_rules | awk -F"\t" "
+            NF!=4                          {print \"NF:\" NR; e=1}
+            \$3 ~ /#/ || \$4 ~ /#/         {print \"HASH:\" NR; e=1}
+            \$4 ~ /&/                      {print \"AMP:\" NR; e=1}
+            \$1==\"detect\" && \$4!=\"-\"  {print \"DUMMY:\" NR; e=1}
+            END{exit e+0}"' 2>&1)
+    [ -z "$SR_ERR" ] \
+        && pass "goax_secret_rules — 4열 · ERE/치환문에 # 없음 · 치환문에 & 없음 · detect 행은 - 고정" \
+        || fail "goax_secret_rules — 표 불변식 위반: $SR_ERR"
+
+    # 파일 하나만 봐요 — common.sh 의 `_GOAX_SECRET_KV_KEYS` 가 `SECRET_KV` 를 부분
+    # 문자열로 담고 있어서, templates 전체에 걸면 SSOT 자신이 빨개져요.
+    SR_INLINE=$(grep -cE 'SECRET_SHAPES|SECRET_KV|AKIA|gh\[|xox|eyJ|AIza' \
+        "$REPO/templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh" || true)
+    [ "${SR_INLINE:-1}" -eq 0 ] \
+        && pass "critical-rule-grep — 인라인 시크릿 패턴 0 (표가 유일한 출처)" \
+        || fail "critical-rule-grep — 패턴 문자열이 다시 인라인됨 (${SR_INLINE}건)"
+
+    # 검출·마스킹이 같은 검체에 같은 답을 내는가. 여섯은 예전에 한쪽만 잡았어요.
+    SSOT=$(mktemp -d)
+    pushd "$SSOT" >/dev/null || fail "SSOT pushd 실패"
+    git init -q . >/dev/null 2>&1
+    mkdir -p .ax/scripts/bash .ax/hooks/pre-commit fx
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" .ax/scripts/bash/
+    cp "$REPO/templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh" .ax/hooks/pre-commit/
+    printf '# C\n' > CLAUDE.md; printf 'sensors:\n  mode: fail\n' > .ax/config.yml
+    # 픽스처는 소스에 리터럴로 두지 않고 실행 시점에 이어 붙여요 (GitHub push protection)
+    printf 'url = https://hooks.slack.com/services/%s/%s/%s\n' T00000000 B00000000 abcdefghij0123456789 > fx/n1.txt
+    printf 'auth: %s.%s.%s\n' eyJhbGciOiJIUzI1NiJ9 eyJzdWIiOiIxMjM0NTY3ODkwIn0 abcdefg               > fx/n2.txt
+    printf -- '-----BEGIN PRIVATE KEY-----\nMIIEow==\n'                                              > fx/n3.txt
+    printf 'Api_Key=%s\n' abcdefgh12345678                                                           > fx/n4.txt
+    printf 'passwd=%s\n' abcdefgh12345678                                                            > fx/n5.txt
+    printf 'access_key=%s\n' abcdefgh12345678                                                        > fx/n6.txt
+    printf 'pg_key=%s\n' abcdefgh12345678                                                            > fx/n7.txt
+    ssot_miss=""; ssot_keep=""
+    for i in 1 2 3 4 5 6 7; do
+        git reset -q >/dev/null 2>&1; git add -f "fx/n$i.txt" >/dev/null 2>&1
+        CLAUDE_PROJECT_DIR="$SSOT" bash .ax/hooks/pre-commit/critical-rule-grep.sh >/dev/null 2>&1
+        [ $? -eq 2 ] || ssot_miss="$ssot_miss n$i"
+        RED=$(bash -c 'source "'"$SSOT"'/.ax/scripts/bash/common.sh" && redact_secrets' < "fx/n$i.txt")
+        [ "$RED" = "$(cat "fx/n$i.txt")" ] && ssot_keep="$ssot_keep n$i"
+    done
+    [ -z "$ssot_miss" ] \
+        && pass "critical-rule-grep — 신규 7종 (웹훅·3세그 JWT·수식어 없는 PEM·Api_Key·passwd·access_key·pg_key) 전부 차단" \
+        || fail "critical-rule-grep — 신규 검체 미탐:$ssot_miss"
+    [ -z "$ssot_keep" ] \
+        && pass "redact_secrets — 같은 7종을 마스킹도 함 (검출·마스킹 폭 일치)" \
+        || fail "redact_secrets — 검출은 되는데 마스킹 안 됨:$ssot_keep (SSOT 갈라짐)"
+    popd >/dev/null || true
+    rm -rf "$SSOT"
+
+    # common.sh 가 없으면 검출할 패턴이 없어요 — 조용히 통과하면 안전망이 꺼진 걸 아무도 몰라요
+    NOC=$(mktemp -d)
+    pushd "$NOC" >/dev/null || fail "NOC pushd 실패"
+    git init -q . >/dev/null 2>&1
+    mkdir -p .ax/hooks/pre-commit fx
+    cp "$REPO/templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh" .ax/hooks/pre-commit/
+    printf '# C\n' > CLAUDE.md; printf 'sensors:\n  mode: fail\n' > .ax/config.yml
+    printf 'AWS_ACCESS_KEY_ID=%s%s\n' AKIA IOSFODNN7EXAMPLE > fx/hit.txt
+    git add -f fx/hit.txt >/dev/null 2>&1
+    NOC_ERR=$(CLAUDE_PROJECT_DIR="$NOC" bash .ax/hooks/pre-commit/critical-rule-grep.sh 2>&1 >/dev/null); NOC_RC=$?
+    { [ "$NOC_RC" -eq 0 ] && printf '%s' "$NOC_ERR" | grep -q '안전망 비활성'; } \
+        && pass "critical-rule-grep — common.sh 부재를 '안전망 비활성' 으로 말하고 통과 (무성 skip 아님)" \
+        || fail "critical-rule-grep — common.sh 부재를 조용히 통과 (rc=$NOC_RC): $NOC_ERR"
+    popd >/dev/null || true
+    rm -rf "$NOC"
+
+    # check-mistake-secrets 도 같은 규약 — common.sh(redact_secrets) 가 없으면 말하고 통과
+    NOM=$(mktemp -d)
+    pushd "$NOM" >/dev/null || fail "NOM pushd 실패"
+    git init -q . >/dev/null 2>&1
+    mkdir -p .ax/hooks/pre-commit .ax/mistakes
+    cp "$REPO/templates/default/.ax/hooks/pre-commit/check-mistake-secrets.sh" .ax/hooks/pre-commit/
+    printf 'sensors:\n  mode: fail\n' > .ax/config.yml
+    printf -- '---\ncategory: ops\n---\nAWS_ACCESS_KEY_ID=%s%s\n' AKIA IOSFODNN7EXAMPLE > .ax/mistakes/2026-01-01-leak.md
+    git add -f .ax/mistakes/2026-01-01-leak.md >/dev/null 2>&1
+    NOM_ERR=$(CLAUDE_PROJECT_DIR="$NOM" bash .ax/hooks/pre-commit/check-mistake-secrets.sh 2>&1 >/dev/null); NOM_RC=$?
+    { [ "$NOM_RC" -eq 0 ] && printf '%s' "$NOM_ERR" | grep -q '안전망 비활성'; } \
+        && pass "check-mistake-secrets — common.sh 부재를 '안전망 비활성' 으로 말하고 통과 (무성 skip 아님)" \
+        || fail "check-mistake-secrets — common.sh 부재를 조용히 통과 (rc=$NOM_RC): $NOM_ERR"
+    popd >/dev/null || true
+    rm -rf "$NOM"
+
+    # 패턴 확대(AWS {16,}·Stripe {16,}·JWT 2세그)의 대가 — 기존 mistake 본문이 계속 통과하는가
+    MS=$(mktemp -d)
+    mkdir -p "$MS/.ax/scripts/bash" "$MS/.ax/hooks/pre-commit" "$MS/.ax/mistakes"
+    ( cd "$MS" && git init -q . >/dev/null 2>&1 )
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$MS/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/hooks/pre-commit/check-mistake-secrets.sh" "$MS/.ax/hooks/pre-commit/"
+    printf 'sensors:\n  mode: fail\n' > "$MS/.ax/config.yml"
+    { printf -- '---\ncategory: parser\nseverity: medium\n---\n\n# 무엇이 일어났나\n'
+      printf 'token_count = 0 인 응답을 성공으로 셌어요.\n\n# 왜 발생 (5 Whys 기법)\n'
+      printf '1. 왜? → max_tokens = 4096 인데 잘림을 안 봤어요\n2. 왜? → api_key: null 과 구분이 없었어요\n'
+      printf '3. 왜? → password 정책 문서를 안 읽었어요\n4. 왜? → secret: null 을 빈 값으로 봤어요\n'
+      printf '5. 왜? → 검증 명령이 exit code 만 봤어요\n\n# 영향 (Cost)\n- 재작성 3파일\n\n## 이력\n'
+    } > "$MS/.ax/mistakes/2026-01-01-parser-x.md"
+    ( cd "$MS" && git add .ax/mistakes/2026-01-01-parser-x.md >/dev/null 2>&1 )
+    if CLAUDE_PROJECT_DIR="$MS" bash "$MS/.ax/hooks/pre-commit/check-mistake-secrets.sh" >/dev/null 2>&1; then
+        pass "check-mistake-secrets — 기존 mistake 본문 형태는 확대된 표에서도 통과 (오탐 0)"
+    else
+        fail "check-mistake-secrets — 패턴 확대가 평범한 mistake 본문을 막음"
+    fi
+    rm -rf "$MS"
 fi
 
 # ───────────────────────────────────────────────────────────
@@ -2856,12 +3005,277 @@ else
         && pass "zero-verify — 따옴표가 든 명령을 원형대로 실행 (tr -d 로 벗기지 않음)" \
         || fail "zero-verify — 따옴표를 지워서 명령이 깨짐"
 
+    # zero-verify — 주석 파서 13종 회귀.
+    # 값 첫 글자로 따옴표/주석을 가르는 sed t-분기가 13가지 입력에서 정확한지, 값이 통째로
+    # 주석인 키가 PASSED 로 뒤집히지 않는지를 재요. 옛 파서는 `s/[[:space:]]*#.*$//` 하나라
+    # `typecheck: 'grep -c "#" README.md'` 를 `grep -c "` 로 잘라놓고 "명령이 실패했다" 고
+    # 보고했어요 — 게이트를 *읽다가* 깨진 건데요. 바로 위 tr -d 사고와 같은 계열이에요.
+    # 이 블록은 §42 의 jq 가드 안이라 따로 감싸지 않아요.
+    ZVC=$(mktemp -d)
+    mkdir -p "$ZVC/.ax/scripts/bash"
+    cp "$SCRIPTS_DIR/"{common,zero-verify}.sh "$ZVC/.ax/scripts/bash/"
+
+    zvc_check() {
+        local label="$1" key="$2" expect="$3" got
+        got=$(GOAX_PROJECT_DIR="$ZVC" bash "$ZVC/.ax/scripts/bash/zero-verify.sh" --dry-run --json 2>/dev/null \
+              | jq -r --arg k "$key" '.result.checks[] | select(.name==$k) | .cmd')
+        [ "$got" = "$expect" ] && pass "zero-verify 주석 파서 — $label" \
+            || fail "zero-verify 주석 파서 — $label (기대 [$expect], 실제 [$got])"
+    }
+
+    printf '%s\n' \
+        'commands:' \
+        '  typecheck: '"'"'grep -c "#" README.md'"'"'' \
+        '  test: npm test  # 로컬만' \
+        '  build: "make all # not-a-comment"  # 진짜 주석' \
+        '  lint: eslint .' \
+        > "$ZVC/.ax/config.yml"
+    zvc_check "1 따옴표 안 # 보존" typecheck 'grep -c "#" README.md'
+    zvc_check "2 따옴표 밖 주석 제거 + 우측 트림" test "npm test"
+    zvc_check "3 따옴표 안팎 # 공존" build 'make all # not-a-comment'
+    zvc_check "4 무변화" lint "eslint ."
+
+    printf '%s\n' \
+        'commands:' \
+        "  typecheck: it's fine  # comment" \
+        "  test: don't stop  # 주석" \
+        '  build: eslint --grep=#123' \
+        '  lint: curl http://x/#frag' \
+        > "$ZVC/.ax/config.yml"
+    zvc_check "5 평문 아포스트로피는 여는 따옴표가 아님" typecheck "it's fine"
+    zvc_check "6 같은 계열" test "don't stop"
+    zvc_check "7 공백 없는 #은 주석이 아님" build "eslint --grep=#123"
+    zvc_check "8 URL 프래그먼트" lint "curl http://x/#frag"
+
+    printf '%s\n' \
+        'commands:' \
+        '  typecheck: "tsc --noEmit"' \
+        '  test: grep -c "#" x  # 주석' \
+        '  build: sh -c '"'"'a  # 미종결' \
+        '  lint:  # 아직 없음' \
+        > "$ZVC/.ax/config.yml"
+    zvc_check "9 바깥 따옴표 한 쌍만" typecheck "tsc --noEmit"
+    zvc_check "10 인용된 #은 보존, 뒤 주석만 제거" test 'grep -c "#" x'
+    zvc_check "11 짝 없는 따옴표는 평문 갈래" build "sh -c 'a"
+
+    ZVC_LINT=$(GOAX_PROJECT_DIR="$ZVC" bash "$ZVC/.ax/scripts/bash/zero-verify.sh" --json 2>/dev/null)
+    echo "$ZVC_LINT" | jq -e '(.result.checks[] | select(.name=="lint") | .cmd)=="" and .result.skipped>=1' >/dev/null 2>&1 \
+        && pass "zero-verify 주석 파서 — 12 값이 통째로 주석인 키는 빈 값 + SKIPPED (PASSED 아님)" \
+        || fail "zero-verify 주석 파서 — 12 lint 가 PASSED 로 뒤집힘: $(echo "$ZVC_LINT" | jq -c '.result')"
+
+    printf '%s\n' \
+        'commands:' \
+        '  typecheck: "say \"hi\""' \
+        '  test: eslint .' \
+        '  build: eslint .' \
+        '  lint: eslint .' \
+        > "$ZVC/.ax/config.yml"
+    # 기대값은 백슬래시 하나로 끝나는 `say \` 예요 — `[^"]*` 가 첫 `\"` 에서 멈춰요.
+    zvc_check "13 이스케이프 따옴표는 첫 짝까지만 (의도된 축소)" typecheck "say \\"
+
+    # grep -c 는 매치 0건이면 exit 1 이라 파이프라인 뒤에 다른 grep 을 물리면 pipefail
+    # 아래서 전체가 실패로 뒤집혀요. 변수로 먼저 받아요.
+    ZVC_OLD=$(grep -c 's/\[\[:space:\]\]\*#\.\*\$//' "$SCRIPTS_DIR/zero-verify.sh" || true)
+    [ "$ZVC_OLD" = "0" ] \
+        && pass "zero-verify — 따옴표를 못 보는 구형 주석 제거 sed 부재" \
+        || fail "zero-verify — 구형 s/[[:space:]]*#.*\$// 잔존"
+
+    rm -rf "$ZVC"
+
     IMF_OUT=$(GOAX_PROJECT_DIR="$ZD" "$OLDBASH" "$ZD/.ax/scripts/bash/init-mistake-file.sh" --category "" --json 2>&1); IMF_RC=$?
     [ "$IMF_RC" -eq 1 ] && echo "$IMF_OUT" | jq -e '.status=="error"' >/dev/null 2>&1 \
         && [ "$(find "$ZD/.ax/mistakes" -type f 2>/dev/null | wc -l | tr -d ' ')" = "0" ] \
         && pass "init-mistake-file — --category '' 는 exit 1 + 파일 미생성 (bad substitution 아님)" \
         || fail "init-mistake-file — 빈 --category 가 exit $IMF_RC: ${IMF_OUT:0:100}"
     rm -rf "$ZD"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "43. 파일 쓰기 락 — 같은 파일을 두 프로세스가 쓸 때"
+# ───────────────────────────────────────────────────────────
+# §36 이 원장(tasks.md·state.json)을 봤다면 여기는 나머지 넷이에요 — STATUS.md ·
+# .claude/settings.json · AGENTS.md · .ax/config.yml. 락 창이 `mv` 가 아니라 **"바꿀지 정하는
+# 첫 읽기"** 부터여야 멱등 프로브가 보호돼요. 실측(수정 전): zero-init 5개 동시 실행이 같은
+# 훅을 3번 등록했고, status-note --add 동시 2개는 10회 중 10회 한쪽을 잃었어요.
+# **결과가 1회분인 것과 함께 각 프로세스의 exit 0 도 봐요** — zero-init 은 --plugin-dir 이
+# 없으면, constitution-apply --append-index 는 인덱스 원본이 없으면 아무것도 안 쓰고 exit 2 라
+# 결과 어서션만으로는 공허하게 초록이에요.
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§43 skip (jq 없음)"
+else
+    LK=$(mktemp -d)
+    mkdir -p "$LK/.ax/scripts/bash" "$LK/.ax/docs" "$LK/.claude"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,status-note,register-spirit-hook,build-memory,zero-init,constitution-apply,zero-domain-risk}.sh "$LK/.ax/scripts/bash/"
+    LKB="$LK/.ax/scripts/bash"
+    # 최소 대상 — 출고 AGENTS.md 는 이미 `## 4계층 인덱스` 와 AX 토큰을 담고 있어서
+    # prepend·index 두 모드가 전부 skip(exit 2) 로 빠져요. 경합을 재려면 둘 다 없어야 해요.
+    seed_lk() {
+        printf '{"hooks":{}}\n' > "$LK/.claude/settings.json"
+        printf '# 픽스처 — Constitution\n\n## 개요\n\n회귀용 최소 대상이에요.\n' > "$LK/AGENTS.md"
+        printf 'default_risk: L1\ndomain_risk:\n  payment: L3\n  search: L1\n  billing: L2\n  auth: L3\n' > "$LK/.ax/config.yml"
+        rm -rf "$LK/.ax/docs/STATUS.md" "$LK"/*.lock "$LK"/.ax/*.lock "$LK"/.claude/*.lock "$LK"/.ax/docs/*.lock
+    }
+    printf '## FIXTURE — 회귀용 가드레일\n\n🔴 **`AX:CRITICAL:901`** — 시크릿을 커밋하지 않아요.\n' > "$LK/block.md"
+    printf '## 4계층 인덱스\n\n- Layer 1 — Constitution\n' > "$LK/.ax/AGENTS.md.suggested"
+    lkrun() { local s="$1"; shift; GOAX_PROJECT_DIR="$LK" bash "$LKB/$s" "$@"; }
+
+    # 1) 동일 스크립트 동시 실행 — 멱등 프로브가 락 안에 있는가
+    seed_lk
+    rc1=""
+    for i in 1 2 3 4 5; do ( lkrun register-spirit-hook.sh --json >/dev/null 2>&1; echo $? > "$LK/rc.$i" ) & done
+    wait
+    for i in 1 2 3 4 5; do rc1="$rc1$(cat "$LK/rc.$i")"; done
+    [ "$(grep -c 'spirit-rules-inject\.sh' "$LK/.claude/settings.json")" -eq 1 ] && [ "$rc1" = "00000" ] \
+        && pass "register-spirit-hook ×5 동시 — 훅 정확히 1회 등록 (전부 exit 0)" \
+        || fail "register-spirit-hook ×5 동시 — 등록 $(grep -c 'spirit-rules-inject\.sh' "$LK/.claude/settings.json")회 / rc=$rc1"
+
+    seed_lk
+    rc2=""; zi_skip=0; zi_ok=0
+    for i in 1 2 3 4 5; do ( lkrun zero-init.sh --plugin-dir "$REPO" --json >/dev/null 2>&1; echo $? > "$LK/rc.$i" ) & done
+    wait
+    for i in 1 2 3 4 5; do
+        r=$(cat "$LK/rc.$i"); rc2="$rc2$r"
+        [ "$r" = 2 ] && zi_skip=$((zi_skip+1))
+        [ "$r" = 0 ] && zi_ok=$((zi_ok+1))
+    done
+    # exit 2 는 "--plugin-dir 을 못 찾아 아무것도 안 썼다" 라서 하나라도 섞이면 이 어서션이 공허해요.
+    # 다섯 다 exit 0 이어야 해요 — 리눅스 GNU cp 가 같은 템플릿을 동시에 복사하다 "File exists" 로
+    # 죽던 copy_one 의 TOCTOU 는 "목적지가 이미 있으면 설치됨" 으로 흡수했어요.
+    [ "$(grep -c 'zero-guard-bash\.sh' "$LK/.claude/settings.json")" -eq 1 ] && [ "$zi_skip" -eq 0 ] && [ "$zi_ok" -eq 5 ] \
+        && pass "zero-init ×5 동시 — 훅 정확히 1회 등록 · 전부 exit 0 (복사 경합 허용)" \
+        || fail "zero-init ×5 동시 — 등록 $(grep -c 'zero-guard-bash\.sh' "$LK/.claude/settings.json")회 / rc=$rc2"
+
+    seed_lk
+    for i in 1 2; do ( lkrun constitution-apply.sh --block "$LK/block.md" --target AGENTS.md --json >/dev/null 2>&1 ) & done
+    wait
+    [ "$(grep -c 'AX:CRITICAL:901' "$LK/AGENTS.md")" -eq 1 ] \
+        && pass "constitution-apply prepend ×2 동시 — 블록이 한 번만 실림" \
+        || fail "constitution-apply prepend ×2 동시 — $(grep -c 'AX:CRITICAL:901' "$LK/AGENTS.md")회 실림"
+
+    seed_lk
+    rc4=""
+    for i in 1 2 3 4 5; do ( lkrun status-note.sh --init --json >/dev/null 2>&1; echo $? > "$LK/rc.$i" ) & done
+    wait
+    for i in 1 2 3 4 5; do rc4="$rc4$(cat "$LK/rc.$i")"; done
+    [ "$(grep -c '^## 다음' "$LK/.ax/docs/STATUS.md")" -eq 1 ] && [ "$rc4" = "00000" ] \
+        && pass "status-note --init ×5 동시 — 절 헤더가 한 번씩만 (전부 exit 0)" \
+        || fail "status-note --init ×5 동시 — '## 다음' $(grep -c '^## 다음' "$LK/.ax/docs/STATUS.md")회 / rc=$rc4"
+
+    # 2) 교차 실행 — 락 경로가 갈리면 여기서 빨개져요
+    lost=0
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        seed_lk; lkrun status-note.sh --init --json >/dev/null 2>&1
+        ( lkrun status-note.sh --add next "항목A" --json >/dev/null 2>&1 ) &
+        ( lkrun status-note.sh --add next "항목B" --json >/dev/null 2>&1 ) &
+        wait
+        grep -q '항목A' "$LK/.ax/docs/STATUS.md" && grep -q '항목B' "$LK/.ax/docs/STATUS.md" || lost=$((lost+1))
+    done
+    [ "$lost" -eq 0 ] && pass "status-note --add 동시 10회 — 항목 유실 0 (수정 전 10/10 유실)" \
+                      || fail "status-note --add 동시 10회 — ${lost}회 유실"
+
+    both=0
+    for i in 1 2 3 4 5; do
+        seed_lk
+        ( lkrun register-spirit-hook.sh --json >/dev/null 2>&1; echo $? > "$LK/rc.a" ) &
+        ( lkrun zero-init.sh --plugin-dir "$REPO" --json >/dev/null 2>&1; echo $? > "$LK/rc.b" ) &
+        wait
+        [ "$(grep -c 'spirit-rules-inject\.sh' "$LK/.claude/settings.json")" -ge 1 ] \
+            && [ "$(grep -c 'zero-guard-bash\.sh' "$LK/.claude/settings.json")" -ge 1 ] \
+            && [ "$(cat "$LK/rc.a")" = 0 ] && [ "$(cat "$LK/rc.b")" = 0 ] && both=$((both+1))
+    done
+    [ "$both" -eq 5 ] && pass "register-spirit-hook ‖ zero-init 5회 — 두 훅 다 생존 (락 경로 문자열 동일)" \
+                      || fail "register-spirit-hook ‖ zero-init — $both/5회만 둘 다 생존"
+
+    survive=0
+    for i in 1 2 3 4 5; do
+        seed_lk
+        ( lkrun constitution-apply.sh --append-index --target AGENTS.md --json >/dev/null 2>&1; echo $? > "$LK/rc.a" ) &
+        ( lkrun constitution-apply.sh --block "$LK/block.md" --target AGENTS.md --json >/dev/null 2>&1; echo $? > "$LK/rc.b" ) &
+        wait
+        [ "$(grep -c '^## 4계층 인덱스' "$LK/AGENTS.md")" -ge 1 ] \
+            && [ "$(grep -c 'AX:CRITICAL:901' "$LK/AGENTS.md")" -ge 1 ] \
+            && [ "$(cat "$LK/rc.a")" = 0 ] && [ "$(cat "$LK/rc.b")" = 0 ] && survive=$((survive+1))
+    done
+    [ "$survive" -eq 5 ] && pass "constitution-apply --append-index ‖ --block 5회 — 인덱스·prepend 둘 다 생존" \
+                         || fail "constitution-apply --append-index ‖ --block — $survive/5회만 둘 다 생존"
+
+    seed_lk
+    rc8=""
+    for i in 1 2 3 4 5; do ( lkrun zero-domain-risk.sh --set "payment=L3,search=L1,billing=L2,auth=L3" --json >/dev/null 2>&1; echo $? > "$LK/rc.$i" ) & done
+    wait
+    for i in 1 2 3 4 5; do rc8="$rc8$(cat "$LK/rc.$i")"; done
+    dr_n=$(awk '/^domain_risk:/{f=1;next} f && /^[^[:space:]]/{f=0} f && NF' "$LK/.ax/config.yml" | grep -c ':')
+    [ "$dr_n" -eq 4 ] && [ "$rc8" = "00000" ] \
+        && pass "zero-domain-risk ×5 동시 — domain_risk 4개 보존 (전부 exit 0)" \
+        || fail "zero-domain-risk ×5 동시 — domain_risk ${dr_n}개 / rc=$rc8"
+
+    seed_lk
+    for i in 1 2; do ( lkrun build-memory.sh --json >/dev/null 2>&1 ) & done
+    wait
+    case "$(head -1 "$LK/.ax/MEMORY.md" 2>/dev/null)" in
+        '#'*) [ "$(find "$LK/.ax" -name 'MEMORY.md.tmp.*' | wc -l | tr -d ' ')" -eq 0 ] \
+                && pass "build-memory ×2 동시 — MEMORY.md 온전 · .tmp.\$\$ 잔존 0" \
+                || fail "build-memory ×2 동시 — .tmp.\$\$ 잔존물" ;;
+        *) fail "build-memory ×2 동시 — MEMORY.md 반쪽" ;;
+    esac
+
+    # 3) 계약 — dry-run 은 락도 파일도 안 만들어요
+    seed_lk
+    lkrun status-note.sh --add next "드라이" --dry-run --json >/dev/null 2>&1
+    lkrun status-note.sh --set now "드라이" --dry-run --json >/dev/null 2>&1
+    lkrun register-spirit-hook.sh --dry-run --json >/dev/null 2>&1
+    lkrun build-memory.sh --dry-run --json >/dev/null 2>&1
+    lkrun zero-init.sh --plugin-dir "$REPO" --dry-run --json >/dev/null 2>&1
+    lkrun constitution-apply.sh --block "$LK/block.md" --target AGENTS.md --dry-run --json >/dev/null 2>&1
+    lkrun zero-domain-risk.sh --set "payment=L3" --dry-run --json >/dev/null 2>&1
+    [ "$(find "$LK" -name '*.lock' | wc -l | tr -d ' ')" -eq 0 ] && [ ! -f "$LK/.ax/docs/STATUS.md" ] \
+        && pass "--dry-run 7종 — .lock 을 안 만들고 STATUS.md 도 안 만듦" \
+        || fail "--dry-run — .lock $(find "$LK" -name '*.lock' | wc -l | tr -d ' ')개 / STATUS.md $([ -f "$LK/.ax/docs/STATUS.md" ] && echo 생성됨 || echo 없음)"
+
+    # 4) 계약 — 이미 잡힌 락 앞에서는 exit 1 + {"status":"error"} (기본 10s 를 기다리지 않게 =1)
+    seed_lk
+    lkrun status-note.sh --init --json >/dev/null 2>&1
+    mkdir -p "$LK/.ax/docs/STATUS.md.lock" "$LK/.claude/settings.json.lock" "$LK/.ax/MEMORY.md.lock" \
+             "$LK/AGENTS.md.lock" "$LK/.ax/config.yml.lock"
+    lock_bad=0
+    check_locked() {   # check_locked <라벨> <스크립트> [인자…]
+        local label="$1" script="$2"; shift 2
+        local out rc st
+        out=$(GOAX_LOCK_TIMEOUT=1 GOAX_PROJECT_DIR="$LK" bash "$LKB/$script" "$@" 2>/dev/null); rc=$?
+        st=$(printf '%s' "$out" | tail -1 | jq -r '.status' 2>/dev/null || echo '-')
+        if [ "$rc" -ne 1 ] || [ "$st" != "error" ]; then
+            lock_bad=$((lock_bad+1)); fail "락 대기 초과 — $label 이 exit=$rc status=$st (기대 1/error)"
+        fi
+    }
+    check_locked status-note        status-note.sh --add next "락테스트" --json
+    check_locked register-spirit    register-spirit-hook.sh --json
+    check_locked build-memory       build-memory.sh --json
+    check_locked zero-init          zero-init.sh --plugin-dir "$REPO" --json
+    check_locked constitution-apply constitution-apply.sh --block "$LK/block.md" --target AGENTS.md --force --json
+    check_locked zero-domain-risk   zero-domain-risk.sh --set "payment=L2" --json
+    [ "$lock_bad" -eq 0 ] && pass "락 대기 초과 6종 — exit 1 + {\"status\":\"error\"} 봉투 (GOAX_LOCK_TIMEOUT=1)"
+    # 손으로 만든 락엔 pid 파일이 없고 stale 문턱에 닿기 전에 타임아웃 나서, 뺏기지 않아요
+    [ "$(find "$LK" -name '*.lock' -type d | wc -l | tr -d ' ')" -eq 5 ] \
+        && pass "락 대기 초과 — 남의 락을 뺏지 않음 (5개 그대로)" \
+        || fail "락 대기 초과 — 손으로 만든 락 5개 중 $(find "$LK" -name '*.lock' -type d | wc -l | tr -d ' ')개만 남음"
+
+    # stale 회수 — 살아 있는 홀더는 mtime 이 아무리 오래돼도 안 뺏고, 죽은 pid 의 락만 회수
+    LSD="$LK/stale-test.lock"; rm -rf "$LSD"; mkdir "$LSD"
+    sleep 30 & LS_PID=$!
+    printf '%s\n' "$LS_PID" > "$LSD/pid"; touch -t 202001010000 "$LSD"
+    GOAX_LOCK_STALE=1 bash -c "source '$REPO/templates/default/.ax/scripts/bash/common.sh'; goax_lock '$LSD' 3" >/dev/null 2>&1; ls_rc=$?
+    { [ "$ls_rc" -ne 0 ] && [ -d "$LSD" ]; } \
+        && pass "goax_lock — 살아 있는 홀더의 락은 mtime 이 오래돼도 안 뺏음 (타임아웃 exit 1)" \
+        || fail "goax_lock — 살아 있는 홀더의 락을 뺏음 (rc=$ls_rc, dir=$([ -d "$LSD" ] && echo 있음 || echo 없음))"
+    kill "$LS_PID" 2>/dev/null; wait "$LS_PID" 2>/dev/null || true
+    touch -t 202001010000 "$LSD"
+    GOAX_LOCK_STALE=1 bash -c "source '$REPO/templates/default/.ax/scripts/bash/common.sh'; goax_lock '$LSD' 5" >/dev/null 2>&1; ls_rc=$?
+    [ "$ls_rc" -eq 0 ] \
+        && pass "goax_lock — 죽은 pid 의 락은 회수 (5초 지난 것)" \
+        || fail "goax_lock — 죽은 pid 의 락을 회수 못 함 (rc=$ls_rc)"
+    rm -rf "$LSD"
+
+    rm -rf "$LK"
 fi
 
 # ───────────────────────────────────────────────────────────

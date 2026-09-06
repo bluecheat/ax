@@ -114,7 +114,7 @@ extract_inline() {
             current_id=""; current_label=""; current_eb=""; current_ek=""
         }
         # 라벨 라인: 🔴/🟡/🔵 + ID
-        /^[🔴🟡🔵]/ {
+        /^(🔴|🟡|🔵)/ {
             flush()
             if (/🔴/) current_label="critical"
             else if (/🟡/) current_label="mandatory"

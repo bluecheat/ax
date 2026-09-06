@@ -7,7 +7,7 @@
 
 | 스크립트 | 용도 | 호출하는 skill |
 |---|---|---|
-| `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log, `goax_inject_fresh` 세션 내 중복 주입 제거, `goax_lock`/`goax_unlock`/`goax_unlock_all` 원장 락, `goax_resolve_spec` `--spec` 축약 해석) | (sourced by all) |
+| `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log, `goax_inject_fresh` 세션 내 중복 주입 제거, `goax_lock`/`goax_unlock`/`goax_unlock_all` 원장 락, `goax_resolve_spec` `--spec` 축약 해석, `goax_secret_rules`/`goax_secret_patterns`/`redact_secrets` 시크릿 패턴 SSOT — 검출과 마스킹이 같은 표에서 나와요) | (sourced by all) |
 | `detect-model.sh` | 지금 돌고 있는 모델 식별 — override → `$GOAX_MODEL` → transcript 스캔 → unknown | (진단·로깅용) |
 | `next-spec-num.sh` | 다음 spec NNN / ADR NNNN 번호 계산 (`--kind spec\|adr`) | `spec`, `adr` |
 | `tier-from-state.sh` | current-task.json + config.yml → tier 결정 + evaluator 필수 여부 + spec_review 필수 여부(Size 축만) (`--reset` 는 `reset-task.sh` 경유) | `spec`, `tasks-gate.sh`, `spec-review.sh`, `update-state.sh` |
@@ -93,23 +93,39 @@ LLM(SKILL.md)이 이 JSON을 받아 사용자에게 ✓ 메시지 출력. 결정
 
 ## 쓰기 규약 — 여러 세션이 같은 파일을 건드릴 때
 
-`tasks.md`·`state.json`·`STATUS.md` 처럼 여러 스크립트·여러 세션이 같은 파일을 `read → 가공 →
-tmp.$$ → mv` 하는 자리는 **락 없이는 동시 쓰기에서 갱신이 유실돼요** (읽은 뒤 서로를 못 보고
-덮어써요). `common.sh` 의 헬퍼로 감싸요:
+`tasks.md`·`state.json`·`STATUS.md`·`.claude/settings.json`·`AGENTS.md`·`.ax/config.yml` 처럼 여러
+스크립트·여러 세션이 같은 파일을 `read → 가공 → tmp.$$ → mv` 하는 자리는 **락 없이는 동시 쓰기에서
+갱신이 유실돼요** (읽은 뒤 서로를 못 보고 덮어써요). `common.sh` 의 헬퍼로 감싸요:
 
 ```bash
-goax_lock "$FILE.lock" || { goax_error "다른 프로세스가 쓰는 중이에요"; exit "$EXIT_ERROR"; }
-# ... 읽고 바꾸고 tmp 에 쓰고 mv ...
-goax_unlock "$FILE.lock"
+LOCK="<대상 절대경로>.lock"
+goax_lock "$LOCK" "${GOAX_LOCK_TIMEOUT:-10}" || fail "다른 프로세스가 <대상> 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
+# ... 멱등 프로브 · 읽고 바꾸고 tmp 에 쓰고 mv ...
+goax_unlock "$LOCK"
 ```
 
-`goax_lock` 은 `mkdir` 원자성으로 락을 잡고(0.05→0.2s 폴링, 기본 타임아웃 10s), 60초 넘게 잡혀
-있거나 기록된 PID 가 죽었으면 stale 로 보고 회수해요. `EXIT`/`INT`/`TERM` trap 으로 자동 해제돼요
+**락 창은 `mv` 가 아니라 "이 실행이 파일을 바꿀지 말지를 정하는 첫 읽기" 부터예요.** 멱등
+`grep -q`(이미 등록됐나 · 이미 적용됐나)를 락 밖에 두면 두 프로세스가 둘 다 "아직 없다" 를 읽고
+둘 다 써요 — 실측: `zero-init.sh` 5개 동시 실행이 같은 훅을 3번 등록했어요.
+
+**락 단위는 스크립트가 아니라 대상 파일이에요.** `constitution-apply.sh` 는 prepend·drop·
+`--append-index` 세 모드가 같은 `<대상>.lock` 을 잡아요. `state.json`(`update-state.sh` ↔
+`tasks-gate.sh`) · `.claude/settings.json`(`register-spirit-hook.sh` ↔ `zero-init.sh`) 처럼 두
+스크립트가 같은 파일을 쓰면 락 경로 문자열을 **글자 그대로 맞춰야** 서로를 막아요 — 다른 이름이면
+락이 두 개가 돼서 무의미해요. 경로는 **절대경로**여야 해요 — 프로젝트 루트로 `cd` 한 스크립트는
+대상이 상대 경로라 `goax_normalize_path "$TARGET" "$PROJECT_ROOT"` 로 절대화해요.
+
+**`--dry-run` 은 락을 안 잡고 아무것도 안 써요.** 락 디렉토리 자체가 부작용이에요. dry-run 분기
+*앞에서* `ensure_file` 같은 헬퍼를 부르면 dry-run 이 여전히 파일을 만들어요 — 그런 호출은 분기
+뒤로 옮겨요.
+
+`goax_lock` 은 `mkdir` 원자성으로 락을 잡고(0.05→0.2s 폴링, 2번째 인자가 타임아웃 · 기본 10s),
+기록된 PID 가 죽었으면(5초 뒤부터), 또는 PID 파일이 없는 락이 `GOAX_LOCK_STALE`(60초)을 넘겼으면 stale 로 보고 회수해요. **살아 있는 홀더는 아무리 오래 잡고 있어도 안 뺏어요** — 대기자는 타임아웃(`GOAX_LOCK_TIMEOUT`, 기본 10초)까지 기다리다 exit 1 이에요. 대기가 길어 곤란한 자리
+(테스트 등)는 `GOAX_LOCK_TIMEOUT=1` 로 줄여요. 획득 실패는 무한 대기가 아니라 exit 1 +
+`--json` 이면 `{"status":"error"}` 봉투예요. `EXIT`/`INT`/`TERM` trap 으로 자동 해제돼요
 — **단, 스크립트가 이미 자기 trap 을 걸어뒀으면 그 trap 이 덮어써져요.** 그런 스크립트
 (`check-spec-clarity.sh`, `check-rule-enforcement.sh`, `promote-mistake.sh` 처럼 `trap ... EXIT` 가
-있는 경우)는 자기 trap 안에서 `goax_unlock_all` 을 같이 호출해요. `state.json` 처럼 두 스크립트가
-같은 파일을 쓰면(`update-state.sh` ↔ `tasks-gate.sh`) 락 경로 이름(`"$FILE.lock"`)을 **글자 그대로
-맞춰야** 서로를 막아요 — 다른 이름이면 락이 두 개가 돼서 무의미해요.
+있는 경우)는 자기 trap 안에서 `goax_unlock_all` 을 같이 호출해요.
 
 `--spec` 인자를 받는 스크립트는 축약(`--spec 001`)을 각자 다르게 풀지 말고 `goax_resolve_spec`
 (정확 일치 → prefix 1개 → 실패/모호)을 써요. 후보가 여럿이면 `GOAX_SPEC_CANDIDATES` 에 담겨요.

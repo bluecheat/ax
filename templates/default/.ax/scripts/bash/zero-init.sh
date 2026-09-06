@@ -108,7 +108,17 @@ copy_one() {
     fi
     if [ "$DRY_RUN" != true ]; then
         mkdir -p "$(dirname "$dst")"
-        cp "$src" "$dst"
+        # `[ -e ]` 와 `cp` 사이는 경합 창이에요 — 동시에 뜬 다른 zero-init 이 먼저 놓으면 리눅스 GNU cp 는
+        # File exists 로 실패해요(BSD cp 는 조용히 덮어써요). 그때 목적지가 있으면 "설치됨" 으로 봐요.
+        if ! cp "$src" "$dst" 2>/dev/null; then
+            if [ -e "$dst" ]; then
+                SKIPPED="${SKIPPED}${rel}
+"
+                return 0
+            fi
+            add_warn "복사 실패: $rel"
+            return 0
+        fi
     fi
     INSTALLED="${INSTALLED}${rel}
 "
@@ -161,10 +171,21 @@ HOOK_SRC="$ZERO/hooks/zero-guard-bash.sh"
 HOOK_DST="$PROJECT_ROOT/.ax/hooks/pre-bash/zero-guard-bash.sh"
 HOOK_CMD='bash "${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-bash/zero-guard-bash.sh"'
 SETTINGS="$PROJECT_ROOT/.claude/settings.json"
+# 락 경로는 register-spirit-hook.sh 와 **글자 그대로** 같아야 해요 — 둘 다 이 settings.json 에
+# jq 머지를 해요. 이름이 갈리면 락이 두 개가 돼서 서로를 못 막아요.
+SETTINGS_LOCK="$SETTINGS.lock"
+
+fail() { if [ "$JSON_MODE" = true ]; then json_error "$1"; fi; goax_error "$1"; exit "$EXIT_ERROR"; }
 
 if [ "$NO_HOOK" != true ]; then
     copy_one "$HOOK_SRC" "$HOOK_DST" ".ax/hooks/pre-bash/zero-guard-bash.sh"
     if [ "$DRY_RUN" != true ] && [ -f "$HOOK_DST" ]; then chmod +x "$HOOK_DST"; fi
+
+    # 락 창은 멱등 grep 부터예요 — "아직 없다" 를 읽고 나서 쓰는 자리라, 락 밖이면 두 프로세스가
+    # 둘 다 없다고 읽고 둘 다 append 해서 훅이 여러 번 등록돼요 (실측: 5회 동시 → 3회 등록).
+    if [ "$DRY_RUN" != true ]; then
+        goax_lock "$SETTINGS_LOCK" "${GOAX_LOCK_TIMEOUT:-10}" || fail "다른 프로세스가 .claude/settings.json 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
+    fi
 
     if [ ! -f "$SETTINGS" ]; then
         add_warn ".claude/settings.json 이 없어서 hook 을 등록 못 했어요 — /up 후 zero-init 을 다시 부르세요"
@@ -203,6 +224,8 @@ if [ "$NO_HOOK" != true ]; then
             add_warn "settings.json 머지 실패 — 원본은 그대로예요"
         fi
     fi
+
+    if [ "$DRY_RUN" != true ]; then goax_unlock "$SETTINGS_LOCK"; fi
 fi
 
 INSTALLED_N=$(printf '%s' "$INSTALLED" | grep -c . || true); INSTALLED_N=${INSTALLED_N:-0}

@@ -60,8 +60,14 @@ if [ "$MODE" != "index" ]; then
     [ -n "$BLOCK" ] && [ -f "$BLOCK" ] || fail "--block <file> 이 필요해요 (시그널 블록 파일)"
 fi
 
+# 락 단위는 스크립트가 아니라 **대상 파일** 이에요 — prepend·drop·index 세 모드가 같은
+# AGENTS.md|CLAUDE.md 를 쓰니까 같은 락 경로를 써요. TARGET 은 cd 뒤의 상대 경로라 절대화해요.
+LOCK="$(goax_normalize_path "$TARGET" "$PROJECT_ROOT").lock"
+
 # 정규화 — 소문자 · 마크다운 장식 제거 · 공백 축약
-norm() { sed -E 's/[*`_>#]+//g; s/^[[:space:]]*[-•·][[:space:]]*//; s/[[:space:]]+/ /g; s/^ //; s/ $//' | tr '[:upper:]' '[:lower:]'; }
+# 대시·불릿은 브래킷이 아니라 교대(|)로 써요 — 브래킷 안 멀티바이트 문자는 POSIX 로케일의 GNU sed 가
+# 바이트 집합으로 읽어 첫 바이트만 지우고 나머지를 남겨요(ubuntu 컨테이너에서 중복 스캔 0건 실측).
+norm() { sed -E 's/[*`_>#]+//g; s/^[[:space:]]*(-|•|·)[[:space:]]*//; s/[[:space:]]+/ /g; s/^ //; s/ $//' | tr '[:upper:]' '[:lower:]'; }
 
 # 블록의 룰 라인 (시그널 라인만)
 rule_lines() { grep -E '^(🔴|🟡|🔵) \*\*`' "$BLOCK" 2>/dev/null || true; }
@@ -78,7 +84,7 @@ scan_dups() {
     fi
     while IFS= read -r rl; do
         [ -z "$rl" ] && continue
-        core=$(printf '%s' "$rl" | sed -E 's/^[^`]*`[^`]+`\*\*[[:space:]]*//; s/^[—–-][[:space:]]*//')
+        core=$(printf '%s' "$rl" | sed -E 's/^[^`]*`[^`]+`\*\*[[:space:]]*//; s/^(—|–|-)[[:space:]]*//')
         cn=$(printf '%s' "$core" | norm)
         [ "${#cn}" -ge 12 ] || continue
         while IFS= read -r ln; do
@@ -96,6 +102,11 @@ scan_dups() {
 
 case "$MODE" in
   prepend)
+    # 락 창은 멱등 프로브(아래 토큰 검사)부터예요 — "아직 없다" 를 읽고 나서 prepend 하는
+    # 자리라, 락 밖이면 둘 다 없다고 읽고 둘 다 붙여서 블록이 두 번 실려요.
+    if [ "$DRY_RUN" != true ]; then
+        goax_lock "$LOCK" "${GOAX_LOCK_TIMEOUT:-10}" || fail "다른 프로세스가 ${TARGET} 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
+    fi
     # "이미 적용됨" 판정 — 예전엔 블록의 첫 `## ` 헤더 **텍스트 하나**만 봤어요.
     # `## META — 핵심 가드레일` 처럼 대상에 흔히 있는 제목이면 룰이 하나도 안 들어갔는데도
     # skip 으로 나가서, onboarding Q5 로 정한 룰이 조용히 사라졌어요.
@@ -138,6 +149,7 @@ case "$MODE" in
     { cat "$BLOCK"; printf '\n'
       if [ -f "$TARGET" ] && [ "$OLD_LINES" -gt 0 ]; then printf -- '---\n\n'; cat "$TARGET"; fi
     } > "$TMP" && mv "$TMP" "$TARGET"
+    goax_unlock "$LOCK"
     RES=$(jq -nc --arg t "$TARGET" --arg o "$OLD_LINES" --arg n "$NEW_LINES" \
         '{target:$t,mode:"prepend",applied:true,block_lines:($n|tonumber),preserved_lines:($o|tonumber)}')
     [ "$JSON_MODE" = true ] && json_output "ok" "$RES" "prepend 완료 — 다음은 --scan-duplicates 로 중복 룰을 사용자에게 보여주세요" \
@@ -145,6 +157,11 @@ case "$MODE" in
     ;;
   scan|drop)
     [ -f "$TARGET" ] || fail "$TARGET 이 없어요"
+    # drop 의 락 창은 scan_dups 부터예요 — 지울 줄 번호를 읽고 나서 그 번호로 지우니까,
+    # 락 밖이면 그 사이에 바뀐 파일의 엉뚱한 줄을 지워요. --scan-duplicates 는 읽기만 해서 안 잡아요.
+    if [ "$MODE" = "drop" ] && [ "$DRY_RUN" != true ]; then
+        goax_lock "$LOCK" "${GOAX_LOCK_TIMEOUT:-10}" || fail "다른 프로세스가 ${TARGET} 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
+    fi
     DUPS=$(scan_dups)
     DN=$(printf '%s' "$DUPS" | grep -c . || true); DN=${DN:-0}
     # 중복 0건이 가장 흔한 경우인데, 예전엔 여기서 죽었어요 — 빈 입력의 `grep -v` 는 exit 1 이고
@@ -168,6 +185,7 @@ case "$MODE" in
     # drop — 신 블록 아래 `---` 이후 구 본문에서만 지워요 (블록 자체는 안 건드려요)
     if [ "$DN" -eq 0 ]; then
         [ "$JSON_MODE" = true ] && json_output "ok" '{"target":"'"$TARGET"'","mode":"drop","dropped":0}' "지울 중복 없음" || goax_log "지울 중복 없음"
+        if [ "$DRY_RUN" != true ]; then goax_unlock "$LOCK"; fi
         exit "$EXIT_OK"
     fi
     if [ "$DRY_RUN" = true ]; then
@@ -182,11 +200,17 @@ case "$MODE" in
     awk -v drops="$(printf '%s' "$LINES_TO_DROP" | tr '\n' ',')" '
         BEGIN { n = split(drops, a, ","); for (i = 1; i <= n; i++) if (a[i] != "") d[a[i]] = 1 }
         !(NR in d) { print }' "$TARGET" > "$TMP" && mv "$TMP" "$TARGET"
+    goax_unlock "$LOCK"
     RES=$(jq -nc --arg t "$TARGET" --arg n "$DROPPED" '{target:$t,mode:"drop",dropped:($n|tonumber)}')
     [ "$JSON_MODE" = true ] && json_output "ok" "$RES" "정확 일치 ${DROPPED}줄 제거 — 부분 일치는 사용자가 직접" || goax_log "${DROPPED}줄 제거"
     ;;
   index)
     [ -f "$TARGET" ] || fail "$TARGET 이 없어요"
+    # 락 창은 멱등 grep 부터예요 — "인덱스가 아직 없다" 를 읽고 나서 append 하는 자리라,
+    # 락 밖이면 둘 다 없다고 읽고 둘 다 붙여서 인덱스가 두 번 실려요.
+    if [ "$DRY_RUN" != true ]; then
+        goax_lock "$LOCK" "${GOAX_LOCK_TIMEOUT:-10}" || fail "다른 프로세스가 ${TARGET} 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
+    fi
     if grep -qE '^## 4계층 인덱스' "$TARGET"; then skip "$TARGET 에 4계층 인덱스가 이미 있어요"; fi
     SRC=""
     [ -f .ax/AGENTS.md.suggested ] && grep -qE '^## 4계층 인덱스' .ax/AGENTS.md.suggested && SRC=".ax/AGENTS.md.suggested"
@@ -207,6 +231,7 @@ case "$MODE" in
         exit "$EXIT_OK"
     fi
     { printf '\n'; printf '%s\n' "$INDEX"; } >> "$TARGET"
+    goax_unlock "$LOCK"
     RES=$(jq -nc --arg t "$TARGET" --arg s "$SRC" --arg n "$IL" '{target:$t,mode:"index",applied:true,index_source:$s,index_lines:($n|tonumber)}')
     [ "$JSON_MODE" = true ] && json_output "ok" "$RES" "4계층 인덱스 append (원본 ${SRC})" || goax_log "4계층 인덱스 ${IL}줄 append (원본 ${SRC})"
     ;;
