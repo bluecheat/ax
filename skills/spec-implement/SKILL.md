@@ -162,76 +162,11 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 
 ### 3.5 레인 모드 — 코디네이터 루프
 
-이 세션은 **코디네이터**예요. 코드를 직접 고치지 않고, 레인을 띄우고, 보고를 받고, 검증하고,
-체크박스를 켜요. 판단은 여기서 하고 기록은 원장이 해요 — 컨텍스트 안의 "누구에게 뭘 보냈더라"
-는 압축되거나 세션이 죽으면 사라져요. 실제로 레인 8개가 전부 idle 이 됐을 때 체크박스는
-24/36 이었고, 세 레인이 산출물을 만들어 놓고 전송하지 않아 아무것도 도착하지 않은 적이 있어요.
-
-**0. 전제** — §1.5 의 violations 0 + `lane_file_conflicts` 0. 하나라도 있으면 띄우지 않아요.
-
-**1. 준비된 task 를 레인별로 묶어요.**
-
-```bash
-echo "$PLAN"   | jq -r '.result.ready | join(" ")'                                   # 지금 시작 가능
-echo "$LEDGER" | jq -r '.result.lanes[] | "\(.lane): \(.tasks | join(","))"'          # 레인 → task
-echo "$LEDGER" | jq -r '.result.unassigned_open | join(" ")'                         # 레인 없는 task
-```
-
-- ready ∩ 레인 A 의 task → 레인 A 의 이번 브리프
-- ready 인데 `레인:` 없음 → **코디네이터가 직접** 해요 (§3.1). 배럴·인덱스처럼 떼어낸 순차
-  task 가 보통 여기예요
-- §3.2 strict 조건(L3 + SP-SEC/DATA 등)에 걸리는 task 는 **레인에 넘기지 않아요.**
-  코디네이터가 `[y/n]` 을 받고 직접 해요
-
-**2. 디스패치를 원장에 먼저 적고, 그다음 띄워요.**
-
-```bash
-bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --dispatch A --json   # 파일 소유 충돌이면 여기서 거부돼요
-```
-
-브리프는 `lane` §10 형식 그대로예요 — 소유 파일(그 레인 task 들의 `files:` 합집합) ·
-금지 파일(다른 레인 소유 + `protected_paths` + 버전 파일) · task ID 와 각 `검증:` 명령 ·
-정지 조건 · "커밋하지 않는다" · "체크박스는 켜지 않는다" · "`SendMessage` 로 보고한다".
-
-`Agent` 도구로 `goax:lane-worker` 를 띄워요 (vendor 설치면 `lane-worker`). 준비된 레인이
-여럿이면 **한 메시지에 같이** 띄워요 — 하나 띄우고 기다렸다 다음을 띄우는 건 병렬이 아니에요.
-
-**3. 보고를 받으면 — 받았다는 사실부터 적어요.**
-
-```bash
-bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --report A --json           # 레인 전체가 왔을 때
-bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --report T010,T011 --json   # 일부만 왔을 때
-```
-
-그다음 **보고에 인용된 검증 명령을 코디네이터가 직접 다시 돌려요.** 통과한 task 만 §5 로
-체크박스를 켜요. 레인이 "완료" 라고 했어도 명령이 실패하면 미완료예요 — 보고와 완료는 별개예요.
-
-- 보고가 잘렸으면 잘린 지점을 지목해서 이어 보내달라고 해요 ("T3 섹션 3번째 항목부터"). "다시
-  보내주세요" 만 하면 앞부분이 또 오고 또 잘려요
-- 레인이 소유 목록 밖 파일을 건드렸다고 보고하면 → §7 범위 이탈, halt
-- 레인이 정지 조건에 걸려 멈췄으면 → 전제가 틀린 거예요. 남은 task 를 재배정하지 말고 사용자 결정
-
-**4. 바로 다음 ready 를 띄워요 — 전원 완료를 기다리지 않아요.**
-
-레인 A 가 끝나서 T020 의 의존이 풀렸으면 B 가 아직 돌고 있어도 T020 을 띄워요. 가장 느린 레인이
-나머지를 붙잡는 배리어는 `tasks-plan.sh` 가 일부러 안 만든 거예요 (항목별 승격).
-
-`phase_gate` 모드의 사람 확인은 **레인 보고를 받은 시점**에 해요. Phase 경계가 아니에요 —
-Phase 와 레인은 1:1 이 아니라서 "Phase 2 → 3 전환" 이 레인 모드에선 정의되지 않아요. 확인
-박스 내용은 §4 와 같아요: 받은 보고 요약 + 다음에 띄울 레인과 파일 + 룰 delta.
-
-**5. 종료 조건** — `tasks-plan.sh` 의 `ready` 와 `blocked` 가 둘 다 비고, 원장의
-`dispatched_unreported` 가 비어야 해요. 레인이 전부 idle 인 건 조건이 아니에요.
-
-**6. 통합 검증** — 파일이 안 겹쳤다는 건 물리적 충돌이 없었다는 뜻뿐이에요. 전체를 한 번 더:
-
-```bash
-bash .ax/scripts/bash/zero-verify.sh --json    # .ax/config.yml commands.* 를 파이프 없이 — 안 돌린 항목도 보고
-```
-
-그리고 레인 보고의 "다른 레인에 넘길 것" 을 모아 **이름 대조** — 같은 개념에 두 이름이 생기지
-않았는지 (props·타입·토큰·이벤트). 명령으로 안 잡히는 유일한 항목이라 사람 몫이에요.
-여기까지 통과해야 §8 로 가요.
+`LANE_N > 0` 이면 이 세션은 **코디네이터**예요 — 코드를 직접 고치지 않고 `lanes-dispatch.sh --dispatch` 로
+원장에 먼저 적은 뒤 `goax:lane-worker` 를 띄우고, 보고가 오면 `--report` 로 적고, 보고에 인용된 검증
+명령을 직접 다시 돌린 뒤에만 §5 로 체크박스를 켜요. 루프 전체(준비 task 묶기 · 브리프 · 격리 · 보고
+수신 · 바뀐 이름 인계 · 항목별 재디스패치 · 종료 조건 · 통합 검증)는 **`references/lane-mode.md`** 를
+읽고 그대로 따라요. 단일 레인이면 읽지 않아요.
 
 ## 4. Phase 경계 게이트 — 정보 밀도 풍부
 
@@ -299,6 +234,14 @@ sed -E "/^- \[ \] .*${TASK_ID}([^0-9A-Za-z]|\$)/ s/^- \[ \]/- [x]/" \
 ```
 
 자동 우회 X. 사용자 결정 받음. mistake 캡처는 audit 으로 위임.
+
+**멈추면 인계 노트에 적어요** — 다음 세션(또는 압축 뒤의 이 세션)이 "어디서 왜 멈췄는지" 를 대화가
+아니라 파일에서 읽게요:
+
+```bash
+bash .ax/scripts/bash/status-note.sh --set now "spec $SPEC 구현 중 — T0NN 에서 halt: <사유 한 줄>" --json
+bash .ax/scripts/bash/status-note.sh --add open "<사용자 결정이 필요한 것>" --json      # 결정 대기일 때만
+```
 
 ## 7. 범위 이탈 / Elevated — 모드 불문 강제
 
@@ -379,6 +322,8 @@ if [ "$COMPLETE" = "true" ]; then
  [ -f "$SPEC_DIR/review.md" ] && echo "  ✓ evaluator verdict: $(head -1 "$SPEC_DIR/review.md")"
  bash .ax/scripts/bash/reset-task.sh >/dev/null 2>&1 || true
  echo "  ✓ current-task.json reset → phase=idle"
+ bash .ax/scripts/bash/status-note.sh --set now "" --json >/dev/null 2>&1 || true    # 끝난 항목은 지워요 — SSOT 는 git log · ADR
+ bash .ax/scripts/bash/status-note.sh --add next "spec $SPEC 완료 — 다음 작업은 triage 부터" --json >/dev/null 2>&1 || true
  echo "  → 다음 작업 메시지에 triage가 다시 발동돼요."
 fi
 ```
@@ -408,22 +353,7 @@ fi
 §3.2 의 `[y/n]` 박스.
 
 ### 레인 모드 (§3.5)
-```
-📐 spec-implement (spec 014, 레인 모드)
-
- ▸ 게이트  violations 0 · 소유 충돌 0
- ▸ ready   T010 T011 T020   ·  레인 A {T010,T011}  B {T020}  ·  직접 T009
- ▸ 디스패치 A, B — 원장 기록 ✓ → lane-worker 2개 동시 기동
-
- (보고 수신)
- ✓ 보고 A — 원장 기록 · $ pnpm test Card (exit 0) · T010 T011 마킹 [x]
- → T021 의존 해소 → 레인 A 재디스패치 (B 는 아직 진행 중)
-
- (전원 종료)
- ▸ 원장   dispatched_unreported 0 · done_without_report 0
- ▸ 통합   zero-verify.sh 전 항목 exit 0 · 이름 대조 — `Pill.tone` → `variant` 1건 정합 확인
- → §8 완료 게이트
-```
+`references/lane-mode.md` 끝의 출력 패턴.
 
 ### 완료 시 (§8)
 ```
@@ -458,6 +388,9 @@ jq '.last_skill = "spec-implement" | .skill_calls = ((.skill_calls // 0) + 1) | 
 ```
 
 ## 관련 룰
+
+- `references/lane-mode.md` — 레인 모드 코디네이터 루프 (`LANE_N > 0` 일 때만)
+- `.ax/docs/STATUS.md` — 인계 노트 (`status-note.sh`). halt·완료·레인 보고 시점에 갱신해요
 
 - `.ax/docs/reference/confirmation-policy.md` — friction 결정 규칙 SSOT (C1~C5)
 - `.ax/docs/reference/triage-matrix.md` — size×risk 별 friction 모드 매핑

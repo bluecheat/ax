@@ -290,13 +290,20 @@ bash .ax/scripts/bash/zero-probe.sh --json     # 차단이 살아 있는지 확�
 
 ## 13. STATUS 개설 + 다음 라운드 인계
 
-`.ax/docs/STATUS.md` 를 만들어요. 두 절이면 충분해요 — `## 지금 상태` · `## 다음`.
-**끝난 항목은 지웁니다.** 완료 사실의 SSOT 는 `git log` 와 ADR 이에요.
+`.ax/docs/STATUS.md` 는 **공용 인계 노트**예요 — zero 뿐 아니라 `triage` 가 매 작업 진입 때 먼저 읽고,
+`spec-implement` 가 halt·완료·레인 보고 시점에 갱신해요. 손으로 쓰지 말고 스크립트로 적어요 (형식이
+고정돼야 다음 세션이 파싱해요). **끝난 항목은 지웁니다.** 완료 사실의 SSOT 는 `git log` 와 ADR 이에요.
 
-`## 다음` 에 반드시 두 개를 넣어요.
+```bash
+bash .ax/scripts/bash/status-note.sh --init --json
+bash .ax/scripts/bash/status-note.sh --set now "첫날 완료 — 배포 <주소 또는 빌드 번호>" --json
+bash .ax/scripts/bash/status-note.sh --add next "- [ ] <날짜> 1순위 위험 가정 \"<가정>\" 을 <방법>으로 검증" --json
+bash .ax/scripts/bash/status-note.sh --add next "- [ ] <6개월 뒤 날짜> 룰 ablation 재검토 (.ax/_templates/zero/ablation.md)" --json
+bash .ax/scripts/bash/status-note.sh --add open "<미룬 축 — 있을 때만>" --json
+```
 
-- 1순위 위험 가정 검증 (2단계에서 정한 것) — 날짜
-- 룰 ablation 재검토 — **6개월 뒤 날짜** (`.ax/_templates/zero/ablation.md`)
+`## 다음` 의 두 체크박스(1순위 가정 검증 · ablation 재검토)는 빠지면 안 돼요 — 문서 안에만 있는
+날짜는 아무도 안 봐요.
 
 인계 출력:
 

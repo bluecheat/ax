@@ -35,19 +35,35 @@ description: "사용자가 새 작업·기능·수정·리팩토링·버그 fix�
 
 LLM 분류 전에 **bash로 후보 자료를 좁혀요**. 큰 프로젝트(>1000 파일)일수록 이게 정확도·속도를 결정해요.
 
-### 1.0 MEMORY.md 먼저 — 빠른 회상 인덱스
+### 1.0 STATUS.md → MEMORY.md — 인계 노트 먼저, 그다음 룰 토큰
 
-검색 전에 `.ax/MEMORY.md` 를 재생성하고 **가장 먼저 읽어요**. 현재 작업·CRITICAL/MANDATORY 룰·모듈·최근 ADR·열린 mistakes·spec 을 한 줄 포인터로 담은 작은 인덱스라, 이걸로 "지금 프로젝트에 뭐가 있는지" 를 토큰 싸게 파악한 뒤 키워드를 더 정확히 뽑아요.
+검색 전에 두 파일을 순서대로 읽어요. 둘 다 작아요.
+
+**① `.ax/docs/STATUS.md` — 세션 간 인계 노트.** 결정은 ADR, 진행은 tasks.md, 단계는 current-task.json 에
+있지만 "막힌 것 · 열린 질문 · 이번에 바뀐 공유 이름 · 다음 세션이 처음 할 일" 은 여기에만 있어요. 대화가
+압축되면 사라지는 것들이라 파일로 받아요.
+
+```bash
+bash .ax/scripts/bash/status-note.sh --show --json   # result.sections.{now,next,open,renamed}
+```
+
+- `next` 에 항목이 있고 사용자 요청이 그것과 같으면 → 새 분류 없이 그 작업으로 이어가요 (3.5단계에서 `phase` 유지)
+- `open` 에 사용자 결정 대기가 있고 지금 요청이 그 결정에 걸리면 → 0단계 의도 확인에서 **그 질문부터** 물어요
+- `renamed` 는 키워드 추출(1.1)에 넣어요 — 옛 이름으로 검색하면 못 찾아요
+- 파일이 없으면 그냥 넘어가요 (첫 세션이거나 `zero`·`spec-implement` 가 아직 안 적은 거예요)
+
+**② `.ax/MEMORY.md` — 룰 토큰 인덱스.** 재생성하고 읽어요:
 
 ```bash
 bash .ax/scripts/bash/build-memory.sh --json   # 재생성. 응답 result.mode 로 full/lean 확인
 ```
 
-그다음 `.ax/MEMORY.md` 본문을 read. 포인터 중 작업과 관련된 항목만 그 `→ 경로` 의 본문을 추가로 read 해요 (index/detail 분리 — 통째로 다 읽지 않아요). 읽는 법:
+여기서 받는 건 **🔴 CRITICAL / 🟡 MANDATORY 포인터**예요 — 작은 프로젝트(lean 모드)에서도 이건 항상
+남아요. 모듈·ADR·spec·mistakes 열거는 본문이 클 때만 펼쳐지고(full), 작으면 `(N) → <dir>` 로 접혀요 —
+그땐 dir 를 직접 glob 하는 게 더 싸요. 읽는 법:
 
 - **★ 표시** = 현재 작업 domain 에 걸린 ADR/spec/모듈 — **이걸 먼저** 보고 `→ 경로` 본문만 read.
 - **`… +N more → <dir>`** = 섹션 예산(8개) 초과분. 더 필요하면 그 `<dir>` 를 glob.
-- **lean 모드** (`result.mode=="lean"` · 작은 프로젝트): 모듈/ADR/spec/mistakes 가 `(N) → <dir>` 한 줄로 접혀 있어요. 인덱스가 오버헤드라 일부러 열거를 생략한 거니, 필요하면 그 dir 를 직접 glob 하세요.
 
 토큰 조절 옵션: `--no-preview`(룰 토큰+경로만)·`--lean`(강제 접기)·`--full`(전체 열거). 자세한 건 `build-memory.sh --help`.
 

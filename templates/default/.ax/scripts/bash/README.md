@@ -26,7 +26,11 @@
 | `update-state.sh` | `.ax/` 실측 → `.ax/state.json` (layers/cross_cut/sensors_mode + HUD 캐시 `hud.{plugin_version,review_required,cached_at}`) 갱신 | `up`, `onboarding`, `audit`, `doctor`, `hud`, `mistake`, `spec-validate`, `spec-implement` |
 | `triage-search.sh` | KEYWORDS 로 6 군데(specs/adrs/mistakes/rules/modules/imported) 검색 + 동의어 확장 + 매칭수 랭킹 + 스니펫 + 도메인 boost | `triage` |
 | `build-memory.sh` | `.ax/` 상태 → `.ax/MEMORY.md` 한 줄 포인터 인덱스 재생성 (triage 가 먼저 read) | `triage` |
-| `build-index.sh` | 역색인 `.ax/.search-index` 빌드 + BM25 query (대형 코퍼스 tier, 재생성 캐시) | `triage-search` |
+| `status-note.sh` | 세션 간 인계 노트 `.ax/docs/STATUS.md` — `--show/--init/--add/--done/--set <now|next|open|renamed>`. 형식 고정 · 40줄 상한 · 끝난 항목은 지움 | `triage`(읽기), `spec-implement`, `zero`, `onboarding` |
+| `spirit-lint.sh` | Spirit 무결성 — 필수 파일 · frontmatter · `## SP-CAT-NNN:` 헤더 형식 · 토큰 중복(spirit ↔ modules) · placeholder. 자동 수정 없음 | `doctor` ("spirit 점검") |
+| `rules-index.sh` | 룰 통합 인덱스 — Constitution(🔴/🟡/🔵 시그널 라인) + Spirit + Module 의 `SP-*` 를 한 목록으로. `--level/--source/--category/--find` | `doctor` ("rules 보여줘"), `/goax` |
+| `doctor-scan.sh` | doctor 의 인라인 진단 셋 — 마이그레이션 잔재 · template 기준 hook 등록 · 문서↔실제 메커니즘 · **도달 지도**(룰 소스별 배관 생사) | `doctor` |
+| `constitution-apply.sh` | onboarding Q5 의 Constitution 블록 적용 — `--block` prepend(기존 본문 `---` 아래 보존) · `--scan-duplicates` · `--drop-exact`(사용자 [a] 뒤에만) · `--append-index` | `onboarding` |
 | `tasks-plan.sh` | tasks.md → ready / blocked / parallel + `[P]` 파일 겹침 violations. 항목별 승격 — wave(배리어) 없음, 자동 실행 없음 | `lane`, `spec-implement` |
 | `tasks-gate.sh` | spec 완료 게이트 G1~G6 — 미완료 · AC 커버리지 · orphan · 유실 · 레인 원장 · evaluator verdict(`review.md`) | `spec-implement`, `lane`, pre-commit hook |
 | `lanes-hotfiles.sh` | tasks.md 에서 핫 파일(여러 미완료 task 가 쓰는 파일) + `files:` 누락 task 추출 | `lane` |
@@ -54,8 +58,8 @@
 의존(`... | grep ... | wc -l` 류)하고 있어서, `-e` 를 켜면 "매칭 없음"이 스크립트 조기 종료로
 오작동해요. 각 자리에서 `|| true` 로 개별 guard 하는 대신 스크립트 전체에서 `-e` 를 뺀 선택:
 
-- `set -u` 만: `build-index.sh`, `build-memory.sh`, `update-state.sh`
-- `set -uo pipefail`: `check-rule-enforcement.sh`, `check-sensor-liveness.sh`, `init-mistake-file.sh`, `install-git-hooks.sh`
+- `set -u` 만: `build-memory.sh`, `update-state.sh`
+- `set -uo pipefail`: `check-rule-enforcement.sh`, `check-sensor-liveness.sh`, `init-mistake-file.sh`, `install-git-hooks.sh`, `spirit-lint.sh`, `rules-index.sh`, `doctor-scan.sh`
 
 나머지 스크립트는 모두 `set -euo pipefail`.
 

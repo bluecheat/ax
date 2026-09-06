@@ -75,7 +75,7 @@ goax 는 두 위치에 룰이 살고, 각각 토큰 형식이 달라요. 같은 
 ```
 
 권장 요소:
-- 헤딩 형식 strict (`spirit/SKILL.md` 의 lint 가 비표준 헤더 검출)
+- 헤딩 형식 strict (`spirit-lint.sh` 가 비표준 헤더·중복 토큰을 검출 — `doctor` 가 불러요)
 - 토큰 중복 금지 — 같은 prefix-NNN 이 spirit/rules/ + modules/*/rules.md 통틀어 1번만
 - path-scoped 룰이면 frontmatter 의 `paths:` 선언
 
@@ -93,17 +93,18 @@ grep -hE '^## SP-[A-Z]+-[0-9]{3}:' .ax/spirit/rules/*.md   # 모든 SP-* 헤딩
 grep -hE '^## SP-DOM-' .ax/spirit/rules/*.md               # 도메인 카테고리만
 ```
 
-## `goax rules` skill
+## 룰 인덱스 — `rules-index.sh`
 
-직접 grep 안 쳐도 통합 인덱스로 보여줘요. 트리거: "goax rules", "rules 보여줘", "CRITICAL 룰만".
+직접 grep 안 쳐도 세 소스(Constitution 시그널 라인 · `.ax/spirit/rules/` · `.ax/modules/*/rules.md`)를 한 인덱스로 보여줘요.
+트리거: "goax rules", "rules 보여줘", "CRITICAL 룰만" — `doctor` 가 받아 이 스크립트 출력을 그대로 보여줘요 (룰 본문은 요약하지 않아요).
 
-지원 필터 (실 구현):
-- `--level critical|mandatory|convention` — TIER 필터
-- `--source constitution|spirit|module` — layer 필터
-- `--category <CAT>` — Spirit 카테고리만
-- `find <token>` — 정확 매칭 (Layer 1 또는 Spirit 토큰)
-
-자세한 흐름: `skills/rules/SKILL.md`.
+```bash
+bash .ax/scripts/bash/rules-index.sh                          # 전체
+bash .ax/scripts/bash/rules-index.sh --level critical         # TIER 필터: critical|mandatory|convention
+bash .ax/scripts/bash/rules-index.sh --source spirit          # 소스 필터: constitution|spirit|module
+bash .ax/scripts/bash/rules-index.sh --category security      # Spirit 카테고리 또는 모듈명
+bash .ax/scripts/bash/rules-index.sh --find AX:CRITICAL:001   # 토큰 정확 매칭
+```
 
 ## ID 발급 규칙
 

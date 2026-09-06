@@ -131,16 +131,19 @@ Natural-language tier overrides: `"simple"` / `"spec + tasks"` → standard · `
 | Phrase | Triggered skill |
 |---|---|
 | `/goax` | Index — shows all triggers (the only remaining slash command) |
-| "set up goax" / "install goax" | up → onboarding (auto-delegated for brownfield) |
+| "set up goax" / "install goax" | up → onboarding (brownfield) or zero (greenfield) |
+| "start a new project" / "from zero" | zero — 0→1 entry: product · business · ADR · enforcement plumbing |
+| "vendor goax" | vendor — ship skills inside the repo without the plugin |
 | "diagnose" / "goax doctor" | doctor — gap diagnosis + `_templates` drift |
-| "show rules" | rules — Constitution + Spirit + Module aggregation |
+| "show rules" / "critical rules only" | doctor → `rules-index.sh` — Constitution + Spirit + Module index |
 | "create spec — <slug>" | spec — tier-aware spec generation |
 | "break into tasks" | spec-tasks |
+| "split into lanes" / "run in parallel" | lane — decides first whether the work can be split at all |
 | "start implementation" / "run tasks" | spec-implement |
 | "validate spec" | spec-validate — NEEDS CLARIFICATION gating |
 | "plan the <task>" / "fix" / "refactor" | triage — Size × Risk classify in 30s |
 | "write ADR" / "record decision" | adr — new ADR file |
-| "spirit check" | spirit — frontmatter + token integrity |
+| "spirit check" | doctor → `spirit-lint.sh` — header format · token duplicates · placeholders |
 | "log a mistake" / "capture mistake" | mistake — single-event capture |
 | "audit" / "review mistakes" | audit — Mistake Loop review · promotion |
 | "/hud setup" / "activate statusline" | hud — Claude Code statusline (OpenCode adapter pending) |

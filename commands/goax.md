@@ -12,7 +12,7 @@ goax 의 모든 기능은 **자연어 트리거** 로 호출돼요 (thin wrapper
   "goax 도입" / "goax 설치"     — up (install or idempotent update)
   "goax 분석" / "goax 마무리"   — onboarding (brownfield 5-step Q1~Q5)
   "진단해줘" / "goax doctor"    — 결손·drift 점검
-  "rules 보여줘"                — 룰 통합 인덱스 (Constitution + Spirit + Module)
+  "rules 보여줘" / "CRITICAL 룰만" — doctor → rules-index.sh (Constitution + Spirit + Module 인덱스)
   "goax 동봉" / "/vendor"       — plugin 설치 없이 쓰도록 저장소에 동봉
 
 ▸ 작업 분류·구현
@@ -30,7 +30,7 @@ goax 의 모든 기능은 **자연어 트리거** 로 호출돼요 (thin wrapper
   "실수 회고" / "audit"              — Mistake Loop 심사·룰 승격 후보
 
 ▸ Spirit / HUD
-  "spirit 점검"                      — frontmatter + 토큰 무결성 검사
+  "spirit 점검"                      — doctor → spirit-lint.sh (헤더 형식 · 토큰 중복 · placeholder)
   "/hud setup" / "/hud preset full"  — statusline (하네스 위치 한 줄, OMC 문법)
 
 각 트리거는 SKILL.md frontmatter 의 키워드 매칭으로 동작해요. autorouting 이

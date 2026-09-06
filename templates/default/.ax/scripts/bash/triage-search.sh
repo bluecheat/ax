@@ -248,44 +248,18 @@ simple_objs() {
     printf '[%s]' "$objs"
 }
 
-# ── Phase 4 tier: 대형 코퍼스면 BM25 역색인으로 후보를 *추가* (union — recall 절대 손실 없음).
-# 소형(임계 이하)은 USE_INDEX=false → grep 경로 그대로(회귀 0). 한글 등 인덱스 미수록 토큰은
-# grep 이 잡으므로 union 이 안전. 인덱스는 ASCII BM25 로 연관 높은 후보를 *보태는* 역할.
-INDEX_THRESHOLD=120
-USE_INDEX=false
-IDX_HITS=""   # 라인: <category>\t<path>
-if [ -f "$SCRIPT_DIR/build-index.sh" ]; then
-    CORPUS_N=0
-    for _cd in .ax/docs .ax/mistakes .ax/modules .ax/spirit/rules; do
-        [ -d "$_cd" ] || continue
-        _cc=$(find "$_cd" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
-        CORPUS_N=$((CORPUS_N + ${_cc:-0}))
-    done
-    if [ "${CORPUS_N:-0}" -gt "$INDEX_THRESHOLD" ] && [ "$HAS_JQ" = true ]; then
-        _idx_json=$(bash "$SCRIPT_DIR/build-index.sh" --query "$KEYWORDS_EXPANDED" --top 50 --json 2>/dev/null || true)
-        if [ -n "$_idx_json" ]; then
-            IDX_HITS=$(printf '%s' "$_idx_json" | jq -r '.result.hits[]? | "\(.category)\t\(.path)"' 2>/dev/null || true)
-            [ -n "$IDX_HITS" ] && USE_INDEX=true
-        fi
-    fi
-fi
-
 # 매칭 후보 파일 listing (재귀) — rg 있으면 가속, 없으면 grep. 둘 다 정답집합 동일(텍스트 md).
 # rg 플래그는 grep 의미와 맞춤: --no-ignore(.gitignore 무시) --hidden(.ax 하위) -i -l.
-# $2=category 주면 USE_INDEX 시 그 카테고리 BM25 후보를 union (recall 보존).
+# (BM25 역색인 union 분기는 제거됐어요 — 임계를 넘는 코퍼스가 한 번도 없었고, 그 규모도 rg 가 ms 로 끝나요.
+#  되살릴 조건: .ax/docs 가 2,000 파일을 넘는 실측.) $2 는 호환용 — 안 써요.
 list_matching_recursive() {
-    local dir="$1" cat="${2:-}"
-    [ -d "$dir" ] || { [ "$USE_INDEX" = true ] && [ -n "$cat" ] || return 0; }
+    local dir="$1"
+    [ -d "$dir" ] || return 0
     {
-        if [ -d "$dir" ]; then
-            if [ "$HAS_RG" = true ]; then
-                rg --no-config --no-ignore --hidden -i -l -e "($ALT)" "$dir" 2>/dev/null || true
-            else
-                grep -rilE "($ALT)" "$dir" 2>/dev/null || true
-            fi
-        fi
-        if [ "$USE_INDEX" = true ] && [ -n "$cat" ]; then
-            printf '%s\n' "$IDX_HITS" | awk -F"$TAB" -v c="$cat" '$1==c && $2!=""{print $2}'
+        if [ "$HAS_RG" = true ]; then
+            rg --no-config --no-ignore --hidden -i -l -e "($ALT)" "$dir" 2>/dev/null || true
+        else
+            grep -rilE "($ALT)" "$dir" 2>/dev/null || true
         fi
     } | grep -v '^$' | sort -u
 }
@@ -294,8 +268,6 @@ list_matching_recursive() {
 # 예전엔 디렉토리 *이름* 만 봤어요. 그래서 슬러그에 도메인 단어가 없고 본문에만 있는
 # spec 은 영영 안 나왔어요 — "같은 도메인이면 같이 검토" 가 정확히 여기서 샜어요.
 # 이름 매칭은 강한 신호라 SPEC_NAME_BOOST 로 유지해요(기존 결과 순위 회귀 없음).
-# BM25 인덱스는 이미 spec.md 를 `spec` 카테고리로 색인하고 있었는데 읽는 데가
-# 없었어요 — 대형 코퍼스에선 그 후보도 union 해요.
 # path 는 spec *디렉토리* 그대로 (기존 소비자 계약 유지), snippet 은 최다 매칭 파일에서.
 SPEC_NAME_BOOST=1000
 process_specs() {
@@ -304,11 +276,6 @@ process_specs() {
         {
             find .ax/docs/spec -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
                 | grep -v '/imported$' || true
-            if [ "$USE_INDEX" = true ]; then
-                printf '%s\n' "$IDX_HITS" \
-                    | awk -F"$TAB" '$1=="spec" && $2!=""{print $2}' \
-                    | sed 's#/[^/]*$##' || true
-            fi
         } | grep -v '^$' | sort -u \
         | while IFS= read -r d; do
             [ -d "$d" ] || continue

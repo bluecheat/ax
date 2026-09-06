@@ -131,16 +131,19 @@ GOAX 가 깔아주는 자산은 두 결로 나뉘어요:
 | 자연어 | 발동 skill |
 |---|---|
 | `/goax` | 인덱스 — 모든 트리거 한눈에 (유일하게 남은 slash 명령) |
-| "goax 도입" / "goax 설치" | up → brownfield 면 자동 onboarding |
+| "goax 도입" / "goax 설치" | up → brownfield 면 onboarding, greenfield 면 zero |
+| "새 프로젝트 시작" / "0에서 만들자" | zero — 0→1 진입: 제품·비즈니스·ADR·집행 배관 |
+| "goax 동봉" | vendor — plugin 없이 저장소에 동봉 |
 | "진단해줘" / "goax doctor" | doctor — 결손·drift 점검 |
-| "rules 보여줘" | rules — Constitution + Spirit + Module 통합 인덱스 |
+| "rules 보여줘" / "CRITICAL 룰만" | doctor → `rules-index.sh` — Constitution + Spirit + Module 통합 인덱스 |
 | "spec 만들어줘 — <slug>" | spec — tier-aware spec 디렉토리 생성 |
 | "tasks 분해" | spec-tasks |
+| "병렬로 돌리자" / "레인 나눠줘" | lane — 가를 수 있는 일인지부터 판정 |
 | "구현 시작" / "tasks 실행" | spec-implement |
 | "spec 확인" | spec-validate — NEEDS CLARIFICATION 게이팅 |
 | "구현해줘" / "고쳐줘" / "리팩토링" | triage — Size × Risk 30 초 분류 |
 | "ADR 작성" / "결정 기록" | adr — 새 ADR 파일 |
-| "spirit 점검" | spirit — frontmatter + 토큰 무결성 |
+| "spirit 점검" | doctor → `spirit-lint.sh` — 헤더 형식 · 토큰 중복 · placeholder |
 | "실수 기록해줘" / "mistake 박아줘" | mistake — 1 건 capture |
 | "audit" / "실수 회고" | audit — Mistake Loop 심사·룰 승격 후보 |
 | "/hud setup" / "statusline 활성화" | hud — Claude Code statusline (OpenCode 어댑터 추후) |

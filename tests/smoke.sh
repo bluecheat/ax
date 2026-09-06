@@ -61,7 +61,7 @@ done < <(find "$REPO/skills" -name SKILL.md | sort)
 # 제거된 skill이 잔재로 남지 않았는지 확인 (옛 구조)
 for removed in skills/global skills/workflows \
                skills/global/goax-critical-rules skills/global/goax-steering-loop \
-               skills/personas skills/meta; do
+               skills/personas skills/meta skills/spirit skills/rules skills/parallel; do
     if [ -e "$REPO/$removed" ]; then
         fail "$removed — 제거됐어야 함 (잔재)"
     else
@@ -410,6 +410,27 @@ expected_skills=$(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d | grep -c 
     && pass "skill 카운트 = $total_skills (디렉토리 수와 일치)" \
     || fail "skill 디렉토리 ${expected_skills}개인데 SKILL.md 는 ${total_skills}개 — 빈 skill 디렉토리 존재"
 
+# 컨텍스트 예산 — SKILL.md 는 500줄 안, description 은 1,536자 안이 공식 권장이에요. compaction 뒤엔
+# skill 당 앞 5,000토큰만 남아서 긴 본문은 뒤가 잘려요 (onboarding 이 1006줄일 때 Q3 이후가 잘렸어요).
+# 본문에서 가리키는 references/<x>.md 는 실재해야 해요 — 포인터가 죽으면 그 절이 통째로 사라져요.
+budget_bad=0
+while IFS= read -r f; do
+    sname=$(basename "$(dirname "$f")")
+    lines=$(wc -l < "$f" | tr -d ' ')
+    if [ "$lines" -gt 500 ]; then
+        fail "skills/$sname/SKILL.md ${lines}줄 — 500줄 상한 초과 (references/ 로 분리)"; budget_bad=$((budget_bad+1))
+    fi
+    dlen=$(python3 -c "import re,sys; t=open(sys.argv[1],encoding='utf-8').read().split('\n---',2)[1] if open(sys.argv[1],encoding='utf-8').read().startswith('---') else ''; m=re.search(r'^description:\\s*(.*)$',t,re.M); print(len(m.group(1).strip().strip('\"')) if m else 0)" "$f" 2>/dev/null || echo 0)
+    if [ "${dlen:-0}" -gt 1536 ]; then
+        fail "skills/$sname description ${dlen}자 — 1,536자 상한 초과"; budget_bad=$((budget_bad+1))
+    fi
+    while IFS= read -r ref; do
+        [ -z "$ref" ] && continue
+        [ -f "$(dirname "$f")/$ref" ] || { fail "skills/$sname/SKILL.md → $ref 없음 (죽은 references 포인터)"; budget_bad=$((budget_bad+1)); }
+    done < <(grep -oE 'references/[a-z0-9-]+\.md' "$f" | sort -u)
+done < <(find "$REPO/skills" -name SKILL.md)
+[ "$budget_bad" -eq 0 ] && pass "skill 컨텍스트 예산 — 500줄 · description 1,536자 · references 포인터 실재"
+
 # ───────────────────────────────────────────────────────────
 section "6. HUD statusline — 하네스 위치 한 줄 (OMC 문법)"
 # ───────────────────────────────────────────────────────────
@@ -529,7 +550,7 @@ SCRIPTS_DIR="$REPO/templates/default/.ax/scripts/bash"
 for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
          check-spec-clarity slug-from-text check-templates-drift check-manifest-install promote-mistake \
          check-rule-enforcement check-sensor-liveness \
-         build-memory build-index \
+         build-memory spirit-lint rules-index doctor-scan status-note constitution-apply \
          tasks-plan tasks-gate lanes-hotfiles lanes-dispatch spec-review; do
     f="$SCRIPTS_DIR/$s.sh"
     if [ -f "$f" ]; then
@@ -570,7 +591,10 @@ for cmd in \
     "check-sensor-liveness.sh --json" \
     "promote-mistake.sh --json" \
     "build-memory.sh --json" \
-    "build-index.sh --json"; do
+    "spirit-lint.sh --json" \
+    "rules-index.sh --json" \
+    "doctor-scan.sh --json --plugin-dir $REPO" \
+    "status-note.sh --show --json"; do
     out=$(bash "$REPO/templates/default/.ax/scripts/bash/"$cmd 2>/dev/null) || true
     if echo "$out" | jq -e '.status' >/dev/null 2>&1; then
         pass "$cmd → valid JSON"
@@ -580,6 +604,9 @@ for cmd in \
 done
 popd >/dev/null || true
 rm -rf "$TMP_E2E"
+[ -e "$SCRIPTS_DIR/build-index.sh" ] && fail "build-index.sh — 제거됐어야 함 (BM25 분기 폐기)" || pass "build-index.sh 제거됨 (되살릴 조건: .ax/docs 2,000 파일 실측)"
+grep -q 'build-index' "$REPO/templates/default/.ax/scripts/bash/triage-search.sh" \
+    && fail "triage-search.sh 에 build-index 분기 잔재" || pass "triage-search.sh — BM25 union 분기 제거"
 
 # ───────────────────────────────────────────────────────────
 section "10. init-mistake-file.sh 런타임 — race-free ID + idempotent + redactor"
@@ -1898,8 +1925,7 @@ else
     TS_T=$(mktemp -d)
     mkdir -p "$TS_T/.ax/scripts/bash" "$TS_T/.ax/docs/adr" "$TS_T/.ax/docs/spec/imported"
     cp "$REPO/templates/default/.ax/scripts/bash/common.sh" \
-       "$REPO/templates/default/.ax/scripts/bash/triage-search.sh" \
-       "$REPO/templates/default/.ax/scripts/bash/build-index.sh" "$TS_T/.ax/scripts/bash/" 2>/dev/null
+       "$REPO/templates/default/.ax/scripts/bash/triage-search.sh" "$TS_T/.ax/scripts/bash/" 2>/dev/null
     : > "$TS_T/CLAUDE.md"
 
     mkdir -p "$TS_T/.ax/docs/spec/003-payment-coupon"      # 슬러그 매칭
@@ -2075,6 +2101,119 @@ grep -q '\.phase = "implementing"' "$REPO/skills/spec-implement/SKILL.md" && gre
     && pass "spec-implement — phase implementing/review 를 실제로 씀 (HUD 가 움직이는 조건)" || fail "spec-implement — phase 기록 없음 (HUD 가 tasks 에 멈춤)"
 grep -q 'hud' "$REPO/templates/default/.ax/hud/state.json.template" && grep -q 'hud.plugin_version' "$REPO/docs/state-ownership.md" \
     && pass "state.json hud 캐시 — template · ownership 문서 동기화" || fail "state.json hud 캐시 3-way 동기화 누락"
+
+# ───────────────────────────────────────────────────────────
+section "34. 폐기·스크립트화 — spirit-lint · rules-index · doctor-scan · status-note · constitution-apply"
+# ───────────────────────────────────────────────────────────
+# rules·spirit skill 은 "grep 해서 찍어라" 산문이었고, doctor 3.6~3.8 은 SKILL.md 안의 bash 였어요.
+# 스크립트가 됐으니 픽스처로 판정을 고정해요. 인계 노트(STATUS.md)는 형식이 고정돼야 다음 세션이 파싱해요.
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§34 skip (jq 없음)"
+else
+    RS=$(mktemp -d)
+    mkdir -p "$RS/.ax/scripts/bash" "$RS/.ax/spirit/rules" "$RS/.ax/modules/order" "$RS/.ax/_templates/spirit" \
+             "$RS/.ax/docs/spec/003-x/checklists" "$RS/.ax/hooks/pre-edit" "$RS/.claude"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,spirit-lint,rules-index,doctor-scan,status-note,constitution-apply}.sh "$RS/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/spirit/"{values,tone}.md "$RS/.ax/spirit/"
+    cp "$REPO/templates/default/.ax/_templates/spirit/rule.md" "$RS/.ax/_templates/spirit/"
+    printf -- '---\ncategory: security\n---\n## SP-SEC-001: 시크릿 커밋 금지\n## SP-SEC-002: 토큰 로그 금지\n' > "$RS/.ax/spirit/rules/security.md"
+    printf -- '---\ncategory: naming\npaths:\n  - "**/*.kt"\n---\n## SP-NAM-001: kebab-case\n## 잘못된 헤더\n' > "$RS/.ax/spirit/rules/naming.md"
+    printf -- '---\nmodule: order\nkeywords: [order]\n---\n## SP-SEC-001: 중복 토큰\n## SP-ORD-001: 주문은 멱등\n' > "$RS/.ax/modules/order/rules.md"
+    printf '# X\n\n## CRITICAL\n\n🔴 **`AX:CRITICAL:001`** — 결제 API 는 멱등성 키 필수\n\n## MANDATORY\n\n🟡 **`AX:MANDATORY:001`** ADR 필수\n\n## CONVENTION\n\n@.ax/spirit/rules/security.md\n' > "$RS/AGENTS.md"
+    touch "$RS/.ax/docs/spec/003-x/README.md"; printf '.ax/state.json\n' > "$RS/.gitignore"
+    echo '{"hooks":{}}' > "$RS/.claude/settings.json"
+    rs() { GOAX_PROJECT_DIR="$RS" bash "$RS/.ax/scripts/bash/$1" "${@:2}" 2>/dev/null; }
+
+    # spirit-lint — 비표준 헤더 · 교차 중복 · 카운트
+    SLJ=$(rs spirit-lint.sh --json)
+    echo "$SLJ" | jq -e '.status=="warning" and (.result.bad_headers|length)==1 and .result.bad_headers[0].line==7' >/dev/null \
+        && pass "spirit-lint — 비표준 ## 헤더를 파일:줄 로 지목" || fail "spirit-lint — 비표준 헤더 검출 실패: $(echo "$SLJ" | head -c 200)"
+    echo "$SLJ" | jq -e '.result.duplicates[0].token=="SP-SEC-001" and (.result.duplicates[0].files|length)==2' >/dev/null \
+        && pass "spirit-lint — spirit ↔ modules 교차 중복 토큰 검출" || fail "spirit-lint — 교차 중복 미검출"
+    echo "$SLJ" | jq -e '.result.rules_count==5 and .result.rules_files==2 and .result.files.values==true' >/dev/null \
+        && pass "spirit-lint — 토큰 5 · 카테고리 2 · 필수 파일 OK" || fail "spirit-lint — 카운트 불일치"
+    rs spirit-lint.sh --json --strict >/dev/null; [ $? -eq 1 ] && pass "spirit-lint --strict — finding 있으면 exit 1" || fail "spirit-lint --strict 가 exit 0"
+
+    # rules-index — 세 소스 · 필터 · find
+    RIJ=$(rs rules-index.sh --json)
+    echo "$RIJ" | jq -e '.result.counts.critical==1 and .result.counts.mandatory==1 and .result.counts.convention==5 and .result.constitution_file=="AGENTS.md"' >/dev/null \
+        && pass "rules-index — Constitution + Spirit + Module 세 소스 집계 (1/1/5)" || fail "rules-index — 집계 불일치: $(echo "$RIJ" | jq -c .result.counts)"
+    [ "$(rs rules-index.sh --json --source module | jq -r '[.result.rules[].token]|join(",")')" = "SP-SEC-001,SP-ORD-001" ] \
+        && pass "rules-index --source module — 모듈 룰만" || fail "rules-index --source 필터 실패"
+    [ "$(rs rules-index.sh --json --find AX:CRITICAL:001 | jq -r '.result.rules[0].line')" = "5" ] \
+        && pass "rules-index --find — 토큰 정확 매칭 + 줄 번호" || fail "rules-index --find 실패"
+    rs rules-index.sh --json --find NOPE:X:999 | jq -e '.status=="warning" and .result.counts.total==0' >/dev/null \
+        && pass "rules-index --find — 없는 토큰은 warning" || fail "rules-index — 없는 토큰을 ok 로"
+    rs rules-index.sh | grep -q '📍 AGENTS.md:5' && pass "rules-index 텍스트 — 원문 + 📍 위치" || fail "rules-index 텍스트 출력 형식"
+
+    # doctor-scan — 잔재 · hook 등록 · 도달 지도
+    DSJ=$(rs doctor-scan.sh --json --plugin-dir "$REPO")
+    echo "$DSJ" | jq -e '(.result.migration.gitignore_missing|index(".ax/current-task.json"))!=null and (.result.migration.spec_readme_stale|length)==1 and (.result.migration.spec_empty_dirs|length)==1' >/dev/null \
+        && pass "doctor-scan — .gitignore 누락 · spec README · 빈 dir 잔재" || fail "doctor-scan — 마이그레이션 잔재 검출 실패"
+    echo "$DSJ" | jq -e '.result.hooks.checked==true and .result.hooks.total>=7 and .result.hooks.registered_n==0' >/dev/null \
+        && pass "doctor-scan — template SSOT 기준 hook 등록 검사 (하드코딩 없음)" || fail "doctor-scan — hook 등록 검사 실패"
+    echo "$DSJ" | jq -e '[.result.reach[]|select(.source=="constitution")][0].reached==false' >/dev/null \
+        && pass "doctor-scan 도달 지도 — AGENTS.md 만 있고 CLAUDE.md 없음 → Constitution 이 어디에도 안 감" || fail "doctor-scan — AGENTS.md-only 를 도달로 봄"
+    echo "$DSJ" | jq -e '[.result.reach[]|select(.source=="spirit-universal")][0].reached==true and [.result.reach[]|select(.source=="spirit-scoped")][0].reached==false' >/dev/null \
+        && pass "doctor-scan 도달 지도 — @import 된 universal 룰은 도달 · paths 룰은 hook 미등록이라 미도달" || fail "doctor-scan — spirit 도달 판정 불일치"
+    printf '@AGENTS.md\n' > "$RS/CLAUDE.md"
+    rs doctor-scan.sh --json | jq -e '[.result.reach[]|select(.source=="constitution")][0].reached==true' >/dev/null \
+        && pass "doctor-scan 도달 지도 — CLAUDE.md 가 @AGENTS.md 를 import 하면 도달" || fail "doctor-scan — @AGENTS.md import 를 미도달로 봄"
+
+    # status-note — 형식 고정 · 중복 무시 · done · 상한
+    rs status-note.sh --add next "1순위 가정 검증" --json | jq -e '.result.added==true' >/dev/null \
+        && pass "status-note --add — 4절 골격 생성 + 항목 추가" || fail "status-note --add 실패"
+    rs status-note.sh --add next "1순위 가정 검증" --json | jq -e '.result.added==false and .result.reason=="duplicate"' >/dev/null \
+        && pass "status-note --add — 같은 줄은 무시 (idempotent)" || fail "status-note — 중복 줄 추가됨"
+    rs status-note.sh --set now "spec 014 구현 중\n- T010 halt" --json >/dev/null
+    rs status-note.sh --show --json | jq -e '(.result.sections.now|length)==2 and .result.sections.next==["- 1순위 가정 검증"]' >/dev/null \
+        && pass "status-note --show — 절별 파싱 (여러 줄 --set 포함)" || fail "status-note --show 파싱 불일치"
+    rs status-note.sh --done next "가정 검증" --json | jq -e '.result.removed==1' >/dev/null \
+        && pass "status-note --done — 끝난 항목 제거" || fail "status-note --done 실패"
+    for i in $(seq 1 40); do rs status-note.sh --add open "q$i" >/dev/null; done
+    rs status-note.sh --show --json | jq -e '.status=="warning" and .result.over_cap==true' >/dev/null \
+        && pass "status-note — 40줄 상한 초과 warning" || fail "status-note — 상한 초과를 ok 로"
+    grep -q '^## 이번에 바뀐 이름' "$RS/.ax/docs/STATUS.md" && pass "status-note — 4절 헤더 형식 고정" || fail "status-note — 절 헤더 누락"
+
+    # constitution-apply — prepend 보존 · 중복 스캔은 구 본문만 · drop 은 [a] 뒤 · 인덱스
+    printf '# X — Constitution\n\n## META — 핵심 가드레일\n\n🔴 **`AX:CRITICAL:001`** — 결제 API 는 멱등성 키 필수\n' > "$RS/block.md"
+    printf '# old\n\n## Database\n파일명 규칙: 결제 API 는 멱등성 키 필수\n짧은줄\n' > "$RS/CLAUDE.md"
+    rs constitution-apply.sh --block "$RS/block.md" --target CLAUDE.md --json | jq -e '.result.applied==true and .result.preserved_lines==5' >/dev/null \
+        && pass "constitution-apply — prepend + 기존 본문 --- 아래 보존" || fail "constitution-apply prepend 실패"
+    rs constitution-apply.sh --block "$RS/block.md" --target CLAUDE.md --json >/dev/null; [ $? -eq 2 ] \
+        && pass "constitution-apply — 이미 적용이면 exit 2 (idempotent)" || fail "constitution-apply — 재적용을 막지 않음"
+    rs constitution-apply.sh --scan-duplicates --block "$RS/block.md" --target CLAUDE.md --json | jq -e '.result.count==1 and (.result.duplicates[0].old_text|test("파일명 규칙"))' >/dev/null \
+        && pass "constitution-apply --scan-duplicates — 구 본문의 정확 일치만 (블록 자신은 제외)" || fail "constitution-apply — 중복 스캔 불일치"
+    rs constitution-apply.sh --drop-exact --block "$RS/block.md" --target CLAUDE.md --json | jq -e '.result.dropped==1' >/dev/null \
+        && grep -q '^짧은줄$' "$RS/CLAUDE.md" && ! grep -q '^파일명 규칙' "$RS/CLAUDE.md" \
+        && pass "constitution-apply --drop-exact — 정확 일치 줄만 제거, 나머지 보존" || fail "constitution-apply --drop-exact 실패"
+    rs constitution-apply.sh --append-index --target CLAUDE.md --plugin-dir "$REPO" --json | jq -e '.result.applied==true' >/dev/null \
+        && grep -q '^## 4계층 인덱스' "$RS/CLAUDE.md" && [ "$(tail -1 "$RS/CLAUDE.md")" != "---" ] \
+        && pass "constitution-apply --append-index — 템플릿에서 인덱스 절만 (끝 구분선 제외)" || fail "constitution-apply --append-index 실패"
+    rm -rf "$RS"
+fi
+
+# 엣지 연결 — 폐기된 skill 의 트리거를 누가 받는지, 새 스크립트를 누가 부르는지 파일에 적혀 있어야 해요.
+grep -q 'spirit-lint.sh' "$REPO/skills/doctor/SKILL.md" && grep -q 'rules-index.sh' "$REPO/skills/doctor/SKILL.md" && grep -q 'doctor-scan.sh' "$REPO/skills/doctor/SKILL.md" \
+    && pass "doctor — spirit-lint · rules-index · doctor-scan 을 실제로 호출" || fail "doctor — 스크립트 호출 엣지 없음"
+grep -q 'spirit 점검' "$REPO/skills/doctor/SKILL.md" && grep -q 'rules 보여줘' "$REPO/skills/doctor/SKILL.md" \
+    && pass "doctor — 폐기된 spirit·rules 트리거를 description 에서 받음" || fail "doctor — spirit/rules 트리거 미인수 (자연어 라우팅 끊김)"
+grep -q 'rules-index.sh' "$REPO/commands/goax.md" && grep -q 'spirit-lint.sh' "$REPO/commands/goax.md" \
+    && pass "/goax 인덱스 — rules·spirit 행이 스크립트를 가리킴" || fail "/goax 인덱스 — 폐기 skill 잔재"
+grep -q 'status-note.sh --show' "$REPO/skills/triage/SKILL.md" && grep -q 'STATUS.md' "$REPO/skills/triage/SKILL.md" \
+    && pass "triage — STATUS.md 를 MEMORY.md 보다 먼저 읽음" || fail "triage — 인계 노트 선독 없음"
+grep -q 'status-note.sh' "$REPO/skills/spec-implement/SKILL.md" && grep -q 'references/lane-mode.md' "$REPO/skills/spec-implement/SKILL.md" \
+    && pass "spec-implement — halt·완료 시 status-note 갱신 + 레인 루프는 references" || fail "spec-implement — 인계 노트/레인 참조 없음"
+grep -q 'status-note.sh --add renamed' "$REPO/skills/spec-implement/references/lane-mode.md" \
+    && pass "lane-mode — 레인 보고의 바뀐 이름을 인계 노트로" || fail "lane-mode — renamed 인계 없음"
+grep -q 'status-note.sh' "$REPO/skills/zero/SKILL.md" && pass "zero — STATUS 개설을 스크립트로" || fail "zero — STATUS 를 손으로 씀"
+grep -qE '^disallowedTools:.*Write.*Edit' "$REPO/agents/lane-scout.md" \
+    && pass "lane-scout — disallowedTools 로 편집 금지 (allowlist 아님)" || fail "lane-scout — 편집 금지가 산문뿐"
+grep -qE '^tools:' "$REPO/agents/lane-scout.md" && fail "lane-scout — tools: allowlist 사용 (한 항목이라도 안 풀리면 에이전트가 안 뜸)" || true
+grep -q 'constitution-apply.sh' "$REPO/skills/onboarding/SKILL.md" && grep -q 'zero-domain-risk.sh --show' "$REPO/skills/onboarding/SKILL.md" \
+    && pass "onboarding — Q5 prepend 와 Q2 카운트가 스크립트" || fail "onboarding — 산문 prepend/awk 카운트 잔재"
+[ -f "$REPO/templates/default/.ax/scripts/bash/build-index.sh" ] || grep -q 'search-index' "$REPO/templates/default/.gitignore.template" \
+    && fail ".gitignore.template 에 .search-index 잔재" || pass ".gitignore.template — .search-index 제거"
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"
