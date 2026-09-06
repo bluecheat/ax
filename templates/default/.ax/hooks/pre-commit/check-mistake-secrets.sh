@@ -24,8 +24,12 @@ set -uo pipefail
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 COMMON="$PROJECT_ROOT/.ax/scripts/bash/common.sh"
 
-# common.sh 없으면 silent skip (redact_secrets 함수 의존)
-[ -f "$COMMON" ] || exit 0
+# common.sh 가 없으면 redact_secrets 도 없어요 — 조용히 통과하지 않고 "안전망 비활성" 을 말하고 통과해요
+# (critical-rule-grep.sh 와 같은 규약. 부분 설치·부분 정리 상태가 가장 흔한 시점이에요)
+if [ ! -f "$COMMON" ]; then
+    printf '[goax] common.sh 없음 — mistakes secrets 안전망 비활성 (.ax/scripts/bash/common.sh 복구 필요)\n' >&2
+    exit 0
+fi
 # shellcheck source=../../scripts/bash/common.sh
 source "$COMMON"
 

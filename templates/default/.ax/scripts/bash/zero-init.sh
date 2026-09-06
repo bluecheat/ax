@@ -108,7 +108,17 @@ copy_one() {
     fi
     if [ "$DRY_RUN" != true ]; then
         mkdir -p "$(dirname "$dst")"
-        cp "$src" "$dst"
+        # `[ -e ]` 와 `cp` 사이는 경합 창이에요 — 동시에 뜬 다른 zero-init 이 먼저 놓으면 리눅스 GNU cp 는
+        # File exists 로 실패해요(BSD cp 는 조용히 덮어써요). 그때 목적지가 있으면 "설치됨" 으로 봐요.
+        if ! cp "$src" "$dst" 2>/dev/null; then
+            if [ -e "$dst" ]; then
+                SKIPPED="${SKIPPED}${rel}
+"
+                return 0
+            fi
+            add_warn "복사 실패: $rel"
+            return 0
+        fi
     fi
     INSTALLED="${INSTALLED}${rel}
 "

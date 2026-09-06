@@ -30,7 +30,9 @@ NUDGED_MARKER="$PROJECT_ROOT/.ax/.triage-nudged"
 # 새 작업 사이클이면 다시 nudge 가능해야 함
 NUDGE_TTL=14400
 if [ -f "$NUDGED_MARKER" ]; then
-    NUDGED_AT=$(stat -f %m "$NUDGED_MARKER" 2>/dev/null || stat -c %Y "$NUDGED_MARKER" 2>/dev/null || echo 0)
+    # GNU stat 이 먼저예요 — GNU 의 `stat -f` 는 파일시스템 모드라 실패해도 stdout 에 글자를 찍어서 뒤 fallback 과 섞여요
+    NUDGED_AT=$(stat -c %Y "$NUDGED_MARKER" 2>/dev/null || stat -f %m "$NUDGED_MARKER" 2>/dev/null || echo 0)
+    case "$NUDGED_AT" in ''|*[!0-9]*) NUDGED_AT=0 ;; esac
     NOW=$(date +%s)
     AGE=$((NOW - NUDGED_AT))
     if [ "$AGE" -lt "$NUDGE_TTL" ]; then

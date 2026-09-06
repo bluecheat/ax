@@ -2905,6 +2905,22 @@ else
     popd >/dev/null || true
     rm -rf "$NOC"
 
+    # check-mistake-secrets 도 같은 규약 — common.sh(redact_secrets) 가 없으면 말하고 통과
+    NOM=$(mktemp -d)
+    pushd "$NOM" >/dev/null || fail "NOM pushd 실패"
+    git init -q . >/dev/null 2>&1
+    mkdir -p .ax/hooks/pre-commit .ax/mistakes
+    cp "$REPO/templates/default/.ax/hooks/pre-commit/check-mistake-secrets.sh" .ax/hooks/pre-commit/
+    printf 'sensors:\n  mode: fail\n' > .ax/config.yml
+    printf -- '---\ncategory: ops\n---\nAWS_ACCESS_KEY_ID=%s%s\n' AKIA IOSFODNN7EXAMPLE > .ax/mistakes/2026-01-01-leak.md
+    git add -f .ax/mistakes/2026-01-01-leak.md >/dev/null 2>&1
+    NOM_ERR=$(CLAUDE_PROJECT_DIR="$NOM" bash .ax/hooks/pre-commit/check-mistake-secrets.sh 2>&1 >/dev/null); NOM_RC=$?
+    { [ "$NOM_RC" -eq 0 ] && printf '%s' "$NOM_ERR" | grep -q '안전망 비활성'; } \
+        && pass "check-mistake-secrets — common.sh 부재를 '안전망 비활성' 으로 말하고 통과 (무성 skip 아님)" \
+        || fail "check-mistake-secrets — common.sh 부재를 조용히 통과 (rc=$NOM_RC): $NOM_ERR"
+    popd >/dev/null || true
+    rm -rf "$NOM"
+
     # 패턴 확대(AWS {16,}·Stripe {16,}·JWT 2세그)의 대가 — 기존 mistake 본문이 계속 통과하는가
     MS=$(mktemp -d)
     mkdir -p "$MS/.ax/scripts/bash" "$MS/.ax/hooks/pre-commit" "$MS/.ax/mistakes"
@@ -3123,11 +3139,10 @@ else
         [ "$r" = 0 ] && zi_ok=$((zi_ok+1))
     done
     # exit 2 는 "--plugin-dir 을 못 찾아 아무것도 안 썼다" 라서 하나라도 섞이면 이 어서션이 공허해요.
-    # exit 1 은 여기서만 허용해요 — GNU cp 는 대상이 없다고 본 순간 O_EXCL 로 열어서, 같은 템플릿을
-    # 동시에 복사하는 다른 프로세스와 부딪히면 "File exists" 로 죽어요 (BSD cp 는 조용히 덮어써요).
-    # copy_one 의 TOCTOU 라 settings.json 락과 무관하고, 락을 넣기 전에도 리눅스에서 똑같았어요.
-    [ "$(grep -c 'zero-guard-bash\.sh' "$LK/.claude/settings.json")" -eq 1 ] && [ "$zi_skip" -eq 0 ] && [ "$zi_ok" -ge 1 ] \
-        && pass "zero-init ×5 동시 — 훅 정확히 1회 등록 (skip 0 · 수정 전 3회)" \
+    # 다섯 다 exit 0 이어야 해요 — 리눅스 GNU cp 가 같은 템플릿을 동시에 복사하다 "File exists" 로
+    # 죽던 copy_one 의 TOCTOU 는 "목적지가 이미 있으면 설치됨" 으로 흡수했어요.
+    [ "$(grep -c 'zero-guard-bash\.sh' "$LK/.claude/settings.json")" -eq 1 ] && [ "$zi_skip" -eq 0 ] && [ "$zi_ok" -eq 5 ] \
+        && pass "zero-init ×5 동시 — 훅 정확히 1회 등록 · 전부 exit 0 (복사 경합 허용)" \
         || fail "zero-init ×5 동시 — 등록 $(grep -c 'zero-guard-bash\.sh' "$LK/.claude/settings.json")회 / rc=$rc2"
 
     seed_lk
@@ -3243,6 +3258,22 @@ else
     [ "$(find "$LK" -name '*.lock' -type d | wc -l | tr -d ' ')" -eq 5 ] \
         && pass "락 대기 초과 — 남의 락을 뺏지 않음 (5개 그대로)" \
         || fail "락 대기 초과 — 손으로 만든 락 5개 중 $(find "$LK" -name '*.lock' -type d | wc -l | tr -d ' ')개만 남음"
+
+    # stale 회수 — 살아 있는 홀더는 mtime 이 아무리 오래돼도 안 뺏고, 죽은 pid 의 락만 회수
+    LSD="$LK/stale-test.lock"; rm -rf "$LSD"; mkdir "$LSD"
+    sleep 30 & LS_PID=$!
+    printf '%s\n' "$LS_PID" > "$LSD/pid"; touch -t 202001010000 "$LSD"
+    GOAX_LOCK_STALE=1 bash -c "source '$REPO/templates/default/.ax/scripts/bash/common.sh'; goax_lock '$LSD' 3" >/dev/null 2>&1; ls_rc=$?
+    { [ "$ls_rc" -ne 0 ] && [ -d "$LSD" ]; } \
+        && pass "goax_lock — 살아 있는 홀더의 락은 mtime 이 오래돼도 안 뺏음 (타임아웃 exit 1)" \
+        || fail "goax_lock — 살아 있는 홀더의 락을 뺏음 (rc=$ls_rc, dir=$([ -d "$LSD" ] && echo 있음 || echo 없음))"
+    kill "$LS_PID" 2>/dev/null; wait "$LS_PID" 2>/dev/null || true
+    touch -t 202001010000 "$LSD"
+    GOAX_LOCK_STALE=1 bash -c "source '$REPO/templates/default/.ax/scripts/bash/common.sh'; goax_lock '$LSD' 5" >/dev/null 2>&1; ls_rc=$?
+    [ "$ls_rc" -eq 0 ] \
+        && pass "goax_lock — 죽은 pid 의 락은 회수 (5초 지난 것)" \
+        || fail "goax_lock — 죽은 pid 의 락을 회수 못 함 (rc=$ls_rc)"
+    rm -rf "$LSD"
 
     rm -rf "$LK"
 fi
