@@ -119,6 +119,7 @@ goax_unlock "$FILE.lock"
 통과시켰어요. `[[:lower:]]`·`[[:upper:]]`·`[[:alnum:]]` 를 쓰거나, 옛 코드를 못 고치는 자리는
 `common.sh` 최상단의 `export LC_COLLATE=C` 가 안전망이에요 (이미 있는 export — 새로 추가할 필요
 없음, 브래킷을 새로 안 쓰면 충분해요).
+- 문자 클래스에 한글 **범위**(`[가-힣]`)를 쓰지 않아요 — GNU grep 은 C.UTF-8 에서 "Invalid collation character" 로 거부해요(BSD grep 은 통과라 리눅스 CI 에서만 드러나요). 부정 클래스(`[^<>]`)나 POSIX 클래스로 써요.
 
 **`tasks.md` 를 파싱하는 스크립트는 코드펜스를 건너뛰어요.** `_templates/spec/tasks.md` 자체가
 형식 설명 예시(`- [ ] T001 [P] [AC2] …`)를 코드펜스 안에 담고 있어서, 펜스를 안 보면 그 예시 줄이
