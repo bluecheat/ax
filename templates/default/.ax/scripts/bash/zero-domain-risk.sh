@@ -61,8 +61,11 @@ if [ "$SHOW_HELP" = true ]; then
     exit "$EXIT_OK"
 fi
 
+fail() { if [ "$JSON_MODE" = true ]; then json_error "$1"; fi; goax_error "$1"; exit "$EXIT_ERROR"; }
+
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
 CONFIG="$PROJECT_ROOT/.ax/config.yml"
+CONFIG_LOCK="$CONFIG.lock"
 
 if [ ! -f "$CONFIG" ]; then
     MSG=".ax/config.yml 이 없어요 — 먼저 /up 으로 하네스를 설치하세요"
@@ -189,6 +192,13 @@ if [ -n "$UNCONVERTED" ]; then
 fi
 
 TMP="$CONFIG.tmp.$$"
+# 락 창은 HAS_BLOCK grep 부터예요 — "블록이 있나" 를 읽고 그 판정으로 파일을 통째 재작성하니까,
+# 락 밖이면 두 세션이 서로의 domain_risk 를 조용히 지워요 (common.sh 머리말의 실측 사고).
+# dry-run 은 TMP 를 만들었다 지우기만 하고 CONFIG 를 안 건드려서 락을 안 잡아요 —
+# TMP 는 `$CONFIG.tmp.$$` 라 프로세스별로 갈려서 경합하지 않아요.
+if [ "$DRY_RUN" != true ]; then
+    goax_lock "$CONFIG_LOCK" "${GOAX_LOCK_TIMEOUT:-10}" || fail "다른 프로세스가 .ax/config.yml 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
+fi
 HAS_BLOCK=false
 grep -qE '^domain_risk:' "$CONFIG" && HAS_BLOCK=true
 
@@ -235,6 +245,7 @@ if [ "$DRY_RUN" = true ]; then
     NEXT="dry-run — ${BEFORE_N}개 → ${NEW_N}개로 교체될 예정 (default_risk=${DEFAULT_RISK})"
 else
     mv "$TMP" "$CONFIG"
+    goax_unlock "$CONFIG_LOCK"
     NEXT="domain_risk ${BEFORE_N}개 → ${AFTER_N}개 (default_risk=${DEFAULT_RISK}). triage 가 이제 이 도메인으로 위험도를 잡아요"
 fi
 

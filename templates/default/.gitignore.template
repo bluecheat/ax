@@ -13,3 +13,6 @@
 .ax/.triage-nudged
 .ax/.session/
 .ax/.ablation-last
+
+# 파일 쓰기 락 (goax_lock — mkdir 원자성. 디렉토리만, 파일형 *.lock 은 Cargo.lock 을 삼켜요)
+*.lock/

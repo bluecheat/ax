@@ -76,7 +76,7 @@ if [ -n "$RULES_FILE" ]; then
             🔴*) lv=critical ;; 🟡*) lv=mandatory ;; 🔵*) lv=convention ;; *) continue ;;
         esac
         tok=$(printf '%s' "$body" | sed -E 's/^[^`]*`([^`]+)`.*/\1/')
-        txt=$(printf '%s' "$body" | sed -E 's/^[^`]*`[^`]+`\*\*[[:space:]]*//; s/^[—–-][[:space:]]*//; s/[[:space:]]+$//')
+        txt=$(printf '%s' "$body" | sed -E 's/^[^`]*`[^`]+`\*\*[[:space:]]*//; s/^(—|–|-)[[:space:]]*//; s/[[:space:]]+$//')
         add_row "$tok" "$lv" constitution constitution "$txt" "$RULES_FILE" "$n"
     done < <(grep -nE '^(🔴|🟡|🔵) \*\*`[^`]+`\*\*' "$RULES_FILE" 2>/dev/null || true)
 fi

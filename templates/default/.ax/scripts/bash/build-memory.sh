@@ -61,6 +61,8 @@ if [ "$SHOW_HELP" = true ]; then
     exit "$EXIT_OK"
 fi
 
+fail() { if [ "$JSON_MODE" = true ]; then json_error "$1"; fi; goax_error "$1"; exit "$EXIT_ERROR"; }
+
 WS="${CLAUDE_PROJECT_DIR:-$(find_project_root 2>/dev/null || pwd)}"
 cd "$WS" 2>/dev/null || { goax_error "프로젝트 루트 진입 실패: $WS"; exit "$EXIT_ERROR"; }
 
@@ -352,15 +354,19 @@ if [ "$DRY_RUN" = true ]; then
     exit "$EXIT_OK"
 fi
 
-# 원자적 기록
+# 원자적 기록 — MEMORY.md 는 통째 재생성이라 RMW 는 아니지만, 두 세션이 겹치면 반쪽 파일과
+# `.tmp.$$` 잔존물이 남아요. 락 경로는 절대경로여야 해요 (여기 cwd 는 $WS 로 바뀌어 있어요).
 mkdir -p .ax
+MEM_LOCK="$(pwd)/.ax/MEMORY.md.lock"
+goax_lock "$MEM_LOCK" "${GOAX_LOCK_TIMEOUT:-10}" || fail "다른 프로세스가 .ax/MEMORY.md 를 쓰는 중이에요 — 잠시 뒤 다시 해요"
 TMP=".ax/MEMORY.md.tmp.$$"
 if printf '%s\n' "$CONTENT" > "$TMP" 2>/dev/null; then
     mv "$TMP" .ax/MEMORY.md
 else
     rm -f "$TMP"
-    if [ "$JSON_MODE" = true ]; then json_error ".ax/MEMORY.md 기록 실패"; else goax_error ".ax/MEMORY.md 기록 실패"; exit "$EXIT_ERROR"; fi
+    fail ".ax/MEMORY.md 기록 실패"
 fi
+goax_unlock "$MEM_LOCK"
 
 BYTES=$(wc -c < .ax/MEMORY.md 2>/dev/null | tr -d ' ')
 LINES=$(wc -l < .ax/MEMORY.md 2>/dev/null | tr -d ' ')

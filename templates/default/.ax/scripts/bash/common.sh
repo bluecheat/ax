@@ -115,28 +115,67 @@ goax_hook_exit() {
     exit 0
 }
 
+# ─── 시크릿 패턴 SSOT ───────────────────────────────────────────────
+# 시크릿의 형태를 아는 곳은 이 표 하나예요. 검출(grep)도 마스킹(sed)도 같은 행에서 나와요.
+# 예전엔 훅이 자기 상수를, 여기가 자기 sed 를 따로 들고 있어서 여덟 축이 이미 갈라져 있었어요
+# (AWS·GitHub·Stripe·PEM·JWT 정량자 · Slack 웹훅은 마스킹만 · key=value 는 키 이름까지).
+#
+#   goax_secret_rules()     표 자체. 한 행 = <use> TAB <label> TAB <ERE> TAB <sed 치환문>
+#   goax_secret_patterns()  use=both|detect 행의 ERE 만 (검출용)
+#   redact_secrets()        use=both|mask 행에서 sed 스크립트를 만들어 실행 (시그니처 불변)
+#
+# 행을 더할 때 지킬 것:
+#   - ERE 는 grep -E 와 sed -E 양쪽에서 그대로 도는 POSIX ERE. `\s`·case-flag 금지, 소문자 단독
+#     브래킷 범위 대신 `[[:lower:]]` (이 파일 위쪽 LC_COLLATE 주석 참고)
+#   - ERE 에도 치환문에도 `#` 을 쓰지 마세요 — sed 구분자예요. 치환문의 `&` 도 금지 (전체 매치를 뜻해요)
+#   - use=detect 행의 치환문은 `-` 고정. 다른 문자열을 두면 나중에 use 를 both 로 바꾸는 순간
+#     그 문자열이 조용히 시크릿 자리에 들어가요
+#   - 행 순서 = 적용 순서. 좁은 패턴이 위 (`sk-(ant|proj)-` 가 `sk-` 보다 위여야 라벨이 안 뭉개져요)
+#   - 검출과 마스킹의 폭은 같게. 다르면 `check-mistake-secrets.sh` 와 `critical-rule-grep.sh` 가
+#     같은 파일에 다른 답을 내요
+#
+# key=value 두 행이 공유하는 키 이름이에요. 두 행은 정량자와 캡처만 달라야 해서 조각을 하나로 둬요 —
+# 이게 이 축의 드리프트(검출에만 `passwd`·`access_key`, 마스킹에만 `pg_key`)를 막는 유일한 장치예요.
+# 대소문자는 브래킷으로 써요 (sed 에는 grep 의 `-i` 가 없어요).
+_GOAX_SECRET_KV_KEYS='[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss][Ss][_-]?[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Bb][Ee][Aa][Rr][Ee][Rr]|[Pp][Gg][_-]?[Kk][Ee][Yy]'
+
+goax_secret_rules() {
+    # 표는 인용 heredoc 이에요 — 행에 `\.`·`\1`·`$`·`%`·`{`·양쪽 따옴표가 다 들어가서 printf 나
+    # 비인용 heredoc 은 그중 일부를 먹어요. `@KV@` 만 위 조각으로 치환해요.
+    cat <<'AXEOF' | sed "s#@KV@#${_GOAX_SECRET_KV_KEYS}#g"
+both	aws	AKIA[0-9A-Z]{16,}	[REDACTED:aws]
+both	github	gh[hoprsu]_[A-Za-z0-9]{20,}	[REDACTED:github]
+both	github	github_pat_[A-Za-z0-9_]{20,}	[REDACTED:github]
+both	llm-key	sk-(ant|proj)-[A-Za-z0-9_-]{20,}	[REDACTED:llm-key]
+both	llm-key	sk-[A-Za-z0-9]{20,}	[REDACTED:llm-key]
+both	google	AIza[0-9A-Za-z_-]{35}	[REDACTED:google]
+both	npm	npm_[A-Za-z0-9]{30,}	[REDACTED:npm]
+both	slack-webhook	https://hooks\.slack\.com/services/[A-Za-z0-9/+]{20,}	[REDACTED:slack-webhook]
+both	slack	xox[abprs]-[A-Za-z0-9-]{10,}	[REDACTED:slack]
+both	stripe	(sk|pk|rk)_live_[A-Za-z0-9]{16,}	[REDACTED:stripe]
+both	stripe	whsec_[A-Za-z0-9]{20,}	[REDACTED:stripe]
+both	jwt	eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}(\.[A-Za-z0-9_-]+)?	[REDACTED:jwt]
+both	pem-begin	-----BEGIN[A-Z ]*PRIVATE KEY-----	[REDACTED:pem-begin]
+detect	kv-detect	(@KV@)[[:space:]]*[:=][[:space:]]*['"]?[^[:space:]'"$<{%(][^[:space:]'"]{5,}	-
+mask	kv-mask	(@KV@)([[:space:]]*[:=][[:space:]]*"?)([A-Za-z0-9+/=_-]{12,})	\1\2[REDACTED]
+AXEOF
+}
+
+# 검출용 — use=both|detect 행의 ERE. 호출부는 `grep -E -e "$pat"` 로 쓰세요 (`-e` 필수: PEM 행이
+# `-----` 로 시작해서 옵션으로 읽혀요).
+goax_secret_patterns() {
+    goax_secret_rules | awk -F'\t' '$1=="both"||$1=="detect"{print $3}'
+}
+
 # Redact secrets in stdin, print redacted to stdout.
 # Strategy: known-prefix tokens (high confidence) + key=value with ≥12-char value (lower).
 # Designed for init-mistake-file.sh / mistake skill DETAILS only — DO NOT apply to titles (signal loss).
-# Patterns chosen to be POSIX sed -E compatible (no \s, no case-flag — bracket classes).
 # Usage: REDACTED=$(printf '%s' "$x" | redact_secrets)
 redact_secrets() {
-    sed -E '
-        s/AKIA[A-Z0-9]{16,}/[REDACTED:aws]/g
-        s/gh[poshru]_[A-Za-z0-9]{20,}/[REDACTED:github]/g
-        s/github_pat_[A-Za-z0-9_]{20,}/[REDACTED:github]/g
-        s/sk-(ant|proj)-[A-Za-z0-9_-]{20,}/[REDACTED:llm-key]/g
-        s/sk-[A-Za-z0-9]{20,}/[REDACTED:llm-key]/g
-        s/AIza[0-9A-Za-z_-]{35}/[REDACTED:google]/g
-        s/npm_[A-Za-z0-9]{30,}/[REDACTED:npm]/g
-        s#https://hooks\.slack\.com/services/[A-Za-z0-9/+]{20,}#[REDACTED:slack-webhook]#g
-        s/xox[baprs]-[A-Za-z0-9-]{10,}/[REDACTED:slack]/g
-        s/(sk|pk|rk)_live_[A-Za-z0-9]{20,}/[REDACTED:stripe]/g
-        s/whsec_[A-Za-z0-9]{20,}/[REDACTED:stripe]/g
-        s/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/[REDACTED:jwt]/g
-        s/-----BEGIN[A-Z ]*PRIVATE KEY-----/[REDACTED:pem-begin]/g
-        s/([Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Tt][Oo][Kk][Ee][Nn]|[Bb][Ee][Aa][Rr][Ee][Rr]|[Pp][Gg][_-]?[Kk][Ee][Yy])([[:space:]]*[:=][[:space:]]*"?)([A-Za-z0-9+\/=_-]{12,})/\1\2[REDACTED]/g
-    '
+    local script
+    script=$(goax_secret_rules | awk -F'\t' '$1=="both"||$1=="mask"{printf "s#%s#%s#g\n", $3, $4}')
+    [ -n "$script" ] || { cat; return 0; }      # 표가 비면 통과 (sed -E "" 방지)
+    sed -E "$script"
 }
 
 # ─── 세션 내 중복 주입 제거 ─────────────────────────────────────────

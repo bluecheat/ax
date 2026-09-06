@@ -3,9 +3,9 @@
 # 시크릿 추정 패턴이 남아있는지 재검증.
 #
 # 왜 별도 hook: init-mistake-file.sh 가 capture 시점에 ONE_LINE 만 redact 적용함.
-#   본문 5섹션은 LLM 이 Edit 으로 채우므로, AWS AKIA / GitHub ghp_ / Slack xox /
-#   Stripe sk_live / JWT / PEM / key=value≥12자 가 그대로 들어갈 수 있음. commit
-#   시점에 한 번 더 막아주는 안전망.
+#   본문 5섹션은 LLM 이 Edit 으로 채우므로, common.sh 의 `goax_secret_rules` 표가 아는
+#   토큰 형태와 key=value≥12자 가 그대로 들어갈 수 있음. commit 시점에 한 번 더 막아주는 안전망.
+#   무엇을 잡는지는 그 표가 SSOT — 여기도, 아래 안내 문구도 형태를 따로 적지 않아요.
 #
 # Dual-use:
 #   1) Claude Code PreToolUse:Bash on `git commit` (grep-on-commit.sh chain)
@@ -56,7 +56,9 @@ if [ "$LEAK_COUNT" -gt 0 ]; then
     printf '\033[31m[goax pre-commit]\033[0m mistake 파일에 시크릿 추정 패턴이 남아있어요 (%d건):\n' "$LEAK_COUNT" >&2
     printf '%b' "$LEAK_FILES" | sed 's/^/  - /' >&2
     printf '\n조치: 해당 파일을 열어 [REDACTED:...] 로 치환 후 다시 commit 하세요.\n' >&2
-    printf '       (탐지 패턴: AWS AKIA·GitHub ghp_·Slack xox·Stripe sk_live·JWT·PEM·key=value≥12자)\n' >&2
+    # 잡는 형태는 표에서 뽑아요 — 여기 손으로 적어두면 표가 늘 때마다 문구가 거짓말이 돼요
+    printf '       (탐지 패턴: %skey=value≥12자)\n' \
+        "$(goax_secret_rules | awk -F'\t' '($1=="both"||$1=="mask") && $2!="kv-mask" && !seen[$2]++ {printf "%s·", $2}')" >&2
     if [ "$SENSOR_MODE" = "fail" ]; then
         printf '[goax] ✗ mistake secrets %d건 — 차단 (mode=fail)\n' "$LEAK_COUNT" >&2
         exit 2
