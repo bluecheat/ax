@@ -243,6 +243,11 @@ bash .ax/scripts/bash/status-note.sh --set now "spec $SPEC 구현 중 — T0NN �
 bash .ax/scripts/bash/status-note.sh --add open "<사용자 결정이 필요한 것>" --json      # 결정 대기일 때만
 ```
 
+이 노트를 안 쓰고 넘어가도 완전히 조용하진 않아요 — 턴이 끝나는 시점에 `stop/spec-gate.sh`
+가 한 번 더 봐요. `implementing`/`review` phase 인데 `tasks-gate.sh` 가 여전히 실패면, 이 노트가
+24시간 이내 시각으로 없는 한 그 턴의 종료를 한 번 막아요 (세션당 상한 있음). 그러니 halt 할 땐
+위 두 명령을 실제로 실행해요 — Stop 게이트를 피하려고가 아니라, 다음 세션이 볼 유일한 창구라서요.
+
 ## 7. 범위 이탈 / Elevated — 모드 불문 강제
 
 다음은 mode 불문 즉시 halt:
@@ -290,6 +295,11 @@ fi
 | * | `진행` | §8.2 완료 |
 | * | `보강 필요` | review.md 의 지적 하나하나를 task 로 옮겨요 (`- [ ] T1NN [ACn] <지적> — files: …`), §3 으로 돌아가요. 끝나면 evaluator 를 **다시** 띄워요 — review.md 는 evaluator 가 덮어써요 |
 | * | `재논의 필요` | halt. 사용자 결정 — spec 자체를 다시 봐야 한다는 뜻이에요 |
+
+`재논의 필요`·`보강 필요` 로 이 턴이 그냥 끝나면 `stop/spec-gate.sh` 가 한 번 더 잡아요 —
+phase 가 `implementing`/`review` 인데 `tasks-gate.sh` 가 아직 실패면, §6 의 인계 노트(24시간 이내)가
+없는 한 턴 종료를 한 번 막고 되돌려보내요. 정상 완료(§8.2, `reset-task.sh` 가 phase 를 `idle` 로
+되돌림)에는 적용되지 않아요.
 
 ### 8.1 evaluator — 새 컨텍스트로, 산출물만 주고
 

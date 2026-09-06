@@ -25,8 +25,36 @@ compaction 뒤엔 4시간 TTL 이 다시 줄 여지를 남겨요. 세션 id 가 
 `stop/spec-gate.sh` 는 `current-task.json` 의 phase 가 `implementing`·`review` 이고 `tasks-gate.sh` 가 위반을
 보고할 때만 `{"decision":"block","reason":…}` 로 한 턴을 더 줘요. Claude Code 가 재시도할 땐
 `stop_hook_active=true` 로 오고 그땐 무조건 통과 — 무한 루프는 공식 계약이 막아요. 인계 노트
-(`.ax/docs/STATUS.md` "지금 상태")에 그 spec 이 적혀 있으면 멈추는 게 의도라고 보고 잡지 않아요.
+(`.ax/docs/STATUS.md` "지금 상태")에 그 spec 이 **24시간 안에** 적혀 있으면 멈추는 게 의도라고 보고 잡지 않아요 —
+`status-note.sh --set now` 이 줄 끝에 `(YYYY-MM-DDTHH:MMZ)` 를 박고 게이트가 그 시각을 봐요. 시각이 없는 옛
+노트는 인정하지 않아요 (예전엔 spec 이름만 있으면 통과라서 몇 주 전 노트 한 줄이 새 세션의 게이트를 영구히
+침묵시켰어요). 지울 땐 `status-note.sh --clear now`. 이 훅은 지나가며 `.ax/.session/*` 의 24시간 넘은
+디렉토리도 지워요 — 그 청소가 pre-edit 훅에만 있어서 Edit 없는 세션은 아무것도 못 지웠거든요.
 세션당 상한은 `GOAX_STOP_GATE_MAX`(기본 8) — `.ax/.session/<sid>/stop-blocks` 카운터. 끄려면 `sensors.mode=off`.
+
+## Secrets 검출 — 토큰 형태 + key=value 두 갈래
+
+`pre-commit/critical-rule-grep.sh` 는 staged 파일에서 시크릿을 찾아요. ① 발급처가 형식을 정해둔 토큰
+(`AKIA…`·`ghp_…`·`xox[abprs]-`·`sk_live_`·`sk-`·`AIza`·`npm_`·`whsec_`·PEM·JWT — `common.sh` 의
+`redact_secrets` 와 같은 세트) 과 ② 대소문자 무시 `key=value` (`password`·`secret`·`api_key`·`access_key`·
+`token`·`bearer`) 를 봐요. `${GITHUB_TOKEN}`·`<from env>` 같은 참조 표기와 `secret: null`·`token_count = 0`
+은 값 첫 글자와 최소 길이로 걸러요. 옛 정규식 하나(`(password|secret|api_key|token).*=.*["']`)는 대소문자를
+가리고 `=` 와 따옴표를 둘 다 요구해서 실검체 9종을 전부 놓쳤어요. 검출되면 **파일 이름만** 찍어요 —
+매칭된 줄을 stderr 로 흘리면 검출한 의미가 없어요.
+
+## jq 가 없으면 침묵하지 않아요
+
+`pre-bash/block-destructive.sh` 와 `pre-edit/check-protected-paths.sh` 는 stdin JSON 을 jq 로 파싱해요.
+jq 가 PATH 에 없으면 인자를 못 뽑아 그냥 통과(fail-open)하는데, 예전엔 그게 **무성**이라 `rm -rf /etc` 가
+아무 출력 없이 exit 0 이고 안전망이 꺼진 걸 아무도 몰랐어요. 이제 `[goax] jq 없음 — 이 안전망이 비활성
+상태예요` 를 stderr 에 한 줄 남기고 통과해요 (fail-open 자체는 그대로).
+
+## 설치 시 심볼릭 링크 — 따라가지 않아요
+
+`scripts/provision.sh` 는 대상 경로에 심링크가 한 조각이라도 끼어 있으면 아무것도 쓰지 않고 `warnings` 에
+남겨요(`status: warning`). `.ax/hooks` 를 프로젝트 밖으로 걸어 두면 훅 파일이 통째로 밖에 생기고,
+`.claude/settings.json` 은 그 경로를 등록하니 이후 세션이 프로젝트 밖 코드를 실행하게 돼요. 댕글링 링크도
+같이 막아요 — `[ -e ]` 가 false 라 "없으니 새로 만들자" 로 읽히면 링크가 가리키던 자리에 파일이 생겨요.
 
 ## 동작 모드 — `sensors.mode`
 

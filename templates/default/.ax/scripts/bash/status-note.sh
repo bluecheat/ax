@@ -7,11 +7,17 @@
 #   bash status-note.sh --add  <절> "<한 줄>" [--json]        # 절에 항목 추가 (같은 줄이 있으면 무시)
 #   bash status-note.sh --done <절> "<부분 문자열>" [--json]  # 매칭 항목 제거 — 끝난 건 지워요
 #   bash status-note.sh --set  <절> "<본문>" [--json]         # 절 통째 교체 (여러 줄은 \n 으로)
+#   bash status-note.sh --clear <절> [--json]                 # 절 비우기 (`--set <절> ""` 과 동일)
 #   절: now | next | open | renamed
 #       now      ## 지금 상태        spec-implement 가 halt·완료·레인 보고 시점에 갱신
 #       next     ## 다음             다음 세션이 처음 할 일 1~3개
 #       open     ## 열린 질문        사용자 결정 대기
 #       renamed  ## 이번에 바뀐 이름  레인 보고의 "다른 레인에 넘길 것" — 이름 대조의 SSOT
+#
+# `--set now` 은 마지막 줄 끝에 `(YYYY-MM-DDTHH:MMZ)` 를 박아요. Stop 게이트
+# (`.ax/hooks/stop/spec-gate.sh`) 가 "인계 노트에 적혀 있으니 의도된 halt" 로 인정하는 건
+# **24시간 안에 찍힌 노트만**이에요. 시각이 없으면 옛 노트 한 줄이 새 세션의 게이트를
+# 영원히 침묵시켜요 (다른 session_id 로 몇 번을 불러도 안 잡히던 구멍).
 #
 # 왜 필요한가 — 결정은 ADR, 진행은 tasks.md, 단계는 current-task.json 에 있는데 "막힌 것·열린 질문·
 # 이번에 바뀐 공유 이름·다음 세션이 처음 해야 할 것" 은 어디에도 없었어요. 대화가 압축되면 사라져요.
@@ -38,6 +44,7 @@ while [ $# -gt 0 ]; do
         --add)     MODE=add;  shift; SEC="${1:-}"; shift; TEXT="${1:-}" ;;
         --done)    MODE=done; shift; SEC="${1:-}"; shift; TEXT="${1:-}" ;;
         --set)     MODE=set;  shift; SEC="${1:-}"; shift; TEXT="${1:-}" ;;
+        --clear)   MODE=set;  shift; SEC="${1:-}"; TEXT="" ;;
         --cap)     shift; CAP="${1:-40}" ;;
         --help|-h) SHOW_HELP=true ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;
@@ -45,7 +52,7 @@ while [ $# -gt 0 ]; do
     [ $# -gt 0 ] && shift
 done
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "$EXIT_OK"
 fi
 [ -n "$MODE" ] || MODE=show
@@ -67,8 +74,18 @@ sec_title() {
 }
 if [ "$MODE" != show ] && [ "$MODE" != init ]; then
     sec_title "$SEC" >/dev/null 2>&1 || fail "절은 now|next|open|renamed 중 하나예요 (받은 값: '${SEC}')"
-    [ -n "$TEXT" ] || fail "--${MODE} 에는 본문이 필요해요"
+    # --set 만 빈 본문을 허용해요 = 그 절을 비우는 것 (--clear 와 같음).
+    # --add·--done 은 빈 본문이면 그냥 오타라서 계속 막아요.
+    [ "$MODE" = set ] || [ -n "$TEXT" ] || fail "--${MODE} 에는 본문이 필요해요"
 fi
+
+# `지금 상태` 는 시각을 같이 박아요 — Stop 게이트가 24시간 안의 노트만 인정해요.
+# 이미 박혀 있으면 지우고 다시 박아요 (두 번 붙는 걸 막아요).
+stamp_now() {   # stdin 본문 → 마지막 줄 끝에 (YYYY-MM-DDTHH:MMZ)
+    sed -E 's/[[:space:]]*\([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z\)[[:space:]]*$//' \
+        | awk -v s=" ($(date -u +%Y-%m-%dT%H:%MZ))" \
+              '{ l[NR] = $0 } END { for (i = 1; i <= NR; i++) print l[i] (i == NR ? s : "") }'
+}
 
 # 골격 — zero 가 만든 2절짜리도 여기서 4절로 승격돼요
 ensure_file() {
@@ -182,6 +199,7 @@ case "$MODE" in
     set)
         ensure_file
         body=$(printf '%b' "$TEXT")
+        if [ "$SEC" = now ] && [ -n "$body" ]; then body=$(printf '%s\n' "$body" | stamp_now); fi
         if [ "$DRY_RUN" = true ]; then
             [ "$JSON_MODE" = true ] && json_output "ok" '{"path":"'"$REL"'","dry_run":true}' "dry-run — 안 썼어요" || goax_log "dry-run — 안 썼어요"
         else

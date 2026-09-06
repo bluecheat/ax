@@ -6,7 +6,8 @@
 #   bash check-spec-clarity.sh --file <path>     [--json] [--help]
 #
 # 검사 항목 (게이팅 — fail 시 진행 차단):
-#   1. NEEDS CLARIFICATION 마커 잔존        → fail
+#   1. 미해결 마커 `**NEEDS CLARIFICATION**` 잔존 → fail
+#      (마커 형식만 — 산문에서 이름을 언급하는 건 안 잡아요)
 #   2. placeholder `<...>` 본문 잔존        → fail
 #      (표 셀 `^|` · URL `<http...>` · code fence ``` 화이트리스트)
 #   3. 필수 섹션 본문 1 라인 이상           → fail
@@ -54,7 +55,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# //'
+    sed -n "2,33p" "${BASH_SOURCE[0]}" | sed 's/^# //; s/^#//'
     exit "$EXIT_OK"
 fi
 
@@ -96,7 +97,9 @@ awk '
 ' "$TARGET" > "$TMP_BODY"
 
 # 1. NEEDS CLARIFICATION 검사
-NEEDS_LINES=$(grep -nE "NEEDS CLARIFICATION" "$TMP_BODY" 2>/dev/null || true)
+# 마커 형식 `**NEEDS CLARIFICATION**` 만 — 템플릿 헤더·안내문이 이름을 산문으로
+# 언급하는 걸 마커로 세면 "성실히 채운 spec" 이 통과할 수 없어요.
+NEEDS_LINES=$(grep -nE '\*\*NEEDS CLARIFICATION\*\*' "$TMP_BODY" 2>/dev/null || true)
 if [ -z "$NEEDS_LINES" ]; then
     NEEDS_COUNT=0
 else
@@ -144,8 +147,14 @@ TASKS_TOTAL=0
 TASKS_COMPLETED=0
 TASKS_OPEN=0
 if [ -f "$TASKS_FILE" ]; then
-    TASKS_COMPLETED=$(grep -cE '^- \[x\]' "$TASKS_FILE" 2>/dev/null || true)
-    TASKS_OPEN=$(grep -cE '^- \[ \]' "$TASKS_FILE" 2>/dev/null || true)
+    # code fence 안의 형식 설명 (`- [ ] T001 …`) 은 실 task 가 아니에요 — 걷어내고 세요
+    TASKS_BODY=$(awk '
+        /^[[:space:]]*```/ { fence = !fence; next }
+        fence { next }
+        { print }
+    ' "$TASKS_FILE")
+    TASKS_COMPLETED=$(printf '%s\n' "$TASKS_BODY" | grep -cE '^- \[x\]' 2>/dev/null || true)
+    TASKS_OPEN=$(printf '%s\n' "$TASKS_BODY" | grep -cE '^- \[ \]' 2>/dev/null || true)
     TASKS_TOTAL=$((TASKS_COMPLETED + TASKS_OPEN))
 fi
 

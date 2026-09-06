@@ -91,7 +91,7 @@ C2 (sensors.mode)       ← C1 의 modifier
 | 분류 | 출력 |
 |---|---|
 | S × L0 | "즉시 작업으로 진행. 다른 경로 원하면 말씀." |
-| L × L3 | "spec + plan + tasks + ADR 풀 패키지로 진행. 축소 원하면 tier=standard 명시." |
+| L × L3 | "spec + tasks + research/data-model/quickstart + ADR 풀 패키지로 진행. 축소 원하면 `--tier standard` 명시." |
 | 기타 명확 | 분류 결과 + 권장만 출력, 메뉴 생략 |
 
 모호 영역(M × L2 등 중간 등급) → `[a]/[b]/[c]/[d]` 메뉴 유지 (결정 공간 시각화).

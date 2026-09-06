@@ -145,7 +145,7 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 | M × L2 | spec 권장 | **standard** (spec.md + tasks.md) | spec-validate |
 | M × L3 | spec + tasks | **standard** | spec-validate + evaluator |
 | L × L0~L2 | spec + tasks | **standard** | spec-validate + evaluator |
-| L × L3 / XL × * | spec + tasks + research/data-model/quickstart + contracts + ADR | **full** | spec-validate + ADR + 사람 게이트 |
+| L × L3 / XL × * | spec + tasks + research/data-model/quickstart + contracts + ADR | **full** | spec-validate + evaluator(필수) + 합의 리뷰(필수, architect·evaluator) + ADR + 사람 게이트 |
 
 > tier 는 **standard / full 2단계** (basic·plan.md 폐기 — 설계 결정은 ADR 로). 결정론 SSOT 는 `tier-from-state.sh` — 이 표와 스크립트 매트릭스가 어긋나면 스크립트가 맞아요.
 
@@ -160,10 +160,14 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 
 | 모호 영역 | 이유 |
 |---|---|
-| M × L2 | tier standard / full 둘 다 정당화 가능 |
+| M × L2 | tier standard / full 둘 다 정당화 가능. `spec-validate` 의 합의 리뷰는 M 에서 **선택**이라 — 켤지도 여기서 같이 물어요 |
 | L × L1 ~ L2 | ADR 동반 여부가 진짜 결정 |
 | 도메인 다중 매칭 | 어느 도메인 우선인지 사용자 결정 필요 |
 | domain_risk 미매핑 (default 적용) | 사용자 확인 필요 |
+
+M×L2 에서 사용자가 합의 리뷰를 켜면 `intent_notes.consensus_review="true"` 로 기록해요 (3.5단계) —
+`spec-validate` §2.5 가 `REQ=optional` 일 때 이 값을 읽어 architect·evaluator 리뷰를 자동으로 돌려요.
+켜는 주체가 없으면 `--consensus` 는 사용자가 그 단어를 직접 말했을 때만 발동해서 죽은 옵션이 돼요.
 
 출력엔 분류(Size×Risk·도메인)·권장 경로·사전 검색 결과(관련 spec/ADR/mistakes/룰 토큰)·friction 모드를 담아요. 형식 예 (모호 영역):
 
@@ -176,7 +180,7 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
  사전 검색  관련 spec/ADR/mistakes 경로 + 매칭 룰 토큰
  friction  phase_gate
 
- [a] tier=standard (권장)  [b] tier=full 확대  [c] 재분류
+ [a] tier=standard (권장)  [b] tier=full 확대  [c] 합의 리뷰도 켜기 (architect·evaluator)  [d] 재분류
 ```
 
 ## Workflow
@@ -196,6 +200,7 @@ grep -E "^[[:space:]]+($KEYWORDS):" .ax/config.yml \
 TASK_ID=$(date -u +%Y-%m-%d)-$(printf '%03d' $((RANDOM % 1000)))
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 INTENT_JSON='{}'   # 0단계 답변 — 축별 객체 (예: '{"why":"버그 수정 — 환불 실패"}'), 스킵 시 {}
+                   # M×L2 모호 영역에서 합의 리뷰를 켰으면 '{"consensus_review":"true"}' 도 병합
 
 jq --arg id "$TASK_ID" \
  --arg desc "$DESCRIPTION" \
@@ -233,7 +238,7 @@ jq --arg id "$TASK_ID" \
 
 ### 진행 룰
 
-1. **질문 축은 [`references/reverse-interview.md`](references/reverse-interview.md)** — 프로젝트에 `.ax/docs/reference/reverse-interview.md` 가 있으면 그쪽이 우선 (도메인 특화 축). 작업과 관련된 축 3~5개, 한 라운드 최대 5문, multiple choice 우선.
+1. **질문 축은 [`references/reverse-interview.md`](references/reverse-interview.md)** — 프로젝트에 `.ax/docs/reference/reverse-interview.md` 가 있으면 그쪽이 우선 (도메인 특화 축). 작업과 관련된 축 3~4개, 한 라운드 최대 4문(`AskUserQuestion` 상한), 선택지 2~4개 + multiple choice 우선 — "다른 것" 은 도구가 자동으로 붙여요.
 2. **낯선 영역이면 blind-pass 먼저** — 코드를 읽으면 알 수 있는 건 정찰로 스스로 채우고, 질문은 코드에 없는 것(의도·제약·기준)만. 상세는 references 참조.
 3. **중복 방지** — `intent_notes` 에 이미 key 가 있는 축은 재질문 금지 (0단계 답변 포함): `jq -r '.intent_notes // {} | keys[]' .ax/current-task.json`
 

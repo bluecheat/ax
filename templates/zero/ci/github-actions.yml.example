@@ -45,10 +45,13 @@ jobs:
       - name: negative probes
         run: bash .ax/scripts/bash/zero-probe.sh --json
 
-  # 하네스 자체 점검 — 룰 라벨과 집행 장치가 어긋나면 보고해요 (I1·I5·I6)
+  # 하네스 자체 점검 — 룰 라벨과 집행 장치가 어긋나면 **여기서 세워요** (I1·I5·I6).
+  # --strict 가 없으면 위반이 있어도 exit 0 이라 체크가 늘 초록이에요 (보고 전용).
+  # 아직 안 채운 예시 룰(`<...>`·`YYYY-MM-DD`)은 위반이 아니라 warning 으로 빠지니
+  # 갓 설치한 프로젝트도 첫날부터 이 잡을 켤 수 있어요.
   harness:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: rule enforcement invariants
-        run: bash .ax/scripts/bash/check-rule-enforcement.sh --json
+        run: bash .ax/scripts/bash/check-rule-enforcement.sh --json --strict

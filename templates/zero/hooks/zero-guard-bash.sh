@@ -37,8 +37,72 @@ NORM=$(printf '%s' "$CMD" | tr -d '\047\042' | tr '\t\n' '  ' | sed -E 's/  +/ /
 matches() { printf '%s' "$NORM" | grep -qE "$1"; }
 
 # ── 1. git add -A / . / --all ────────────────────────────────────
-# 명령어 위치의 git add 만 (`# git add -A` 같은 주석·문서 인용은 앞 문자로 걸러져요)
-if matches '(^| |[;&|(])git add ([^;&|]* )?(-A|--all|\.)( |$)'; then
+# **명령 위치**의 git add 만 잡아요. 따옴표 안 문자열(`echo "git add -A"`)·`#` 뒤 주석·
+# 다른 명령의 인자(`grep -rn "git add -A" docs/`)는 실행이 아니라 *언급* 이에요.
+# 언급까지 막으면 룰을 문서에 적지도 못하고, 사람은 우회 습관만 배워요.
+#
+# 판정 절차 — (a) 줄 이음(`\`)을 붙이고 heredoc 본문은 데이터로 건너뛰어요
+#              (b) `#` 뒤 주석을 잘라내고, 따옴표 안은 아래 세 갈래로 나눠요
+#                  · `-c` 뒤 문자열 → 그 자체가 명령이니 세그먼트로 펼쳐요 (`bash -c "…"`)
+#                  · 공백이 든 문자열 → 인용된 문장 = 언급이니 공백으로 지워요
+#                  · 공백 없는 토큰   → 표기 변형일 뿐이니 따옴표만 벗겨요 (`git add '.'`)
+#              (c) `;` `&&` `||` `|` `(` `)` 로 쪼개고 각 세그먼트의 첫 명령만 봐요
+SEGMENTS=$(printf '%s\n' "$CMD" | awk '
+    BEGIN { SQ = sprintf("%c", 39); hd = "" }
+    {
+        line = $0
+        while (line ~ /\\$/ && (getline nxt) > 0) { sub(/\\$/, "", line); line = line nxt }
+
+        if (hd != "") {                       # heredoc 본문 = 데이터, 명령이 아니에요
+            t = line; gsub(/^[[:space:]]+|[[:space:]]+$/, "", t)
+            if (t == hd) hd = ""
+            next
+        }
+
+        out = ""; n = length(line)
+        for (i = 1; i <= n; i++) {
+            c = substr(line, i, 1)
+            if (c == "\\") { out = out "  "; i++; continue }
+            if (c == SQ || c == "\"") {
+                j = index(substr(line, i + 1), c)
+                if (j == 0) { body = substr(line, i + 1); i = n }
+                else        { body = substr(line, i + 1, j - 1); i = i + j }
+                tail = out; sub(/[[:space:]]+$/, "", tail)
+                if (tail ~ /(^|[[:space:]])-c$/) out = out "\n" body "\n"
+                else if (body ~ /[[:space:]]/)   out = out " "
+                else                             out = out body
+                continue
+            }
+            if (c == "#" && (out == "" || substr(out, length(out), 1) == " ")) break
+            out = out c
+        }
+
+        if (match(line, /<<-?[[:space:]]*[^[:space:]<>|&;]*/)) {   # heredoc 시작 표식
+            tok = substr(line, RSTART, RLENGTH)
+            sub(/^<<-?[[:space:]]*/, "", tok)
+            gsub(/"/, "", tok); gsub(SQ, "", tok)
+            if (tok ~ /^[A-Za-z_][A-Za-z0-9_]*$/) hd = tok
+        }
+
+        gsub(/&&|\|\|/, "\n", out)
+        gsub(/[;|&(){}]/, "\n", out)
+        print out
+    }
+')
+
+# 세그먼트 앞의 환경변수 대입·sudo/xargs 류를 걷어내 첫 명령을 드러내요
+HEADS=$(printf '%s\n' "$SEGMENTS" \
+    | sed -E 's/^[[:space:]]+//' \
+    | sed -E 's/^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)+//' \
+    | sed -E 's/^(sudo|command|time|nice|env|xargs)[[:space:]]+//')
+
+# 첫 명령이 git add 인 세그먼트만 (git 의 전역 플래그 `-C <path>` 등은 넘겨요)
+GIT_ADD=$(printf '%s\n' "$HEADS" \
+    | grep -E '^git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+add([[:space:]]|$)' \
+    || true)
+
+if [ -n "$GIT_ADD" ] && printf '%s\n' "$GIT_ADD" \
+    | grep -qE '[[:space:]](-[A-Za-z]*A[A-Za-z]*|--all|\.)([[:space:]]|$)'; then
     printf '[goax] git add -A 차단 — 다른 세션이 같은 트리에 있을 수 있어요. 경로를 적어서 스테이지하세요 (git add <path>).\n' >&2
     exit 2
 fi

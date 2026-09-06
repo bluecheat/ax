@@ -17,6 +17,10 @@
 # 경로가 실제로 적혀 있어야 성립해요. `files:` 가 없는 task 는 겹쳐도 조용히 통과해서,
 # 게이트가 "위반 없음" 이라고 말하는데 실제로는 검사가 안 된 상태가 돼요.
 #
+# ``` 코드펜스 안의 줄은 건너뛰어요 — 형식 설명용 예시 task 가 실 task 로 세면 안 되니까요.
+# `files:` 경로는 비교 전에 정규화해요 (`./` 제거 · 중복 `/` · 끝 `/`) — `src/a.ts` 와
+# `./src/a.ts` 는 같은 파일이고, 표기 차이로 경합 검출을 빠져나갈 수 없어요.
+#
 # 세는 대상은 `- [ ]` 미완료 task 뿐이에요. 완료(`[x]`)는 이제 안 쓰고,
 # 보류(`[~]`)는 이번 라운드에 안 돌아요.
 #
@@ -29,7 +33,7 @@
 # 소유 레인은 **정하지 않아요.** 누가 어느 파일을 가질지는 판단이고, 이 스크립트는
 # 사실만 줘요. 소유자 배정은 `/lane` skill 이 사람과 함께 해요.
 #
-# Exit: 0 ok (경합이 있어도 0 — 판단은 caller) / 1 error
+# Exit: 0 ok (경합이 있어도 0 — 판단은 caller) / 1 error (tasks.md 없음 · --min 오류 · --spec 모호)
 
 set -euo pipefail
 SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,7 +55,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "$EXIT_OK"
 fi
 
@@ -68,14 +72,41 @@ if [ -z "$SPEC" ] && command -v jq >/dev/null 2>&1; then
         SPEC=$(basename "$(jq -r '.spec_dir // empty' "$TF" 2>/dev/null || true)")
     fi
 fi
+# --spec 해석은 공통 규칙 (정확 일치 → prefix 1개 → 실패)
+if [ -n "$SPEC" ]; then
+    RESOLVED=$(goax_resolve_spec "$SPEC" "$PROJECT_ROOT/.ax/docs/spec") && RC=0 || RC=$?
+    if [ "$RC" -eq 0 ]; then
+        SPEC="$RESOLVED"
+    elif [ "$RC" -eq 2 ]; then
+        if [ "$JSON_MODE" = true ]; then json_error "--spec '$SPEC' 이 여러 spec 에 걸려요: ${GOAX_SPEC_CANDIDATES} — 하나를 정확히 적으세요"; fi
+        goax_error "--spec '$SPEC' 이 여러 spec 에 걸려요: ${GOAX_SPEC_CANDIDATES}"; exit "$EXIT_ERROR"
+    fi
+fi
+
 TASKS="$PROJECT_ROOT/.ax/docs/spec/$SPEC/tasks.md"
 if [ ! -f "$TASKS" ]; then
-    if [ "$JSON_MODE" = true ]; then json_error "tasks.md 를 찾을 수 없어요: .ax/docs/spec/$SPEC/tasks.md"; fi
-    goax_error "no tasks.md for spec '$SPEC'"; exit "$EXIT_ERROR"
+    if [ "$JSON_MODE" = true ]; then json_error "tasks.md 를 찾을 수 없어요: .ax/docs/spec/${SPEC:-<없음>}/tasks.md"; fi
+    goax_error "no tasks.md for spec '${SPEC:-<none>}'"; exit "$EXIT_ERROR"
 fi
 
 # 파싱 — tasks-plan.sh 와 같은 한 줄 형식을 읽어요: "ID|state|P|files(,)"
 PARSED=$(awk '
+    function norm(p) {
+        gsub(/\/+/, "/", p)
+        while (sub(/^\.\//, "", p)) ;
+        while (sub(/\/\.\//, "/", p)) ;
+        sub(/\/+$/, "", p)
+        return p
+    }
+    function normlist(s,   n, a, i, v, out) {
+        if (s == "") return ""
+        n = split(s, a, ",")
+        out = ""
+        for (i = 1; i <= n; i++) { v = norm(a[i]); if (v != "") out = (out == "" ? v : out "," v) }
+        return out
+    }
+    /^[[:space:]]*```/ { fence = !fence; next }
+    fence { next }
     /^- \[[ x~X]\] / {
         line = $0
         st = "open"
@@ -88,7 +119,7 @@ PARSED=$(awk '
         if (match(f, /files:[ ]*/)) {
             f = substr(f, RSTART + RLENGTH)
             gsub(/[ ]*,[ ]*/, ",", f); gsub(/^[ ]+|[ ]+$/, "", f)
-            files = f
+            files = normlist(f)
         }
         if (id != "") printf "%s|%s|%s|%s\n", id, st, par, files
     }

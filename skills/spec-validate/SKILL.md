@@ -36,16 +36,16 @@ spec.md 가 single source of truth.
 
 ```bash
 RESULT=$(bash .ax/scripts/bash/check-spec-clarity.sh --json --spec "$SPEC")
-STATUS=$(echo "$RESULT" | jq -r '.status')
-NEEDS=$(echo "$RESULT" | jq -r '.result.needs_clarification')
-PLACE=$(echo "$RESULT" | jq -r '.result.placeholders')
-EMPTY=$(echo "$RESULT" | jq -r '.result.empty_sections | join(", ")')
-TASKS_DONE=$(echo "$RESULT" | jq -r '.result.tasks_progress.completed')
-TASKS_TOTAL=$(echo "$RESULT" | jq -r '.result.tasks_progress.total')
-TASKS_OPEN=$(echo "$RESULT"  | jq -r '.result.tasks_progress.open')
-AC_DONE=$(echo "$RESULT"     | jq -r '.result.ac_progress.completed')
-AC_TOTAL=$(echo "$RESULT"    | jq -r '.result.ac_progress.total')
-WARNINGS=$(echo "$RESULT"    | jq -r '.warnings // [] | join("; ")')
+STATUS=$(printf '%s\n' "$RESULT" | jq -r '.status')
+NEEDS=$(printf '%s\n' "$RESULT" | jq -r '.result.needs_clarification')
+PLACE=$(printf '%s\n' "$RESULT" | jq -r '.result.placeholders')
+EMPTY=$(printf '%s\n' "$RESULT" | jq -r '.result.empty_sections | join(", ")')
+TASKS_DONE=$(printf '%s\n' "$RESULT" | jq -r '.result.tasks_progress.completed')
+TASKS_TOTAL=$(printf '%s\n' "$RESULT" | jq -r '.result.tasks_progress.total')
+TASKS_OPEN=$(printf '%s\n' "$RESULT"  | jq -r '.result.tasks_progress.open')
+AC_DONE=$(printf '%s\n' "$RESULT"     | jq -r '.result.ac_progress.completed')
+AC_TOTAL=$(printf '%s\n' "$RESULT"    | jq -r '.result.ac_progress.total')
+WARNINGS=$(printf '%s\n' "$RESULT"    | jq -r '.warnings // [] | join("; ")')
 ```
 
 스크립트 검사 (게이팅 — fail 시 진행 차단):
@@ -68,13 +68,13 @@ goax 가 얹은 건 둘이에요: 리뷰어는 §2 를 **통과한** spec 만 �
 
 ```bash
 REVIEW=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --status --json)
-REQ=$(echo "$REVIEW" | jq -r '.result.required')      # required (L·XL) | optional (M) | none (S)
+REQ=$(printf '%s\n' "$REVIEW" | jq -r '.result.required')      # required (L·XL) | optional (M) | none (S)
 ```
 
 | `REQ` | 할 것 |
 |---|---|
 | `none` | 건너뛰어요. S 는 리뷰 대상이 아니에요 |
-| `optional` | 사용자가 `--consensus`·"합의 리뷰" 라고 했을 때만 돌려요. 아니면 §3 으로 |
+| `optional` | 사용자가 이 대화에서 `--consensus`·"합의 리뷰" 라고 했거나, `current-task.json` 의 `intent_notes.consensus_review = "true"` (triage 의 M×L2 모호 영역 메뉴에서 켠 경우) 면 돌려요. 아니면 §3 으로 |
 | `required` | 돌려요. `pass` 가 true 가 될 때까지 (라운드 상한 3) |
 
 risk 는 안 봐요 — risk 는 구현 리뷰(evaluator, `tasks-gate.sh` G6)가 이미 반영해요.
@@ -83,10 +83,10 @@ risk 는 안 봐요 — risk 는 구현 리뷰(evaluator, `tasks-gate.sh` G6)가
 
 ```bash
 SNAP=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --snapshot --json)
-SHA=$(echo "$SNAP" | jq -r '.result.sha')
-A_FILE=$(echo "$SNAP" | jq -r '.result.architect_file')
-E_FILE=$(echo "$SNAP" | jq -r '.result.evaluator_file')
-echo "$SNAP" | jq -r '.warnings[]?'                    # 라운드 상한 경고
+SHA=$(printf '%s\n' "$SNAP" | jq -r '.result.sha')
+A_FILE=$(printf '%s\n' "$SNAP" | jq -r '.result.architect_file')
+E_FILE=$(printf '%s\n' "$SNAP" | jq -r '.result.evaluator_file')
+printf '%s\n' "$SNAP" | jq -r '.warnings[]?'                    # 라운드 상한 경고
 ```
 
 1. **architect** 를 `Agent` 도구로 띄워요 (`goax:architect`, vendor 설치면 `architect`). 브리프에는
@@ -99,13 +99,15 @@ echo "$SNAP" | jq -r '.warnings[]?'                    # 라운드 상한 경고
 
 ```bash
 REVIEW=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --status --json)
-PASS=$(echo "$REVIEW" | jq -r '.result.pass')
-echo "$REVIEW" | jq -r '"architect \(.result.architect.verdict // "없음") · evaluator \(.result.evaluator.verdict // "없음") — \(.result.reason)"'
+PASS=$(printf '%s\n' "$REVIEW" | jq -r '.result.pass')
+printf '%s\n' "$REVIEW" | jq -r '"architect \(.result.architect.verdict // "없음") · evaluator \(.result.evaluator.verdict // "없음") — \(.result.reason)"'
 ```
 
 4. `pass=false` 면 두 파일을 **이 세션이** 읽고 종합해 spec.md 를 고쳐요. 고치면 sha 가 바뀌니
    §2 → `--snapshot` 부터 다시예요 (한쪽만 sha 가 어긋나면 그쪽만 다시 띄워요). `재논의 필요` 가
-   하나라도 있으면 spec 자체가 틀렸다는 뜻이라 사용자 결정으로 halt.
+   하나라도 있으면 spec 자체가 틀렸다는 뜻이라 사용자 결정으로 halt. **round ≥ 3 이면 지적을
+   더 반영하려 하지 말고 그 자체로 halt** — 라운드를 더 돌리는 건 리뷰가 아니라 spec 정의가
+   문제라는 신호예요 (아래 "상한 3" 참조). `--snapshot` 응답의 `warnings[]` 가 상한 경고를 줘요.
 5. `pass=true` 면 합본을 남기고 §3 으로:
 
 ```bash

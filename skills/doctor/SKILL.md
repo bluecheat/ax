@@ -33,10 +33,15 @@ ROOT=$(pwd)   # 또는 감지한 PROJECT_ROOT
 ## 2. 빠른 사전 통계
 
 ```bash
-echo "Spirit rules: $(ls "$ROOT"/.ax/spirit/rules/*.md 2>/dev/null | wc -l) 카테고리"
+SL_PRE=$(bash "$ROOT/.ax/scripts/bash/spirit-lint.sh" --json 2>/dev/null)
+echo "Spirit rules: $(echo "$SL_PRE" | jq -r '.result.rules_files // 0') 카테고리"
 echo "ADR: $(ls "$ROOT"/.ax/docs/adr/*.md 2>/dev/null | wc -l) · Spec: $(ls -d "$ROOT"/.ax/docs/spec/[0-9][0-9][0-9]-* 2>/dev/null | wc -l) · Mistakes: $(ls "$ROOT"/.ax/mistakes/*.md 2>/dev/null | grep -v README | wc -l)"
-grep -h "^category:" "$ROOT"/.ax/mistakes/*.md 2>/dev/null | awk '{print $2}' | sort | uniq -c | sort -rn   # 미승격 mistakes
+bash "$ROOT/.ax/scripts/bash/promote-mistake.sh" --json 2>/dev/null \
+ | jq -r '.result.candidates[]? | "\(.category): \(.count)건"'   # 미승격 mistakes 카테고리 분포 (threshold 이상만)
 ```
+
+Spirit 카테고리 수를 `spirit-lint.sh` 로, mistake 카테고리 집계를 `promote-mistake.sh` 로 받아요 —
+같은 걸 §3.7·audit 이 또 세면 둘이 갈릴 수 있으니, 여기서도 그 스크립트를 다시 호출해요 (§0 원칙).
 
 ## 3. 검사 — 스크립트 → 섹션
 

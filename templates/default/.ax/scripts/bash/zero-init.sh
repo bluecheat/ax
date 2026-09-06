@@ -176,6 +176,14 @@ if [ "$NO_HOOK" != true ]; then
         : # dry-run 은 아무것도 안 써요
     else
         cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y%m%d-%H%M%S)"
+        # 백업은 최신 3개만 — 재실행마다 쌓이면 .claude/ 가 백업 무덤이 되고, 정작
+        # 되돌릴 때 어느 게 직전인지 사람이 못 골라요.
+        BAK_OLD=$(ls -1t "$SETTINGS".bak.* 2>/dev/null | tail -n +4 || true)
+        if [ -n "$BAK_OLD" ]; then
+            printf '%s\n' "$BAK_OLD" | while IFS= read -r old; do
+                if [ -n "$old" ]; then rm -f "$old"; fi
+            done
+        fi
         STMP="$SETTINGS.tmp.$$"
         if jq --arg cmd "$HOOK_CMD" '
             .hooks.PreToolUse = (
@@ -191,6 +199,7 @@ if [ "$NO_HOOK" != true ]; then
             mv "$STMP" "$SETTINGS"
             HOOK_REGISTERED=true
         else
+            rm -f "$STMP"      # jq 가 죽으면 반쪽짜리 .tmp.$$ 가 .claude/ 에 남아요
             add_warn "settings.json 머지 실패 — 원본은 그대로예요"
         fi
     fi

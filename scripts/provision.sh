@@ -17,6 +17,9 @@
 #   ② MANIFEST `src -> dst`  — seed-only. 이미 있으면 안 건드려요 (진행 중인 런타임 상태)
 #   ③ MANIFEST 외 조건부     — 사용자가 customize 하는 자산. 있으면 `.suggested` 로 옆에
 #
+# 심볼릭 링크는 따라가지 않아요 — 대상 경로에 링크가 한 조각이라도 끼어 있으면 건너뛰고
+# `warnings` 에 남겨요 (`status: warning`). 댕글링 링크도 마찬가지예요.
+#
 # Output (--json):
 #   {"status":"ok","result":{"target":"...","copied":N,"seeded_kept":N,
 #     "suggested":[...],"preserved":[...],"opencode":false,
@@ -46,7 +49,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 0
 fi
 
@@ -62,7 +65,7 @@ die()  {
     exit 1
 }
 
-WARNINGS=""; SUGGESTED=""; PRESERVED=""
+WARNINGS=""; SUGGESTED=""; PRESERVED=""; LINK_HITS=""
 COPIED=0; SEEDED_KEPT=0
 
 TPL="$PLUGIN_ROOT/templates/default"
@@ -77,13 +80,45 @@ PROJECT_DIR="$(pwd)"
 
 GOAX_VER=$(cat "$PLUGIN_ROOT/VERSION" 2>/dev/null || echo unknown)
 
+# ── 심볼릭 링크 가드 (CWE-59) ───────────────────────────────────────────
+# 대상 경로에 링크가 끼어 있으면 아무것도 쓰지 않아요. `.ax/hooks` 를 프로젝트 밖
+# 디렉토리로 걸어 두면 훅 파일이 통째로 밖에 생기고, `.claude/settings.json` 은 그 경로를
+# 등록하니 이후 세션이 프로젝트 밖 코드를 실행하게 돼요. 댕글링 링크는 `[ -e ]` 가 false 라
+# "없으니 새로 만들자" 로 읽혀서 링크가 가리키던 자리에 파일이 생겨요 — `[ -L ]` 로 봐야 둘 다 잡혀요.
+# 경로 **구성요소 전부**를 봐요. 링크는 마지막 조각이 아니라 중간에 끼거든요
+# (`.ax/hooks/pre-bash/x.sh` 를 쓸 때 링크인 건 `.ax/hooks`).
+first_symlink() {   # first_symlink <프로젝트 상대 경로> — 첫 링크 조각을 stdout 으로, 없으면 1
+    local rest="${1#./}" acc="" seg
+    while [ -n "$rest" ]; do
+        seg="${rest%%/*}"
+        if [ "$seg" = "$rest" ]; then rest=""; else rest="${rest#*/}"; fi
+        [ -z "$seg" ] && continue
+        acc="${acc:+$acc/}$seg"
+        if [ -L "$acc" ]; then printf '%s' "$acc"; return 0; fi
+    done
+    return 1
+}
+link_guard() {   # link_guard <dst> — 통과면 0, 링크가 끼어 있으면 경고 남기고 1
+    local hit
+    hit=$(first_symlink "$1") || return 0
+    case "$LINK_HITS" in *"[$hit]"*) return 1 ;; esac   # 같은 링크로 수십 번 경고하지 않아요
+    LINK_HITS="${LINK_HITS}[$hit]"
+    warn "심볼릭 링크라 건너뛰었어요: $hit → $(readlink "$hit" 2>/dev/null || printf '?') (프로젝트 밖으로 쓰는 걸 막아요 — 링크를 지우고 다시 실행하세요)"
+    return 1
+}
+
 # ── 복사 프리미티브 (dry-run 을 한 곳에서만 처리) ────────────────────────
-mk()  { [ "$DRY_RUN" = true ] || mkdir -p "$1" 2>/dev/null || warn "mkdir 실패: $1"; }
+mk()  {
+    link_guard "$1" || return 0
+    [ "$DRY_RUN" = true ] || mkdir -p "$1" 2>/dev/null || warn "mkdir 실패: $1"
+}
 cpf() {   # cpf <src> <dst>
+    link_guard "$2" || return 0
     if [ "$DRY_RUN" = true ]; then COPIED=$((COPIED+1)); return 0; fi
     if cp "$1" "$2" 2>/dev/null; then COPIED=$((COPIED+1)); else warn "복사 실패: $1 → $2"; fi
 }
 cpd() {   # cpd <src-dir-with-trailing-dot> <dst>
+    link_guard "$2" || return 0
     if [ "$DRY_RUN" = true ]; then COPIED=$((COPIED+1)); return 0; fi
     if cp -R "$1" "$2" 2>/dev/null; then COPIED=$((COPIED+1)); else warn "재귀 복사 실패: $1 → $2"; fi
 }
@@ -94,6 +129,7 @@ same() { [ -f "$1" ] && [ -f "$2" ] && cmp -s "$1" "$2"; }
 cond() {  # cond <tpl-relative-src> <dst>
     local src="$TPL/$1" dst="$2"
     [ -f "$src" ] || { warn "템플릿 부재: $1"; return 0; }
+    link_guard "$dst" || return 0
     mk "$(dirname "$dst")"
     if [ -e "$dst" ]; then
         same "$src" "$dst" && return 0
@@ -178,7 +214,7 @@ fi
 # **plugin 원본**에서 계산해요. 방금 설치한 로컬에서 계산하면, 아래에서 사용자
 # 수정본을 복원한 뒤 .origin 이 그 수정본을 "출고본"으로 기록해버려서
 # user_modified 가 영원히 false 가 돼요 (드리프트 감지 실명).
-if [ "$DRY_RUN" != true ] && [ -d "$TPL/.ax/_templates/spec" ]; then
+if [ "$DRY_RUN" != true ] && [ -d "$TPL/.ax/_templates/spec" ] && link_guard .ax/_templates/spec/.origin; then
     mkdir -p .ax/_templates/spec
     (
         cd "$TPL/.ax/_templates/spec" && \
@@ -308,7 +344,7 @@ fi
 # runtime 파일(.ax/state.json 등)·임시본(.ax/*.suggested)이 PR diff 노이즈가 되는 걸 방지.
 GI_ADDED=0
 GITIGNORE_TPL="$TPL/.gitignore.template"
-if [ -f "$GITIGNORE_TPL" ]; then
+if [ -f "$GITIGNORE_TPL" ] && link_guard .gitignore; then
     if [ -f .gitignore ]; then
         while IFS= read -r gline; do
             case "$gline" in ''|\#*) continue ;; esac
@@ -325,7 +361,7 @@ if [ -f "$GITIGNORE_TPL" ]; then
 fi
 
 # ── 7. 메타 ─────────────────────────────────────────────────────────────
-if [ "$DRY_RUN" != true ]; then
+if [ "$DRY_RUN" != true ] && link_guard .ax/version; then
     mk .ax
     {
         printf 'goax: %s\n' "$GOAX_VER"

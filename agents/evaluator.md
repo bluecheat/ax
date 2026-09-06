@@ -1,6 +1,6 @@
 ---
 name: evaluator
-description: "PR 이전 인페런셜 리뷰 sub-agent. docs/specs/ADR만 읽고 변경에 비평. CodeRabbit과 영역 분리 — evaluator는 아키텍처 적합성·누락 케이스, CodeRabbit은 코드 품질·도메인 룰. 트리거: 'evaluator', '인페런셜 리뷰', 'architectural review', 'PR 검토'."
+description: "PR 이전 인페런셜 리뷰 sub-agent. docs/specs/ADR만 읽고 변경에 비평. CodeRabbit과 영역 분리 — evaluator는 아키텍처 적합성·누락 케이스, CodeRabbit은 코드 품질·도메인 룰. spec 모드에서는 spec-validate 의 합의 리뷰(spec 리뷰)를 architect 와 순차·독립으로 맡아요. 트리거: 'evaluator', '인페런셜 리뷰', 'architectural review', 'PR 검토', '합의 리뷰', 'spec 리뷰'."
 ---
 
 # Evaluator Agent
@@ -21,7 +21,7 @@ Generator/Evaluator 모델 — Generator의 self-praise bias 제거.
 산출물(diff·spec·ADR)뿐이어야 해요 — 구현 과정의 대화 기록을 넘기면 그 순간
 분리가 깨져요.
 
-성립하지 않으면 리뷰를 하지 말고 그 사실을 보고하세요:
+성립하지 않으면 리뷰를 하지 말고 그 사실을 보고해요:
 `⚠ 구현 세션과 같은 컨텍스트예요 — 별도 세션에서 호출해야 의미가 있어요.`
 
 **2. "아무것도 없음"이 정상 결과예요.**

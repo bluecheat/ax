@@ -6,6 +6,13 @@
 #   source "$(dirname "$0")/common.sh"
 #   PROJECT_ROOT=$(find_project_root) || exit 1
 
+# 로케일 — 글롭·정규식의 문자 범위를 바이트 순서로 고정해요.
+# en_US.UTF-8 collation 에서 `[a-z]` 는 대문자를 삼켜요 (정렬이 aAbB…zZ 라 `[a-z]` 가 `Z` 만
+# 뺀 전부를 포함). 실측: `case "$x" in [a-z]*)` 검증이 `Payment` 를 통과시키고 뒤이은 `sed -E`
+# 가 같은 값을 거부해서, config.yml 의 domain_risk 4개가 status: ok 인 채로 사라졌어요.
+# 새 코드는 `[[:lower:]]`·`[[:upper:]]`·`[[:alnum:]]` 를 쓰고, 이 export 는 옛 브래킷의 안전망이에요.
+export LC_COLLATE=C
+
 # Exit codes
 EXIT_OK=0
 EXIT_ERROR=1
@@ -298,6 +305,121 @@ goax_rules_matching() {
             fi
         done < <(goax_yaml_list "$f" paths)
     done
+}
+
+# ─── 파일 쓰기 락 ───────────────────────────────────────────────────
+# goax_lock <lockdir> [timeout_s]  ·  goax_unlock <lockdir>  ·  goax_unlock_all
+#   read → 변환 → tmp → mv 를 통째로 감싸요. `mv` 자체는 원자적이지만 lost-update 는 못 막아요 —
+#   두 프로세스가 같은 원본을 읽으면 나중에 mv 하는 쪽이 앞의 변경을 통째로 덮어써요.
+#   실측(레인 원장): `--report A` ‖ `--report B` 30회 중 30회 유실(보고 16줄 중 8줄만 남음),
+#   tasks-gate 의 task_seal 은 10회 중 5회 유실 — G4 "미완료를 지워서 통과" 방어가 같이 사라져요.
+#   mkdir 은 POSIX 에서 원자적이라 flock(리눅스 전용) 없이 macOS/BSD 에서도 상호배제가 돼요.
+#
+#   같은 `tmp.$$` && `mv` 패턴을 쓰는 스크립트는 전부 이 헬퍼를 거쳐야 해요:
+#     lanes-dispatch · tasks-gate · status-note · register-spirit-hook · build-memory ·
+#     zero-init · zero-domain-risk · constitution-apply · update-state
+#
+# Usage:
+#   goax_lock "$FILE.lock" || fail "다른 프로세스가 원장을 쓰는 중이에요"
+#   ... 읽고 바꾸고 mv ...
+#   goax_unlock "$FILE.lock"
+#
+# 이미 EXIT trap 을 건 스크립트는 그 trap 안에서 goax_unlock_all 을 같이 부르세요 —
+# goax_lock 이 거는 trap 이 기존 trap 을 덮어써요.
+GOAX_LOCKS_HELD=""                              # 개행 구분 (경로에 공백이 있어도 안전)
+GOAX_LOCK_STALE="${GOAX_LOCK_STALE:-60}"        # 이보다 오래 잡힌 락은 죽은 프로세스로 봐요
+
+goax_lock() {
+    local dir="${1:-}" timeout="${2:-10}" waited=0 iv="0.05" inc=5 now mt age pid
+    [ -n "$dir" ] || return 1
+    while :; do
+        if mkdir "$dir" 2>/dev/null; then
+            printf '%s\n' "$$" > "$dir/pid" 2>/dev/null || true
+            GOAX_LOCKS_HELD="${GOAX_LOCKS_HELD}${dir}
+"
+            trap 'goax_unlock_all' EXIT INT TERM
+            return 0
+        fi
+        # stale 회수 — 2초 넘게 기다린 뒤에만 검사해요 (빠른 경합에서 stat/date 를 안 띄우려고)
+        if [ "$waited" -ge 200 ]; then
+            now=$(date +%s)
+            mt=$(stat -f %m "$dir" 2>/dev/null || stat -c %Y "$dir" 2>/dev/null || echo "$now")
+            age=$((now - mt))
+            pid=$(cat "$dir/pid" 2>/dev/null || true)
+            if [ "$age" -gt "$GOAX_LOCK_STALE" ] \
+               || { [ "$age" -gt 5 ] && [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; }; then
+                goax_warn "stale 락 회수: $dir (${age}s · pid ${pid:-?})"
+                rm -rf "$dir" 2>/dev/null || true
+                continue
+            fi
+        fi
+        if [ "$waited" -ge $((timeout * 100)) ]; then
+            goax_warn "락 대기 시간 초과: $dir (${timeout}s)"
+            return 1
+        fi
+        sleep "$iv" 2>/dev/null || sleep 1
+        waited=$((waited + inc))
+        if [ "$iv" = "0.05" ]; then iv="0.1"; inc=10
+        elif [ "$iv" = "0.1" ]; then iv="0.2"; inc=20; fi
+    done
+}
+
+goax_unlock() {
+    local dir="${1:-}" keep="" d oldIFS
+    [ -n "$dir" ] || return 0
+    rm -rf "$dir" 2>/dev/null || true
+    oldIFS="$IFS"; IFS='
+'
+    for d in $GOAX_LOCKS_HELD; do
+        [ -z "$d" ] && continue
+        [ "$d" = "$dir" ] && continue
+        keep="${keep}${d}
+"
+    done
+    IFS="$oldIFS"
+    GOAX_LOCKS_HELD="$keep"
+    return 0
+}
+
+goax_unlock_all() {
+    local d oldIFS
+    oldIFS="$IFS"; IFS='
+'
+    for d in $GOAX_LOCKS_HELD; do
+        [ -n "$d" ] && rm -rf "$d" 2>/dev/null
+    done
+    IFS="$oldIFS"
+    GOAX_LOCKS_HELD=""
+    return 0
+}
+
+# ─── spec 인자 해석 ─────────────────────────────────────────────────
+# goax_resolve_spec <spec> [spec-base-dir]
+#   `--spec 001` 같은 축약을 한 규칙으로 풀어요: 정확 일치 → prefix 일치가 정확히 1개 → 실패.
+#   같은 인자에 스크립트마다 다른 답(검사 · 조용한 성공 · 에러)이 나오던 걸 없애요.
+#   반환: 0 = 해석됨(디렉토리 이름을 stdout 으로) · 1 = 없음 · 2 = 후보 여럿
+#         후보 여럿이면 GOAX_SPEC_CANDIDATES 에 공백 구분으로 담아요.
+GOAX_SPEC_CANDIDATES=""
+goax_resolve_spec() {
+    local want="${1:-}" base="${2:-}" root hits n
+    GOAX_SPEC_CANDIDATES=""
+    [ -n "$want" ] || return 1
+    if [ -z "$base" ]; then
+        root="${CLAUDE_PROJECT_DIR:-$(find_project_root 2>/dev/null || pwd)}"
+        base="$root/.ax/docs/spec"
+    fi
+    [ -d "$base" ] || return 1
+    if [ -d "$base/$want" ]; then printf '%s' "$want"; return 0; fi
+    hits=$(find "$base" -mindepth 1 -maxdepth 1 -type d -name "${want}*" 2>/dev/null \
+           | sed 's|.*/||' | sort)
+    n=$(printf '%s\n' "$hits" | grep -c . || true); n=${n:-0}
+    if [ "$n" -eq 1 ]; then printf '%s' "$hits"; return 0; fi
+    if [ "$n" -gt 1 ]; then
+        GOAX_SPEC_CANDIDATES=$(printf '%s' "$hits" | tr '\n' ' ')
+        GOAX_SPEC_CANDIDATES="${GOAX_SPEC_CANDIDATES% }"
+        return 2
+    fi
+    return 1
 }
 
 # Find project root — fallback chain:

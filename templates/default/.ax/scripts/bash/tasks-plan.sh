@@ -9,6 +9,10 @@
 #   parallel    그중 `[P]` 가 붙었고 서로 파일이 안 겹치는 것
 #   violations  `[P]` 인데 다른 `[P]` 와 파일이 겹치는 것 — 주장 검증
 #
+# ``` 코드펜스 안의 줄은 건너뛰어요 — 형식 설명용 예시 task 가 실 task 로 세면 같은 ID 가
+# ready 와 blocked 양쪽에 나와요. `files:` 경로는 비교 전에 정규화해요 (`./` 제거 · 중복 `/` ·
+# 끝 `/`) — `src/a.ts` 와 `./src/a.ts` 는 같은 파일이고 표기 차이로 겹침 검사를 빠져나갈 수 없어요.
+#
 # **wave 를 만들지 않아요.** "1차 전원 완료 → 2차 시작" 은 배리어라, 가장 느린
 # 하나가 나머지를 붙잡아요. 항목별로 "내 의존이 끝났으면 나는 준비됨" 이 맞아요.
 #
@@ -20,7 +24,7 @@
 #   {"status":"ok","result":{"spec":"012-x","ready":["T002"],"parallel":["T002"],
 #     "blocked":["T003"],"violations":[{"tasks":["T005","T006"],"file":"a.kt"}]},...}
 #
-# Exit: 0 ok / 1 error
+# Exit: 0 ok / 1 error (tasks.md 없음 · --spec 이 여러 spec 에 걸림)
 
 set -uo pipefail
 SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,7 +45,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,27p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "$EXIT_OK"
 fi
 
@@ -51,19 +55,46 @@ if [ -z "$SPEC" ] && command -v jq >/dev/null 2>&1; then
     TF="$PROJECT_ROOT/.ax/current-task.json"
     [ -f "$TF" ] && SPEC=$(basename "$(jq -r '.spec_dir // empty' "$TF" 2>/dev/null || true)")
 fi
+# --spec 해석은 공통 규칙 (정확 일치 → prefix 1개 → 실패) — 스크립트마다 다르면 같은 인자에 다른 답이 나와요
+if [ -n "$SPEC" ]; then
+    RESOLVED=$(goax_resolve_spec "$SPEC" "$PROJECT_ROOT/.ax/docs/spec") && RC=0 || RC=$?
+    if [ "$RC" -eq 0 ]; then
+        SPEC="$RESOLVED"
+    elif [ "$RC" -eq 2 ]; then
+        if [ "$JSON_MODE" = true ]; then json_error "--spec '$SPEC' 이 여러 spec 에 걸려요: ${GOAX_SPEC_CANDIDATES} — 하나를 정확히 적으세요"; fi
+        goax_error "--spec '$SPEC' 이 여러 spec 에 걸려요: ${GOAX_SPEC_CANDIDATES}"; exit "$EXIT_ERROR"
+    fi
+fi
+
 TASKS="$PROJECT_ROOT/.ax/docs/spec/$SPEC/tasks.md"
 if [ ! -f "$TASKS" ]; then
-    if [ "$JSON_MODE" = true ]; then json_error "tasks.md 를 찾을 수 없어요: .ax/docs/spec/$SPEC/tasks.md"; fi
-    goax_error "no tasks.md for spec '$SPEC'"; exit "$EXIT_ERROR"
+    if [ "$JSON_MODE" = true ]; then json_error "tasks.md 를 찾을 수 없어요: .ax/docs/spec/${SPEC:-<없음>}/tasks.md"; fi
+    goax_error "no tasks.md for spec '${SPEC:-<none>}'"; exit "$EXIT_ERROR"
 fi
 
 # 파싱 — awk 한 번에. task 줄 + 뒤따르는 `의존:` 들여쓰기 줄을 같이 읽어요.
 # 출력: "ID|state|P|files(,)|deps(,)"
 PARSED=$(awk '
+    function norm(p) {
+        gsub(/\/+/, "/", p)
+        while (sub(/^\.\//, "", p)) ;
+        while (sub(/\/\.\//, "/", p)) ;
+        sub(/\/+$/, "", p)
+        return p
+    }
+    function normlist(s,   n, a, i, v, out) {
+        if (s == "") return ""
+        n = split(s, a, ",")
+        out = ""
+        for (i = 1; i <= n; i++) { v = norm(a[i]); if (v != "") out = (out == "" ? v : out "," v) }
+        return out
+    }
     function flush() {
         if (id != "") printf "%s|%s|%s|%s|%s\n", id, st, par, files, deps
         id=""; st=""; par="0"; files=""; deps=""
     }
+    /^[[:space:]]*```/ { fence = !fence; next }
+    fence { next }
     /^- \[[ x~X]\] / {
         flush()
         line = $0
@@ -76,7 +107,7 @@ PARSED=$(awk '
         if (match(f, /files:[ ]*/)) {
             f = substr(f, RSTART + RLENGTH)
             gsub(/[ ]*,[ ]*/, ",", f); gsub(/^[ ]+|[ ]+$/, "", f)
-            files = f
+            files = normlist(f)
         }
         next
     }

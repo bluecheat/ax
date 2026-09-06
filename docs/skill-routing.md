@@ -26,8 +26,8 @@ Size·Risk 등급 정의는 [`reference/triage-matrix.md`](reference/triage-matr
 | M × L0~L1 | inline (+ lint) → commit | — (standard 선택 가능) | autopilot / phase_gate |
 | M × L2 | `spec` → spec-tasks → 구현 | standard 또는 full (모호 영역 — 메뉴) | phase_gate |
 | M × L3 | `spec` → spec-tasks → 구현 (+ evaluator) | standard | per_task |
-| L × L0~L2 | `spec` → spec-tasks → 구현 (+ ADR 권장) | standard | phase_gate |
-| L × L3 / XL × * | `adr` 먼저 → `spec --tier full` → spec-tasks → 구현 (+ architect · evaluator 게이트) | full | per_task |
+| L × L0~L2 | `spec` → spec-tasks → 구현 (+ evaluator 필수 · ADR 권장) | standard | phase_gate |
+| L × L3 / XL × * | `adr` 먼저 → `spec --tier full` → spec-tasks → 구현 (+ architect·evaluator 합의 리뷰 필수 + evaluator 게이트) | full | per_task |
 
 ## 두 가지 spec 길
 

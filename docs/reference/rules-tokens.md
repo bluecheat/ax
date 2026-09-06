@@ -119,7 +119,7 @@ bash .ax/scripts/bash/rules-index.sh --find AX:CRITICAL:001   # 토큰 정확 �
 ## 안티 패턴
 
 - 토큰 없는 룰 → CLI/grep 에서 못 찾음 → `goax doctor` 가 spirit lint 로 비표준 헤더 검출
-- ID 충돌 (같은 scope·TIER·NNN 또는 같은 CAT·NNN) → `goax rules` 가 fail
+- ID 충돌 (같은 scope·TIER·NNN 또는 같은 CAT·NNN) → `spirit-lint.sh` 가 `duplicates` 로 잡아요 ("spirit 점검" 트리거)
 - TIER 소문자 (`critical`) → 대문자 통일 (`CRITICAL`)
 - Layer 1 룰을 spirit/rules/ 에 직접 박기 → Layer 분리 위반. Layer 1 은 CLAUDE.md, fine 룰은 spirit/rules/.
 - ADR 링크를 HTML 주석으로 첨부 → `enforced_by:` schema 로 통일 ([`rule-enforcement.md`](rule-enforcement.md))

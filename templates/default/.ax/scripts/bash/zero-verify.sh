@@ -83,9 +83,12 @@ else
         esac
         val=""
         if [ -f "$CONFIG" ]; then
+            # 따옴표는 **값을 감싼 바깥 한 쌍만** 벗겨요. 예전엔 `tr -d` 로 전부 지워서
+            # `test "a b" = "a b"` 가 `test a b = a b` 로 망가지고 "too many arguments" 로 죽었어요 —
+            # 게이트가 실패한 게 아니라 게이트를 읽다가 깨진 건데 실패로 보고했어요.
             val=$(grep -E "^[[:space:]]+${key}:" "$CONFIG" 2>/dev/null | head -1 \
-                  | sed -E "s/^[[:space:]]+${key}:[[:space:]]*//; s/[[:space:]]*#.*$//" \
-                  | tr -d '"' | tr -d "'" | sed -E 's/[[:space:]]+$//')
+                  | sed -E "s/^[[:space:]]+${key}:[[:space:]]*//; s/[[:space:]]*#.*$//; s/[[:space:]]+$//" \
+                  | sed -E 's/^"(.*)"$/\1/; s/^'\''(.*)'\''$/\1/')
         fi
         NAMES+=("$key"); RUNS+=("$val")
     done

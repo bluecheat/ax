@@ -16,7 +16,7 @@
 #
 # 원장 필드 — task 줄 아래 들여쓰기 continuation (`의존:` 과 같은 자리). 손으로 안 적어요.
 #   레인: A                       소유 레인. --assign 이 써요
-#   디스패치: 2026-09-06T03:12Z   레인에 실제로 넘긴 시각. --dispatch 가 써요 (재디스패치면 갱신 + 보고 삭제)
+#   디스패치: 2026-09-06T03:12Z   레인에 실제로 넘긴 시각. --dispatch 가 써요
 #   보고: 2026-09-06T04:02Z       코디네이터가 산출물을 **받은** 시각. --report 가 써요
 #
 # 판정 (--status):
@@ -25,17 +25,27 @@
 #   lane_file_conflicts    같은 파일을 두 레인이 소유 — 핫 파일 독점 위반
 #   unassigned_open        레인 없는 미완료 task — 코디네이터가 직접 하는 몫
 #
+# --assign 은 트랜잭션이에요 — 하나라도 거부되면 파일을 건드리지 않고 result 의
+# `rejected` 에 이유를 담아요. 부분 적용은 원장을 반쯤 옮겨 놓아서 더 나빠요.
+# --dispatch 는 기본적으로 **아직 보고를 못 받은** 미완료 task 만 보내요. 이미 보고까지
+# 받은 task 를 다시 보내려면 --force (그때만 그 task 의 `보고:` 를 지워요).
 # --dispatch 는 그 레인이 lane_file_conflicts 에 걸려 있으면 거부해요 (exit 1, --force 로 우회).
 # 소유자는 정하지 않아요 — 배정은 판단이고 lane skill 이 사람과 해요. 여기선 기록과 검사만.
+#
+# `files:` 경로는 비교 전에 정규화해요 (`./` 제거 · 중복 `/` · 끝 `/`) — `src/a.ts` 와
+# `./src/a.ts` 는 같은 파일이고, 표기 차이로 소유 충돌을 빠져나갈 수 없어요.
+# ``` 코드펜스 안의 줄은 전부 건너뛰어요 — 형식 설명용 예시 task 가 실 task 로 세지 않도록.
+# 원장 쓰기는 goax_lock 으로 직렬화해요 — mv 는 원자적이지만 lost-update 는 못 막아요.
 #
 # Output (--json):
 #   {"status":"ok|warning","result":{"spec":"012-x","mode":"status|assign|dispatch|report",
 #     "lanes":[{"lane":"A","tasks":["T010","T011"],"open":2,"dispatched":1,"reported":0,"done":0}],
 #     "unassigned_open":["T009"],"dispatched_unreported":["T010"],"done_without_report":[],
 #     "lane_file_conflicts":[{"file":"a.ts","lanes":["A","B"],"tasks":["T010","T020"]}],
+#     "applied":["T010=A"],"rejected":[{"task":"T999","reason":"…"}],
 #     "changed":0,"dry_run":false},...}
 #
-# Exit: 0 ok · 1 error (대상 없음 · 충돌로 dispatch 거부) · 2 skipped (--json 인데 jq 없음)
+# Exit: 0 ok · 1 error (대상 없음 · 충돌로 dispatch 거부 · --assign 거부 · 락 실패) · 2 skipped (--json 인데 jq 없음)
 
 set -euo pipefail
 SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -62,7 +72,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,49p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "$EXIT_OK"
 fi
 
@@ -73,6 +83,11 @@ fi
 
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
 
+fail() {
+    if [ "$JSON_MODE" = true ]; then json_error "$1"; fi
+    goax_error "$1"; exit "$EXIT_ERROR"
+}
+
 if [ -z "$SPEC" ] && command -v jq >/dev/null 2>&1; then
     TF="$PROJECT_ROOT/.ax/current-task.json"
     if [ -f "$TF" ]; then
@@ -80,24 +95,46 @@ if [ -z "$SPEC" ] && command -v jq >/dev/null 2>&1; then
         [ -n "$SD" ] && SPEC=$(basename "$SD")
     fi
 fi
-TASKS="$PROJECT_ROOT/.ax/docs/spec/$SPEC/tasks.md"
-if [ -z "$SPEC" ] || [ ! -f "$TASKS" ]; then
-    if [ "$JSON_MODE" = true ]; then json_error "tasks.md 를 찾을 수 없어요: .ax/docs/spec/${SPEC:-<없음>}/tasks.md"; fi
-    goax_error "no tasks.md for spec '${SPEC:-<none>}'"; exit "$EXIT_ERROR"
+
+# --spec 해석은 공통 규칙 (정확 일치 → prefix 1개 → 실패) — 스크립트마다 다르면 같은 인자에 다른 답이 나와요
+if [ -n "$SPEC" ]; then
+    RESOLVED=$(goax_resolve_spec "$SPEC" "$PROJECT_ROOT/.ax/docs/spec") && RC=0 || RC=$?
+    if [ "$RC" -eq 0 ]; then SPEC="$RESOLVED"
+    elif [ "$RC" -eq 2 ]; then
+        fail "--spec '$SPEC' 이 여러 spec 에 걸려요: ${GOAX_SPEC_CANDIDATES} — 하나를 정확히 적으세요"
+    fi
 fi
 
-fail() {
-    if [ "$JSON_MODE" = true ]; then json_error "$1"; fi
-    goax_error "$1"; exit "$EXIT_ERROR"
-}
+TASKS="$PROJECT_ROOT/.ax/docs/spec/$SPEC/tasks.md"
+LOCK="$TASKS.lock"
+if [ -z "$SPEC" ] || [ ! -f "$TASKS" ]; then
+    fail "tasks.md 를 찾을 수 없어요: .ax/docs/spec/${SPEC:-<없음>}/tasks.md"
+fi
 
 # ── 파싱: "ID|state|files(,)|lane|dispatched|reported" ─────────────────────────
+# ``` 펜스 안은 형식 설명이라 건너뛰고, files: 경로는 비교 전에 정규화해요.
 parse_ledger() {
     awk '
+        function norm(p) {
+            gsub(/\/+/, "/", p)
+            while (sub(/^\.\//, "", p)) ;
+            while (sub(/\/\.\//, "/", p)) ;
+            sub(/\/+$/, "", p)
+            return p
+        }
+        function normlist(s,   n, a, i, v, out) {
+            if (s == "") return ""
+            n = split(s, a, ",")
+            out = ""
+            for (i = 1; i <= n; i++) { v = norm(a[i]); if (v != "") out = (out == "" ? v : out "," v) }
+            return out
+        }
         function flush() {
             if (id != "") printf "%s|%s|%s|%s|%s|%s\n", id, st, files, lane, disp, rep
             id=""; st=""; files=""; lane=""; disp=""; rep=""
         }
+        /^[[:space:]]*```/ { fence = !fence; next }
+        fence { next }
         /^- \[[ x~X]\] / {
             flush()
             line = $0; st = "open"
@@ -108,7 +145,7 @@ parse_ledger() {
             if (match(f, /files:[ ]*/)) {
                 f = substr(f, RSTART + RLENGTH)
                 gsub(/[ ]*,[ ]*/, ",", f); gsub(/^[ ]+|[ ]+$/, "", f)
-                files = f
+                files = normlist(f)
             }
             next
         }
@@ -129,6 +166,8 @@ edit_field() {
             if (cur != "" && (cur in want) && mode == "set" && !hit) print ind key ": " val
             cur = ""; hit = 0; ind = "      "; indset = 0
         }
+        /^[[:space:]]*```/ { leave(); fence = !fence; print; next }
+        fence { print; next }
         /^- \[[ x~X]\] / {
             leave()
             if (match($0, /T[0-9][0-9][0-9]+/)) cur = substr($0, RSTART, RLENGTH)
@@ -148,10 +187,16 @@ edit_field() {
     ' "$1"
 }
 
-apply_edit() {   # $1 ids(,) · $2 key · $3 value · $4 set|del  — DRY_RUN 이면 파일을 건드리지 않아요
-    local tmp="$TASKS.tmp.$$"
-    edit_field "$TASKS" "$1" "$2" "$3" "$4" > "$tmp"
-    if [ "$DRY_RUN" = true ]; then rm -f "$tmp"; else mv "$tmp" "$TASKS"; fi
+# $1 ids(,) · $2 key · $3 value · $4 set|del  — DRY_RUN 이면 파일을 건드리지 않아요.
+# read → 변환 → mv 전체를 락으로 감싸요: 레인 둘이 동시에 --report 하면 락 없이는
+# 나중에 mv 하는 쪽이 앞의 기록을 통째로 덮어써요 (실측 30/30 유실).
+apply_edit() {
+    local tmp
+    if [ "$DRY_RUN" = true ]; then return 0; fi
+    goax_lock "$LOCK" || fail "원장 락을 못 잡았어요: $LOCK — 다른 프로세스가 쓰는 중이거나 락이 남아 있어요"
+    tmp="$TASKS.tmp.$$"
+    edit_field "$TASKS" "$1" "$2" "$3" "$4" > "$tmp" && mv "$tmp" "$TASKS" || { rm -f "$tmp"; goax_unlock "$LOCK"; fail "원장 갱신 실패: $TASKS"; }
+    goax_unlock "$LOCK"
 }
 
 has_id() { printf '%s\n' "$LEDGER" | awk -F'|' -v id="$1" '$1==id{f=1} END{exit f?0:1}'; }
@@ -160,33 +205,77 @@ NOW=$(date -u +%Y-%m-%dT%H:%MZ)
 LEDGER=$(parse_ledger "$TASKS")
 CHANGED=0
 WARN=""
+APPLIED=""       # 공백 구분 "T010=A"
+REJECTED=""      # 개행 구분 "T010|사유"
+SKIPPED=""       # dispatch 에서 건너뛴 task (이미 보고 받음)
+TARGETS=""
 
 case "$MODE" in
   assign)
     [ -n "$ASSIGN" ] || fail "--assign 에 \"T010=A,T011=A\" 형식이 필요해요"
-    MISSING=""; CLASH=""
+    # 1단계: 전부 검증만 — 하나라도 거부되면 파일을 안 건드려요
+    PLAN=""
     oldIFS="$IFS"; IFS=','
     for pair in $ASSIGN; do
         pair=$(printf '%s' "$pair" | tr -d ' ')
         [ -z "$pair" ] && continue
         tid="${pair%%=*}"; ln="${pair#*=}"
-        { [ -n "$tid" ] && [ -n "$ln" ] && [ "$tid" != "$ln" ]; } || fail "형식 오류: '$pair' (T010=A 형식)"
-        has_id "$tid" || { MISSING="$MISSING$tid "; continue; }
+        if ! { [ -n "$tid" ] && [ -n "$ln" ] && [ "$tid" != "$ln" ]; }; then
+            REJECTED="${REJECTED}${pair}|형식 오류 — T010=A 형식이어야 해요
+"; continue
+        fi
+        if ! has_id "$tid"; then
+            REJECTED="${REJECTED}${tid}|tasks.md 에 없는 task
+"; continue
+        fi
         cur=$(printf '%s\n' "$LEDGER" | awk -F'|' -v id="$tid" '$1==id{print $4}')
         if [ -n "$cur" ] && [ "$cur" != "$ln" ] && [ "$FORCE" != true ]; then
-            CLASH="$CLASH$tid(${cur}→${ln}) "; continue
+            REJECTED="${REJECTED}${tid}|이미 레인 ${cur} — 옮기려면 --force
+"; continue
         fi
+        PLAN="${PLAN}${tid}=${ln}
+"
+    done
+    IFS="$oldIFS"
+
+    if [ -n "$REJECTED" ]; then
+        if [ "$JSON_MODE" = true ]; then
+            REJ_J=$(printf '%s' "$REJECTED" | jq -Rn '[inputs|select(length>0)|split("|")|{task:.[0], reason:.[1]}]')
+            RESULT=$(jq -nc --arg spec "$SPEC" --arg mode "$MODE" --argjson rej "$REJ_J" --argjson dry "$DRY_RUN" \
+                '{spec:$spec, mode:$mode, applied:[], rejected:$rej, changed:0, dry_run:$dry}')
+            ERRS=$(_goax_json_array "--assign 거부 — 파일은 그대로예요. rejected 를 보세요")
+            json_output "error" "$RESULT" "" "[]" "$ERRS"
+        else
+            goax_error "--assign 거부 (파일 무변경):"
+            printf '%s' "$REJECTED" | awk -F'|' 'NF{printf "  %-8s %s\n", $1, $2}' >&2
+        fi
+        exit "$EXIT_ERROR"
+    fi
+
+    # 2단계: 전부 적용
+    oldIFS="$IFS"; IFS='
+'
+    for p in $PLAN; do
+        [ -z "$p" ] && continue
+        tid="${p%%=*}"; ln="${p#*=}"
         apply_edit "$tid" "레인" "$ln" set
+        APPLIED="$APPLIED$p "
         CHANGED=$((CHANGED + 1))
     done
     IFS="$oldIFS"
-    [ -n "$MISSING" ] && fail "tasks.md 에 없는 task: ${MISSING% }"
-    [ -n "$CLASH" ] && fail "이미 다른 레인에 배정된 task: ${CLASH% } — 옮기려면 --force"
     ;;
   dispatch)
     [ -n "$LANE" ] || fail "--dispatch 에 레인 이름이 필요해요"
-    TARGETS=$(printf '%s\n' "$LEDGER" | awk -F'|' -v l="$LANE" '$2=="open" && $4==l{print $1}' | paste -sd, - || true)
-    [ -n "$TARGETS" ] || fail "레인 '$LANE' 에 미완료 task 가 없어요 — --assign 으로 먼저 배정하세요"
+    OPEN_IN_LANE=$(printf '%s\n' "$LEDGER" | awk -F'|' -v l="$LANE" '$2=="open" && $4==l{print $1}')
+    [ -n "$OPEN_IN_LANE" ] || fail "레인 '$LANE' 에 미완료 task 가 없어요 — --assign 으로 먼저 배정하세요"
+    if [ "$FORCE" = true ]; then
+        TARGETS=$(printf '%s\n' "$OPEN_IN_LANE" | paste -sd, - || true)
+    else
+        # 기본 대상 = 디스패치 기록이 없거나 보고를 못 받은 것. 보고까지 받은 task 는 건드리지 않아요
+        TARGETS=$(printf '%s\n' "$LEDGER" | awk -F'|' -v l="$LANE" '$2=="open" && $4==l && ($5=="" || $6==""){print $1}' | paste -sd, - || true)
+        SKIPPED=$(printf '%s\n' "$LEDGER" | awk -F'|' -v l="$LANE" '$2=="open" && $4==l && $5!="" && $6!=""{print $1}' | paste -sd, - || true)
+        [ -n "$TARGETS" ] || fail "레인 '$LANE' 의 미완료 task 는 전부 디스패치 후 보고까지 받았어요 (${SKIPPED}) — 그래도 다시 보내려면 --force"
+    fi
     ;;
   report)
     [ -n "$REPORT" ] || fail "--report 에 레인 이름 또는 task ID 목록이 필요해요"
@@ -215,7 +304,7 @@ esac
 # ── 판정 (assign 뒤엔 갱신된 원장으로) ──────────────────────────────────────────
 [ "$MODE" = "assign" ] && [ "$DRY_RUN" != true ] && LEDGER=$(parse_ledger "$TASKS")
 
-# 같은 파일을 두 레인이 소유 — "file|lanes(,)|tasks(,)"
+# 같은 파일을 두 레인이 소유 — "file|lanes(,)|tasks(,)". 경로는 parse_ledger 가 이미 정규화했어요
 CONFLICTS=$(printf '%s\n' "$LEDGER" | awk -F'|' '
     $2=="open" && $4!="" && $3!="" {
         n = split($3, fs, ",")
@@ -264,6 +353,15 @@ CONF_N=$(printf '%s' "$CONFLICTS" | grep -c . || true); CONF_N=${CONF_N:-0}
 UNREP_N=$(printf '%s' "$UNREPORTED" | grep -c . || true); UNREP_N=${UNREP_N:-0}
 NOREP_N=$(printf '%s' "$NOREPORT" | grep -c . || true); NOREP_N=${NOREP_N:-0}
 
+# 방금 디스패치한 task 는 "보고 안 받은 디스패치" 경보에서 빼요 — 방금 보낸 걸 경보로 돌려받으면
+# 성공을 알 수 없어요. result 의 dispatched_unreported 는 사실 그대로 두고, 경보 집계만 걸러요.
+UNREP_WARN_N="$UNREP_N"
+if [ "$MODE" = "dispatch" ] && [ -n "$TARGETS" ]; then
+    UNREP_WARN_N=$(printf '%s\n' "$UNREPORTED" | awk -v t="$TARGETS" '
+        BEGIN { n = split(t, a, ","); for (i = 1; i <= n; i++) just[a[i]] = 1 }
+        NF && !($1 in just) { c++ } END { print c+0 }')
+fi
+
 if [ "$JSON_MODE" = true ]; then
     arr() { printf '%s\n' "$1" | jq -Rn '[inputs|select(length>0)]'; }
     LANES_J=$(printf '%s\n' "$LANES" | jq -Rn '[inputs|select(length>0)|split("|")
@@ -271,21 +369,25 @@ if [ "$JSON_MODE" = true ]; then
            reported:(.[4]|tonumber), done:(.[5]|tonumber)}]')
     CONF_J=$(printf '%s\n' "$CONFLICTS" | jq -Rn '[inputs|select(length>0)|split("|")
         | {file:.[0], lanes:(.[1]|split(",")), tasks:(.[2]|split(","))}]')
+    APP_J=$(printf '%s' "$APPLIED" | tr ' ' '\n' | jq -Rn '[inputs|select(length>0)]')
     RESULT=$(jq -nc --arg spec "$SPEC" --arg mode "$MODE" --argjson lanes "$LANES_J" \
         --argjson un "$(arr "$UNASSIGNED")" --argjson dr "$(arr "$UNREPORTED")" \
-        --argjson dn "$(arr "$NOREPORT")" --argjson cf "$CONF_J" \
+        --argjson dn "$(arr "$NOREPORT")" --argjson cf "$CONF_J" --argjson app "$APP_J" \
         --argjson changed "${CHANGED:-0}" --argjson dry "$DRY_RUN" \
         '{spec:$spec, mode:$mode, lanes:$lanes, unassigned_open:$un, dispatched_unreported:$dr,
-          done_without_report:$dn, lane_file_conflicts:$cf, changed:$changed, dry_run:$dry}')
+          done_without_report:$dn, lane_file_conflicts:$cf, applied:$app, rejected:[],
+          changed:$changed, dry_run:$dry}')
     WARN_J='[]'; [ -n "$WARN" ] && WARN_J=$(_goax_json_array "$WARN")
     if [ "$CONF_N" -gt 0 ]; then
         json_output "warning" "$RESULT" "같은 파일을 두 레인이 소유해요 (${CONF_N}개) — 핫 파일은 한 레인이 독점하거나 별도 task 로 떼세요" "$WARN_J"
-    elif [ "$UNREP_N" -gt 0 ] || [ "$NOREP_N" -gt 0 ]; then
-        json_output "warning" "$RESULT" "보고 안 받은 디스패치 ${UNREP_N}개 · 보고 없이 완료된 task ${NOREP_N}개 — 산출물을 받고 --report 로 기록한 뒤에만 완료예요" "$WARN_J"
+    elif [ "$UNREP_WARN_N" -gt 0 ] || [ "$NOREP_N" -gt 0 ]; then
+        json_output "warning" "$RESULT" "보고 안 받은 디스패치 ${UNREP_WARN_N}개 · 보고 없이 완료된 task ${NOREP_N}개 — 산출물을 받고 --report 로 기록한 뒤에만 완료예요" "$WARN_J"
     else
         case "$MODE" in
             assign)   NEXT="레인 배정 ${CHANGED}건 기록. tasks-plan.sh 로 violations 확인 뒤 --dispatch <레인>" ;;
-            dispatch) NEXT="레인 '$LANE' 디스패치 기록 (${CHANGED} task). 산출물이 오면 --report $LANE" ;;
+            dispatch) NEXT="레인 '$LANE' 에 ${CHANGED} task 디스패치 (${TARGETS})"
+                      [ -n "$SKIPPED" ] && NEXT="$NEXT · 보고까지 받은 ${SKIPPED} 은 건너뜀 (--force 로 재전송)"
+                      NEXT="$NEXT. 산출물이 오면 --report $LANE" ;;
             report)   NEXT="보고 ${CHANGED}건 기록. 검증 명령을 돌린 뒤 체크박스를 켜세요 — 보고가 곧 완료는 아니에요" ;;
             *)        NEXT="원장 이상 없음" ;;
         esac
@@ -298,8 +400,11 @@ else
     else
         printf '  레인 배정 없음 (단일 레인)\n'
     fi
+    [ -n "$APPLIED" ] && printf '  배정: %s\n' "${APPLIED% }"
+    [ "$MODE" = "dispatch" ] && [ -n "$TARGETS" ] && printf '  보냄: %s\n' "$TARGETS"
+    [ -n "$SKIPPED" ] && printf '  건너뜀 (보고 받음): %s — 다시 보내려면 --force\n' "$SKIPPED"
     [ -n "$UNASSIGNED" ] && printf '  레인 없는 미완료: %s\n' "$(printf '%s' "$UNASSIGNED" | tr '\n' ' ')"
-    [ "$UNREP_N" -gt 0 ] && printf '  ⚠ 디스패치됐는데 보고 없음: %s\n' "$(printf '%s' "$UNREPORTED" | tr '\n' ' ')"
+    [ "$UNREP_WARN_N" -gt 0 ] && printf '  ⚠ 디스패치됐는데 보고 없음: %s\n' "$(printf '%s' "$UNREPORTED" | tr '\n' ' ')"
     [ "$NOREP_N" -gt 0 ] && printf '  ⚠ 보고 없이 완료 표시: %s\n' "$(printf '%s' "$NOREPORT" | tr '\n' ' ')"
     if [ "$CONF_N" -gt 0 ]; then
         printf '  ⛔ 파일 소유 충돌 (%s)\n' "$CONF_N"

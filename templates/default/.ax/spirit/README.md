@@ -34,22 +34,23 @@ cp .ax/_templates/spirit/ops.md .ax/spirit/rules/ops.md
 
 ### 새 룰 카테고리 추가
 ```bash
-goax spirit add <category>     # 예: goax spirit add observability
+cp .ax/_templates/spirit/rule.md .ax/spirit/rules/observability.md   # 예: observability
 ```
-→ `rules/observability.md` 빈 템플릿이 생성됨. 본문에 룰 작성.
+→ frontmatter(`category`·`applies_to`·`paths`·`severity`·`enforced_by`)를 채우고 본문에 `## SP-<CAT>-<NNN>: 제목` 헤더로 룰 작성. `audit` 의 룰 승격(3단계)이나 `onboarding` 이 자동으로 만들어주기도 해요.
 
 ### 검증
+"spirit 점검" 또는 "spirit lint" 라고 말하면 `doctor` 가 이 절만 보고해요 (frontmatter + `## SP-CAT-NNN:` 헤더 형식 + 토큰 중복 검증):
 ```bash
-goax spirit lint               # frontmatter + ID 일관성 검증
-goax spirit                    # values/tone/rules 카운트 요약
+bash .ax/scripts/bash/spirit-lint.sh --json
 ```
 
-### 기존 룰 검색 (rules CLI 통합)
+### 기존 룰 검색
+"rules 보여줘" · "CRITICAL 룰만" · "SP-SEC-001 찾아줘" 라고 말하면 `doctor` 가 `rules-index.sh` 출력을 그대로 보여줘요 (Constitution + Spirit + Module 통합 인덱스):
 ```bash
-goax rules                              # CLAUDE.md + spirit/rules/ 통합
-goax rules --source spirit              # spirit/rules/만
-goax rules --category security          # 카테고리 필터
-goax find SP-SEC-001                    # 특정 룰
+bash .ax/scripts/bash/rules-index.sh                          # 전체 인덱스
+bash .ax/scripts/bash/rules-index.sh --level critical         # CRITICAL 만
+bash .ax/scripts/bash/rules-index.sh --source spirit --category security
+bash .ax/scripts/bash/rules-index.sh --find SP-SEC-001        # 토큰 정확 매칭
 ```
 
 ## Triage가 자동 주입
@@ -70,9 +71,10 @@ spirit_context:
 
 `.ax/spirit/values.md` 또는 `tone.md` 누락 시 `goax triage`가 **fail**.
 다음으로 복구:
-```bash
-goax up --force      # spirit 디렉토리 + 샘플 복원
 ```
+"goax up" 재실행 (또는 "/up")   # idempotent update — 없는 파일만 채워 넣어요, 기존 customize 는 안 건드려요
+```
+plugin 컨텍스트 밖에서 직접 복원하려면: `bash scripts/provision.sh --target <프로젝트 경로> --json`.
 
 ## 변경 시
 

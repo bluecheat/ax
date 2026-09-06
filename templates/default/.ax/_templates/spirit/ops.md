@@ -1,6 +1,10 @@
 ---
 category: ops
 applies_to: [code, pr, commit, review]
+severity: mandatory                 # critical | mandatory | convention
+enforced_by:                        # 없으면 check-rule-enforcement 검사에서 통째로 빠져요
+  - human:pr-review                 # hook:<경로> · external:<도구> · human:<게이트> · TODO:<YYYY-MM-DD>
+enforced_kind: human                # block | warn | arch | human | missing
 # paths: (생략 — universal 룰. CLAUDE.md @import으로 전체 작업에 적용됨)
 # path-scoped 예시 (도메인 특화 룰의 경우):
 # paths:

@@ -7,7 +7,8 @@
 
 | 스크립트 | 용도 | 호출하는 skill |
 |---|---|---|
-| `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log, `goax_inject_fresh` 세션 내 중복 주입 제거) | (sourced by all) |
+| `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log, `goax_inject_fresh` 세션 내 중복 주입 제거, `goax_lock`/`goax_unlock`/`goax_unlock_all` 원장 락, `goax_resolve_spec` `--spec` 축약 해석) | (sourced by all) |
+| `detect-model.sh` | 지금 돌고 있는 모델 식별 — override → `$GOAX_MODEL` → transcript 스캔 → unknown | (진단·로깅용) |
 | `next-spec-num.sh` | 다음 spec NNN / ADR NNNN 번호 계산 (`--kind spec\|adr`) | `spec`, `adr` |
 | `tier-from-state.sh` | current-task.json + config.yml → tier 결정 + evaluator 필수 여부 + spec_review 필수 여부(Size 축만) (`--reset` 는 `reset-task.sh` 경유) | `spec`, `tasks-gate.sh`, `spec-review.sh`, `update-state.sh` |
 | `init-spec-dir.sh` | tier별 selective spec 디렉토리 생성 | `spec` |
@@ -42,6 +43,7 @@
 | `zero-verify.sh` | `config.yml commands` 를 파이프 없이 실행하고 증거 블록 생성 — 안 돌린 게이트도 보고 (하나도 안 돌면 exit 2) | `zero` |
 | `zero-ablation.sh` | 산문 룰 전체를 끄고 무엇이 깨지는지 재는 ablation (`--off/--on/--status`) — `--on` 이 회차를 기록하고 다음 기한(+180일)을 STATUS.md 에 체크박스로 (doctor 가 추적) | `zero`, `doctor` |
 | `zero-guard-bash.sh` | **(`.ax/hooks/pre-bash/` 에 설치 — 이 디렉터리 밖)** pre-bash 가드: `git add -A` 차단(exit 2) · 검증 명령 파이프 경고. hook 규약이라 `--json` 표준 밖이에요 | (hook) |
+| `vendor-skills.sh` | goax skill/command/agent 를 저장소에 동봉(`--plugin-dir` cp) — 모노레포처럼 ADE 루트 ≠ 프로젝트 루트일 때 `.goax-root` 포인터도 씀. `--check` 로 동봉본 ↔ plugin 버전 비교만 | `vendor`, `doctor` |
 
 ## 표준 (모든 스크립트 공통)
 
@@ -50,7 +52,7 @@
 - 옵션: `--json` (기계 출력), `--dry-run` (해당 시), `--help/-h`
 - stderr: `[goax]` prefix 로그·경고
 - stdout: `--json` 시 JSON, 아니면 사용자 친화 텍스트
-- exit code: `0` ok, `1` error, `2` skipped (graceful degradation)
+- exit code: `0` ok(경고 있어도 ok), `1` error(`--strict` 위반 포함), `2` skipped (대상 없음 · graceful degradation)
 
 ### 의도적 편차 (documented deviation)
 
@@ -59,15 +61,16 @@
 오작동해요. 각 자리에서 `|| true` 로 개별 guard 하는 대신 스크립트 전체에서 `-e` 를 뺀 선택:
 
 - `set -u` 만: `build-memory.sh`, `update-state.sh`
-- `set -uo pipefail`: `check-rule-enforcement.sh`, `check-sensor-liveness.sh`, `init-mistake-file.sh`, `install-git-hooks.sh`, `spirit-lint.sh`, `rules-index.sh`, `doctor-scan.sh`
+- `set -uo pipefail`: `check-rule-enforcement.sh`, `check-sensor-liveness.sh`, `detect-model.sh`, `doctor-scan.sh`, `init-mistake-file.sh`, `install-git-hooks.sh`, `rules-index.sh`, `spirit-lint.sh`, `tasks-gate.sh`, `vendor-skills.sh`, `zero-probe.sh`, `zero-verify.sh`
 
-나머지 스크립트는 모두 `set -euo pipefail`.
+나머지 스크립트는 모두 `set -euo pipefail`. (목록이 실제와 갈리면 신뢰할 수 없으니, 바뀔 때마다
+`grep -l '^set -[a-z]*$' *.sh` 로 재확인하고 이 목록을 갱신해요.)
 
 ## `--json` 출력 스키마
 
 ```json
 {
- "status": "ok" | "error" | "skipped",
+ "status": "ok" | "warning" | "error" | "skipped",
  "result": { ... },
  "next_step": "string (사용자에게 보여줄 다음 액션)",
  "warnings": ["string", ...],
@@ -75,7 +78,55 @@
 }
 ```
 
+`warning` — 대상은 정상 처리됐지만 사용자가 봐야 할 게 있을 때(예: `check-rule-enforcement.sh`
+위반 존재, `spec-review.sh` 라운드 상한 초과, `lanes-dispatch.sh` 원장 불일치). `error`/`skipped` 와
+달리 **exit code 는 `0`** 이에요 — caller 가 exit 만 보고 넘어가면 이 신호를 놓쳐요, `status` 를
+같이 봐야 해요. `warning` 을 emit 하는 스크립트: `check-manifest-install.sh`, `check-rule-enforcement.sh`,
+`check-sensor-liveness.sh`, `constitution-apply.sh`, `doctor-scan.sh`, `lanes-dispatch.sh`,
+`lanes-hotfiles.sh`, `rules-index.sh`, `spec-review.sh`, `spirit-lint.sh`, `status-note.sh`,
+`tasks-gate.sh`, `tasks-plan.sh`, `zero-ablation.sh`.
+
+예외: `update-state.sh --json` 은 이 envelope 을 따르지 않아요 — 호출자가 `.status`/`.result` 를
+파싱하지 않고 그냥 실행만 하는 fire-and-forget 스크립트라서예요 (모든 SKILL.md 가 `>/dev/null 2>&1 || true` 로 호출).
+
 LLM(SKILL.md)이 이 JSON을 받아 사용자에게 ✓ 메시지 출력. 결정론 부분(번호, 경로, sha)은 LLM이 재해석하지 않음 — script가 SSOT.
+
+## 쓰기 규약 — 여러 세션이 같은 파일을 건드릴 때
+
+`tasks.md`·`state.json`·`STATUS.md` 처럼 여러 스크립트·여러 세션이 같은 파일을 `read → 가공 →
+tmp.$$ → mv` 하는 자리는 **락 없이는 동시 쓰기에서 갱신이 유실돼요** (읽은 뒤 서로를 못 보고
+덮어써요). `common.sh` 의 헬퍼로 감싸요:
+
+```bash
+goax_lock "$FILE.lock" || { goax_error "다른 프로세스가 쓰는 중이에요"; exit "$EXIT_ERROR"; }
+# ... 읽고 바꾸고 tmp 에 쓰고 mv ...
+goax_unlock "$FILE.lock"
+```
+
+`goax_lock` 은 `mkdir` 원자성으로 락을 잡고(0.05→0.2s 폴링, 기본 타임아웃 10s), 60초 넘게 잡혀
+있거나 기록된 PID 가 죽었으면 stale 로 보고 회수해요. `EXIT`/`INT`/`TERM` trap 으로 자동 해제돼요
+— **단, 스크립트가 이미 자기 trap 을 걸어뒀으면 그 trap 이 덮어써져요.** 그런 스크립트
+(`check-spec-clarity.sh`, `check-rule-enforcement.sh`, `promote-mistake.sh` 처럼 `trap ... EXIT` 가
+있는 경우)는 자기 trap 안에서 `goax_unlock_all` 을 같이 호출해요. `state.json` 처럼 두 스크립트가
+같은 파일을 쓰면(`update-state.sh` ↔ `tasks-gate.sh`) 락 경로 이름(`"$FILE.lock"`)을 **글자 그대로
+맞춰야** 서로를 막아요 — 다른 이름이면 락이 두 개가 돼서 무의미해요.
+
+`--spec` 인자를 받는 스크립트는 축약(`--spec 001`)을 각자 다르게 풀지 말고 `goax_resolve_spec`
+(정확 일치 → prefix 1개 → 실패/모호)을 써요. 후보가 여럿이면 `GOAX_SPEC_CANDIDATES` 에 담겨요.
+
+**로케일 — `[a-z]`/`[A-Z]` 브래킷을 새로 쓰지 마세요.** en_US.UTF-8 collation 에서 `[a-z]` 는
+정렬 순서(aAbB…zZ) 때문에 대문자까지 삼켜요 — 실측: `case "$x" in [a-z]*)` 가 `Payment` 를
+통과시켰어요. `[[:lower:]]`·`[[:upper:]]`·`[[:alnum:]]` 를 쓰거나, 옛 코드를 못 고치는 자리는
+`common.sh` 최상단의 `export LC_COLLATE=C` 가 안전망이에요 (이미 있는 export — 새로 추가할 필요
+없음, 브래킷을 새로 안 쓰면 충분해요).
+
+**`tasks.md` 를 파싱하는 스크립트는 코드펜스를 건너뛰어요.** `_templates/spec/tasks.md` 자체가
+형식 설명 예시(`- [ ] T001 [P] [AC2] …`)를 코드펜스 안에 담고 있어서, 펜스를 안 보면 그 예시 줄이
+실제 task 로 세여요. awk 파서는 이 3줄로 펜스를 건너뛰어요:
+```awk
+/^[[:space:]]*```/ { fence = !fence; next }
+fence { next }
+```
 
 ## graceful degradation
 

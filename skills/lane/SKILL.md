@@ -35,8 +35,8 @@ description: "작업을 레인으로 가르고 게이트로 검증 — '/lane', 
 
 레인은 **같은 워킹 트리**에서 돌아요. 격리는 파일 소유권(§5)과 원장(`lanes-dispatch.sh` 가 소유 겹침을
 거부)이 해요 — worktree 를 안 갈라요. 갈라야 할 때는 둘뿐이에요: (a) 레인이 *같은 파일을 다른 방향으로*
-바꿔야 한다 → 그건 §1 에서 "가를 수 없는 일" 이에요, 단일 레인으로. (b) 실행 시간이 긴 통합 검증을
-레인 작업과 동시에 돌려야 한다 → `git worktree add` 로 검증 전용 트리를 하나 더 두고, 레인은 여전히
+바꿔야 해요 → 그건 §1 에서 "가를 수 없는 일" 이에요, 단일 레인으로. (b) 실행 시간이 긴 통합 검증을
+레인 작업과 동시에 돌려야 해요 → `git worktree add` 로 검증 전용 트리를 하나 더 두고, 레인은 여전히
 공유 트리에서. worktree 는 물리적 덮어쓰기만 막고 논리 충돌(§12.2)은 못 막아요 — 그래서 기본값이
 아니에요.
 
@@ -253,8 +253,8 @@ bash .ax/scripts/bash/tasks-plan.sh --spec "$SPEC" --json
   `grep` 하고 결과를 보고에 포함하세요.
 - **공유 이름을 바꾸면 즉시 보고하세요.** props 이름·타입 축·토큰 이름을 바꾸는 건
   파일 안의 일이 아니라 레인 밖의 일이에요.
-- **결과를 반드시 `SendMessage` 로 전송하세요.** 파일을 다 만들고 idle 이 되는 건
-  완료가 아니에요.
+- **결과를 최종 메시지에 전부 담으세요.** `SendMessage`·`ListAgents` 는 이 레인엔 없어요 —
+  최종 응답이 유일한 산출물 경로예요. 파일을 다 만들고 idle 이 되는 건 완료가 아니에요.
 - 보고가 길면 **나눠서 여러 번 보내세요.** 한 번에 밀면 잘려요.
 ```
 
@@ -372,7 +372,7 @@ bash .ax/scripts/bash/status-note.sh --show --json | jq -r '.result.sections.ren
 ## state.json 갱신
 
 ```bash
-jq '.last_skill = "parallel" | .skill_calls = ((.skill_calls // 0) + 1) | .updated_at = (now | todate)' \
+jq '.last_skill = "lane" | .skill_calls = ((.skill_calls // 0) + 1) | .updated_at = (now | todate)' \
  .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
 ```
 

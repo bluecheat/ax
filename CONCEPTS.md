@@ -429,4 +429,4 @@ goax의 *고유 기여*는 두 가지예요:
 - [`docs/skill-routing.md`](docs/skill-routing.md) — skill 라우팅 매트릭스
 - [`docs/up.md`](docs/up.md) — Brownfield 도입 흐름
 - [`changelog/0.1.0.md`](changelog/0.1.0.md) "Design decisions" 섹션 — 결정 기록·거부된 대안 (옛 docs/adr/ 통합)
-- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 결정론 도구 19개 표준
+- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 결정론 도구 36개 표준

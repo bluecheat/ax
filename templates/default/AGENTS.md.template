@@ -39,10 +39,12 @@
 - enforced_kind: block
 
 🔴 **`AX:CRITICAL:002`** *(두 번째 — 외부 도구 예시)*
-- enforced_by: external:archunit
+- enforced_by: external:<도구 이름 — 예: archunit>
 - enforced_kind: arch
 
 > ⚠ hook 파일을 아직 못 만들었으면 라벨을 🟡 MANDATORY 로 시작하세요. `🔴 + TODO:*` 는 invariant 위반 (doctor 가 보고). 작성 후 🔴 승급이 정직.
+>
+> 위 두 룰의 `enforced_by` 는 아직 안 채운 자리(`<...>`)예요. `check-rule-enforcement.sh` 는 이런 자리표시자를 **위반이 아니라 placeholder** 로 세서 warning 으로만 보고해요 — 그래서 갓 설치한 프로젝트도 CI 의 `--strict` 를 첫날부터 켤 수 있어요. 실제 값으로 바꾸는 순간 I1·I5·I6 검사 대상이 됩니다.
 
 ## MANDATORY — 사람 승인 필요
 
