@@ -17,9 +17,10 @@ set -uo pipefail
 [ -d "${CLAUDE_PROJECT_DIR:-$(pwd)}/.ax/hooks" ] || exit 0
 
 INPUT="$(cat 2>/dev/null || true)"
-TARGET_PATH=""
+TARGET_PATH=""; SID=""
 if [ -n "$INPUT" ] && command -v jq >/dev/null 2>&1; then
     TARGET_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' 2>/dev/null || true)
+    SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
 fi
 TARGET_PATH="${TARGET_PATH:-${CLAUDE_EDIT_PATH:-${1:-}}}"
 [ -z "$TARGET_PATH" ] && exit 0
@@ -65,6 +66,8 @@ if [ -d "$MOD_DIR" ]; then
             fi
         done < <(goax_yaml_list "$rules" paths)
         [ "$matched" = true ] || continue
+        # 같은 세션에서 이미 준 모듈 포인터는 다시 안 줘요 (서브에이전트 하나가 168회 받은 실측)
+        goax_inject_fresh "$SID" "module:$mod" || continue
 
         LINES="${LINES}  Layer 2 · ${mod}  →  .ax/modules/${mod}/rules.md"$'\n'
 
@@ -84,7 +87,8 @@ TASK_FILE="$PROJECT_ROOT/.ax/current-task.json"
 if [ -f "$TASK_FILE" ] && command -v jq >/dev/null 2>&1; then
     PHASE=$(jq -r '.phase // "idle"' "$TASK_FILE" 2>/dev/null || echo idle)
     SPEC_DIR=$(jq -r '.spec_dir // empty' "$TASK_FILE" 2>/dev/null || true)
-    if [ "$PHASE" != "idle" ] && [ -n "$SPEC_DIR" ] && [ -d "$PROJECT_ROOT/$SPEC_DIR" ]; then
+    if [ "$PHASE" != "idle" ] && [ -n "$SPEC_DIR" ] && [ -d "$PROJECT_ROOT/$SPEC_DIR" ] \
+       && goax_inject_fresh "$SID" "spec:$(basename "$SPEC_DIR")"; then
         [ -f "$PROJECT_ROOT/$SPEC_DIR/spec.md" ]  && LINES="${LINES}  Layer 3 · spec   →  ${SPEC_DIR}/spec.md"$'\n'
         [ -f "$PROJECT_ROOT/$SPEC_DIR/tasks.md" ] && LINES="${LINES}  Layer 3 · tasks  →  ${SPEC_DIR}/tasks.md"$'\n'
         # spec.md 가 인용한 ADR 만 (전체 ADR 을 흘리면 노이즈)

@@ -44,20 +44,37 @@ Generator/Evaluator 모델 — Generator의 self-praise bias 제거.
 
 ## 호출 시점
 
+- **`spec-implement` §8** — `tasks-gate.sh` 가 task 0건 남았다고 판정한 직후. size L 이상 ·
+  M×L3 은 **필수**(`tier-from-state.sh` 의 `evaluator: required`), 그 외는 선택. 필수인데
+  review.md 가 없으면 게이트 G6 이 완료를 막아요
 - 모든 PR 직전 (L 이상 강제, M 이하 선택)
 - CodeRabbit과 영역 회피 — Evaluator는 "비어있는 것", CodeRabbit은 "잘못된 것"
 
 ## 입력
 
-- 변경 파일 + diff
-- 관련 `.ax/docs/adr/*.md`, `.ax/docs/spec/*.md`
+- 변경 파일 + diff (브리프가 지목한 범위 — `git diff <base>...HEAD` 또는 spec 시작 이후)
+- 관련 `.ax/docs/adr/*.md`, `.ax/docs/spec/<NNN-slug>/spec.md`
+- 산출물 경로 — `.ax/docs/spec/<NNN-slug>/review.md`
 - (선택) PR description
 
 여기 없는 것 — 특히 구현 세션의 대화 맥락 — 은 받지 않아요 (§성립 조건 1).
 
-## 출력
+## 출력 — `review.md` 파일로, 첫 줄은 verdict
+
+결과를 대화로만 돌려주지 않고 **`<spec dir>/review.md` 에 직접 써요.** 코디네이터가 받아 적으면
+검사받는 쪽이 검사 기록을 쓰는 게 되니까요. `tasks-gate.sh` G6 이 이 파일의 **첫 줄**을 읽어요:
+
+```
+verdict: 진행 | 보강 필요 | 재논의 필요
+```
+
+- `진행` — 발견 0건이거나, 있어도 정확성·spec 적합성에 영향 없음
+- `보강 필요` — 지적이 task 로 옮겨져야 해요. 각 지적에 재현 시나리오 + 어느 AC 인지
+- `재논의 필요` — spec 자체가 틀렸거나 ADR 과 어긋나요. 코드로 못 고쳐요
 
 ```markdown
+verdict: 보강 필요
+
 ## Evaluator Review
 
 ### Spec 적합성
@@ -70,17 +87,54 @@ Generator/Evaluator 모델 — Generator의 self-praise bias 제거.
 - 거부된 패턴 재출현 여부
 
 ### 종합
-- 진행 / 보강 필요 / 재논의 필요
+- 보강 필요: <지적 n건 — 각각 AC 와 재현 시나리오>
 ```
 
 발견이 없으면:
 
 ```markdown
+verdict: 진행
+
 ## Evaluator Review
 
 발견 0건 — spec 적합성·엣지 케이스·drift 모두 이상 없어요.
 (검토 범위: <본 파일들>)
 ```
+
+기존 review.md 가 있으면 덮어써요 — 재리뷰의 기록은 최신 것 하나면 돼요. 이전 지적이 처리됐는지는
+tasks.md 의 task 로 남아요.
+
+## spec 모드 — 합의 리뷰 (`spec-validate` 가 띄워요)
+
+같은 agent, 다른 브리프예요. diff 대신 **spec 스냅샷**을 보고, `review.md` 대신
+`<spec>/review-spec.evaluator.md` 에 써요. OMC ralplan 의 Critic 역할이에요.
+
+**받는 것**: spec 스냅샷 경로 + sha (`spec-review.sh --snapshot`) · 관련 ADR · tasks.md 가 있으면 그 경로 ·
+**내 출력 파일 경로**. architect 의 파일은 **받지 않아요** — 받았더라도 열지 마세요. 성립 조건 1 과
+같은 이유예요: 앞 리뷰를 읽은 뒤 리뷰는 그 리뷰의 메아리가 돼요.
+
+**보는 것** — 구현 리뷰와 같은 규율(정확성·spec 적합성에 영향 주는 것만 · 발견 0건이 정상 · 지적엔
+재현 시나리오)로, 질문은 이 넷이에요:
+- §3 수용 기준이 **검증 가능한가** — 명령이나 관찰로 참/거짓이 갈리는가. "잘 동작한다" 는 AC 가 아니에요
+- **누락 엣지** — 환불·취소·재시도·권한·동시성·국제화 중 spec 이 침묵하는 것
+- **같은 개념에 다른 이름** — spec 안에서, 그리고 기존 ADR·모듈 룰과 어긋나는 용어
+- tasks.md 가 있으면 셋 더: 컨텍스트 기준으로 쪼갰는가(작업 종류로 쪼갠 플래너/코더/테스터는 안티패턴) ·
+  `files:` 가 실제 존재하거나 생길 파일인가 · `[P]` 주장에 근거가 있는가 (`tasks-plan.sh` violations 는 그 전에 0 이어야 해요)
+
+**출력 파일 형식** — 첫 두 줄이 계약이에요:
+
+```markdown
+verdict: 진행 | 보강 필요 | 재논의 필요
+sha: <브리프가 준 12자>
+
+## AC 검증 가능성
+## 누락 엣지
+## 이름 대조
+## tasks (있을 때)
+## 종합
+```
+
+발견이 없으면 `verdict: 진행` 아래 `발견 0건 — 검토 범위: <파일들>` 한 줄이면 돼요.
 
 ## 안티 패턴
 
@@ -89,3 +143,5 @@ Generator/Evaluator 모델 — Generator의 self-praise bias 제거.
 - 모든 변경에 똑같은 체크리스트 → 도메인별 컨텍스트 무시
 - **재현 시나리오 없는 지적** → 발견이 아니라 인상평
 - **빈손으로 끝내기 싫어서 채운 항목** → 과잉 설계의 출발점
+- **verdict 없이 끝내기** → 게이트가 못 읽어요. 첫 줄이 `verdict:` 가 아니면 리뷰가 없던 게 돼요
+- **결과를 대화로만 돌려주기** → review.md 에 직접 써요. 코디네이터가 옮겨 적는 구조가 자기보고예요

@@ -70,7 +70,7 @@
        │ .ax/spirit/{values, tone, rules}      │ .ax/mistakes/ — 수동 캡처 (mistake skill)
        │ → 모든 sub-agent 공통 태도              │ → /audit 심사 → 룰 승격
 
-Sensors (결정론적):  .ax/hooks/{user-prompt, pre-bash, pre-edit, post-edit, pre-commit}/*.sh
+Sensors (결정론적):  .ax/hooks/{user-prompt, pre-bash, pre-edit, post-edit, pre-commit, subagent-start, stop}/*.sh
 Scripts (결정론적):   .ax/scripts/bash/*.sh — --json 표준
 ```
 
@@ -113,7 +113,10 @@ GOAX 가 깔아주는 자산은 두 결로 나뉘어요:
 ```
 "spec 만들어줘 payment-refund"   → spec.md + tasks.md
 "tasks 분해"                      → tasks 분해 ([P] 병렬 마커)
-"구현 시작"                       → tasks.md 순차 실행 + - [x] 마킹
+"구현 시작"                       → tasks.md 실행: 순차, 또는 레인 배정이 있으면 코디네이터 모드
+                                  (lanes-dispatch.sh 원장) → 완료 게이트 G1~G6
+                                  (L · M×L3 은 새 컨텍스트 evaluator 필수)
+"레인 나눠줘"                     → lane — 가를 수 있는 일인지부터 판정
 # 설계 결정은 ADR (.ax/docs/adr/NNNN-*.md) 로
 ```
 
@@ -128,16 +131,19 @@ GOAX 가 깔아주는 자산은 두 결로 나뉘어요:
 | 자연어 | 발동 skill |
 |---|---|
 | `/goax` | 인덱스 — 모든 트리거 한눈에 (유일하게 남은 slash 명령) |
-| "goax 도입" / "goax 설치" | up → brownfield 면 자동 onboarding |
+| "goax 도입" / "goax 설치" | up → brownfield 면 onboarding, greenfield 면 zero |
+| "새 프로젝트 시작" / "0에서 만들자" | zero — 0→1 진입: 제품·비즈니스·ADR·집행 배관 |
+| "goax 동봉" | vendor — plugin 없이 저장소에 동봉 |
 | "진단해줘" / "goax doctor" | doctor — 결손·drift 점검 |
-| "rules 보여줘" | rules — Constitution + Spirit + Module 통합 인덱스 |
+| "rules 보여줘" / "CRITICAL 룰만" | doctor → `rules-index.sh` — Constitution + Spirit + Module 통합 인덱스 |
 | "spec 만들어줘 — <slug>" | spec — tier-aware spec 디렉토리 생성 |
 | "tasks 분해" | spec-tasks |
+| "병렬로 돌리자" / "레인 나눠줘" | lane — 가를 수 있는 일인지부터 판정 |
 | "구현 시작" / "tasks 실행" | spec-implement |
 | "spec 확인" | spec-validate — NEEDS CLARIFICATION 게이팅 |
 | "구현해줘" / "고쳐줘" / "리팩토링" | triage — Size × Risk 30 초 분류 |
 | "ADR 작성" / "결정 기록" | adr — 새 ADR 파일 |
-| "spirit 점검" | spirit — frontmatter + 토큰 무결성 |
+| "spirit 점검" | doctor → `spirit-lint.sh` — 헤더 형식 · 토큰 중복 · placeholder |
 | "실수 기록해줘" / "mistake 박아줘" | mistake — 1 건 capture |
 | "audit" / "실수 회고" | audit — Mistake Loop 심사·룰 승격 후보 |
 | "/hud setup" / "statusline 활성화" | hud — Claude Code statusline (OpenCode 어댑터 추후) |
@@ -239,67 +245,30 @@ bash .ax/scripts/bash/install-git-hooks.sh
 
 ---
 
-## HUD — One-line Layer Status (fact-based)
+## HUD — 하네스 위치만 한 줄
 
-statusline은 **단일 디자인** (preset 없음). 핵심 신호 셋만 한 줄로:
+statusline 은 **하네스 안에서 지금 어디인지**만 보여줘요. 모델·ctx%·에이전트 수·todo 는 OMC HUD 몫이고, 레인·게이트·경보는 skill 출력과 `doctor` 가 보여줘요.
 
 ```
-triage: M×L3 | harness: 🪐 | ☄3       ← task 있음
-harness: 🪐 | ☄3                       ← task 없음 (idle)
+[goax#0.5.1] | M×L2 · payment | spec ✓ › tasks ✓ › impl ● [######----]7/12 › review ○ | mistakes:3
 ```
 
-### 신호 1 — `triage: <Size>×<Risk>` (color matrix)
+| 조각 | 뜻 |
+|---|---|
+| `[goax#0.5.1]` | 설치된 버전. plugin 이 더 새로우면 `[goax#0.5.1] -> 0.5.2 goax up` |
+| `M×L2 · payment` | triage 결과 (Size×Risk, 도메인). 활성 작업이 없으면 `idle` |
+| `spec ✓ › tasks ✓ › impl ● 7/12 › review ○` | M 이상의 워크플로 체인. `✓` 완료 · `●` 진행 중 · `○` 남음. S 는 `즉시 작업`. full tier 는 `adr` 이 끼고, `review` 는 evaluator 가 필수일 때만 |
+| `mistakes:3` | 실수 누적 수 (5 이상 노랑, 10 이상 빨강) |
 
-현재 작업의 size·risk 를 색상으로 즉시 읽어낼 수 있어요:
+프리셋은 OMC HUD 와 같은 이름이에요 — `minimal` / `focused`(기본) / `full`, `.ax/config.yml` 의 `hud.preset`. 스크립트는 파일만 읽어요(스크립트 호출 없음) — statusline 의 300ms 디바운스 안에 끝나요. 무거운 값은 `update-state.sh` 가 캐시하고 30분이 지나면 `(stale)` 을 붙여요.
 
-- **Size**: S=dim · M=cyan · L=yellow · XL=red
-- **Risk**: L0=dim · L1=green · L2=yellow · L3=red
-
-16 개 매트릭스 조합 색이 모두 달라요.
-
-### 신호 2 — `harness: <evolution>` (4계층 종합)
-
-플러그인 4 계층의 활성도를 *우주 진화* 단계로 보여줘요:
-
-| 활성 | 이모지 | 의미 | 색 |
-|---|---|---|---|
-| 0/4 | `·` | 특이점 (시작점) | dim |
-| 1/4 | `✦` | 별 첫 빛 | yellow |
-| 2/4 | `⭐` | 항성 형성 | yellow |
-| 3/4 | `🌟` | 빛나는 별 | green |
-| 4/4 | `🪐` | 우아한 행성 (완성) | cyan |
-
-### 신호 3 — `☄<n>` (mistakes count)
-
-mistakes 누적 개수예요. 우주 메타포를 유지해요 (혜성 = 충돌 사건):
-
-- 0=dim · 1–4=plain · 5–9=yellow · 10+=red
-
-### Live Refresh
-
-statusline 은 *어시스턴트 메시지 직후* 에 자동으로 갱신돼요 (Claude Code 사양). idle 중에도 주기적 갱신을 원하면 `.claude/settings.json` 에 `refreshInterval` 을 추가해요:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": ".ax/hud/statusline.sh",
-    "refreshInterval": 5
-  }
-}
-```
-
-5 초마다 재실행해서 백그라운드 작업이 spec/tasks 진척을 갱신할 때 바로 반영돼요.
-
-### How to Activate
+활성화:
 
 ```
 /hud setup
 ```
 
-또는 `.claude/settings.json` 에 `statusLine` 을 직접 추가해요. 다른 플러그인의 statusLine 과 충돌하면 `setup` 이 합치기 옵션을 제안해요.
-
----
+다른 statusline(예: OMC)이 이미 있으면 `setup` 이 stdin 을 **양쪽에** 먹이는 합성 스크립트를 제안해요 — 명령 두 개를 이어 붙이면 앞 명령이 stdin 을 다 먹어서 안 돼요.
 
 ## Updates
 

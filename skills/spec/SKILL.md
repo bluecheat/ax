@@ -162,7 +162,7 @@ jq --arg id "$SPEC_ID" \
 
 📍 다음 단계
  1. spec.md 작성 — 문제 정의 + NEEDS CLARIFICATION 명시 + §7.5 Technical Context
- 2. "/spec-validate" — 게이팅 통과 (NEEDS / placeholder / 빈 섹션)
+ 2. "/spec-validate" — 게이팅 통과 (NEEDS / placeholder / 빈 섹션) + L/XL 은 합의 리뷰 (architect → evaluator, M 은 "--consensus")
  3. "/spec-tasks" → "/spec-implement"
  4. (L3 도메인이라) "/adr 작성" 권장 — 설계 결정 기록
 ```

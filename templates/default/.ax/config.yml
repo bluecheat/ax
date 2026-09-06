@@ -96,3 +96,12 @@ confirmation:
 mistake_loop:
   promotion_threshold: 3     # 같은 카테고리 N회 이상 → CRITICAL 승격 권고
   audit_cadence_days: 7
+
+# ───────────────────────────────────────────────────────────
+# HUD (statusline) — .ax/hud/statusline.sh
+#   [goax#0.5.1] | M×L2 · payment | spec ✓ › tasks ✓ › impl ● [######----]7/12 › review ○ | mistakes:3
+#   이 블록이 없으면 focused · ascii 로 동작해요 (기존 설치는 키가 안 내려와도 괜찮아요).
+# ───────────────────────────────────────────────────────────
+hud:
+  preset: focused       # minimal (1줄, 현재 단계만) | focused (1줄, 체인 전체) | full (2줄 — spec 슬러그·tier·다음 단계)
+  bars: ascii           # ascii ([######----]) | unicode (█░)

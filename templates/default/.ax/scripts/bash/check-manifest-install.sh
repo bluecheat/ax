@@ -113,7 +113,7 @@ for entry in ${DIR_ENTRIES[@]+"${DIR_ENTRIES[@]}"}; do
         elif ! cmp -s "$f" "$user_f"; then
             DRIFT+=("$rel")
         fi
-    done < <(find "$plugin_dir" -type f)
+    done < <(find "$plugin_dir" -type f -not -path '*/.omc/*')
 done
 
 # Extra (non-MANIFEST) shipped paths — install/SKILL.md §6.6
@@ -136,7 +136,7 @@ for spec in "${EXTRA_PATHS[@]}"; do
         elif ! cmp -s "$f" "$user_f"; then
             DRIFT+=("$dst_rel/$sub")
         fi
-    done < <(find "$src_dir" -type f)
+    done < <(find "$src_dir" -type f -not -path '*/.omc/*')
 done
 
 # helpers

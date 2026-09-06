@@ -61,7 +61,7 @@ done < <(find "$REPO/skills" -name SKILL.md | sort)
 # 제거된 skill이 잔재로 남지 않았는지 확인 (옛 구조)
 for removed in skills/global skills/workflows \
                skills/global/goax-critical-rules skills/global/goax-steering-loop \
-               skills/personas skills/meta; do
+               skills/personas skills/meta skills/spirit skills/rules skills/parallel; do
     if [ -e "$REPO/$removed" ]; then
         fail "$removed — 제거됐어야 함 (잔재)"
     else
@@ -152,6 +152,8 @@ for f in \
     templates/default/.ax/hooks/pre-edit/spirit-check.sh \
     templates/default/.ax/hooks/post-edit/lint-changed.sh \
     templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh \
+    templates/default/.ax/hooks/subagent-start/harness-pointer.sh \
+    templates/default/.ax/hooks/stop/spec-gate.sh \
     templates/default/.ax/_templates/adr/0000-template.md \
     templates/default/.ax/_templates/spec/spec.md \
     templates/default/.ax/_templates/spec/tasks.md \
@@ -233,7 +235,7 @@ fi
 section "4.1 settings.json.template ↔ .ax/hooks/ 양방향 cross-check"
 # ───────────────────────────────────────────────────────────
 # 정방향: settings.json.template 이 참조하는 .ax/... 경로가 실제로 존재하는지.
-# 역방향: .ax/hooks/{user-prompt,pre-bash,pre-edit,post-edit}/*.sh 가 모두 등록됐는지
+# 역방향: .ax/hooks/{user-prompt,pre-bash,pre-edit,post-edit,subagent-start,stop}/*.sh 가 모두 등록됐는지
 #         (pre-commit/ 은 grep-on-commit.sh + install-git-hooks.sh 체이닝으로 별도 등록되므로 예외).
 # 실제 구조는 hooks[phase][n]['hooks'][m]['command'] 깊이이고 command 는
 # `bash "${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-bash/block-destructive.sh"` 형태라 .ax/ 부분만 추출.
@@ -255,7 +257,7 @@ lines = []
 for path in sorted(registered):
     full = os.path.join(tpl, path)
     lines.append("FWD|%s|%d" % (path, 1 if os.path.isfile(full) else 0))
-for phase in ["user-prompt", "pre-bash", "pre-edit", "post-edit"]:
+for phase in ["user-prompt", "pre-bash", "pre-edit", "post-edit", "subagent-start", "stop"]:
     for f in sorted(glob.glob(os.path.join(tpl, ".ax/hooks", phase, "*.sh"))):
         rel = os.path.relpath(f, tpl)
         lines.append("REV|%s|%d" % (rel, 1 if rel in registered else 0))
@@ -410,56 +412,97 @@ expected_skills=$(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d | grep -c 
     && pass "skill 카운트 = $total_skills (디렉토리 수와 일치)" \
     || fail "skill 디렉토리 ${expected_skills}개인데 SKILL.md 는 ${total_skills}개 — 빈 skill 디렉토리 존재"
 
-# ───────────────────────────────────────────────────────────
-section "6. HUD statusline 우주 이모지 + spec/ADR 진척 (팩트 기반)"
-# ───────────────────────────────────────────────────────────
-if grep -q "🪐\|🌟\|⭐\|✦" "$REPO/templates/default/.ax/hud/statusline.sh"; then
-    pass "statusline.sh 우주 이모지 (별·행성)"
-else
-    fail "statusline.sh 우주 이모지 누락"
-fi
-# 자가 점수 prefix 잔재 검사 (제거됐어야 함)
-LEFT=$(grep -rl "응답 prefix 이모지\|prefix 자가 점수\|하네스 자가 점수" \
-       "$REPO/templates/default/.ax/spirit" "$REPO/skills" "$REPO/agents" 2>/dev/null || true)
-if [ -z "$LEFT" ]; then
-    pass "자가 점수 prefix 제거 완료 (spirit/skills/agents 잔재 0)"
-else
-    fail "자가 점수 prefix 잔재: $(echo $LEFT | tr '\n' ' ')"
-fi
-# stdin JSON 처리 (Claude Code statusline 사양)
-if grep -q "workspace.current_dir" "$REPO/templates/default/.ax/hud/statusline.sh"; then
-    pass "statusline.sh stdin JSON 처리 (workspace.current_dir)"
-else
-    fail "statusline.sh stdin JSON 처리 누락"
-fi
-# spec/ADR 진척 e2e — 임시 .ax/ 만들고 multi-line 출력 검증
-if command -v jq >/dev/null 2>&1; then
-    HUD_TMP=$(mktemp -d)
-    mkdir -p "$HUD_TMP/.ax/docs/spec/005-test"
-    cat > "$HUD_TMP/.ax/state.json" <<JSON
-{"layers":{"L0_triage":{"active":true},"L1_constitution":{"active":true},"L2_module":{"active":false},"L3_spec_adr":{"active":true,"specs":1}},
-"cross_cut":{"spirit":{"active":true},"mistakes":{"active":false,"count":0,"due_in_days":7}},
-"hud_preset":"full"}
-JSON
-    # .ax/current-task.json 이 triage(size/risk) SSOT — state.json.current_task 는 갖지 않음.
-    # phase=idle(또는 size/risk 미채움)이면 statusline 이 triage fragment 를 숨기므로
-    # phase!=idle + size/risk 둘 다 채워야 e2e 가 triage: 라벨을 검증할 수 있음.
-    cat > "$HUD_TMP/.ax/current-task.json" <<JSON
-{"spec_id":"005","spec_dir":".ax/docs/spec/005-test","spec_tier":"standard","phase":"implementing","size":"M","risk":"L1"}
-JSON
-    cat > "$HUD_TMP/.ax/docs/spec/005-test/spec.md" <<MD
-# Spec
-Related: ADR-0006
-MD
-    printf -- "- [x] T001\n- [x] T002\n- [ ] T003\n" > "$HUD_TMP/.ax/docs/spec/005-test/tasks.md"
-    OUT=$(echo "{\"workspace\":{\"current_dir\":\"$HUD_TMP\"}}" | bash "$REPO/templates/default/.ax/hud/statusline.sh" 2>&1)
-    # compact preset 기본 — triage 라벨 + harness 우주 이모지 + 혜성(mistakes) 검증
-    if echo "$OUT" | grep -q "triage:" && echo "$OUT" | grep -qE "🪐|🌟|⭐|✦" && echo "$OUT" | grep -q "☄"; then
-        pass "statusline e2e — triage + harness 이모지 + 혜성 출력"
-    else
-        fail "statusline e2e 출력 누락: $OUT"
+# 컨텍스트 예산 — SKILL.md 는 500줄 안, description 은 1,536자 안이 공식 권장이에요. compaction 뒤엔
+# skill 당 앞 5,000토큰만 남아서 긴 본문은 뒤가 잘려요 (onboarding 이 1006줄일 때 Q3 이후가 잘렸어요).
+# 본문에서 가리키는 references/<x>.md 는 실재해야 해요 — 포인터가 죽으면 그 절이 통째로 사라져요.
+budget_bad=0
+while IFS= read -r f; do
+    sname=$(basename "$(dirname "$f")")
+    lines=$(wc -l < "$f" | tr -d ' ')
+    if [ "$lines" -gt 500 ]; then
+        fail "skills/$sname/SKILL.md ${lines}줄 — 500줄 상한 초과 (references/ 로 분리)"; budget_bad=$((budget_bad+1))
     fi
-    rm -rf "$HUD_TMP"
+    dlen=$(python3 -c "import re,sys; t=open(sys.argv[1],encoding='utf-8').read().split('\n---',2)[1] if open(sys.argv[1],encoding='utf-8').read().startswith('---') else ''; m=re.search(r'^description:\\s*(.*)$',t,re.M); print(len(m.group(1).strip().strip('\"')) if m else 0)" "$f" 2>/dev/null || echo 0)
+    if [ "${dlen:-0}" -gt 1536 ]; then
+        fail "skills/$sname description ${dlen}자 — 1,536자 상한 초과"; budget_bad=$((budget_bad+1))
+    fi
+    while IFS= read -r ref; do
+        [ -z "$ref" ] && continue
+        [ -f "$(dirname "$f")/$ref" ] || { fail "skills/$sname/SKILL.md → $ref 없음 (죽은 references 포인터)"; budget_bad=$((budget_bad+1)); }
+    done < <(grep -oE 'references/[a-z0-9-]+\.md' "$f" | sort -u)
+done < <(find "$REPO/skills" -name SKILL.md)
+[ "$budget_bad" -eq 0 ] && pass "skill 컨텍스트 예산 — 500줄 · description 1,536자 · references 포인터 실재"
+
+# ───────────────────────────────────────────────────────────
+section "6. HUD statusline — 하네스 위치 한 줄 (OMC 문법)"
+# ───────────────────────────────────────────────────────────
+# 이전 HUD 의 세 조각(행성 이모지·S×R·혜성)은 작업 중에 안 변했어요. 지금은 phase 로 체인이 움직여요.
+SL="$REPO/templates/default/.ax/hud/statusline.sh"
+if grep -qE "🪐|🌟|⭐|✦|☄" "$SL"; then
+    fail "statusline.sh — 우주 이모지 잔재 (행성·혜성은 폐기)"
+else
+    pass "statusline.sh — 행성·혜성 이모지 0"
+fi
+grep -q "workspace.current_dir" "$SL" && pass "statusline.sh stdin JSON 처리 (workspace.current_dir)" || fail "statusline.sh stdin JSON 처리 누락"
+if grep -qE 'bash .*\.sh' "$SL" | grep -v '^#' ; then fail "statusline.sh 가 스크립트를 호출함 (300ms 예산)"; else pass "statusline.sh — 스크립트 호출 없음 (파일 읽기만)"; fi
+
+if command -v jq >/dev/null 2>&1; then
+    HUD_FX=$(mktemp -d)
+    mkdir -p "$HUD_FX/.ax/hud" "$HUD_FX/.ax/docs/spec/014-pay" "$HUD_FX/.ax/docs/adr" "$HUD_FX/.ax/mistakes"
+    cp "$SL" "$HUD_FX/.ax/hud/"
+    cp "$REPO/templates/default/.ax/hud/state.json.template" "$HUD_FX/.ax/state.json"
+    cp "$REPO/templates/default/.ax/config.yml" "$HUD_FX/.ax/config.yml"
+    printf 'goax: 0.5.1\n' > "$HUD_FX/.ax/version"
+    printf -- '- [x] T001 [AC1] a\n- [x] T002 [AC1] b\n- [ ] T003 [AC2] c\n' > "$HUD_FX/.ax/docs/spec/014-pay/tasks.md"
+    touch "$HUD_FX/.ax/mistakes/a.md" "$HUD_FX/.ax/mistakes/b.md" "$HUD_FX/.ax/mistakes/README.md"
+    hud_render() { printf '{"workspace":{"current_dir":"%s"}}' "$HUD_FX" | bash "$HUD_FX/.ax/hud/statusline.sh" 2>/dev/null | sed -E $'s/\033\\[[0-9;]*[A-Za-z]//g'; }
+
+    echo '{"phase":"idle"}' > "$HUD_FX/.ax/current-task.json"
+    OUT=$(hud_render)
+    echo "$OUT" | grep -q '\[goax#0.5.1\]' && echo "$OUT" | grep -q 'idle' && echo "$OUT" | grep -q 'mistakes:2' \
+        && pass "HUD idle — 버전 태그 + idle + mistakes:2 (README 제외)" || fail "HUD idle 출력: $OUT"
+
+    echo '{"phase":"triaged","size":"S","risk":"L1","domain":"search"}' > "$HUD_FX/.ax/current-task.json"
+    hud_render | grep -q '즉시 작업' && pass "HUD S×L1 — 즉시 작업 (체인 없음)" || fail "HUD S 사이즈 체인 오표시"
+
+    echo '{"phase":"implementing","size":"M","risk":"L2","domain":"payment","spec_tier":"standard","spec_dir":".ax/docs/spec/014-pay"}' > "$HUD_FX/.ax/current-task.json"
+    OUT=$(hud_render)
+    echo "$OUT" | grep -q 'M×L2' && echo "$OUT" | grep -q 'spec ✓' && echo "$OUT" | grep -q 'tasks ✓' && echo "$OUT" | grep -q 'impl ●' && echo "$OUT" | grep -q '2/3' \
+        && pass "HUD M×L2 implementing — spec ✓ › tasks ✓ › impl ● 2/3" || fail "HUD 체인 오표시: $OUT"
+    echo "$OUT" | grep -q 'review' && fail "HUD — review_required 없는데 review 단계 표시" || pass "HUD — review 단계는 필수일 때만"
+
+    jq '.hud.review_required="required" | .hud.cached_at=(now|todate)' "$HUD_FX/.ax/state.json" > "$HUD_FX/s" && mv "$HUD_FX/s" "$HUD_FX/.ax/state.json"
+    jq '.phase="review" | .spec_tier="full" | .size="L" | .risk="L3"' "$HUD_FX/.ax/current-task.json" > "$HUD_FX/ct" && mv "$HUD_FX/ct" "$HUD_FX/.ax/current-task.json"
+    printf '# ADR — spec 014\n' > "$HUD_FX/.ax/docs/adr/0001-x.md"
+    OUT=$(hud_render)
+    echo "$OUT" | grep -q 'adr ✓' && echo "$OUT" | grep -q 'impl ✓' && echo "$OUT" | grep -q 'review ●' \
+        && pass "HUD L×L3 full review — adr ✓ · impl ✓ · review ●" || fail "HUD full tier/review 오표시: $OUT"
+    echo "$OUT" | grep -q '(stale)' && fail "HUD — 캐시가 방금인데 stale" || pass "HUD — 캐시 신선하면 stale 없음"
+
+    jq '.hud.cached_at="2026-01-01T00:00:00Z" | .hud.plugin_version="0.9.0"' "$HUD_FX/.ax/state.json" > "$HUD_FX/s" && mv "$HUD_FX/s" "$HUD_FX/.ax/state.json"
+    OUT=$(hud_render)
+    echo "$OUT" | grep -q '(stale)' && pass "HUD — 캐시 30분 초과면 (stale)" || fail "HUD — stale 미표시: $OUT"
+    echo "$OUT" | grep -q -- '-> 0.9.0 goax up' && pass "HUD — plugin 이 새로우면 '-> X goax up' 힌트" || fail "HUD — 업데이트 힌트 없음: $OUT"
+
+    jq '.phase="spec_blocked"' "$HUD_FX/.ax/current-task.json" > "$HUD_FX/ct" && mv "$HUD_FX/ct" "$HUD_FX/.ax/current-task.json"
+    hud_render | grep -q 'spec ●' && pass "HUD spec_blocked — spec ● (노랑)" || fail "HUD spec_blocked 오표시"
+
+    sed -i.bak 's/^  preset: focused/  preset: full/' "$HUD_FX/.ax/config.yml" && rm -f "$HUD_FX/.ax/config.yml.bak"
+    N=$(hud_render | grep -c .)
+    [ "$N" -eq 2 ] && pass "HUD preset full — 2줄 (둘째 줄에 spec·tier·다음)" || fail "HUD full 프리셋 줄 수 $N"
+    sed -i.bak 's/^  preset: full/  preset: minimal/' "$HUD_FX/.ax/config.yml" && rm -f "$HUD_FX/.ax/config.yml.bak"
+    OUT=$(hud_render)
+    [ "$(echo "$OUT" | grep -c .)" -eq 1 ] && ! echo "$OUT" | grep -q 'tasks' \
+        && pass "HUD preset minimal — 1줄, 현재 단계만" || fail "HUD minimal 프리셋 출력: $OUT"
+
+    RAW=$(printf '{"workspace":{"current_dir":"%s"}}' "$HUD_FX" | bash "$HUD_FX/.ax/hud/statusline.sh" 2>/dev/null)
+    [ "$(printf '%s' "$RAW" | tail -c 1 | od -An -c | tr -d ' ')" != "" ] || true
+    printf '{"workspace":{"current_dir":"%s"}}' "$HUD_FX" | bash "$HUD_FX/.ax/hud/statusline.sh" 2>/dev/null | tail -c 1 | od -An -tx1 | grep -q '0a' \
+        && pass "HUD — 출력이 개행으로 끝남 (합치기 안전)" || fail "HUD — 마지막 개행 없음"
+
+    LONG=$(COLUMNS=40 hud_render | head -1)
+    [ "${#LONG}" -le 40 ] && pass "HUD — COLUMNS=40 이면 ' | ' 경계에서 잘림 (${#LONG}자)" || fail "HUD — 폭 초과 (${#LONG}자)"
+    rm -rf "$HUD_FX"
 fi
 
 # ───────────────────────────────────────────────────────────
@@ -509,7 +552,8 @@ SCRIPTS_DIR="$REPO/templates/default/.ax/scripts/bash"
 for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
          check-spec-clarity slug-from-text check-templates-drift check-manifest-install promote-mistake \
          check-rule-enforcement check-sensor-liveness \
-         build-memory build-index; do
+         build-memory spirit-lint rules-index doctor-scan status-note constitution-apply \
+         tasks-plan tasks-gate lanes-hotfiles lanes-dispatch spec-review; do
     f="$SCRIPTS_DIR/$s.sh"
     if [ -f "$f" ]; then
         # bash -n 통과
@@ -539,6 +583,8 @@ for cmd in \
     "next-spec-num.sh --json" \
     "tier-from-state.sh --json" \
     "tier-from-state.sh --json --size L --risk L3" \
+    "tier-from-state.sh --json --size M --risk L3" \
+    "tier-from-state.sh --json --size L --risk L1" \
     "init-spec-dir.sh --json --tier standard --slug e2e-test --dry-run" \
     "slug-from-text.sh --json 'End To End Test'" \
     "check-templates-drift.sh --json" \
@@ -547,7 +593,10 @@ for cmd in \
     "check-sensor-liveness.sh --json" \
     "promote-mistake.sh --json" \
     "build-memory.sh --json" \
-    "build-index.sh --json"; do
+    "spirit-lint.sh --json" \
+    "rules-index.sh --json" \
+    "doctor-scan.sh --json --plugin-dir $REPO" \
+    "status-note.sh --show --json"; do
     out=$(bash "$REPO/templates/default/.ax/scripts/bash/"$cmd 2>/dev/null) || true
     if echo "$out" | jq -e '.status' >/dev/null 2>&1; then
         pass "$cmd → valid JSON"
@@ -557,6 +606,9 @@ for cmd in \
 done
 popd >/dev/null || true
 rm -rf "$TMP_E2E"
+[ -e "$SCRIPTS_DIR/build-index.sh" ] && fail "build-index.sh — 제거됐어야 함 (BM25 분기 폐기)" || pass "build-index.sh 제거됨 (되살릴 조건: .ax/docs 2,000 파일 실측)"
+grep -q 'build-index' "$REPO/templates/default/.ax/scripts/bash/triage-search.sh" \
+    && fail "triage-search.sh 에 build-index 분기 잔재" || pass "triage-search.sh — BM25 union 분기 제거"
 
 # ───────────────────────────────────────────────────────────
 section "10. init-mistake-file.sh 런타임 — race-free ID + idempotent + redactor"
@@ -1396,6 +1448,40 @@ tg | jq -e '.result.task_count_drop == 1 and .result.complete == false' >/dev/nu
 # --strict 는 exit 2
 GOAX_PROJECT_DIR="$TG" bash "$TG/.ax/scripts/bash/tasks-gate.sh" --spec 012-x --strict >/dev/null 2>&1
 [ $? -eq 2 ] && pass "tasks-gate --strict — 위반 시 exit 2" || fail "tasks-gate --strict — exit code 부정확"
+
+# G5 원장 — 체크박스를 채운 쪽과 검사받는 쪽이 같으면 게이트가 아니라 자기보고예요.
+# 레인이 조용해진 것(idle)과 산출물을 받은 것(보고:)은 달라요 — 8 레인 idle 인데 24/36 이었어요.
+echo '{}' > "$TG/.ax/state.json"      # G3/G4 가 올린 봉인값(3) 초기화 — 여기선 2 task fixture 라 G4 와 섞이면 안 돼요
+printf -- '- [ ] T001 [AC1] a — files: a.kt\n      레인: A\n      디스패치: 2026-01-01T00:00Z\n- [x] T002 [AC2] b — files: b.kt\n' > "$TG/.ax/docs/spec/012-x/tasks.md"
+tg | jq -e '(.result.dispatched_unreported | index("T001")) and .result.complete == false' >/dev/null 2>&1 \
+    && pass "tasks-gate G5 — 보고 안 받은 디스패치는 미완료" || fail "tasks-gate G5 — dispatched_unreported 미검출"
+printf -- '- [x] T001 [AC1] a — files: a.kt\n      레인: A\n      디스패치: 2026-01-01T00:00Z\n- [x] T002 [AC2] b — files: b.kt\n' > "$TG/.ax/docs/spec/012-x/tasks.md"
+tg | jq -e '(.result.done_without_report | index("T001")) and .result.complete == false' >/dev/null 2>&1 \
+    && pass "tasks-gate G5 — 보고 없이 켜진 체크박스는 미완료 (레인 자기보고 차단)" || fail "tasks-gate G5 — done_without_report 미검출"
+printf -- '- [x] T001 [AC1] a — files: a.kt\n      레인: A\n      디스패치: 2026-01-01T00:00Z\n      보고: 2026-01-01T01:00Z\n- [x] T002 [AC2] b — files: b.kt\n' > "$TG/.ax/docs/spec/012-x/tasks.md"
+tg | jq -e '.result.dispatched_unreported == [] and .result.done_without_report == [] and .result.complete == true' >/dev/null 2>&1 \
+    && pass "tasks-gate G5 — 디스패치+보고 짝이 맞으면 통과" || fail "tasks-gate G5 — 정상 원장을 위반으로 봄"
+
+# G6 evaluator verdict — 필수 여부는 활성 spec 의 size×risk (SSOT: tier-from-state.sh)
+cp "$REPO/templates/default/.ax/scripts/bash/tier-from-state.sh" "$TG/.ax/scripts/bash/"
+echo '{"phase":"implementing","spec_dir":".ax/docs/spec/012-x","size":"L","risk":"L1"}' > "$TG/.ax/current-task.json"
+tg | jq -e '.result.review_required == true and .result.review_verdict == null and .result.complete == false' >/dev/null 2>&1 \
+    && pass "tasks-gate G6 — L×L1 은 evaluator 필수, review.md 없으면 미완료" || fail "tasks-gate G6 — 필수 리뷰 부재를 통과시킴"
+printf 'verdict: 진행\n\n## Evaluator Review\n발견 0건\n' > "$TG/.ax/docs/spec/012-x/review.md"
+tg | jq -e '.result.review_verdict == "진행" and .result.complete == true' >/dev/null 2>&1 \
+    && pass "tasks-gate G6 — verdict 진행 → complete" || fail "tasks-gate G6 — verdict 진행을 못 읽음"
+printf 'verdict: 보강 필요\n' > "$TG/.ax/docs/spec/012-x/review.md"
+tg | jq -e '.result.review_verdict == "보강 필요" and .result.complete == false' >/dev/null 2>&1 \
+    && pass "tasks-gate G6 — verdict 보강 필요 → 미완료" || fail "tasks-gate G6 — 보강 필요를 통과시킴"
+echo '{"phase":"implementing","spec_dir":".ax/docs/spec/012-x","size":"S","risk":"L0"}' > "$TG/.ax/current-task.json"
+tg | jq -e '.result.review_required == false and .result.complete == false' >/dev/null 2>&1 \
+    && pass "tasks-gate G6 — 선택이어도 받은 리뷰가 보강 필요면 미완료" || fail "tasks-gate G6 — 선택 리뷰의 지적을 무시함"
+rm "$TG/.ax/docs/spec/012-x/review.md"
+tg | jq -e '.result.review_required == false and .result.review_verdict == null and .result.complete == true' >/dev/null 2>&1 \
+    && pass "tasks-gate G6 — S×L0 은 리뷰 없이 완료 가능" || fail "tasks-gate G6 — 선택 리뷰를 필수로 강제함"
+echo '{"phase":"implementing","spec_dir":".ax/docs/spec/099-other","size":"L","risk":"L3"}' > "$TG/.ax/current-task.json"
+tg | jq -e '.result.review_required == false' >/dev/null 2>&1 \
+    && pass "tasks-gate G6 — 다른 spec 이 활성이면 필수 판정 안 함 (--all 안전)" || fail "tasks-gate G6 — 비활성 spec 에 필수를 적용함"
 rm -rf "$TG"
 
 # pre-commit 훅 — 활성 spec 없으면 조용해야 (커밋마다 떠들면 우회 대상이 됨)
@@ -1841,8 +1927,7 @@ else
     TS_T=$(mktemp -d)
     mkdir -p "$TS_T/.ax/scripts/bash" "$TS_T/.ax/docs/adr" "$TS_T/.ax/docs/spec/imported"
     cp "$REPO/templates/default/.ax/scripts/bash/common.sh" \
-       "$REPO/templates/default/.ax/scripts/bash/triage-search.sh" \
-       "$REPO/templates/default/.ax/scripts/bash/build-index.sh" "$TS_T/.ax/scripts/bash/" 2>/dev/null
+       "$REPO/templates/default/.ax/scripts/bash/triage-search.sh" "$TS_T/.ax/scripts/bash/" 2>/dev/null
     : > "$TS_T/CLAUDE.md"
 
     mkdir -p "$TS_T/.ax/docs/spec/003-payment-coupon"      # 슬러그 매칭
@@ -1880,6 +1965,358 @@ else
     esac
     rm -rf "$TS_T"
 fi
+
+# ───────────────────────────────────────────────────────────
+section "32. lanes-dispatch — 디스패치 원장 (assign / dispatch / report / status)"
+# ───────────────────────────────────────────────────────────
+# 코디네이터의 "누구에게 뭘 보냈더라" 는 컨텍스트 안에만 있어서 압축·세션 종료로 사라져요.
+# 원장이 tasks.md 에 있어야 tasks-gate G5 가 읽고, dispatch 는 파일 소유 충돌을 거부해야 해요.
+LDX=$(mktemp -d)
+mkdir -p "$LDX"/.ax/scripts/bash "$LDX"/.ax/docs/spec/012-x
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,lanes-dispatch}.sh "$LDX/.ax/scripts/bash/"
+cat > "$LDX/.ax/docs/spec/012-x/tasks.md" <<'LDEOF'
+- [ ] T001 [AC1] 배럴 — files: ui/index.ts
+      의존: 없음
+- [ ] T010 [P] [AC1] 카드 — files: ui/Card.tsx
+      의존: T001
+      검증: pnpm test Card
+- [ ] T011 [P] [AC2] 필 — files: ui/Pill.tsx
+      의존: T001
+- [ ] T021 [AC3] 스크린 — files: app/Result.tsx, ui/Card.tsx
+LDEOF
+ld() { GOAX_PROJECT_DIR="$LDX" bash "$LDX/.ax/scripts/bash/lanes-dispatch.sh" --spec 012-x "$@" 2>/dev/null; }
+
+ld --json | jq -e '.result.lanes == [] and (.result.unassigned_open | length) == 4' >/dev/null 2>&1 \
+    && pass "lanes-dispatch — 배정 없으면 lanes 비고 전부 unassigned" || fail "lanes-dispatch — 초기 status 오류"
+
+# assign: T010(A) 와 T021(B) 가 ui/Card.tsx 를 공유 → 충돌
+ld --assign "T010=A,T011=A,T021=B" --json | jq -e '.status == "warning" and (.result.lane_file_conflicts | length) == 1
+    and .result.lane_file_conflicts[0].file == "ui/Card.tsx"' >/dev/null 2>&1 \
+    && pass "lanes-dispatch --assign — 원장 기록 + 파일 소유 충돌 검출" || fail "lanes-dispatch --assign — 충돌 미검출"
+grep -qE '^[[:space:]]+레인: A$' "$LDX/.ax/docs/spec/012-x/tasks.md" \
+    && pass "lanes-dispatch --assign — tasks.md 에 레인: 필드가 continuation 으로 기록" || fail "lanes-dispatch --assign — 레인: 필드 미기록"
+
+# dispatch: 충돌 레인은 거부 (exit 1)
+ld --dispatch B --json >/dev/null 2>&1; [ $? -eq 1 ] \
+    && pass "lanes-dispatch --dispatch — 파일 소유 충돌이면 거부 (exit 1)" || fail "lanes-dispatch --dispatch — 충돌인데 디스패치함"
+
+# 재배정은 --force 필요
+ld --assign "T021=A" --json >/dev/null 2>&1; [ $? -eq 1 ] \
+    && pass "lanes-dispatch --assign — 다른 레인으로 옮기려면 --force" || fail "lanes-dispatch --assign — 무단 재배정 허용"
+ld --assign "T021=A" --force --json | jq -e '.result.lane_file_conflicts == []' >/dev/null 2>&1 \
+    && pass "lanes-dispatch --assign --force — 재배정 후 충돌 해소" || fail "lanes-dispatch --assign --force 실패"
+
+# dry-run 은 파일을 안 건드려요
+ld --dispatch A --dry-run --json | jq -e '.result.dry_run == true and .result.changed == 3' >/dev/null 2>&1 \
+    && ! grep -q '디스패치:' "$LDX/.ax/docs/spec/012-x/tasks.md" \
+    && pass "lanes-dispatch --dry-run — 변경 예정 수만 보고, 파일 불변" || fail "lanes-dispatch --dry-run — 파일을 건드림"
+
+# dispatch → dispatched_unreported 3
+ld --dispatch A --json | jq -e '(.result.dispatched_unreported | length) == 3 and .status == "warning"' >/dev/null 2>&1 \
+    && pass "lanes-dispatch --dispatch — 디스패치: 기록 + 보고 대기 3" || fail "lanes-dispatch --dispatch 실패"
+
+# report 일부 → 남은 것만 대기
+ld --report T010 --json | jq -e '.result.dispatched_unreported == ["T011","T021"]' >/dev/null 2>&1 \
+    && pass "lanes-dispatch --report <ID> — 일부 보고 반영" || fail "lanes-dispatch --report <ID> 실패"
+ld --report A --json | jq -e '.result.dispatched_unreported == []' >/dev/null 2>&1 \
+    && pass "lanes-dispatch --report <레인> — 레인 전체 보고 반영" || fail "lanes-dispatch --report <레인> 실패"
+
+# 디스패치 기록 없는 task 보고 → warning (기록은 하되 원장 밖 전달을 드러냄)
+ld --report T001 --json | jq -e '(.warnings | length) == 1' >/dev/null 2>&1 \
+    && pass "lanes-dispatch --report — 디스패치 기록 없는 보고는 warning" || fail "lanes-dispatch --report — 원장 밖 보고를 조용히 통과시킴"
+
+# 없는 task
+ld --assign "T999=A" --json >/dev/null 2>&1; [ $? -eq 1 ] \
+    && pass "lanes-dispatch --assign — 없는 task 는 error" || fail "lanes-dispatch --assign — 없는 task 를 통과시킴"
+
+# tier-from-state 의 evaluator 필드 (tasks-gate G6 의 SSOT) — 프로젝트 루트는 fixture 로 고정
+cp "$REPO/templates/default/.ax/scripts/bash/tier-from-state.sh" "$LDX/.ax/scripts/bash/"
+ev() { GOAX_PROJECT_DIR="$LDX" bash "$LDX/.ax/scripts/bash/tier-from-state.sh" --json --size "$1" --risk "$2" 2>/dev/null | jq -r '.result.evaluator // empty'; }
+EV_M3=$(ev M L3); EV_S0=$(ev S L0); EV_XL=$(ev XL L0); EV_L1=$(ev L L1); EV_M2=$(ev M L2)
+[ "$EV_M3" = "required" ] && [ "$EV_S0" = "optional" ] && [ "$EV_XL" = "required" ] \
+    && [ "$EV_L1" = "required" ] && [ "$EV_M2" = "optional" ] \
+    && pass "tier-from-state — evaluator 필수 매트릭스 (M×L3·L·XL 필수, 나머지 선택)" \
+    || fail "tier-from-state — evaluator 필드 오류 (M×L3=$EV_M3, S×L0=$EV_S0, XL=$EV_XL, L×L1=$EV_L1, M×L2=$EV_M2)"
+rm -rf "$LDX"
+
+# 엣지가 실제로 연결됐는가 — 보내는 쪽만 적고 받는 쪽이 모르면 산문 약속이에요.
+grep -q 'lanes-dispatch.sh' "$REPO/skills/spec-implement/SKILL.md" \
+    && grep -q 'goax:lane-worker' "$REPO/skills/spec-implement/SKILL.md" \
+    && pass "spec-implement — 레인 모드가 원장·lane-worker 를 실제로 호출" \
+    || fail "spec-implement — lane 이 넘긴 레인을 받는 코드가 없음"
+grep -q 'goax:evaluator' "$REPO/skills/spec-implement/SKILL.md" \
+    && grep -q 'review_required' "$REPO/skills/spec-implement/SKILL.md" \
+    && pass "spec-implement — 완료 시 evaluator 엣지 연결" \
+    || fail "spec-implement — evaluator 를 호출하는 곳이 없음 (triage 매트릭스만 약속)"
+grep -q '^verdict:' "$REPO/agents/evaluator.md" \
+    && pass "evaluator — review.md 첫 줄 verdict 계약 명시" \
+    || fail "evaluator — verdict 계약 없음 (게이트가 읽을 것이 없음)"
+
+# ───────────────────────────────────────────────────────────
+section "33. spec-review — 합의 리뷰 원장 (리뷰어별 파일 · sha 고정 · Size 축)"
+# ───────────────────────────────────────────────────────────
+# 한 파일에 둘이 쓰면 첫 줄 verdict 로 "둘 다 진행" 을 못 담고 뒤에 쓰는 쪽이 앞 절을 읽어요.
+# 그래서 리뷰어별 파일이고, 스크립트가 집계해요. 필수 여부는 Size 축만 (L/XL 필수 · M 선택 · S 없음).
+SR=$(mktemp -d)
+mkdir -p "$SR/.ax/scripts/bash" "$SR/.ax/docs/spec/014-x"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,spec-review,tier-from-state}.sh "$SR/.ax/scripts/bash/"
+printf '# Spec\n## 3.\n- [ ] **AC1** a\n' > "$SR/.ax/docs/spec/014-x/spec.md"
+echo '{"phase":"spec","spec_dir":".ax/docs/spec/014-x","size":"L","risk":"L1"}' > "$SR/.ax/current-task.json"
+sr() { GOAX_PROJECT_DIR="$SR" bash "$SR/.ax/scripts/bash/spec-review.sh" --spec 014-x "$@" 2>/dev/null; }
+
+for sz in S:none M:optional L:required XL:required; do
+    got=$(GOAX_PROJECT_DIR="$SR" bash "$SR/.ax/scripts/bash/tier-from-state.sh" --json --size "${sz%%:*}" --risk L2 2>/dev/null | jq -r '.result.spec_review')
+    [ "$got" = "${sz##*:}" ] || fail "tier-from-state spec_review — ${sz%%:*} 가 $got (기대 ${sz##*:})"
+done
+pass "tier-from-state — spec_review 는 Size 축만 (S none · M optional · L/XL required)"
+
+sr --status --json | jq -e '.result.required=="required" and .result.pass==false' >/dev/null 2>&1 \
+    && pass "spec-review — L 은 리뷰 파일 없으면 미통과" || fail "spec-review — 필수인데 빈 상태를 통과시킴"
+SHA=$(sr --snapshot --json | jq -r '.result.sha')
+[ "$(sr --status --json | jq -r '.result.round')" = "1" ] && pass "spec-review --snapshot — round 1, sha 고정" || fail "spec-review --snapshot 라운드 기록 실패"
+printf 'verdict: 진행\nsha: %s\n' "$SHA" > "$SR/.ax/docs/spec/014-x/review-spec.architect.md"
+printf 'verdict: 보강 필요\nsha: %s\n' "$SHA" > "$SR/.ax/docs/spec/014-x/review-spec.evaluator.md"
+sr --status --json | jq -e '.result.pass==false and .result.evaluator.verdict=="보강 필요"' >/dev/null 2>&1 \
+    && pass "spec-review — 한쪽이 보강 필요면 미통과" || fail "spec-review — 보강 필요를 통과시킴"
+printf 'verdict: 진행\nsha: %s\n' "$SHA" > "$SR/.ax/docs/spec/014-x/review-spec.evaluator.md"
+sr --status --json | jq -e '.result.pass==true' >/dev/null 2>&1 \
+    && pass "spec-review — 둘 다 진행 + sha 일치 → 통과" || fail "spec-review — 정상 합의를 미통과로 봄"
+printf -- '- [ ] **AC2** b\n' >> "$SR/.ax/docs/spec/014-x/spec.md"
+sr --status --json | jq -e '.result.pass==false and .result.architect.sha_match==false' >/dev/null 2>&1 \
+    && pass "spec-review — 리뷰 뒤 spec 변경 → sha 불일치로 미통과" || fail "spec-review — sha 불일치를 못 잡음"
+sr --merge --json >/dev/null 2>&1; [ -f "$SR/.ax/docs/spec/014-x/review-spec.md" ] \
+    && pass "spec-review --merge — 합본 생성" || fail "spec-review --merge 실패"
+echo '{"phase":"spec","spec_dir":".ax/docs/spec/014-x","size":"M","risk":"L3"}' > "$SR/.ax/current-task.json"
+rm -f "$SR/.ax/docs/spec/014-x"/review-spec.*.md
+sr --status --json | jq -e '.result.required=="optional" and .result.pass==true' >/dev/null 2>&1 \
+    && pass "spec-review — M 은 리뷰 없으면 선택 통과 (risk 는 안 봄)" || fail "spec-review — M×L3 에 필수를 강제함"
+rm -rf "$SR"
+
+# 엣지 연결 — 보내는 쪽만 적고 받는 쪽이 모르면 산문 약속이에요.
+grep -q 'spec-review.sh' "$REPO/skills/spec-validate/SKILL.md" && grep -q 'goax:architect' "$REPO/skills/spec-validate/SKILL.md" \
+    && pass "spec-validate — 합의 리뷰가 spec-review.sh + architect 를 실제로 호출" || fail "spec-validate — 합의 리뷰 엣지 없음"
+grep -q '^verdict:' "$REPO/agents/architect.md" && grep -q 'review-spec.architect.md' "$REPO/agents/architect.md" \
+    && pass "architect — spec 리뷰 verdict 파일 계약 명시" || fail "architect — spec 리뷰 계약 없음"
+grep -q 'review-spec.evaluator.md' "$REPO/agents/evaluator.md" \
+    && pass "evaluator — spec 모드 파일 계약 명시" || fail "evaluator — spec 모드 없음"
+grep -q '\.phase = "implementing"' "$REPO/skills/spec-implement/SKILL.md" && grep -q '\.phase = "review"' "$REPO/skills/spec-implement/SKILL.md" \
+    && pass "spec-implement — phase implementing/review 를 실제로 씀 (HUD 가 움직이는 조건)" || fail "spec-implement — phase 기록 없음 (HUD 가 tasks 에 멈춤)"
+grep -q 'hud' "$REPO/templates/default/.ax/hud/state.json.template" && grep -q 'hud.plugin_version' "$REPO/docs/state-ownership.md" \
+    && pass "state.json hud 캐시 — template · ownership 문서 동기화" || fail "state.json hud 캐시 3-way 동기화 누락"
+
+# ───────────────────────────────────────────────────────────
+section "34. 폐기·스크립트화 — spirit-lint · rules-index · doctor-scan · status-note · constitution-apply"
+# ───────────────────────────────────────────────────────────
+# rules·spirit skill 은 "grep 해서 찍어라" 산문이었고, doctor 3.6~3.8 은 SKILL.md 안의 bash 였어요.
+# 스크립트가 됐으니 픽스처로 판정을 고정해요. 인계 노트(STATUS.md)는 형식이 고정돼야 다음 세션이 파싱해요.
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§34 skip (jq 없음)"
+else
+    RS=$(mktemp -d)
+    mkdir -p "$RS/.ax/scripts/bash" "$RS/.ax/spirit/rules" "$RS/.ax/modules/order" "$RS/.ax/_templates/spirit" \
+             "$RS/.ax/docs/spec/003-x/checklists" "$RS/.ax/hooks/pre-edit" "$RS/.claude"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,spirit-lint,rules-index,doctor-scan,status-note,constitution-apply}.sh "$RS/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/spirit/"{values,tone}.md "$RS/.ax/spirit/"
+    cp "$REPO/templates/default/.ax/_templates/spirit/rule.md" "$RS/.ax/_templates/spirit/"
+    printf -- '---\ncategory: security\n---\n## SP-SEC-001: 시크릿 커밋 금지\n## SP-SEC-002: 토큰 로그 금지\n' > "$RS/.ax/spirit/rules/security.md"
+    printf -- '---\ncategory: naming\npaths:\n  - "**/*.kt"\n---\n## SP-NAM-001: kebab-case\n## 잘못된 헤더\n' > "$RS/.ax/spirit/rules/naming.md"
+    printf -- '---\nmodule: order\nkeywords: [order]\n---\n## SP-SEC-001: 중복 토큰\n## SP-ORD-001: 주문은 멱등\n' > "$RS/.ax/modules/order/rules.md"
+    printf '# X\n\n## CRITICAL\n\n🔴 **`AX:CRITICAL:001`** — 결제 API 는 멱등성 키 필수\n\n## MANDATORY\n\n🟡 **`AX:MANDATORY:001`** ADR 필수\n\n## CONVENTION\n\n@.ax/spirit/rules/security.md\n' > "$RS/AGENTS.md"
+    touch "$RS/.ax/docs/spec/003-x/README.md"; printf '.ax/state.json\n' > "$RS/.gitignore"
+    echo '{"hooks":{}}' > "$RS/.claude/settings.json"
+    rs() { GOAX_PROJECT_DIR="$RS" bash "$RS/.ax/scripts/bash/$1" "${@:2}" 2>/dev/null; }
+
+    # spirit-lint — 비표준 헤더 · 교차 중복 · 카운트
+    SLJ=$(rs spirit-lint.sh --json)
+    echo "$SLJ" | jq -e '.status=="warning" and (.result.bad_headers|length)==1 and .result.bad_headers[0].line==7' >/dev/null \
+        && pass "spirit-lint — 비표준 ## 헤더를 파일:줄 로 지목" || fail "spirit-lint — 비표준 헤더 검출 실패: $(echo "$SLJ" | head -c 200)"
+    echo "$SLJ" | jq -e '.result.duplicates[0].token=="SP-SEC-001" and (.result.duplicates[0].files|length)==2' >/dev/null \
+        && pass "spirit-lint — spirit ↔ modules 교차 중복 토큰 검출" || fail "spirit-lint — 교차 중복 미검출"
+    echo "$SLJ" | jq -e '.result.rules_count==5 and .result.rules_files==2 and .result.files.values==true' >/dev/null \
+        && pass "spirit-lint — 토큰 5 · 카테고리 2 · 필수 파일 OK" || fail "spirit-lint — 카운트 불일치"
+    rs spirit-lint.sh --json --strict >/dev/null; [ $? -eq 1 ] && pass "spirit-lint --strict — finding 있으면 exit 1" || fail "spirit-lint --strict 가 exit 0"
+
+    # rules-index — 세 소스 · 필터 · find
+    RIJ=$(rs rules-index.sh --json)
+    echo "$RIJ" | jq -e '.result.counts.critical==1 and .result.counts.mandatory==1 and .result.counts.convention==5 and .result.constitution_file=="AGENTS.md"' >/dev/null \
+        && pass "rules-index — Constitution + Spirit + Module 세 소스 집계 (1/1/5)" || fail "rules-index — 집계 불일치: $(echo "$RIJ" | jq -c .result.counts)"
+    [ "$(rs rules-index.sh --json --source module | jq -r '[.result.rules[].token]|join(",")')" = "SP-SEC-001,SP-ORD-001" ] \
+        && pass "rules-index --source module — 모듈 룰만" || fail "rules-index --source 필터 실패"
+    [ "$(rs rules-index.sh --json --find AX:CRITICAL:001 | jq -r '.result.rules[0].line')" = "5" ] \
+        && pass "rules-index --find — 토큰 정확 매칭 + 줄 번호" || fail "rules-index --find 실패"
+    rs rules-index.sh --json --find NOPE:X:999 | jq -e '.status=="warning" and .result.counts.total==0' >/dev/null \
+        && pass "rules-index --find — 없는 토큰은 warning" || fail "rules-index — 없는 토큰을 ok 로"
+    rs rules-index.sh | grep -q '📍 AGENTS.md:5' && pass "rules-index 텍스트 — 원문 + 📍 위치" || fail "rules-index 텍스트 출력 형식"
+
+    # doctor-scan — 잔재 · hook 등록 · 도달 지도
+    DSJ=$(rs doctor-scan.sh --json --plugin-dir "$REPO")
+    echo "$DSJ" | jq -e '(.result.migration.gitignore_missing|index(".ax/current-task.json"))!=null and (.result.migration.spec_readme_stale|length)==1 and (.result.migration.spec_empty_dirs|length)==1' >/dev/null \
+        && pass "doctor-scan — .gitignore 누락 · spec README · 빈 dir 잔재" || fail "doctor-scan — 마이그레이션 잔재 검출 실패"
+    echo "$DSJ" | jq -e '.result.hooks.checked==true and .result.hooks.total>=7 and .result.hooks.registered_n==0' >/dev/null \
+        && pass "doctor-scan — template SSOT 기준 hook 등록 검사 (하드코딩 없음)" || fail "doctor-scan — hook 등록 검사 실패"
+    echo "$DSJ" | jq -e '[.result.reach[]|select(.source=="constitution")][0].reached==false' >/dev/null \
+        && pass "doctor-scan 도달 지도 — AGENTS.md 만 있고 CLAUDE.md 없음 → Constitution 이 어디에도 안 감" || fail "doctor-scan — AGENTS.md-only 를 도달로 봄"
+    echo "$DSJ" | jq -e '[.result.reach[]|select(.source=="spirit-universal")][0].reached==true and [.result.reach[]|select(.source=="spirit-scoped")][0].reached==false' >/dev/null \
+        && pass "doctor-scan 도달 지도 — @import 된 universal 룰은 도달 · paths 룰은 hook 미등록이라 미도달" || fail "doctor-scan — spirit 도달 판정 불일치"
+    printf '@AGENTS.md\n' > "$RS/CLAUDE.md"
+    rs doctor-scan.sh --json | jq -e '[.result.reach[]|select(.source=="constitution")][0].reached==true' >/dev/null \
+        && pass "doctor-scan 도달 지도 — CLAUDE.md 가 @AGENTS.md 를 import 하면 도달" || fail "doctor-scan — @AGENTS.md import 를 미도달로 봄"
+
+    # status-note — 형식 고정 · 중복 무시 · done · 상한
+    rs status-note.sh --add next "1순위 가정 검증" --json | jq -e '.result.added==true' >/dev/null \
+        && pass "status-note --add — 4절 골격 생성 + 항목 추가" || fail "status-note --add 실패"
+    rs status-note.sh --add next "1순위 가정 검증" --json | jq -e '.result.added==false and .result.reason=="duplicate"' >/dev/null \
+        && pass "status-note --add — 같은 줄은 무시 (idempotent)" || fail "status-note — 중복 줄 추가됨"
+    rs status-note.sh --set now "spec 014 구현 중\n- T010 halt" --json >/dev/null
+    rs status-note.sh --show --json | jq -e '(.result.sections.now|length)==2 and .result.sections.next==["- 1순위 가정 검증"]' >/dev/null \
+        && pass "status-note --show — 절별 파싱 (여러 줄 --set 포함)" || fail "status-note --show 파싱 불일치"
+    rs status-note.sh --done next "가정 검증" --json | jq -e '.result.removed==1' >/dev/null \
+        && pass "status-note --done — 끝난 항목 제거" || fail "status-note --done 실패"
+    for i in $(seq 1 40); do rs status-note.sh --add open "q$i" >/dev/null; done
+    rs status-note.sh --show --json | jq -e '.status=="warning" and .result.over_cap==true' >/dev/null \
+        && pass "status-note — 40줄 상한 초과 warning" || fail "status-note — 상한 초과를 ok 로"
+    grep -q '^## 이번에 바뀐 이름' "$RS/.ax/docs/STATUS.md" && pass "status-note — 4절 헤더 형식 고정" || fail "status-note — 절 헤더 누락"
+
+    # constitution-apply — prepend 보존 · 중복 스캔은 구 본문만 · drop 은 [a] 뒤 · 인덱스
+    printf '# X — Constitution\n\n## META — 핵심 가드레일\n\n🔴 **`AX:CRITICAL:001`** — 결제 API 는 멱등성 키 필수\n' > "$RS/block.md"
+    printf '# old\n\n## Database\n파일명 규칙: 결제 API 는 멱등성 키 필수\n짧은줄\n' > "$RS/CLAUDE.md"
+    rs constitution-apply.sh --block "$RS/block.md" --target CLAUDE.md --json | jq -e '.result.applied==true and .result.preserved_lines==5' >/dev/null \
+        && pass "constitution-apply — prepend + 기존 본문 --- 아래 보존" || fail "constitution-apply prepend 실패"
+    rs constitution-apply.sh --block "$RS/block.md" --target CLAUDE.md --json >/dev/null; [ $? -eq 2 ] \
+        && pass "constitution-apply — 이미 적용이면 exit 2 (idempotent)" || fail "constitution-apply — 재적용을 막지 않음"
+    rs constitution-apply.sh --scan-duplicates --block "$RS/block.md" --target CLAUDE.md --json | jq -e '.result.count==1 and (.result.duplicates[0].old_text|test("파일명 규칙"))' >/dev/null \
+        && pass "constitution-apply --scan-duplicates — 구 본문의 정확 일치만 (블록 자신은 제외)" || fail "constitution-apply — 중복 스캔 불일치"
+    rs constitution-apply.sh --drop-exact --block "$RS/block.md" --target CLAUDE.md --json | jq -e '.result.dropped==1' >/dev/null \
+        && grep -q '^짧은줄$' "$RS/CLAUDE.md" && ! grep -q '^파일명 규칙' "$RS/CLAUDE.md" \
+        && pass "constitution-apply --drop-exact — 정확 일치 줄만 제거, 나머지 보존" || fail "constitution-apply --drop-exact 실패"
+    rs constitution-apply.sh --append-index --target CLAUDE.md --plugin-dir "$REPO" --json | jq -e '.result.applied==true' >/dev/null \
+        && grep -q '^## 4계층 인덱스' "$RS/CLAUDE.md" && [ "$(tail -1 "$RS/CLAUDE.md")" != "---" ] \
+        && pass "constitution-apply --append-index — 템플릿에서 인덱스 절만 (끝 구분선 제외)" || fail "constitution-apply --append-index 실패"
+    rm -rf "$RS"
+fi
+
+# 엣지 연결 — 폐기된 skill 의 트리거를 누가 받는지, 새 스크립트를 누가 부르는지 파일에 적혀 있어야 해요.
+grep -q 'spirit-lint.sh' "$REPO/skills/doctor/SKILL.md" && grep -q 'rules-index.sh' "$REPO/skills/doctor/SKILL.md" && grep -q 'doctor-scan.sh' "$REPO/skills/doctor/SKILL.md" \
+    && pass "doctor — spirit-lint · rules-index · doctor-scan 을 실제로 호출" || fail "doctor — 스크립트 호출 엣지 없음"
+grep -q 'spirit 점검' "$REPO/skills/doctor/SKILL.md" && grep -q 'rules 보여줘' "$REPO/skills/doctor/SKILL.md" \
+    && pass "doctor — 폐기된 spirit·rules 트리거를 description 에서 받음" || fail "doctor — spirit/rules 트리거 미인수 (자연어 라우팅 끊김)"
+grep -q 'rules-index.sh' "$REPO/commands/goax.md" && grep -q 'spirit-lint.sh' "$REPO/commands/goax.md" \
+    && pass "/goax 인덱스 — rules·spirit 행이 스크립트를 가리킴" || fail "/goax 인덱스 — 폐기 skill 잔재"
+grep -q 'status-note.sh --show' "$REPO/skills/triage/SKILL.md" && grep -q 'STATUS.md' "$REPO/skills/triage/SKILL.md" \
+    && pass "triage — STATUS.md 를 MEMORY.md 보다 먼저 읽음" || fail "triage — 인계 노트 선독 없음"
+grep -q 'status-note.sh' "$REPO/skills/spec-implement/SKILL.md" && grep -q 'references/lane-mode.md' "$REPO/skills/spec-implement/SKILL.md" \
+    && pass "spec-implement — halt·완료 시 status-note 갱신 + 레인 루프는 references" || fail "spec-implement — 인계 노트/레인 참조 없음"
+grep -q 'status-note.sh --add renamed' "$REPO/skills/spec-implement/references/lane-mode.md" \
+    && pass "lane-mode — 레인 보고의 바뀐 이름을 인계 노트로" || fail "lane-mode — renamed 인계 없음"
+grep -q 'status-note.sh' "$REPO/skills/zero/SKILL.md" && pass "zero — STATUS 개설을 스크립트로" || fail "zero — STATUS 를 손으로 씀"
+grep -qE '^disallowedTools:.*Write.*Edit' "$REPO/agents/lane-scout.md" \
+    && pass "lane-scout — disallowedTools 로 편집 금지 (allowlist 아님)" || fail "lane-scout — 편집 금지가 산문뿐"
+grep -qE '^tools:' "$REPO/agents/lane-scout.md" && fail "lane-scout — tools: allowlist 사용 (한 항목이라도 안 풀리면 에이전트가 안 뜸)" || true
+grep -q 'constitution-apply.sh' "$REPO/skills/onboarding/SKILL.md" && grep -q 'zero-domain-risk.sh --show' "$REPO/skills/onboarding/SKILL.md" \
+    && pass "onboarding — Q5 prepend 와 Q2 카운트가 스크립트" || fail "onboarding — 산문 prepend/awk 카운트 잔재"
+[ -f "$REPO/templates/default/.ax/scripts/bash/build-index.sh" ] || grep -q 'search-index' "$REPO/templates/default/.gitignore.template" \
+    && fail ".gitignore.template 에 .search-index 잔재" || pass ".gitignore.template — .search-index 제거"
+
+# ───────────────────────────────────────────────────────────
+section "35. hook 도달 범위 — Stop 게이트 · SubagentStart 포인터 · 주입 중복 제거 · 이벤트 키 · 인계 기한 · .omc 잔재"
+# ───────────────────────────────────────────────────────────
+# 하네스가 메인 세션 안에서만 돌았어요. 서브에이전트는 Constitution 을 모른 채 떴고, 커밋 없이 턴이 끝나면
+# 완료 게이트는 아무도 안 봤고, 같은 룰 포인터가 한 세션에 1,200회 들어갔어요 (실측). 셋 다 파일로 고정해요.
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§35 skip (jq 없음)"
+else
+    HX=$(mktemp -d)
+    mkdir -p "$HX/.ax/scripts/bash" "$HX/.ax/hooks/stop" "$HX/.ax/hooks/subagent-start" "$HX/.ax/hooks/pre-edit" \
+             "$HX/.ax/docs/spec/014-x" "$HX/.ax/spirit/rules" "$HX/.ax/modules/order" "$HX/.claude" "$HX/src"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate,tier-from-state,lanes-dispatch,status-note,doctor-scan,zero-ablation}.sh "$HX/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/hooks/stop/spec-gate.sh" "$HX/.ax/hooks/stop/"
+    cp "$REPO/templates/default/.ax/hooks/subagent-start/harness-pointer.sh" "$HX/.ax/hooks/subagent-start/"
+    cp "$REPO/templates/default/.ax/hooks/pre-edit/"{spirit-rules-inject,module-rules-inject}.sh "$HX/.ax/hooks/pre-edit/"
+    cp "$REPO/templates/default/.ax/spirit/"{values,tone}.md "$HX/.ax/spirit/"
+    printf '# Spec\n## 3.\n- [ ] **AC1** a\n' > "$HX/.ax/docs/spec/014-x/spec.md"
+    printf '# tasks\n- [ ] T001 [AC1] do — files: src/A.kt\n' > "$HX/.ax/docs/spec/014-x/tasks.md"
+    echo '{"phase":"implementing","spec_dir":".ax/docs/spec/014-x","size":"M","risk":"L1"}' > "$HX/.ax/current-task.json"
+    printf '# X\n🔴 **`AX:CRITICAL:001`** — x\n' > "$HX/AGENTS.md"; printf '@AGENTS.md\n' > "$HX/CLAUDE.md"
+    printf -- '---\ncategory: naming\npaths:\n  - "**/*.kt"\n---\n## SP-NAM-001: kebab\n' > "$HX/.ax/spirit/rules/naming.md"
+    printf -- '---\nmodule: order\napplies_to: [code]\npaths:\n  - "src/**"\n---\n## SP-ORD-001: x\n' > "$HX/.ax/modules/order/rules.md"
+    echo '{"hooks":{"PreToolUse":[]}}' > "$HX/.claude/settings.json"
+    hx() { CLAUDE_PROJECT_DIR="$HX" bash "$HX/$1" 2>/dev/null; }
+    STOP=.ax/hooks/stop/spec-gate.sh
+
+    # Stop 게이트
+    O=$(printf '{"session_id":"s1","hook_event_name":"Stop","stop_hook_active":false}' | hx $STOP)
+    echo "$O" | jq -e '.decision=="block" and (.reason|test("status-note.sh"))' >/dev/null 2>&1 \
+        && pass "stop 게이트 — implementing + 미완료 → decision:block, reason 에 인계 노트 명령" || fail "stop 게이트 — block 안 함: ${O:0:120}"
+    [ -z "$(printf '{"session_id":"s1","stop_hook_active":true}' | hx $STOP)" ] \
+        && pass "stop 게이트 — stop_hook_active=true (재시도) 면 통과 (무한 루프 없음)" || fail "stop 게이트 — 재시도를 또 잡음"
+    for i in 1 2 3 4 5 6 7 8 9; do LAST=$(printf '{"session_id":"s2","stop_hook_active":false}' | hx $STOP); done
+    [ -z "$LAST" ] && [ "$(cat "$HX/.ax/.session/s2/stop-blocks")" = "8" ] \
+        && pass "stop 게이트 — 세션당 8회 상한 뒤 통과" || fail "stop 게이트 — 상한 없이 계속 잡음"
+    CLAUDE_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/status-note.sh" --set now "spec 014-x 에서 멈춤 — T001" --json >/dev/null 2>&1
+    [ -z "$(printf '{"session_id":"s3","stop_hook_active":false}' | hx $STOP)" ] \
+        && pass "stop 게이트 — 인계 노트에 spec 이 적혀 있으면 통과 (멈추는 게 의도)" || fail "stop 게이트 — 인계 노트를 무시"
+    CLAUDE_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/status-note.sh" --set now "" --json >/dev/null 2>&1
+    echo '{"phase":"spec","spec_dir":".ax/docs/spec/014-x"}' > "$HX/.ax/current-task.json"
+    [ -z "$(printf '{"session_id":"s4","stop_hook_active":false}' | hx $STOP)" ] \
+        && pass "stop 게이트 — 계획 단계(phase=spec)엔 안 잡음" || fail "stop 게이트 — 계획 단계를 잡음"
+    echo '{"phase":"implementing","spec_dir":".ax/docs/spec/014-x","size":"M","risk":"L1"}' > "$HX/.ax/current-task.json"
+    printf 'sensors:\n  mode: off\n' > "$HX/.ax/config.yml"
+    [ -z "$(printf '{"session_id":"s5","stop_hook_active":false}' | hx $STOP)" ] \
+        && pass "stop 게이트 — sensors.mode=off 면 침묵" || fail "stop 게이트 — off 에서도 잡음"
+    rm -f "$HX/.ax/config.yml"
+
+    # SubagentStart 포인터
+    O=$(printf '{"session_id":"s1","hook_event_name":"SubagentStart","agent_type":"Explore"}' | hx .ax/hooks/subagent-start/harness-pointer.sh)
+    echo "$O" | jq -e '.hookSpecificOutput.hookEventName=="SubagentStart" and (.hookSpecificOutput.additionalContext|test("AGENTS.md") and test("values.md") and test("014-x"))' >/dev/null 2>&1 \
+        && pass "subagent-start — Explore 에 Constitution·Spirit·현재 spec 경로 (hookEventName 중첩 OK)" || fail "subagent-start — 포인터 누락: ${O:0:120}"
+    [ -z "$(printf '{"agent_type":"goax:evaluator"}' | hx .ax/hooks/subagent-start/harness-pointer.sh)" ] \
+        && pass "subagent-start — goax 자기 에이전트는 건너뜀 (이미 spirit 선언)" || fail "subagent-start — 자기 에이전트에도 주입"
+    echo "$O" | jq -e '(.hookSpecificOutput.additionalContext|length) < 600' >/dev/null 2>&1 \
+        && pass "subagent-start — 경로만 (600자 미만, 본문 주입 아님)" || fail "subagent-start — 본문을 밀어 넣음"
+
+    # 주입 중복 제거
+    J='{"session_id":"d1","tool_input":{"file_path":"'"$HX"'/src/A.kt"}}'
+    O1=$(printf '%s' "$J" | hx .ax/hooks/pre-edit/spirit-rules-inject.sh); O2=$(printf '%s' "$J" | hx .ax/hooks/pre-edit/spirit-rules-inject.sh)
+    echo "$O1" | jq -e '.hookSpecificOutput.additionalContext|test("naming.md")' >/dev/null 2>&1 && [ -z "$O2" ] \
+        && pass "spirit-rules-inject — 같은 세션 두 번째는 침묵 (1,200회 실측의 원인 제거)" || fail "spirit-rules-inject — 중복 주입: [$O2]"
+    [ -n "$(printf '{"session_id":"d2","tool_input":{"file_path":"'"$HX"'/src/A.kt"}}' | hx .ax/hooks/pre-edit/spirit-rules-inject.sh)" ] \
+        && pass "spirit-rules-inject — 다른 세션은 다시 주입" || fail "spirit-rules-inject — 세션 경계를 넘어 억제"
+    [ -n "$(printf '{"tool_input":{"file_path":"'"$HX"'/src/A.kt"}}' | hx .ax/hooks/pre-edit/spirit-rules-inject.sh)" ] \
+        && pass "spirit-rules-inject — session_id 없으면 예전처럼 매번 (수동 실행 호환)" || fail "spirit-rules-inject — session_id 없을 때 침묵"
+    M1=$(printf '%s' "$J" | hx .ax/hooks/pre-edit/module-rules-inject.sh); M2=$(printf '%s' "$J" | hx .ax/hooks/pre-edit/module-rules-inject.sh)
+    echo "$M1" | jq -e '.hookSpecificOutput.additionalContext|test("Layer 2") and test("Layer 3")' >/dev/null 2>&1 && [ -z "$M2" ] \
+        && pass "module-rules-inject — 모듈·spec 포인터도 세션당 한 번" || fail "module-rules-inject — 중복 주입: [$M2]"
+
+    # doctor-scan — 이벤트 키 · 인계 노트 기한
+    printf '## 다음\n- [ ] 2020-01-01 룰 ablation 재검토\n- [ ] 2099-01-01 far\n' > "$HX/.ax/docs/STATUS.md"
+    DS=$(GOAX_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/doctor-scan.sh" --json --plugin-dir "$REPO" 2>/dev/null)
+    echo "$DS" | jq -e '(.result.hooks.events.missing|index("Stop"))!=null and (.result.hooks.events.missing|index("SubagentStart"))!=null' >/dev/null 2>&1 \
+        && pass "doctor-scan — settings.json 에 Stop·SubagentStart 키가 없으면 events.missing" || fail "doctor-scan — 이벤트 키 검사 없음"
+    echo "$DS" | jq -e '.result.handoff.overdue==1 and .result.handoff.imminent==0 and .result.handoff.deadlines[0].status=="overdue"' >/dev/null 2>&1 \
+        && pass "doctor-scan — 인계 노트 기한 초과 1 · 먼 기한은 ok (I3 규칙)" || fail "doctor-scan — 기한 판정 불일치: $(echo "$DS" | jq -c .result.handoff)"
+
+    # zero-ablation — 회차 기록 + 다음 기한
+    GOAX_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/zero-ablation.sh" --off --json >/dev/null 2>&1
+    AB=$(GOAX_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/zero-ablation.sh" --on --json 2>/dev/null)
+    echo "$AB" | jq -e '.result.last_round!="" and .result.next_due!=""' >/dev/null 2>&1 && grep -q '^- \[ \] 20[0-9][0-9]-[0-9][0-9]-[0-9][0-9] 룰 ablation 재검토' "$HX/.ax/docs/STATUS.md" \
+        && ! grep -q '2020-01-01 룰 ablation' "$HX/.ax/docs/STATUS.md" \
+        && pass "zero-ablation --on — 회차 기록 + 다음 기한(+180일)을 STATUS.md 체크박스로 (옛 기한은 제거)" || fail "zero-ablation — 회차/기한 기록 실패: $(echo "$AB" | jq -c .result)"
+    rm -rf "$HX"
+fi
+
+# .omc 잔재 — plugin 디렉토리에서 세션을 열면 OMC 가 templates/ 안에 상태를 만들어요. tracked 되면 안 되고,
+# 로컬 설치(cp -R)도 실어 나르면 안 돼요.
+git -C "$REPO" ls-files templates | grep -q '/\.omc/' && fail "templates/ 안에 .omc/ 가 tracked 됨" || pass "templates/ — .omc/ tracked 파일 0"
+grep -q "name .omc -prune" "$REPO/scripts/provision.sh" && pass "provision.sh — 복사 뒤 .omc 잔재 제거" || fail "provision.sh — .omc 잔재를 사용자 프로젝트로 실어 나름"
+grep -q "not -path '\*/.omc/\*'" "$REPO/templates/default/.ax/scripts/bash/check-manifest-install.sh" && pass "check-manifest-install — .omc 열거 제외" || fail "check-manifest-install — .omc 를 출고분으로 셈"
+
+# 엣지 연결 — 새 hook 이 template 에 등록돼야 doctor 도 사용자 설치도 따라가요
+grep -q '"SubagentStart"' "$REPO/templates/default/.claude/settings.json.template" && grep -q '"Stop"' "$REPO/templates/default/.claude/settings.json.template" \
+    && pass "settings.json.template — SubagentStart · Stop 이벤트 등록" || fail "settings.json.template — 새 이벤트 미등록"
+grep -q 'events.missing' "$REPO/skills/doctor/SKILL.md" && grep -q 'handoff.deadlines' "$REPO/skills/doctor/SKILL.md" \
+    && pass "doctor — 이벤트 키 · 인계 노트 기한을 실제로 읽음" || fail "doctor — 새 검사 결과를 안 읽음"
+grep -q 'goax_inject_fresh' "$REPO/templates/default/.ax/hooks/pre-edit/spirit-rules-inject.sh" && grep -q 'goax_inject_fresh' "$REPO/templates/default/.ax/hooks/pre-edit/module-rules-inject.sh" \
+    && pass "주입 훅 둘 다 goax_inject_fresh 로 세션 dedupe" || fail "주입 훅 dedupe 누락"
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"

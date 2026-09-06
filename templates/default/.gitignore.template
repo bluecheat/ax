@@ -2,9 +2,8 @@
 .ax/state.json
 .ax/current-task.json
 
-# 재생성 캐시 (build-memory.sh / build-index.sh — markdown·상태에서 결정론 재생성)
+# 재생성 캐시 (build-memory.sh — markdown·상태에서 결정론 재생성)
 .ax/MEMORY.md
-.ax/.search-index
 
 # install/onboarding 시점 머지 임시본 (사용자가 처리 후 rm)
 .ax/*.suggested
@@ -12,3 +11,5 @@
 
 # hook 런타임 마커 (세션당 재생성)
 .ax/.triage-nudged
+.ax/.session/
+.ax/.ablation-last

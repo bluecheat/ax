@@ -40,6 +40,20 @@
           { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/post-edit/lint-changed.sh\"" }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/subagent-start/harness-pointer.sh\"" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/stop/spec-gate.sh\"" }
+        ]
+      }
     ]
   }
 }

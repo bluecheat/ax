@@ -13,6 +13,7 @@
     "mistakes": { "active": false, "count": 0, "last_audit": null, "due_in_days": null }
   },
   "current_task": null,
+  "hud": { "plugin_version": null, "review_required": null, "cached_at": null },
   "last_skill": null,
   "skill_calls": 0
 }

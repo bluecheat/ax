@@ -12,7 +12,9 @@
 | **ADR** | Architecture Decision Record. *왜* 이 결정이고 *무엇을* 거부했는가 |
 | **Spec / Policy** | 도메인 정의 / 비즈니스 정책 |
 | **Persona** | 도메인 전문가 skill (예: payment-engineer) |
-| **Generator / Evaluator** | Anthropic 모델 운영 사례에서 인용된 self-praise bias 제거 패턴 (하네스 엔지니어링 모델 Generator/Evaluator 분리). 코드를 쓰는 세션 ≠ 평가하는 세션 |
+| **Generator / Evaluator** | Anthropic 모델 운영 사례에서 인용된 self-praise bias 제거 패턴 (하네스 엔지니어링 모델 Generator/Evaluator 분리). 코드를 쓰는 세션 ≠ 평가하는 세션. 실체는 `<spec>/review.md` 첫 줄 `verdict:` — evaluator 가 쓰고 `tasks-gate.sh` G6 이 읽어요 |
+| **레인 (lane)** | 병렬 실행의 단위. 조사 레인은 관점으로, 실행 레인은 **파일 소유권**으로 갈라요. Phase 와 1:1 이 아니에요 |
+| **레인 원장** | tasks.md 의 `레인:`·`디스패치:`·`보고:` 필드. "누구에게 뭘 보냈고 뭘 받았는가" 를 세션 기억 대신 파일이 들고 있어요. `lanes-dispatch.sh` 만 써요 |
 | **Computational sensor** | 결정론적·빠름 — linter, typecheck |
 | **Inferential sensor** | AI-led 깊은 평가 — agent, CodeRabbit |
 | **Structural test** | 레이어/모듈 의존 방향 위반 자동 검출 |

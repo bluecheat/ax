@@ -150,7 +150,14 @@ echo "$RESULT" | jq -r '.result.preserved[]? | "  · _templates/\(.) 수정본 �
 
 → onboarding skill 발동.
 
-## 6. greenfield면 — 안내만
+## 6. greenfield면 — `zero` 로 인계
+
+빈 리포는 brownfield 판정 조건(CLAUDE.md · hooks · modules > 1 · external spec)을 하나도 안 만족해서
+반드시 여기로 떨어져요. **그런데 0→1 은 결정 밀도가 가장 높은 구간이에요** — 안내만 하고 끝내면
+`domain_risk` 가 출고 예시로 남고, triage 가 그걸 못 찾아 `default_risk`(L0)로 흘려서
+"S/M × L0 = 즉시 작업, spec 불필요" 로 가요. 역면접도 발동 조건 미달로 스킵돼요.
+
+그래서 아래 안내를 낸 뒤 **`zero` skill 로 넘겨요.**
 
 ```
 🥳 goax 도입 완료.
@@ -170,6 +177,17 @@ echo "$RESULT" | jq -r '.result.preserved[]? | "  · _templates/\(.) 수정본 �
  "결제 환불 정책 변경 작업 계획 세워줘"
  → triage skill이 Size×Risk 분류 → spirit·룰·페르소나 자동 주입
 ```
+
+---
+
+**→ `zero` skill 을 이어서 발동해요.**
+
+제품 정의 역면접 → PRD v0.1 → 되돌리기 비싼 결정 ADR → `domain_risk` 최초 설정 →
+스캐폴드 → 집행 배관 + 네거티브 프로브 → 첫 배포 → STATUS 개설.
+순서가 메시지예요 — **제품·비즈니스가 앞이고 기술이 뒤예요.**
+
+사용자가 지금 당장 시작하지 않겠다고 하면 그대로 멈춰요. 나중에 `"새 프로젝트 시작"`·`/zero` 로
+직접 부를 수 있고, `.ax/` 는 있는데 ADR 0개 + 코드 없음 상태에서도 스스로 발동해요.
 
 ## 7. AGENTS.md / CLAUDE.md 마이그레이션 가이드 (customize 본문 보존)
 

@@ -1,0 +1,54 @@
+# .github/workflows/gates.yml 로 복사해서 쓰세요 (이 위치에선 실행되지 않아요)
+#
+# 두 잡이 핵심이에요.
+#   gates  — 게이트 명령을 파이프 없이 돌려요 (exit code 를 덮지 않아요)
+#   probes — **차단이 아직 살아 있는지** 매 푸시마다 재요. 첫날 1회로 끝내지 않아요
+#
+# 실측 사고: 워크플로가 의존성 설치 단계에서 실패해 테스트를 한 번도 실행하지 않은 채
+# 체크는 초록으로 보였어요. 아래 `verify` 스텝은 무엇을 안 돌렸는지도 보고해요.
+
+name: gates
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 스택에 맞게 교체 — 설치 실패가 조용히 지나가지 않게 이 스텝은 반드시 실패해야 해요
+      - name: install
+        run: |
+          set -euo pipefail
+          # 예: pnpm install --frozen-lockfile
+          echo "install step — 스택에 맞게 채우세요"
+
+      # .ax/config.yml 의 commands.{typecheck,test,lint,build} 를 파이프 없이 실행하고
+      # 안 돌린 항목까지 보고해요. 하나라도 실패하면 exit 1.
+      - name: verify
+        run: bash .ax/scripts/bash/zero-verify.sh --json
+
+  probes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install
+        run: |
+          set -euo pipefail
+          echo "install step — 스택에 맞게 채우세요"
+
+      # 게이트가 아직 막는지 확인. 막아야 할 위반이 통과하면 exit 1 로 여기서 세워요.
+      - name: negative probes
+        run: bash .ax/scripts/bash/zero-probe.sh --json
+
+  # 하네스 자체 점검 — 룰 라벨과 집행 장치가 어긋나면 보고해요 (I1·I5·I6)
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: rule enforcement invariants
+        run: bash .ax/scripts/bash/check-rule-enforcement.sh --json
