@@ -213,7 +213,7 @@ process_body() {
         if [ "$HAS_JQ" = true ]; then
             snip_json=$(grep -niE "($ALT)" "$f" 2>/dev/null \
                 | head -"$SNIPPET_MAX" \
-                | awk -v w="$SNIPPET_WIDTH" '{print substr($0,1,w)}' \
+                | awk -v w="$SNIPPET_WIDTH" "$GOAX_AWK_CLIP"'{print clip($0, w)}' \
                 | jq -R -s -c 'split("\n") | map(select(. != ""))' 2>/dev/null) || snip_json="[]"
             [ -z "$snip_json" ] && snip_json="[]"
             o=$(jq -nc --arg p "$f" --argjson s "${score:-0}" --argjson sn "$snip_json" --argjson b "$boostbool" \
@@ -319,7 +319,7 @@ process_specs() {
         if [ "$HAS_JQ" = true ] && [ -n "$best" ] && [ -f "$best" ]; then
             snip_json=$(grep -niE "($ALT)" "$best" 2>/dev/null \
                 | head -"$SNIPPET_MAX" \
-                | awk -v w="$SNIPPET_WIDTH" '{print substr($0,1,w)}' \
+                | awk -v w="$SNIPPET_WIDTH" "$GOAX_AWK_CLIP"'{print clip($0, w)}' \
                 | jq -R -s -c 'split("\n") | map(select(. != ""))' 2>/dev/null) || snip_json="[]"
             [ -z "$snip_json" ] && snip_json="[]"
         fi

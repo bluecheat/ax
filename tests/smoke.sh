@@ -3279,6 +3279,145 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────
+section "44. GOAX_AWK_CLIP — macOS BWK awk 바이트 절단 회귀 (clip 단위 · build-memory.sh 통합 · 자기 점검)"
+# ───────────────────────────────────────────────────────────
+# macOS 기본 awk(BWK 20200816)는 length/substr 가 바이트 단위라, 한글을 substr(s,1,N) 으로
+# 자르면 글자를 반으로 갈라 깨진 UTF-8 을 만들고 뒤이은 정규식이
+# `awk: towc: multibyte conversion failure` 로 awk 를 통째로 중단시켜요. gawk 는 문자 단위라
+# 원래 안전했고 CI 가 ubuntu 라 이 결함이 한 번도 안 잡혔어요. clip() 은 공백(낱말) 경계에서만
+# 끊어 이 결함을 피해가요 — 44.1 은 그 계약, 44.2 는 build-memory.sh 가 실제로 그 계약을 쓰는지,
+# 44.3 은 렌더가 죽었을 때 자기 점검이 조용히 넘어가지 않는지를 검증해요.
+CLIP_SCRIPTS_DIR="$REPO/templates/default/.ax/scripts/bash"
+HAVE_PY3=false
+command -v python3 >/dev/null 2>&1 && HAVE_PY3=true
+
+# 44.1 clip() 단위 — (a) 상한 이하 (b) 한글 긴 문장 (c) 공백 없는 긴 한글 덩어리
+clip_run() {
+    ( . "$CLIP_SCRIPTS_DIR/common.sh"
+      printf '%s' "$1" | awk -v n="$2" "$GOAX_AWK_CLIP"'{ print clip($0, n) }' )
+}
+
+CLIP_A_IN="안녕하세요 상태 확인 중입니다"
+CLIP_A_OUT=$(clip_run "$CLIP_A_IN" 180)
+[ "$CLIP_A_OUT" = "$CLIP_A_IN" ] \
+    && pass "clip() — 상한 이하는 원문 그대로" \
+    || fail "clip() — 상한 이하가 변형됨: got='$CLIP_A_OUT'"
+
+CLIP_B_IN="사용자 노출 카피의 안전선을 어기지 않는다 이가 병기 금지 원전을 앞세운 인용과 원용체 금지 안 보이는 명사인 기운이나 힘이 실려요 같은 표현도 쓰지 않는다 내부 용어인 포커스나 델타 같은 말도 노출 금지 헤드라인은 데이터와 연결된 구체 문장만 허용한다"
+CLIP_B_OUT=$(clip_run "$CLIP_B_IN" 180)
+[ "$CLIP_B_OUT" != "$CLIP_B_IN" ] \
+    && pass "clip() — 상한 초과 한글 문장은 실제로 잘림" \
+    || fail "clip() — 상한 초과인데 안 잘림 (cap=180, bytes=$(printf '%s' "$CLIP_B_IN" | wc -c | tr -d ' '))"
+case "$CLIP_B_OUT" in
+    *' …') pass "clip() — 잘린 결과가 ' …' 로 끝남" ;;
+    *) fail "clip() — 잘린 결과가 ' …' 로 안 끝남: '$CLIP_B_OUT'" ;;
+esac
+if [ "$HAVE_PY3" = true ]; then
+    if printf '%s' "$CLIP_B_OUT" | python3 -c "import sys; sys.stdin.buffer.read().decode('utf-8')" 2>/dev/null; then
+        pass "clip() — 잘린 결과가 유효한 UTF-8 (글자 안 갈라짐)"
+    else
+        fail "clip() — 잘린 결과가 깨진 UTF-8"
+    fi
+else
+    pass "clip() UTF-8 유효성 검증 skip (python3 없음)"
+fi
+
+CLIP_C_WORD="가나다라마바사아자차카타파하"
+CLIP_C_IN=""
+for _i in 1 2 3 4 5 6 7 8; do CLIP_C_IN="${CLIP_C_IN}${CLIP_C_WORD}"; done
+CLIP_C_OUT=$(clip_run "$CLIP_C_IN" 180)
+[ "$CLIP_C_OUT" = "$CLIP_C_IN" ] \
+    && pass "clip() — 공백 없는 긴 한글 덩어리는 안 자르고 그대로 (깨지는 것보다 긴 게 나음)" \
+    || fail "clip() — 공백 없는 덩어리를 건드림: got='$CLIP_C_OUT'"
+
+if ! command -v jq >/dev/null 2>&1; then
+    pass "§44.2/44.3 skip (jq 없음)"
+else
+    # 44.2 build-memory.sh 통합 — 긴 한글 🔴/🟡 룰 → towc 없이 렌더, 목록 수 = 머리말 수
+    BM_FX=$(mktemp -d)
+    cat > "$BM_FX/AGENTS.md" <<'EOF'
+# Test Constitution
+
+🔴 **`TEST:CRIT:001`** 사용자 노출 카피의 안전선을 지킨다 — 이(가) 병기 금지, 원전을 앞세운 인용과 원용체 금지, 안 보이는 명사인 기운이나 힘이 실려요 같은 표현 금지, 내부 용어인 포커스나 델타 노출 금지, 헤드라인은 데이터와 연결된 구체 문장만 허용한다 절대 예외 없다
+- enforced_by: external:vitest
+- enforced_kind: test
+
+🔴 **`TEST:CRIT:002`** 패키지 의존 방향을 지킨다 — apps 는 ui 와 api 만 참조하고 core 는 React 나 네트워크나 플랫폼 API 를 절대 import 하지 않는다 위반 시 빌드가 자동으로 막히고 리뷰어 승인도 소용이 없다
+- enforced_by: external:eslint
+- enforced_kind: lint
+
+🟡 **`TEST:MAND:001`** 얼굴 이미지는 리딩 생성 목적의 일시 처리에 한해 외부 API 로 전송할 수 있다 전송 전 얼굴 크롭과 다운스케일과 EXIF 제거가 필수이고 서버나 제3자 저장은 금지되며 사전 승인 없이는 정식 출시를 금지한다
+- enforced_by: human:pr-review
+EOF
+    BM_OUT=$(CLAUDE_PROJECT_DIR="$BM_FX" bash "$CLIP_SCRIPTS_DIR/build-memory.sh" --json --full 2>"$BM_FX/stderr.log")
+
+    if grep -q 'towc' "$BM_FX/stderr.log" 2>/dev/null; then
+        fail "build-memory.sh — 긴 한글 룰에서 towc 충돌: $(tr '\n' ' ' < "$BM_FX/stderr.log")"
+    else
+        pass "build-memory.sh — 긴 한글 🔴/🟡 룰에서 towc 충돌 없음"
+    fi
+
+    echo "$BM_OUT" | jq -e '.status == "ok"' >/dev/null 2>&1 \
+        && pass "build-memory.sh — 정상 렌더는 status:ok" \
+        || fail "build-memory.sh — status 불일치: $BM_OUT"
+
+    BM_MEM="$BM_FX/.ax/MEMORY.md"
+    if [ -f "$BM_MEM" ]; then
+        BM_DECLARED=$(grep -oE '^## 🔴 CRITICAL 룰 \([0-9]+\)' "$BM_MEM" | grep -oE '[0-9]+')
+        BM_LISTED=$(awk '
+            /^## 🔴 CRITICAL 룰 \(/ { on=1; next }
+            on && /^## / { exit }
+            on && /^- / { c++ }
+            END { print c+0 }
+        ' "$BM_MEM")
+        [ "${BM_DECLARED:-0}" -eq 2 ] && [ "${BM_LISTED:-0}" -eq "${BM_DECLARED:-0}" ] \
+            && pass "build-memory.sh — 🔴 CRITICAL 룰 (${BM_DECLARED}) 목록 수 일치 (listed=${BM_LISTED})" \
+            || fail "build-memory.sh — 🔴 CRITICAL 룰 머리말(${BM_DECLARED:-0})과 목록(${BM_LISTED:-0}) 불일치 — awk 가 죽어 목록만 사라짐"
+    else
+        fail "build-memory.sh — .ax/MEMORY.md 안 씀"
+    fi
+    rm -rf "$BM_FX"
+
+    # 44.3 build-memory.sh 자기 점검 — 렌더가 죽으면(목록 0) status:warning + warnings[] 비지 않음.
+    # clip() 만 옛 byte-substr 판으로 바꿔치기해 렌더를 일부러 죽여요 (build-memory.sh 원본은 안 건드림).
+    BM_BROKEN=$(mktemp -d)
+    cp "$CLIP_SCRIPTS_DIR/build-memory.sh" "$BM_BROKEN/build-memory.sh"
+    chmod +x "$BM_BROKEN/build-memory.sh"
+    cat > "$BM_BROKEN/common.sh" <<EOF
+#!/usr/bin/env bash
+. "$CLIP_SCRIPTS_DIR/common.sh"
+GOAX_AWK_CLIP='
+function clip(s, n,   t) {
+    if (length(s) <= n) return s
+    t = substr(s, 1, n)
+    sub(/[^ .][^ .]*\$/, "", t)
+    sub(/ +\$/, "", t)
+    return t " …"
+}
+'
+EOF
+    chmod +x "$BM_BROKEN/common.sh"
+
+    BM_NEG_FX=$(mktemp -d)
+    cat > "$BM_NEG_FX/AGENTS.md" <<'EOF'
+# Test Constitution
+
+🟡 **`TEST:MAND:001`** 얼굴 이미지는 리딩 생성 목적의 일시 처리에 한해 외부 API 로 전송할 수 있다 전송 전 얼굴 크롭과 다운스케일과 EXIF 제거가 필수이고 서버나 제3자 저장은 금지되며 사전 승인 없이는 정식 출시를 금지한다
+- enforced_by: human:pr-review
+EOF
+    BM_NEG_OUT=$(CLAUDE_PROJECT_DIR="$BM_NEG_FX" bash "$BM_BROKEN/build-memory.sh" --json --full 2>/dev/null)
+
+    echo "$BM_NEG_OUT" | jq -e '.status == "warning"' >/dev/null 2>&1 \
+        && pass "build-memory.sh 자기 점검 — 렌더가 죽어 목록이 비면 status:warning" \
+        || fail "build-memory.sh 자기 점검 — 렌더 실패인데 status 가 warning 이 아님: $BM_NEG_OUT"
+    echo "$BM_NEG_OUT" | jq -e '(.warnings | type == "array") and (.warnings | length > 0)' >/dev/null 2>&1 \
+        && pass "build-memory.sh 자기 점검 — warnings[] 비지 않음" \
+        || fail "build-memory.sh 자기 점검 — warnings[] 비어 있음: $BM_NEG_OUT"
+
+    rm -rf "$BM_BROKEN" "$BM_NEG_FX"
+fi
+
+# ───────────────────────────────────────────────────────────
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────
 if [ "$fail_count" -eq 0 ]; then

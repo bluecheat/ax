@@ -100,7 +100,7 @@ fi
 emit_rules() {
     local sev="$1"
     [ -n "$RULES_FILE" ] || return 0
-    awk -v sev="$sev" -v rf="$RULES_FILE" -v cap=180 -v max=12 -v nopre="$NO_PREVIEW" '
+    awk -v sev="$sev" -v rf="$RULES_FILE" -v cap=180 -v max=12 -v nopre="$NO_PREVIEW" "$GOAX_AWK_CLIP"'
     function flush(   t) {
         if (tok == "") return
         pr++
@@ -110,12 +110,7 @@ emit_rules() {
         gsub(/`/, "", t)
         gsub(/[ \t]+/, " ", t)
         sub(/^ +/, "", t); sub(/ +$/, "", t)
-        if (length(t) > cap) {
-            t = substr(t, 1, cap)
-            sub(/[^ .][^ .]*$/, "", t)
-            sub(/ +$/, "", t)
-            t = t " …"
-        }
+        t = clip(t, cap)
         printf "- `%s` → %s:%d  %s\n", tok, rf, ln, t
         tok = ""; txt = ""
     }
@@ -146,7 +141,7 @@ emit_ranked() {
         files=$(find "$dir" -mindepth 2 -name 'spec.md' 2>/dev/null | sort)
     fi
     [ -n "$files" ] || return 0
-    printf '%s\n' "$files" | awk -v mode="$mode" -v domains="$TASK_DOMAINS" -v max="$max" -v dir="$dir" '
+    printf '%s\n' "$files" | awk -v mode="$mode" -v domains="$TASK_DOMAINS" -v max="$max" -v dir="$dir" "$GOAX_AWK_CLIP"'
     BEGIN { nd = split(domains, D, " ") }
     {
         p = $0; n++; pth[n] = p
@@ -158,7 +153,7 @@ emit_ranked() {
             }
             close(p)
             if (title == "") title = slug
-            if (length(title) > 70) { title = substr(title, 1, 70); sub(/[^ ][^ ]*$/, "", title); title = title "…" }
+            title = clip(title, 70)
             disp[n] = title
         } else {
             slug = p; sub(/\/spec\.md$/, "", slug); sub(/.*\//, "", slug)
@@ -248,7 +243,7 @@ emit_memory() {
             for md in .ax/modules/*/rules.md; do
                 [ -f "$md" ] || continue
                 name=$(printf '%s' "$md" | sed -E 's#\.ax/modules/([^/]+)/rules\.md#\1#')
-                kw=$(grep -E '^keywords:' "$md" 2>/dev/null | head -1 | sed -E 's/^keywords:[[:space:]]*//' | awk '{print substr($0,1,80)}')
+                kw=$(grep -E '^keywords:' "$md" 2>/dev/null | head -1 | sed -E 's/^keywords:[[:space:]]*//' | awk "$GOAX_AWK_CLIP"'{print clip($0, 80)}')
                 star=""
                 case " $TASK_DOMAINS " in *" $(printf '%s' "$name" | tr 'A-Z' 'a-z') "*) star="★ " ;; esac
                 printf -- '- %s%s — keywords: %s → %s\n' "$star" "$name" "${kw:-—}" "$md"
@@ -341,16 +336,45 @@ fi
 
 CONTENT=$(emit_memory)
 
+# ── 자기 점검 — 머리말이 (N>0) 인데 목록이 비면 렌더가 죽은 거예요 ──────────
+# 건수는 grep -c 로, 목록은 awk 로 각각 나와요. 그래서 awk 가 중간에 죽어도 머리말은
+# 멀쩡히 건수를 보고하고 목록만 사라져요 — 사용자 눈엔 "룰 3건" 인데 triage 에는 0건이
+# 닿는 상태라, 하네스가 조용히 반쪽만 켜져 있게 돼요. 렌더 실패는 조용하면 안 돼요.
+RULE_WARN=""
+if [ -n "$RULES_FILE" ] && [ "$LEAN" != true ]; then
+    for pair in '🔴:CRITICAL' '🟡:MANDATORY'; do
+        sev="${pair%%:*}"; label="${pair##*:}"
+        declared=$(grep -cE "^$sev \*\*\`" "$RULES_FILE" 2>/dev/null || true); declared=${declared:-0}
+        [ "$declared" -gt 0 ] || continue
+        listed=$(printf '%s\n' "$CONTENT" | awk -v h="## $sev $label 룰 (" '
+            index($0, h) == 1 { on = 1; next }
+            on && /^## / { exit }
+            on && /^- / { c++ }
+            END { print c + 0 }')
+        [ "${listed:-0}" -gt 0 ] && continue
+        # 한글이 바로 뒤에 붙는 자리는 반드시 중괄호 — `$declared건이` 는 bash 가 변수명에
+        # 한글 첫 바이트까지 물어서 `set -u` 아래 unbound variable 로 죽어요.
+        RULE_WARN="${RULE_WARN}${label} 룰 ${declared}건이 목록에 안 실렸어요 — 렌더 실패 (--no-preview 로 우회 가능)
+"
+    done
+fi
+STATUS=$([ -n "$RULE_WARN" ] && echo warning || echo ok)
+WARN_JSON='[]'
+if [ -n "$RULE_WARN" ] && command -v jq >/dev/null 2>&1; then
+    WARN_JSON=$(printf '%s' "$RULE_WARN" | grep -v '^$' | jq -R . | jq -sc .)
+fi
+
 if [ "$DRY_RUN" = true ]; then
     if [ "$JSON_MODE" = true ]; then
         BYTES=$(printf '%s' "$CONTENT" | wc -c | tr -d ' ')
         RES=$(printf '{"path":".ax/MEMORY.md","bytes":%s,"dry_run":true,"mode":"%s","body_bytes":%s}' \
             "${BYTES:-0}" "$([ "$LEAN" = true ] && echo lean || echo full)" "${BODY_BYTES:-0}")
-        json_output "ok" "$RES" "미리보기만 — 파일 안 썼어요"
+        json_output "$STATUS" "$RES" "미리보기만 — 파일 안 썼어요" "$WARN_JSON"
     else
         printf '%s\n' "$CONTENT"
         printf '\n(dry-run — .ax/MEMORY.md 안 썼어요)\n' >&2
     fi
+    [ -n "$RULE_WARN" ] && printf '%s' "$RULE_WARN" | grep -v '^$' | while IFS= read -r w; do goax_warn "$w"; done
     exit "$EXIT_OK"
 fi
 
@@ -375,9 +399,11 @@ MODE=$([ "$LEAN" = true ] && echo lean || echo full)
 if [ "$JSON_MODE" = true ]; then
     RES=$(printf '{"path":".ax/MEMORY.md","bytes":%s,"lines":%s,"mode":"%s","body_bytes":%s}' \
         "${BYTES:-0}" "${LINES:-0}" "$MODE" "${BODY_BYTES:-0}")
-    json_output "ok" "$RES" "MEMORY.md 재생성 — triage 가 가장 먼저 읽는 포인터 인덱스"
+    json_output "$STATUS" "$RES" "MEMORY.md 재생성 — triage 가 가장 먼저 읽는 포인터 인덱스" "$WARN_JSON"
 else
     goax_log "MEMORY.md 재생성 — ${LINES:-0}줄 / ${BYTES:-0}B (${MODE})"
 fi
+# JSON 모드에서도 stderr 로 한 번 더 — 파이프로 넘길 때 warnings 를 안 읽는 호출부가 있어요
+[ -n "$RULE_WARN" ] && printf '%s' "$RULE_WARN" | grep -v '^$' | while IFS= read -r w; do goax_warn "$w"; done
 
 exit "$EXIT_OK"
