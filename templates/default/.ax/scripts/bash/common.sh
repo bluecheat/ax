@@ -13,6 +13,41 @@
 # 새 코드는 `[[:lower:]]`·`[[:upper:]]`·`[[:alnum:]]` 를 쓰고, 이 export 는 옛 브래킷의 안전망이에요.
 export LC_COLLATE=C
 
+# ─── awk 길이 상한 SSOT — GOAX_AWK_CLIP ──────────────────────────────
+# awk 프로그램 앞에 `awk "$GOAX_AWK_CLIP"'…'` 로 붙이면 `clip(s, n)` 을 쓸 수 있어요.
+#
+# **길이 상한은 낱말 경계로만 적용해요. substr 로 바이트를 자르면 안 돼요.**
+# macOS 기본 awk(BWK)는 length/substr 가 바이트 단위라 상한 위치가 한글 한 글자를 반으로
+# 가르고, 그 뒤 정규식이 `awk: towc: multibyte conversion failure` 로 **awk 를 통째로
+# 중단**시켜요. 실측 피해 둘 —
+#   · build-memory.sh: "🔴 CRITICAL 룰 (3)" 머리말은 grep -c 로 따로 세니 건수를 계속
+#     보고하는데 그 아래 목록만 사라져요. triage 에 룰이 0건 닿는데 아무도 모릅니다.
+#   · triage-search.sh: 스니펫이 반 글자에서 잘려 `앱<?>` 처럼 깨진 채 컨텍스트에 들어가요.
+# 공백은 1바이트이고 UTF-8 연속 바이트(0x80-0xBF)가 될 수 없어서, 공백에서만 끊으면 어느
+# awk 에서도 안 깨져요. 리눅스는 gawk 가 문자 단위, mawk(ubuntu 기본)는 바이트 단위지만 towc
+# 검사가 없어 어느 쪽도 죽지는 않아요 — 그래서 macOS 에서만 터져요. CI 는 macOS 도 돌지만
+# 180바이트를 넘는 한글 룰 픽스처가 없어서 못 잡았어요 (smoke §44 가 그 자리를 채워요).
+# 첫 낱말이 이미 상한을 넘으면 자르지 않고 그대로 내보내요 — 깨진 출력보다 긴 출력이 나아요.
+# 상한 n 은 length 의 단위를 따라가요 — BWK/mawk 는 바이트, gawk 는 문자라 같은 n 이어도 한글
+# 프리뷰 길이가 플랫폼마다 달라요. 정확한 절단이 아니라 soft cap 이에요.
+# 이 파일은 훅마다 source 돼요 (큰 세션이면 주입만 네 자릿수 번). 그래서 `$(cat <<EOF)` 가
+# 아니라 fork 없는 순수 문자열 할당이에요. 본문에 작은따옴표를 쓰지 마세요.
+GOAX_AWK_CLIP='
+function clip(s, n,   nw, w, out, cand, i) {
+    if (length(s) <= n) return s
+    nw = split(s, w, " ")
+    out = ""
+    for (i = 1; i <= nw; i++) {
+        cand = (out == "" ? w[i] : out " " w[i])
+        if (length(cand) > n) break
+        out = cand
+    }
+    if (out == "") return s
+    sub(/[.]$/, "", out)
+    return out " …"
+}
+'
+
 # Exit codes
 EXIT_OK=0
 EXIT_ERROR=1
