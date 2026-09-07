@@ -2667,6 +2667,52 @@ else
         && pass "check-rule-enforcement I1 — 🟡 로 낮추면 human:* 허용" || fail "check-rule-enforcement I1 — mandatory 도 잡음"
     rm -rf "$RE"
 
+    # I5 배선 판정 — .ax/hooks/pre-commit/*.sh 는 settings.json 에 개별 등록되지 않아요.
+    # grep-on-commit.sh(에이전트 커밋)와 git chain wrapper(사람 커밋)가 디렉토리째 glob 하는데
+    # basename 리터럴로만 찾던 탓에 배선이 멀쩡해도 늘 미등록으로 나왔어요. 반대로 디스패처가
+    # 둘 다 없으면 여전히 잡혀야 하고요 — 오탐을 지우려다 거짓 음성을 만들면 더 나빠요.
+    i5_reg_n() {   # i5_reg_n <project-dir> → I5 미등록 건수
+        GOAX_PROJECT_DIR="$1" bash "$1/.ax/scripts/bash/check-rule-enforcement.sh" --json 2>/dev/null \
+            | jq -r '.result.i5_not_registered|length'
+    }
+    i5_rule() {    # i5_rule <project-dir> <hook-relpath>
+        printf -- '---\ncategory: ops\nseverity: critical\nenforced_by: hook:%s\n---\n## SP-OPS-001: 팀 룰\n' \
+            "$2" > "$1/.ax/spirit/rules/ops.md"
+    }
+    I5T=$(mktemp -d)
+    git -C "$I5T" init -q >/dev/null 2>&1
+    mkdir -p "$I5T/.ax/scripts/bash" "$I5T/.ax/spirit/rules" "$I5T/.ax/hooks/pre-commit" \
+             "$I5T/.ax/hooks/pre-edit" "$I5T/.claude"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$I5T/.ax/scripts/bash/"
+    printf '# X\n' > "$I5T/AGENTS.md"
+    printf '#!/usr/bin/env bash\n' > "$I5T/.ax/hooks/pre-commit/team-rules.sh"
+    i5_rule "$I5T" ".ax/hooks/pre-commit/team-rules.sh"
+
+    printf '{"hooks":{}}\n' > "$I5T/.claude/settings.json"
+    [ "$(i5_reg_n "$I5T")" = "1" ] \
+        && pass "check-rule-enforcement I5 — 디스패처가 하나도 없으면 pre-commit hook 도 미배선으로 잡음" \
+        || fail "check-rule-enforcement I5 — 디스패처 없는데 통과 (거짓 음성)"
+
+    printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash .ax/hooks/pre-bash/grep-on-commit.sh"}]}]}}\n' \
+        > "$I5T/.claude/settings.json"
+    [ "$(i5_reg_n "$I5T")" = "0" ] \
+        && pass "check-rule-enforcement I5 — grep-on-commit.sh 등록이면 pre-commit hook 은 배선됨" \
+        || fail "check-rule-enforcement I5 — glob 디스패처를 못 보고 오탐"
+
+    printf '{"hooks":{}}\n' > "$I5T/.claude/settings.json"
+    printf '#!/usr/bin/env bash\n#goax-pre-commit-chain\n' > "$I5T/.git/hooks/pre-commit"
+    chmod +x "$I5T/.git/hooks/pre-commit"
+    [ "$(i5_reg_n "$I5T")" = "0" ] \
+        && pass "check-rule-enforcement I5 — git chain wrapper 만 있어도 배선 인정 (사람 커밋 경로)" \
+        || fail "check-rule-enforcement I5 — .git/hooks/pre-commit 을 안 봄 (rule-enforcement.md I5 명세 위반)"
+
+    printf '#!/usr/bin/env bash\n' > "$I5T/.ax/hooks/pre-edit/guard.sh"
+    i5_rule "$I5T" ".ax/hooks/pre-edit/guard.sh"
+    [ "$(i5_reg_n "$I5T")" = "1" ] \
+        && pass "check-rule-enforcement I5 — pre-commit 밖 hook 은 여전히 settings.json 등록 필요" \
+        || fail "check-rule-enforcement I5 — 예외가 pre-commit 밖으로 샘"
+    rm -rf "$I5T"
+
     # 갓 provision 한 프로젝트가 --strict 초록이어야 CI 예시(harness job)를 켤 수 있어요
     STRICT_T=$(mktemp -d)
     bash "$REPO/scripts/provision.sh" --target "$STRICT_T" --json >/dev/null 2>&1
