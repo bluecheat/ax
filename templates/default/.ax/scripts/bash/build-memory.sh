@@ -94,9 +94,11 @@ if [ "$HAS_JQ" = true ] && [ -f .ax/current-task.json ]; then
 fi
 
 # ── D1: 룰 프리뷰 — 원문 줄바꿈을 join 해 첫 문장(들)을 예산 안에서 그대로 노출 ──
-# 시그널 라인 다음의 연속 설명 라인을 빈 줄 / '- ' 메타 전까지 이어붙인 뒤 cap 바이트로
-# 자르되 마지막 공백/마침표 경계에서 끊고 '…' 표기. (예전엔 첫 물리 라인만 잡아
-# '단방향:' 처럼 wrap 지점에서 끊겨 핵심 제약이 통째로 빠졌음)
+# 시그널 라인 다음의 연속 설명 라인을 빈 줄 / '- ' 메타 전까지 이어붙인 뒤 clip(t, cap) 으로
+# 낱말 경계에서만 끊고 ' …' 표기 (common.sh 의 GOAX_AWK_CLIP). substr 로 cap 바이트를 직접
+# 자르면 BWK awk 가 한글을 반으로 갈라 죽으니 그 방식으로 되돌리지 마세요. 첫 낱말이 cap 을
+# 넘으면 안 자르고 통째로 나가요. (예전엔 첫 물리 라인만 잡아 '단방향:' 처럼 wrap 지점에서
+# 끊겨 핵심 제약이 통째로 빠졌음)
 emit_rules() {
     local sev="$1"
     [ -n "$RULES_FILE" ] || return 0
@@ -352,8 +354,9 @@ if [ -n "$RULES_FILE" ] && [ "$LEAN" != true ]; then
             on && /^- / { c++ }
             END { print c + 0 }')
         [ "${listed:-0}" -gt 0 ] && continue
-        # 한글이 바로 뒤에 붙는 자리는 반드시 중괄호 — `$declared건이` 는 bash 가 변수명에
-        # 한글 첫 바이트까지 물어서 `set -u` 아래 unbound variable 로 죽어요.
+        # 한글이 바로 뒤에 붙는 자리는 반드시 중괄호 — `$declared건이` 는 bash 3.2(macOS 기본)가
+        # 변수명에 한글 첫 바이트까지 물어서 `set -u` 아래 unbound variable 로 죽어요
+        # (bash 5 는 멀쩡해서 리눅스에선 안 드러나요).
         RULE_WARN="${RULE_WARN}${label} 룰 ${declared}건이 목록에 안 실렸어요 — 렌더 실패 (--no-preview 로 우회 가능)
 "
     done

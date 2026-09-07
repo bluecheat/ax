@@ -158,7 +158,7 @@ if command -v jq >/dev/null 2>&1; then HAS_JQ=true; fi
 
 TAB=$(printf '\t')
 SNIPPET_MAX=3       # 파일당 미리보기 줄 수
-SNIPPET_WIDTH=200   # 줄당 최대 글자(과도한 토큰 방지)
+SNIPPET_WIDTH=200   # 줄당 길이 상한(과도한 토큰 방지) — clip() 의 soft cap: 낱말 경계에서만 끊고, awk 의 length 단위(BWK/mawk 바이트 · gawk 문자)를 따라요
 TOPK=10             # 카테고리당 상위 K
 SCAN_CAP=50         # 본문 랭킹 전 후보 파일 상한
 

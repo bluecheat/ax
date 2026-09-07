@@ -3283,10 +3283,11 @@ section "44. GOAX_AWK_CLIP — macOS BWK awk 바이트 절단 회귀 (clip 단�
 # ───────────────────────────────────────────────────────────
 # macOS 기본 awk(BWK 20200816)는 length/substr 가 바이트 단위라, 한글을 substr(s,1,N) 으로
 # 자르면 글자를 반으로 갈라 깨진 UTF-8 을 만들고 뒤이은 정규식이
-# `awk: towc: multibyte conversion failure` 로 awk 를 통째로 중단시켜요. gawk 는 문자 단위라
-# 원래 안전했고 CI 가 ubuntu 라 이 결함이 한 번도 안 잡혔어요. clip() 은 공백(낱말) 경계에서만
-# 끊어 이 결함을 피해가요 — 44.1 은 그 계약, 44.2 는 build-memory.sh 가 실제로 그 계약을 쓰는지,
-# 44.3 은 렌더가 죽었을 때 자기 점검이 조용히 넘어가지 않는지를 검증해요.
+# `awk: towc: multibyte conversion failure` 로 awk 를 통째로 중단시켜요. 리눅스는 gawk(문자 단위)도
+# mawk(바이트 단위지만 towc 검사 없음)도 죽지 않아요. CI 매트릭스에 macOS 가 있는데도 못 잡은 건
+# 180바이트를 넘는 한글 룰 픽스처가 smoke 에 없어서예요 — 이 섹션이 그 자리예요. clip() 은
+# 공백(낱말) 경계에서만 끊어 이 결함을 피해가요 — 44.1 은 그 계약, 44.2 는 build-memory.sh 가
+# 실제로 그 계약을 쓰는지, 44.3 은 렌더가 죽었을 때 자기 점검이 조용히 넘어가지 않는지를 검증해요.
 CLIP_SCRIPTS_DIR="$REPO/templates/default/.ax/scripts/bash"
 HAVE_PY3=false
 command -v python3 >/dev/null 2>&1 && HAVE_PY3=true
@@ -3385,8 +3386,9 @@ EOF
     # 44.3 build-memory.sh 자기 점검 — 렌더가 죽으면(목록 0) status:warning + warnings[] 비지 않음.
     # clip() 을 즉시 중단하는 판으로 바꿔치기해 렌더를 일부러 죽여요 (build-memory.sh 원본은 안 건드림).
     #
-    # 옛 byte-substr 판을 복원하는 방식은 쓰지 않아요 — gawk 는 substr 가 문자 단위라 **안 깨져서**
-    # 리눅스에선 프로브가 아무것도 재지 않고 status:ok 가 정상이 돼요 (실제로 CI 를 빨갛게 만들었어요).
+    # 옛 byte-substr 판을 복원하는 방식은 쓰지 않아요 — gawk 는 substr 가 문자 단위라 안 깨지고, mawk 는
+    # 바이트로 깨지되 towc 검사가 없어 안 죽어서, 리눅스에선 프로브가 아무것도 재지 않고 status:ok 가
+    # 정상이 돼요 (실제로 CI 를 빨갛게 만들었어요).
     # 자기 점검이 잡아야 할 건 "awk 가 어떻게 죽었나" 가 아니라 "머리말은 N인데 목록이 비었다" 라서,
     # awk 를 확실히 중단시키는 쪽이 어느 구현에서도 같은 상태를 재현해요.
     BM_BROKEN=$(mktemp -d)
