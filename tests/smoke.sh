@@ -3303,7 +3303,10 @@ CLIP_A_OUT=$(clip_run "$CLIP_A_IN" 180)
     && pass "clip() — 상한 이하는 원문 그대로" \
     || fail "clip() — 상한 이하가 변형됨: got='$CLIP_A_OUT'"
 
-CLIP_B_IN="사용자 노출 카피의 안전선을 어기지 않는다 이가 병기 금지 원전을 앞세운 인용과 원용체 금지 안 보이는 명사인 기운이나 힘이 실려요 같은 표현도 쓰지 않는다 내부 용어인 포커스나 델타 같은 말도 노출 금지 헤드라인은 데이터와 연결된 구체 문장만 허용한다"
+# 상한(180)을 **바이트로도 문자로도** 넘겨야 해요. macOS awk 는 length 가 바이트,
+# gawk 는 문자라서, 한글 141자(349바이트) 같은 값은 macOS 에서만 잘려요 — 그러면
+# 리눅스 CI 에서 "안 잘림" 으로 빨개져요. awk 종류를 감지해 분기하지 않고 픽스처를 키웠어요.
+CLIP_B_IN="사용자 노출 카피의 안전선을 어기지 않는다 이가 병기 금지 원전을 앞세운 인용과 원용체 금지 안 보이는 명사인 기운이나 힘이 실려요 같은 표현도 쓰지 않는다 내부 용어인 포커스나 델타 같은 말도 노출 금지 헤드라인은 데이터와 연결된 구체 문장만 허용한다 사용자 노출 카피의 안전선을 어기지 않는다 이가 병기 금지 원전을 앞세운 인용과 원용체 금지 안 보이는 명사인 기운이나 힘이 실려요 같은 표현도 쓰지 않는다 내부 용어인 포커스나 델타 같은 말도 노출 금지 헤드라인은 데이터와 연결된 구체 문장만 허용한다"
 CLIP_B_OUT=$(clip_run "$CLIP_B_IN" 180)
 [ "$CLIP_B_OUT" != "$CLIP_B_IN" ] \
     && pass "clip() — 상한 초과 한글 문장은 실제로 잘림" \
@@ -3324,7 +3327,8 @@ fi
 
 CLIP_C_WORD="가나다라마바사아자차카타파하"
 CLIP_C_IN=""
-for _i in 1 2 3 4 5 6 7 8; do CLIP_C_IN="${CLIP_C_IN}${CLIP_C_WORD}"; done
+# 14자 × 16 = 224자 — gawk(문자)에서도 상한을 넘겨야 "첫 낱말이 상한 초과" 경로를 실제로 타요
+for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do CLIP_C_IN="${CLIP_C_IN}${CLIP_C_WORD}"; done
 CLIP_C_OUT=$(clip_run "$CLIP_C_IN" 180)
 [ "$CLIP_C_OUT" = "$CLIP_C_IN" ] \
     && pass "clip() — 공백 없는 긴 한글 덩어리는 안 자르고 그대로 (깨지는 것보다 긴 게 나음)" \
@@ -3379,7 +3383,12 @@ EOF
     rm -rf "$BM_FX"
 
     # 44.3 build-memory.sh 자기 점검 — 렌더가 죽으면(목록 0) status:warning + warnings[] 비지 않음.
-    # clip() 만 옛 byte-substr 판으로 바꿔치기해 렌더를 일부러 죽여요 (build-memory.sh 원본은 안 건드림).
+    # clip() 을 즉시 중단하는 판으로 바꿔치기해 렌더를 일부러 죽여요 (build-memory.sh 원본은 안 건드림).
+    #
+    # 옛 byte-substr 판을 복원하는 방식은 쓰지 않아요 — gawk 는 substr 가 문자 단위라 **안 깨져서**
+    # 리눅스에선 프로브가 아무것도 재지 않고 status:ok 가 정상이 돼요 (실제로 CI 를 빨갛게 만들었어요).
+    # 자기 점검이 잡아야 할 건 "awk 가 어떻게 죽었나" 가 아니라 "머리말은 N인데 목록이 비었다" 라서,
+    # awk 를 확실히 중단시키는 쪽이 어느 구현에서도 같은 상태를 재현해요.
     BM_BROKEN=$(mktemp -d)
     cp "$CLIP_SCRIPTS_DIR/build-memory.sh" "$BM_BROKEN/build-memory.sh"
     chmod +x "$BM_BROKEN/build-memory.sh"
@@ -3387,12 +3396,8 @@ EOF
 #!/usr/bin/env bash
 . "$CLIP_SCRIPTS_DIR/common.sh"
 GOAX_AWK_CLIP='
-function clip(s, n,   t) {
-    if (length(s) <= n) return s
-    t = substr(s, 1, n)
-    sub(/[^ .][^ .]*\$/, "", t)
-    sub(/ +\$/, "", t)
-    return t " …"
+function clip(s, n) {
+    exit 2
 }
 '
 EOF
