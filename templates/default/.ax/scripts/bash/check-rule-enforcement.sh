@@ -14,7 +14,10 @@
 #   I1. 🔴 CRITICAL 의 enforced_by 는 hook:* 또는 external:* 만 (TODO/human/script 금지)
 #   I2. TODO:* 는 deadline 필수 (YYYY-MM-DD)
 #   I3. deadline 임박(≤7일) 또는 초과 보고
-#   I5. enforced_by: hook:<path> 면 (a) 파일 존재 (b) .claude/settings.json 등록
+#   I5. enforced_by: hook:<path> 면 (a) 파일 존재 (b) 배선됨
+#       — 배선 = settings.json 에 등록. 단 .ax/hooks/pre-commit/*.sh 는 디렉토리째
+#         glob 되므로 디스패처 존재로 판정해요: settings.json 의 grep-on-commit.sh
+#         (에이전트 커밋) 또는 .git/hooks/pre-commit 의 goax chain wrapper (사람 커밋)
 #   I6. enforced_by: external:* 면 그걸 자동 실행하는 트리거가 리포에 실재해야 함
 #       (CI workflow[GitHub/GitLab/Circle/Jenkins/Azure/Buildkite] / git pre-commit /
 #        husky / pre-commit-framework / lefthook 중 1+)
@@ -92,6 +95,9 @@ done
 [ -z "$RULES_FILE" ] && [ -f "$ROOT/CLAUDE.md" ] && RULES_FILE="$ROOT/CLAUDE.md"
 
 SETTINGS="$ROOT/.claude/settings.json"
+# install-git-hooks.sh 가 wrapper 안에 심는 마커. I6 트리거 판정과 I5 배선 판정이
+# 같은 것을 봐야 해서 한 곳에 뒀어요 (두 리터럴이 갈라지면 한쪽만 조용히 틀어져요).
+GOAX_CHAIN_MARKER="#goax-pre-commit-chain"
 TODAY=$(date -u +%Y-%m-%d)
 
 if [ -z "$RULES_FILE" ]; then
@@ -255,7 +261,7 @@ GIT_PC=$(git -C "$ROOT" rev-parse --git-path hooks/pre-commit 2>/dev/null || ech
 if [ -n "$GIT_PC" ]; then
     case "$GIT_PC" in /*) ;; *) GIT_PC="$ROOT/$GIT_PC" ;; esac
     if [ -f "$GIT_PC" ] && [ -x "$GIT_PC" ]; then
-        if grep -q '#goax-pre-commit-chain' "$GIT_PC" 2>/dev/null; then
+        if grep -q "$GOAX_CHAIN_MARKER" "$GIT_PC" 2>/dev/null; then
             # goax wrapper 는 .ax/hooks/pre-commit/*.sh 만 chain 해요 — up 이 전 환경
             # 기본으로 설치하므로 wrapper 존재 자체는 external 실행의 근거가 못 돼요
             # (그걸 근거로 치면 I6 가 항상 통과하는 자기 무력화). 출고 훅 이외의
@@ -275,6 +281,26 @@ fi
 [ -f "$ROOT/.pre-commit-config.yaml" ] && TRIGGER_SURFACES+=("framework:pre-commit")
 [ -f "$ROOT/.husky/pre-commit" ] && TRIGGER_SURFACES+=("framework:husky")
 { [ -f "$ROOT/lefthook.yml" ] || [ -f "$ROOT/.lefthook.yml" ]; } && TRIGGER_SURFACES+=("framework:lefthook")
+
+# hook 이 실제로 배선돼 있는가 (I5-b).
+#
+# .ax/hooks/pre-commit/*.sh 는 settings.json 에 개별 등록하지 않아요 — 디스패처 둘이
+# 디렉토리째 glob 해요. settings.json 에 등록된 pre-bash/grep-on-commit.sh 가 에이전트
+# 커밋을, install-git-hooks.sh 가 깐 .git/hooks/pre-commit wrapper 가 사람 커밋을 잡아요.
+# 그래서 basename 리터럴로 찾으면 배선이 멀쩡해도 항상 미등록으로 나와요.
+# rule-enforcement.md I5 가 "settings.json 또는 .git/hooks/pre-commit 에 등록" 이라고
+# 규정한 게 이것 — 구현이 앞의 절반만 보고 있었어요.
+hook_wired() {   # hook_wired <hook_path> → 0=배선됨
+    local hp="$1"
+    case "$hp" in
+        */hooks/pre-commit/*)
+            [ -f "$SETTINGS" ] && grep -q 'grep-on-commit\.sh' "$SETTINGS" 2>/dev/null && return 0
+            [ -n "$GIT_PC" ] && [ -f "$GIT_PC" ] && [ -x "$GIT_PC" ] \
+                && grep -q "$GOAX_CHAIN_MARKER" "$GIT_PC" 2>/dev/null && return 0
+            return 1 ;;
+    esac
+    [ -f "$SETTINGS" ] && grep -q "$(basename "$hp")" "$SETTINGS" 2>/dev/null
+}
 
 # 날짜 차이 (YYYY-MM-DD) — bash 만으로 (date -d 가 BSD 에선 다름. macOS/Linux 호환).
 date_diff_days() {
@@ -335,18 +361,13 @@ while IFS=$'\t' read -r rid label eb ek file; do
         esac
     fi
 
-    # I5: enforced_by 가 hook:<path> 형식이면 파일 + settings.json 등록 검증
+    # I5: enforced_by 가 hook:<path> 형식이면 파일 존재 + 배선 검증
     # eb 안에 hook:.ax/hooks/<...>.sh 추출 (복수면 모두)
     while [[ "$eb" =~ hook:([^[:space:]+]+\.sh) ]]; do
         hook_path="${BASH_REMATCH[1]}"
         if [ ! -f "$ROOT/$hook_path" ]; then
             I5_FILE+=("$rid|$hook_path|file_missing|$file")
-        elif [ -f "$SETTINGS" ]; then
-            hook_basename=$(basename "$hook_path")
-            if ! grep -q "$hook_basename" "$SETTINGS" 2>/dev/null; then
-                I5_REG+=("$rid|$hook_path|not_registered|$file")
-            fi
-        else
+        elif ! hook_wired "$hook_path"; then
             I5_REG+=("$rid|$hook_path|not_registered|$file")
         fi
         # 처리한 hook 제거 후 다음 hook 매칭 (복수 처리)

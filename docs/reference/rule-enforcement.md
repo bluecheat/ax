@@ -90,7 +90,7 @@ enforced_by:
 - **I2. TODO 는 deadline 필수** — `enforced_by: TODO` (deadline 없음) 는 형식 위반. `TODO:YYYY-MM-DD` 또는 `TODO:+Nw` (즉시 절대화).
 - **I3. doctor 매 호출 추적** — `enforced_by: TODO:*` 를 grep 해서 deadline 과 오늘 비교. 임박(≤7일) / 초과(<오늘) 시 별도 보고 섹션 + 옵션 제시.
 - **I4. deadline 초과는 강등 권장** — 자동 강등 X (UX 안전: 사용자 confirm 필요). 단 doctor 는 강등 명령을 옵션 [r] 로 강조.
-- **I5. hook 경로는 실제 존재 + settings.json 등록** — `enforced_by: hook:.ax/hooks/...sh` 면 (a) 파일 실제 존재 (b) `.claude/settings.json` 또는 `.git/hooks/pre-commit` 에 등록. 둘 다 OK 여야 enforce 보장. 한 쪽만이면 ⚠ "활성화 안 됨".
+- **I5. hook 경로는 실제 존재 + 배선됨** — `enforced_by: hook:.ax/hooks/...sh` 면 (a) 파일 실제 존재 (b) 배선됨. 둘 다 OK 여야 enforce 보장. 한 쪽만이면 ⚠ "활성화 안 됨". **배선의 판정은 hook 이 어디 사는지에 달렸음** — `.ax/hooks/pre-commit/*.sh` 는 `.claude/settings.json` 에 개별 등록하지 **않는** 게 정상이라 basename 으로 찾으면 안 됨. 디스패처 둘이 디렉토리째 glob 하므로 그 존재로 판정: settings.json 에 등록된 `pre-bash/grep-on-commit.sh`(에이전트 커밋) 또는 `.git/hooks/pre-commit` 의 goax chain wrapper(사람 터미널 커밋). 둘 다 없으면 위반 — 오탐을 피하려다 통과시키면 "선언한 hook 이 실제로 돈다" 는 I5 의 값어치가 사라짐. 그 밖의 hook 은 settings.json 등록을 요구.
 - **I6. external 은 자동 트리거 실재 필수** — `enforced_by: external:*` 면 그 도구를 자동으로 실행하는 표면(CI workflow[GitHub/GitLab/Circle/Jenkins/Azure/Buildkite] / `.git/hooks/pre-commit` / husky / pre-commit-framework / lefthook)이 리포에 1개 이상 있어야 함. 도구 **내용**까지는 검증하지 않지만(도구별이라 비목표 유지), **무엇이 그걸 돌리는가** 는 도구 무관하게 검증 가능. 트리거 0 이면 I1 을 통과해도 "누군가 손으로 돌릴 때만" 도는 라벨뿐인 룰. **goax wrapper 만 있는 pre-commit 은 트리거로 안 침** — up 이 전 환경 기본 설치하는 wrapper 는 `.ax/hooks/pre-commit/*.sh` 를 chain 할 뿐 external 도구를 직접 실행하지 않아서, 그걸 인정하면 I6 가 항상 통과하는 자기 무력화가 됨. 출고 훅 이외의 프로젝트 전용 chain 훅이 있을 때만 `git:pre-commit-chain` 으로 인정.
 
 ## 룰 파일 frontmatter / inline 표기 — 두 형태 허용
