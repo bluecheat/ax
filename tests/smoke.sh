@@ -46,6 +46,18 @@ CHANGELOG_FILE="$REPO/changelog/$VER_FILE.md"
     && pass "changelog/$VER_FILE.md 존재" \
     || fail "changelog/$VER_FILE.md 누락 (VERSION=$VER_FILE)"
 
+# changelog 최신 ↔ VERSION — 위 검사의 반대 방향.
+# 위는 VERSION → changelog 만 봐요. changelog/<새 버전>.md 를 넣고 스탬프를 안 올리면
+# 네 스탬프끼리는 여전히 일치해서 CI 가 초록이에요 — 실제로 0.5.8 이 그렇게 나갔어요.
+# 그러면 배포가 멈춰요: 플러그인 캐시는 버전 문자열로 디렉토리를 나눠서
+# (cache/goax/goax/<ver>/), 스탬프가 그대로면 marketplace update + install 을 돌려도
+# 새 디렉토리가 안 생기고 사용자는 옛 버전을 계속 써요.
+CHANGELOG_MAX=$(find "$REPO/changelog" -maxdepth 1 -name '*.md' 2>/dev/null \
+    | sed 's|.*/||; s|\.md$||' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+[ -n "$CHANGELOG_MAX" ] && [ "$CHANGELOG_MAX" = "$VER_FILE" ] \
+    && pass "changelog 최신 ↔ VERSION (=$VER_FILE)" \
+    || fail "changelog 최신/VERSION 불일치 (changelog=$CHANGELOG_MAX vs VERSION=$VER_FILE) — 스탬프를 안 올리면 배포가 멈춰요"
+
 # ───────────────────────────────────────────────────────────
 section "2. skills/ — name: frontmatter가 디렉토리명과 일치하는지 (전체 동적 순회)"
 # ───────────────────────────────────────────────────────────
