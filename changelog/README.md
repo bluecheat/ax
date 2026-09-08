@@ -4,7 +4,7 @@
 
 ## 버전
 
-- [0.5.10](0.5.10.md) — dry-run 이 spec 번호를 태우던 것 (예약은 쓰기인데 호출부가 --dry-run 을 안 넘김)
+- [0.5.10](0.5.10.md) — dry-run 이 spec 번호를 태우던 것 (예약은 쓰기인데 호출부가 --dry-run 을 안 넘김) + 중첩 `.suggested` gitignore 구멍
 - [0.5.9](0.5.9.md) — I5 가 pre-commit hook 을 늘 미등록으로 세던 것 (glob 디스패처를 안 봐서 — 문서는 처음부터 맞게 적혀 있었어요)
 - [0.5.8](0.5.8.md) — 한글을 반으로 가르며 awk 를 죽이던 길이 상한, 그 실패가 ok 로 나가던 것 (`GOAX_AWK_CLIP` 낱말 경계 clip SSOT + build-memory 자기 점검)
 - [0.5.7](0.5.7.md) — 안전망이 반쪽만 켜져 있던 자리 넷: 시크릿 SSOT · 파일 쓰기 락 6곳 · zero-verify 주석 파서 · warning 회귀 (+ 리눅스 stat·멀티바이트 브래킷)
