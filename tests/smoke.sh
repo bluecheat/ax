@@ -2651,6 +2651,35 @@ else
     GOAX_PROJECT_DIR="$SRV" bash "$SRV/.ax/scripts/bash/tasks-gate.sh" --spec 020-a --json >/dev/null 2>&1
     jq -e '.task_seal["020-a"] == 2' "$SRV/.ax/state.json" >/dev/null 2>&1 \
         && pass "tasks-gate — 일반 실행은 봉인값 기록 (dry-run 과 구분)" || fail "tasks-gate — 일반 실행도 기록 안 함"
+
+    # init-spec-dir --dry-run 은 번호를 예약하지 않아요.
+    # --reserve 는 원장 선점 + 디렉토리 생성까지 하는 쓰기라, 호출부가 --dry-run 을
+    # 안 넘기면 "안 만든다" 고 보고해놓고 번호를 영구 점유해요 (원장 규약상 재사용 없음).
+    # next-spec-num 쪽 가드는 §15.x 가 이미 보는데, 그걸 부르는 이 호출부가 사각지대였어요.
+    ISD=$(mktemp -d)
+    mkdir -p "$ISD/.ax/scripts/bash" "$ISD/.ax/_templates/spec" "$ISD/.ax/docs/spec"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num,init-spec-dir,slug-from-text}.sh \
+       "$ISD/.ax/scripts/bash/" 2>/dev/null
+    cp -R "$REPO/templates/default/.ax/_templates/spec/." "$ISD/.ax/_templates/spec/" 2>/dev/null
+    CLAUDE_PROJECT_DIR="$ISD" bash "$ISD/.ax/scripts/bash/init-spec-dir.sh" \
+        --slug ghost --tier standard --dry-run --json >/dev/null 2>&1
+    isd_dirs=$(ls -d "$ISD"/.ax/docs/spec/[0-9]* 2>/dev/null | wc -l | tr -d ' ')
+    { [ "$isd_dirs" = "0" ] && [ ! -d "$ISD/.ax/docs/spec/.numbers" ]; } \
+        && pass "init-spec-dir --dry-run — 디렉토리·번호 원장 둘 다 안 만듦" \
+        || fail "init-spec-dir --dry-run — 예약이 샘 (dirs=$isd_dirs, ledger=$([ -d "$ISD/.ax/docs/spec/.numbers" ] && echo yes || echo no))"
+    # 연속 dry-run 이 같은 번호를 줘야 정상 — 다르면 번호가 타고 있다는 뜻
+    isd_a=$(CLAUDE_PROJECT_DIR="$ISD" bash "$ISD/.ax/scripts/bash/init-spec-dir.sh" --slug ghost --tier standard --dry-run --json 2>/dev/null | jq -r '.result.spec_id')
+    isd_b=$(CLAUDE_PROJECT_DIR="$ISD" bash "$ISD/.ax/scripts/bash/init-spec-dir.sh" --slug ghost --tier standard --dry-run --json 2>/dev/null | jq -r '.result.spec_id')
+    [ -n "$isd_a" ] && [ "$isd_a" = "$isd_b" ] \
+        && pass "init-spec-dir --dry-run — 연속 호출이 같은 번호 ($isd_a)" \
+        || fail "init-spec-dir --dry-run — 번호가 증가함 ($isd_a → $isd_b)"
+    # 일반 실행은 여전히 만들어야 해요 (dry-run 가드가 본 기능을 끄면 안 돼요)
+    CLAUDE_PROJECT_DIR="$ISD" bash "$ISD/.ax/scripts/bash/init-spec-dir.sh" \
+        --slug real-one --tier standard --json >/dev/null 2>&1
+    [ -f "$ISD/.ax/docs/spec/${isd_a}-real-one/spec.md" ] \
+        && pass "init-spec-dir — 일반 실행은 생성 (dry-run 과 구분)" \
+        || fail "init-spec-dir — 일반 실행이 생성 안 함"
+    rm -rf "$ISD"
     rm -rf "$SRV"
 fi
 
