@@ -243,6 +243,26 @@ if [ -f "$GI_TPL" ]; then
     [ "$missing" -eq 0 ] && pass ".gitignore.template — runtime 엔트리 5종 모두 포함"
 fi
 
+# 중첩 .suggested 가 실제로 무시되는가 — 엔트리 존재가 아니라 git 동작으로.
+# `.ax/*.suggested` 는 한 단계만 잡아요. provision 은 `.ax/spirit/`·`.ax/mistakes/`·
+# `.ax/_templates/spec/` 밑에도 .suggested 를 만들어서, 그것들이 git status 에 ?? 로
+# 새어나가 실수로 커밋될 수 있었어요. 위 엔트리 검사는 리터럴 grep 이라 못 봤어요 —
+# 다섯 줄이 다 있어도 중첩은 안 잡히니까요. 그래서 동작으로 봐요.
+if [ -f "$GI_TPL" ]; then
+    GIT_T=$(mktemp -d)
+    git -C "$GIT_T" init -q >/dev/null 2>&1
+    cp "$GI_TPL" "$GIT_T/.gitignore"
+    mkdir -p "$GIT_T/.ax/spirit" "$GIT_T/.ax/mistakes" "$GIT_T/.ax/_templates/spec"
+    gi_miss=0
+    for p in ".ax/config.yml.suggested" ".ax/spirit/tone.md.suggested" \
+             ".ax/mistakes/README.md.suggested" ".ax/_templates/spec/spec.md.suggested"; do
+        git -C "$GIT_T" check-ignore -q "$p" 2>/dev/null \
+            || { fail ".gitignore.template — $p 가 무시되지 않음 (git status 로 샘)"; gi_miss=$((gi_miss+1)); }
+    done
+    [ "$gi_miss" -eq 0 ] && pass ".gitignore.template — 중첩 .suggested 4종 모두 무시 (동작 검증)"
+    rm -rf "$GIT_T"
+fi
+
 # 잔재 검증 — spirit/rules/output-style.md (plugin meta로 분류되어 출고에서 제거됨)
 [ -f "$REPO/templates/default/.ax/spirit/rules/output-style.md" ] \
     && fail "spirit/rules/output-style.md — plugin 출고 제거됐어야 함 (plugin meta)" \
