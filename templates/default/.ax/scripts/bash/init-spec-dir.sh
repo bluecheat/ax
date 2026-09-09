@@ -76,15 +76,32 @@ fi
 # 계산만 하면 여기서 mkdir 까지 사이에 다른 세션이 같은 번호를 가져가요
 # (실사용 리포에서 spec 2 쌍·ADR 7 쌍이 이렇게 겹쳤어요).
 # --reserve 는 번호 원장에 원자적으로 선점하고 디렉토리까지 만들어 줘요.
+# --dry-run 이면 예약하지 않아요. --reserve 는 번호 원장 선점 + 디렉토리 생성까지
+# 하는 *쓰기* 라, 그대로 부르면 "안 만든다" 고 보고해놓고 번호를 영구 점유해요
+# (원장 규약: 한 번 쓰인 번호는 재사용 안 함). 계산 fallback 도 같은 이유로 넘겨요 —
+# --reserve 없이도 sync_ledger 가 .numbers/ 를 만들거든요.
+# next-spec-num.sh 자체는 두 경로 다 가드가 있어요. 안 넘긴 건 이 호출부뿐이었어요.
 RESERVED_BY_US=false
 if [ -z "$NUM" ]; then
     if command -v jq >/dev/null 2>&1; then
-        RES=$(bash "$SCRIPT_DIR/next-spec-num.sh" --reserve --slug "$SLUG" --json 2>/dev/null || true)
+        if [ "$DRY_RUN" = true ]; then
+            RES=$(bash "$SCRIPT_DIR/next-spec-num.sh" --reserve --slug "$SLUG" --json --dry-run 2>/dev/null || true)
+        else
+            RES=$(bash "$SCRIPT_DIR/next-spec-num.sh" --reserve --slug "$SLUG" --json 2>/dev/null || true)
+        fi
         NUM=$(printf '%s' "$RES" | jq -r 'select(.status=="ok") | .result.next // empty' 2>/dev/null || true)
-        [ -n "$NUM" ] && RESERVED_BY_US=true
+        # dry-run 은 아무것도 선점하지 않았으니 소유권도 없어요. true 로 두면 아래
+        # "이미 존재" 가드가 통째로 꺼져서 실재하는 spec 을 덮어쓸 수 있다고 보고해요.
+        [ -n "$NUM" ] && [ "$DRY_RUN" != true ] && RESERVED_BY_US=true
     fi
     # jq 없거나 예약 실패 — 계산 fallback (경합 방어는 못 하지만 동작은 함)
-    [ -z "$NUM" ] && NUM=$(bash "$SCRIPT_DIR/next-spec-num.sh" 2>/dev/null || echo "001")
+    if [ -z "$NUM" ]; then
+        if [ "$DRY_RUN" = true ]; then
+            NUM=$(bash "$SCRIPT_DIR/next-spec-num.sh" --dry-run 2>/dev/null || echo "001")
+        else
+            NUM=$(bash "$SCRIPT_DIR/next-spec-num.sh" 2>/dev/null || echo "001")
+        fi
+    fi
 fi
 
 # 형식 검증
