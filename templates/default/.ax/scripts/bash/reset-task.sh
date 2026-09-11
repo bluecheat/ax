@@ -17,4 +17,9 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# --help 는 자기 헤더 — exec 로 넘기면 tier-from-state.sh 의 헤더가 찍혀요
+case "${1:-}" in --help|-h)
+    # shellcheck source=common.sh
+    source "$SCRIPT_DIR/common.sh"; goax_help "${BASH_SOURCE[0]}"; exit "$EXIT_OK" ;;
+esac
 exec bash "$SCRIPT_DIR/tier-from-state.sh" --reset "$@"

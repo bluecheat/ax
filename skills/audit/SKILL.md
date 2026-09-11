@@ -239,10 +239,6 @@ grep -h '^model:' .ax/mistakes/*.md .ax/mistakes/_archive/*/*/*.md 2>/dev/null \
 
 갱신 방법: jq로 in-place. 실패해도 skill 본 작업은 영향 X (HUD는 부수효과).
 ```bash
-# canonical 갱신 — derived value + updated_at (mistakes.count, last_audit, due_in_days 포함)
-bash .ax/scripts/bash/update-state.sh
-
-# 메타데이터만
-jq '.last_skill = "audit" | .skill_calls = ((.skill_calls // 0) + 1)' \
- .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+# canonical 갱신 — derived value + updated_at (mistakes.count, last_audit, due_in_days 포함) + last_skill·skill_calls
+bash .ax/scripts/bash/update-state.sh --skill audit
 ```

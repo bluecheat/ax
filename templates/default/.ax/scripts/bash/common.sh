@@ -68,6 +68,14 @@ goax_error() {
     fi
 }
 
+# --help — 헤더 주석 블록(2행부터 첫 비-`#` 행 전까지)을 `# ` 벗겨서 그대로 찍어요.
+#   예전엔 스크립트마다 `sed -n '2,NNp'` 로 줄 번호를 손으로 들고 있었는데, 헤더가 자라면 `Exit:` 계약 줄이
+#   잘리고 줄면 `set -euo pipefail` 까지 찍혔어요 (실측 19/37 스크립트가 어긋나 있었어요). 줄 번호를 없애요.
+# Usage: if [ "$SHOW_HELP" = true ]; then goax_help "${BASH_SOURCE[0]}"; exit "$EXIT_OK"; fi
+goax_help() {
+    awk 'NR == 1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "$1"
+}
+
 # 단일 문자열 → JSON array (잘 escape 된 1-element). arg-based, stdin 안 씀.
 # 다른 _goax_* helper와 명명 일관 + caller 호출이 깔끔.
 _goax_json_array() {
@@ -391,7 +399,7 @@ goax_rules_matching() {
 #   mkdir 은 POSIX 에서 원자적이라 flock(리눅스 전용) 없이 macOS/BSD 에서도 상호배제가 돼요.
 #
 #   같은 `tmp.$$` && `mv` 패턴을 쓰는 스크립트는 전부 이 헬퍼를 거쳐야 해요:
-#     lanes-dispatch · tasks-gate · status-note · tier-from-state(--reset) · register-spirit-hook ·
+#     lanes-dispatch · tasks-gate · status-note · update-task · tier-from-state(--reset) · register-spirit-hook ·
 #     build-memory · zero-init · zero-domain-risk · constitution-apply · update-state
 #
 # Usage:

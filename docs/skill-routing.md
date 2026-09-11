@@ -68,6 +68,7 @@ idle → triaged → spec → spec_checked → tasks → implementing → review
 | `review` | spec-implement §8.1 (evaluator 대기) | `review ●` |
 | `idle` | spec-implement §8.2 (`reset-task.sh`) | `idle` |
 
+위 표의 skill 은 전부 `update-task.sh --phase <p> [--set …]` 로 써요 — 인라인 jq 는 금지(smoke 가 잡아요). writer 셋(`update-task.sh` · `status-note.sh` · `tier-from-state.sh --reset`)이 같은 락 문자열을 잡아요.
 `handoff` 하위 객체 (`current-task.json.handoff`) — 누가 쓰나: `status-note.sh` 만. 언제: halt·완료·레인 보고·zero §13·onboarding 9단계.
 `reset-task.sh` 의 phase 리셋에 살아남아요 (next·open·renamed 는 task 를 넘어 살아야 해요).
 

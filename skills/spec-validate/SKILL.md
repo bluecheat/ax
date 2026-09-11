@@ -200,10 +200,9 @@ bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --merge --json >/dev/null
 이 skill이 끝날 때 `.ax/state.json` 갱신 항목:
 - current_task.spec_passed
 
-갱신 방법: jq로 in-place. 실패해도 skill 본 작업은 영향 X (HUD는 부수효과).
+갱신 방법: `update-state.sh --skill` (락 안에서 in-place). 실패해도 skill 본 작업은 영향 X (HUD는 부수효과).
 ```bash
-jq '.last_skill = "spec-validate" | .skill_calls = ((.skill_calls // 0) + 1) | .updated_at = (now | todate)' \
- .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+bash .ax/scripts/bash/update-state.sh --skill spec-validate   # canonical(derived·hud 캐시) + last_skill·skill_calls 를 같은 락 안에서
 ```
 
 ## current-task.json 갱신 
@@ -212,15 +211,10 @@ jq '.last_skill = "spec-validate" | .skill_calls = ((.skill_calls // 0) + 1) | .
 
 ```bash
 # 통과 — 명료성 + (required 면) spec-review pass
-jq '.phase = "spec_checked" | .blocked_by = [] | .updated_at = (now | todate)' \
- .ax/current-task.json \
- > .ax/current-task.json.tmp && mv .ax/current-task.json.tmp .ax/current-task.json
+bash .ax/scripts/bash/update-task.sh --phase spec_checked --blocked-by '[]' --json
 bash .ax/scripts/bash/update-state.sh >/dev/null 2>&1 || true     # HUD: spec ✓ › tasks ●
 
 # 미해소 — blocked_by 에 위치/카테고리 기록 (합의 리뷰 미통과도 여기)
 BLOCKED='["spec.md:42 NEEDS","spec.md:18 placeholder","review-spec: evaluator 보강 필요"]'
-jq --argjson bb "$BLOCKED" \
- '.phase = "spec_blocked" | .blocked_by = $bb | .updated_at = (now | todate)' \
- .ax/current-task.json > .ax/current-task.json.tmp \
- && mv .ax/current-task.json.tmp .ax/current-task.json
+bash .ax/scripts/bash/update-task.sh --phase spec_blocked --blocked-by "$BLOCKED" --json
 ```

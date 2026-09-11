@@ -60,8 +60,8 @@ emit() {
     if [ "$JSON_MODE" = true ]; then
         if command -v jq >/dev/null 2>&1; then
             jq -nc --arg s "$1" --arg o "$2" --arg n "$3" --arg ns "$4" \
-                --arg pj "$pj" --arg mt "$mj_top" --arg mp "$mj_p0" \
-                '{status:$s, result:{old:$o, new:$n, files:{VERSION:$o, plugin:$pj, marketplace_top:$mt, marketplace_plugin:$mp}}, next_step:$ns}'
+                --arg v "$(tr -d ' \n' < "$VFILE")" --arg pj "$pj" --arg mt "$mj_top" --arg mp "$mj_p0" \
+                '{status:$s, result:{old:$o, new:$n, files:{VERSION:$v, plugin:$pj, marketplace_top:$mt, marketplace_plugin:$mp}}, next_step:$ns}'
         else
             printf '{"status":"%s","result":{"old":"%s","new":"%s"},"next_step":"%s"}\n' "$1" "$2" "$3" "$4"
         fi

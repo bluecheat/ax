@@ -27,8 +27,8 @@ schema 변경 시 반드시 `statusline.sh`가 읽는 path와 이 문서를 같�
 | `hud.plugin_version` | installer (null) | `update-state.sh` — skill 컨텍스트(`${CLAUDE_SKILL_DIR}`)에서만 채움 | statusline (`[goax#ver] -> X goax up` 힌트) |
 | `hud.review_required` | installer (null) | `update-state.sh` — 활성 task 면 `tier-from-state.sh` 의 `evaluator` 값 | statusline (체인에 `review` 단계를 붙일지) |
 | `hud.cached_at` | installer (null) | `update-state.sh` 매 호출 | statusline (30분 넘으면 `(stale)`) |
-| `last_skill` | null | 모든 skill 종료 시 | doctor |
-| `skill_calls` | 0 | 모든 skill 종료 시 (`+= 1`) | doctor |
+| `last_skill` | null | 모든 skill 종료 시 — `update-state.sh --skill <name>` (인라인 jq 금지, 같은 락) | doctor |
+| `skill_calls` | 0 | 모든 skill 종료 시 (`+= 1`) — 위와 같은 호출 | doctor |
 
 ## 규칙
 

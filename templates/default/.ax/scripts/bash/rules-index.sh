@@ -42,7 +42,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    goax_help "${BASH_SOURCE[0]}"
     exit "$EXIT_OK"
 fi
 case "$LEVEL" in ""|critical|mandatory|convention) ;; *) goax_error "--level 은 critical|mandatory|convention"; exit "$EXIT_ERROR" ;; esac

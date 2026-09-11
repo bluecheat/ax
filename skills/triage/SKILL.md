@@ -198,27 +198,15 @@ M×L2 에서 사용자가 합의 리뷰를 켜면 `intent_notes.consensus_review
 
 ```bash
 TASK_ID=$(date -u +%Y-%m-%d)-$(printf '%03d' $((RANDOM % 1000)))
-NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 INTENT_JSON='{}'   # 0단계 답변 — 축별 객체 (예: '{"why":"버그 수정 — 환불 실패"}'), 스킵 시 {}
                    # M×L2 모호 영역에서 합의 리뷰를 켰으면 '{"consensus_review":"true"}' 도 병합
 
-jq --arg id "$TASK_ID" \
- --arg desc "$DESCRIPTION" \
- --arg size "$SIZE" \
- --arg risk "$RISK" \
- --arg domain "$DOMAIN" \
- --arg now "$NOW" \
- '.task_id = $id
- | .description = $desc
- | .size = $size
- | .risk = $risk
- | .domain = $domain
- | .started_at = $now
- | .phase = "triaged"
- | .intent_notes = ((.intent_notes // {}) + $intent)' \
- --argjson intent "$INTENT_JSON" \
- .ax/current-task.json > .ax/current-task.json.tmp \
- && mv .ax/current-task.json.tmp .ax/current-task.json
+# update-task.sh 가 락 안에서 in-place 갱신해요 — started_at·updated_at 은 스크립트가 찍고,
+# 값 검증(size·risk enum)에 걸리면 아무것도 안 쓰고 exit 1. 인라인 jq 로 쓰지 않아요 (handoff 가 무락에 노출돼요).
+bash .ax/scripts/bash/update-task.sh --start --phase triaged \
+ --set "task_id=$TASK_ID" --set "description=$DESCRIPTION" \
+ --set "size=$SIZE" --set "risk=$RISK" --set "domain=$DOMAIN" \
+ --merge-intent "$INTENT_JSON" --json
 ```
 
 이후 spec 이 `.ax/scripts/bash/tier-from-state.sh --json`로 tier 자동 결정.
@@ -245,10 +233,7 @@ jq --arg id "$TASK_ID" \
 ### 종료 후 — intent_notes 병합
 
 ```bash
-jq --argjson intent "$REVERSE_INTERVIEW_JSON" \
- '.intent_notes = ((.intent_notes // {}) + $intent)' \
- .ax/current-task.json > .ax/current-task.json.tmp \
- && mv .ax/current-task.json.tmp .ax/current-task.json
+bash .ax/scripts/bash/update-task.sh --merge-intent "$REVERSE_INTERVIEW_JSON" --json   # 기존 키는 새 값이 이겨요
 ```
 
 spec/spec-tasks 는 이 `intent_notes` 를 입력으로 받아 §3 acceptance criteria 와 §7.5 Technical Context 를 채워요 — 재질문·재추론하지 않아요.
@@ -273,10 +258,5 @@ spec/spec-tasks 는 이 `intent_notes` 를 입력으로 받아 §3 acceptance cr
 이 데이터를 봐요 — triage 가 안 찍으면 `goax_version: null`·`skill_calls: 0` 인 죽은
 state 로 남아서 doctor 가 stale 로 오진해요).
 ```bash
-# canonical 갱신 (layer.active, sensors_mode, goax_version, updated_at) — 결정론 스크립트
-bash .ax/scripts/bash/update-state.sh
-
-# 메타데이터 (last_skill, skill_calls)만 별도
-jq '.last_skill = "triage" | .skill_calls = ((.skill_calls // 0) + 1)' \
- .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+bash .ax/scripts/bash/update-state.sh --skill triage   # canonical(derived·hud 캐시) + last_skill·skill_calls 를 같은 락 안에서
 ```

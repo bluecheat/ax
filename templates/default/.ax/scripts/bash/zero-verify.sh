@@ -56,7 +56,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,36p' "${BASH_SOURCE[0]}" | sed 's/^#$//; s/^# //'
+    goax_help "${BASH_SOURCE[0]}"
     exit "$EXIT_OK"
 fi
 

@@ -72,8 +72,7 @@ CONFLICT_N=$(echo "$LEDGER" | jq '.result.lane_file_conflicts | length')
 멈춰 있어요 (이전 판까지의 실제 결함 — spec-implement 가 phase 를 안 썼어요).
 
 ```bash
-jq '.phase = "implementing" | .updated_at = (now | todate)' .ax/current-task.json \
- > .ax/current-task.json.tmp && mv .ax/current-task.json.tmp .ax/current-task.json
+bash .ax/scripts/bash/update-task.sh --phase implementing --json
 bash .ax/scripts/bash/update-state.sh >/dev/null 2>&1 || true    # HUD 캐시 (review 단계 표시 여부)
 ```
 
@@ -316,8 +315,7 @@ phase 가 `implementing`/`review` 인데 `tasks-gate.sh` 가 아직 실패면, �
 띄우기 전에 phase 를 `review` 로 적어요 — HUD 체인의 `review ●` 가 여기서 켜져요:
 
 ```bash
-jq '.phase = "review" | .updated_at = (now | todate)' .ax/current-task.json \
- > .ax/current-task.json.tmp && mv .ax/current-task.json.tmp .ax/current-task.json
+bash .ax/scripts/bash/update-task.sh --phase review --json
 ```
 
 evaluator 가 파일을 직접 써요. 코디네이터는 결과를 받아 적지 않아요 — 받아 적는 순간 검사받는
@@ -393,8 +391,7 @@ fi
 ## state.json 갱신
 
 ```bash
-jq '.last_skill = "spec-implement" | .skill_calls = ((.skill_calls // 0) + 1) | .updated_at = (now | todate)' \
- .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+bash .ax/scripts/bash/update-state.sh --skill spec-implement   # canonical(derived·hud 캐시) + last_skill·skill_calls 를 같은 락 안에서
 ```
 
 ## 관련 룰

@@ -56,7 +56,7 @@ while [ $# -gt 0 ]; do
     [ $# -gt 0 ] && shift
 done
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    goax_help "${BASH_SOURCE[0]}"
     exit "$EXIT_OK"
 fi
 [ -n "$MODE" ] || MODE=show

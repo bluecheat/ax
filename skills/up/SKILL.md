@@ -254,10 +254,5 @@ diff 후 누락된 META / 4계층 인덱스 / 시그널 의미 섹션만 머지 
 
 갱신 방법: jq로 in-place. 실패해도 skill 본 작업은 영향 X (HUD는 부수효과).
 ```bash
-# canonical 갱신 — derived value + updated_at
-bash .ax/scripts/bash/update-state.sh
-
-# 메타데이터만
-jq '.last_skill = "up" | .skill_calls = ((.skill_calls // 0) + 1)' \
- .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+bash .ax/scripts/bash/update-state.sh --skill up   # canonical(derived·hud 캐시) + last_skill·skill_calls 를 같은 락 안에서
 ```

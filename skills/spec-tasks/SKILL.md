@@ -137,8 +137,7 @@ task 가 있으면 그건 spec 에 없는 일을 하고 있다는 신호예요.
 ## 4. current-task.json 갱신
 
 ```bash
-jq '.phase = "tasks" | .updated_at = (now | todate)' .ax/current-task.json \
- > .ax/current-task.json.tmp && mv .ax/current-task.json.tmp .ax/current-task.json
+bash .ax/scripts/bash/update-task.sh --phase tasks --json
 ```
 
 ## 5. 출력
@@ -169,6 +168,5 @@ jq '.phase = "tasks" | .updated_at = (now | todate)' .ax/current-task.json \
 ## state.json 갱신
 
 ```bash
-jq '.last_skill = "spec-tasks" | .skill_calls = ((.skill_calls // 0) + 1) | .updated_at = (now | todate)' \
- .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+bash .ax/scripts/bash/update-state.sh --skill spec-tasks   # canonical(derived·hud 캐시) + last_skill·skill_calls 를 같은 락 안에서
 ```

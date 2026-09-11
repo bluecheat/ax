@@ -57,7 +57,7 @@ if [ "$RESERVE" = true ] && [ -z "$SLUG" ]; then
 fi
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# //; s/^#//'
+    goax_help "${BASH_SOURCE[0]}"
     exit "$EXIT_OK"
 fi
 
