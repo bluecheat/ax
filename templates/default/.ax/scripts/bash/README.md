@@ -25,7 +25,7 @@
 | `install-git-hooks.sh` | `.ax/hooks/pre-commit/*.sh` chain 을 git pre-commit wrapper 로 설치 (모든 환경 기본 — 사람 터미널 커밋 커버) | `up`, `onboarding` |
 | `register-spirit-hook.sh` | `.claude/settings.json` 에 spirit-rules-inject hook idempotent 등록 | `doctor` |
 | `reset-task.sh` | 작업 완료 후 `current-task.json` → phase=idle 리셋 (`tier-from-state.sh --reset` 위임). `handoff` 는 남기고, 파일이 없으면 만들지 않고 exit 1 | `spec-implement` |
-| `update-state.sh` | `.ax/` 실측 → `.ax/state.json` (layers/cross_cut/sensors_mode + HUD 캐시 `hud.{plugin_version,review_required,cached_at}`) 갱신 | `up`, `onboarding`, `audit`, `doctor`, `hud`, `mistake`, `spec-validate`, `spec-implement` |
+| `update-state.sh` | `.ax/` 실측 → `.ax/state.json` (layers/cross_cut/sensors_mode + HUD 캐시 `hud.{plugin_version,review_required,cached_at}`) 갱신. `--skill <name>` 이 `last_skill`·`skill_calls+=1` 을, `--last-mistake <file>` 이 `last_mistake_file` 을 **같은 락·같은 쓰기** 안에서 찍어요 — SKILL.md 가 state.json 을 인라인 jq 로 쓰면 안 돼요 (smoke 가 막아요) | 모든 skill 의 마무리 (`--skill <자기 이름>`) |
 | `triage-search.sh` | KEYWORDS 로 6 군데(specs/adrs/mistakes/rules/modules/imported) 검색 + 동의어 확장 + 매칭수 랭킹 + 스니펫 + 도메인 boost | `triage` |
 | `build-memory.sh` | `.ax/` 상태 → `.ax/MEMORY.md` 한 줄 포인터 인덱스 재생성 (triage 가 먼저 read) | `triage` |
 | `status-note.sh` | 세션 간 인계 노트 — `.ax/current-task.json` 의 `handoff` — `--show/--init/--add/--done/--set <now|next|open|renamed>`. 형식 고정 · 40개 항목 상한 · 끝난 항목은 지움 · jq 필수(없으면 exit 2) | `triage`(읽기), `spec-implement`, `zero`, `onboarding` |

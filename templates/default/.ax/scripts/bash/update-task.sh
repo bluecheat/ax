@@ -5,7 +5,7 @@
 #   bash update-task.sh --phase <p> [--json] [--dry-run]
 #   bash update-task.sh [--phase <p>] [--set <key>=<value> ...] [--blocked-by '<json 배열>'] \
 #                       [--merge-intent '<json 객체>'] [--start] [--json] [--dry-run]
-#   phase:  idle | triaged | spec | spec_checked | spec_blocked | tasks | implementing | review
+#   phase:  triaged | spec | spec_checked | spec_blocked | tasks | implementing | review   (idle 은 reset-task.sh 만)
 #   --set 키:  task_id · description · size(S|M|L|XL) · risk(L0|L1|L2|L3) · domain ·
 #              spec_id · spec_dir · spec_tier(standard|full)   — 빈 값은 안 받아요 (비우는 건 reset-task.sh)
 #   --blocked-by    blocked_by 를 통째로 교체 (문자열 JSON 배열, '[]' 로 비움)
@@ -33,16 +33,29 @@ SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 JSON_MODE=false; SHOW_HELP=false; DRY_RUN=false
-PHASE=""; SETS='{}'; SET_KV=(); BLOCKED=""; INTENT=""; START=false; NARGS=0
+PHASE=""; SETS='{}'; SET_KV=(); BLOCKED=""; INTENT=""; START=false; NARGS=0; EMPTY_OPT=""; opt=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --json)    JSON_MODE=true ;;
         --dry-run) DRY_RUN=true ;;
         --help|-h) SHOW_HELP=true ;;
-        --phase)   shift; PHASE="${1:-}"; NARGS=$((NARGS + 1)) ;;
-        --set)     shift; SET_KV+=("${1:-}"); NARGS=$((NARGS + 1)) ;;
-        --blocked-by)   shift; BLOCKED="${1:-}"; NARGS=$((NARGS + 1)) ;;
-        --merge-intent) shift; INTENT="${1:-}"; NARGS=$((NARGS + 1)) ;;
+        --phase|--set|--blocked-by|--merge-intent)
+            opt="$1"
+            # 값이 비었거나 다음 토큰이 옵션(--…)이면 값을 삼키지 않고 오류로 — 예전엔 빈 값을 "안 준 것" 으로 접어
+            # updated_at 만 조용히 쓰고 ok 였고 (spec-validate 가 BLOCKED 를 비워 보내면 phase 만 spec_blocked 로
+            # 넘어갔어요), `--set --json` 은 --json 을 값으로 먹어 오류가 봉투 없이 나갔어요.
+            if [ $# -lt 2 ]; then EMPTY_OPT="$opt"                       # 마지막 토큰 — 값 없음
+            elif [ "${2#--}" != "$2" ]; then EMPTY_OPT="$opt"           # 다음이 옵션 — 삼키지 않아요 (--json 이 살아요)
+            else
+                shift; [ -n "$1" ] || EMPTY_OPT="$opt"                  # 빈 문자열 — 삼키되 오류
+                case "$opt" in
+                    --phase)        PHASE="$1" ;;
+                    --set)          SET_KV+=("$1") ;;
+                    --blocked-by)   BLOCKED="$1" ;;
+                    --merge-intent) INTENT="$1" ;;
+                esac
+            fi
+            NARGS=$((NARGS + 1)) ;;
         --start)   START=true; NARGS=$((NARGS + 1)) ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;
     esac
@@ -54,6 +67,7 @@ if [ "$SHOW_HELP" = true ]; then
 fi
 
 fail() { if [ "$JSON_MODE" = true ]; then json_error "$1"; fi; goax_error "$1"; exit "$EXIT_ERROR"; }
+[ -z "$EMPTY_OPT" ] || { command -v jq >/dev/null 2>&1 || JSON_MODE=false; fail "${EMPTY_OPT} 의 값이 비었어요 (다음 토큰이 옵션이면 값이 빠진 거예요) — 값을 주거나 옵션을 빼요"; }
 
 if ! command -v jq >/dev/null 2>&1; then
     if [ "$JSON_MODE" = true ]; then json_skip "jq 가 필요해요 — current-task.json 은 JSON 이에요"; fi
@@ -64,8 +78,9 @@ fi
 # ── 값 검증 — 전부 파일을 열기 전에. 하나라도 틀리면 아무것도 안 써요 ──
 # enum 은 case 로 잡되 [a-z] 범위는 안 써요 (en_US.UTF-8 에서 [a-z] 가 대문자도 물어요 — CLAUDE.md)
 if [ -n "$PHASE" ]; then
-    case "$PHASE" in idle|triaged|spec|spec_checked|spec_blocked|tasks|implementing|review) ;;
-        *) fail "phase 는 idle|triaged|spec|spec_checked|spec_blocked|tasks|implementing|review 중 하나예요 (받은 값: '${PHASE}')" ;;
+    case "$PHASE" in triaged|spec|spec_checked|spec_blocked|tasks|implementing|review) ;;
+        idle) fail "phase idle 은 reset-task.sh 가 써요 — task 필드도 같이 비워야 해요" ;;
+        *) fail "phase 는 triaged|spec|spec_checked|spec_blocked|tasks|implementing|review 중 하나예요 (받은 값: '${PHASE}')" ;;
     esac
 fi
 # 배열이라 값 안의 줄바꿈도 살아요. ${arr[@]+…} 는 bash 3.2(macOS) 의 set -u 가 빈 배열에서 죽는 것 우회.
@@ -100,7 +115,7 @@ FILE="$PROJECT_ROOT/.ax/current-task.json"; REL=".ax/current-task.json"
 # 바뀌는 키 목록 — 출력용. updated_at 은 항상.
 CHANGED=$(jq -nc --arg p "$PHASE" --argjson s "$SETS" --argjson bb "$BLOCKED" --argjson it "$INTENT" --argjson st "$START" \
     '[ (if $p != "" then "phase" else empty end), ($s | keys[]),
-       (if $bb != null then "blocked_by" else empty end), (if $it != null then "intent_notes" else empty end),
+       (if $bb != null then "blocked_by" else empty end), (if ($it != null and ($it | length) > 0) then "intent_notes" else empty end),
        (if $st then "started_at" else empty end), "updated_at" ] | unique')
 
 # 한 번의 jq 로 전부 — 필터는 in-place `.k = v` 뿐이에요. `. + $sets` 도 최상위 키만 덮어요.

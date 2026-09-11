@@ -372,8 +372,7 @@ bash .ax/scripts/bash/status-note.sh --show --json | jq -r '.result.sections.ren
 ## state.json 갱신
 
 ```bash
-jq '.last_skill = "lane" | .skill_calls = ((.skill_calls // 0) + 1) | .updated_at = (now | todate)' \
- .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+bash .ax/scripts/bash/update-state.sh --skill lane   # canonical(derived·hud 캐시) + last_skill·skill_calls 를 같은 락 안에서
 ```
 
 ## 관련

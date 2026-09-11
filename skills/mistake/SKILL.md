@@ -136,12 +136,7 @@ frontmatter + `# 무엇이 일어났나` 는 이미 채워진 상태. **나머�
 ## state.json 갱신
 
 ```bash
-jq --arg file "$FILE" \
-   '.last_skill = "mistake"
-    | .skill_calls = ((.skill_calls // 0) + 1)
-    | .last_mistake_file = $file
-    | .updated_at = (now | todate)' \
-    .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+bash .ax/scripts/bash/update-state.sh --skill mistake --last-mistake "$FILE"   # 락 안에서 last_skill·skill_calls·last_mistake_file
 ```
 
 `update-state.sh` 의 mistake count 도 자동 반영 (다음 호출 시).

@@ -327,7 +327,5 @@ placeholder 를 통과로 안 봐요. "엄격하게 진단해줘", "strict mode"
 ## state.json 갱신
 
 ```bash
-bash .ax/scripts/bash/update-state.sh                     # canonical (layers · cross_cut · sensors_mode · hud 캐시)
-jq '.last_skill = "doctor" | .skill_calls = ((.skill_calls // 0) + 1)' \
- .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+bash .ax/scripts/bash/update-state.sh --skill doctor   # canonical(derived·hud 캐시) + last_skill·skill_calls 를 같은 락 안에서
 ```

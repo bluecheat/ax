@@ -562,28 +562,19 @@ done < <(find "$REPO/templates/default/.ax/hooks" "$REPO/templates/default/.ax/h
 [ "$sh_count" -gt 0 ] && pass "shell 문법 $sh_ok/$sh_count" || fail "shell script 0개 검사"
 
 # ───────────────────────────────────────────────────────────
-section "8. jq syntax 검사 — state.json 갱신 패턴"
+section "8. state.json 마무리 — skill 마다 update-state.sh --skill <자기 이름> (인라인 jq 는 writer 계약이 막아요)"
 # ───────────────────────────────────────────────────────────
-if ! command -v jq >/dev/null 2>&1; then
-    pass "jq 미설치 — section 8 skip"
-else
-    jq_count=0
-    jq_ok=0
-    while IFS= read -r f; do
-        # SKILL.md에서 jq state 갱신 line 추출
-        line=$(grep -E "^jq '\.last_skill" "$f" 2>/dev/null | head -1)
-        [ -z "$line" ] && continue
-        jq_count=$((jq_count+1))
-        # jq filter 부분만 추출 (작은따옴표 안)
-        filter=$(echo "$line" | sed -E "s/^jq '([^']+)' .*/\1/")
-        if echo '{"last_skill":"x","skill_calls":0,"updated_at":"x"}' | jq "$filter" >/dev/null 2>&1; then
-            jq_ok=$((jq_ok+1))
-        else
-            fail "jq syntax 오류: ${f#$REPO/} → $filter"
-        fi
-    done < <(find "$REPO/skills" -name SKILL.md)
-    [ "$jq_count" -gt 0 ] && pass "jq syntax $jq_ok/$jq_count" || fail "jq pattern 0개 발견"
-fi
+# 예전엔 SKILL.md 12곳이 `jq '.last_skill = … | .skill_calls += 1' state.json > tmp && mv` 를 인라인으로 들고 있었고
+# 여기서 그 jq 문법만 검사했어요. 무락이라 tasks-gate.sh(task_seal) 와 경합하면 한쪽이 사라져서 update-state.sh
+# `--skill` 로 흡수했어요 — 이제 검사할 건 "각 skill 이 자기 이름으로 부르는가" 예요.
+sk_bad=0
+for sk in lane mistake spec spec-validate triage doctor audit zero up spec-tasks spec-implement onboarding; do
+    grep -qE "update-state\.sh --skill ${sk}([[:space:]]|$)" "$REPO/skills/$sk/SKILL.md" \
+        || { sk_bad=$((sk_bad+1)); fail "$sk — 'update-state.sh --skill $sk' 호출 없음 (last_skill·skill_calls 갱신 끊김)"; }
+done
+grep -q -- '--skill mistake --last-mistake "\$FILE"' "$REPO/skills/mistake/SKILL.md" \
+    || { sk_bad=$((sk_bad+1)); fail "mistake — --last-mistake \"\$FILE\" 없음 (last_mistake_file 갱신 끊김)"; }
+[ "$sk_bad" -eq 0 ] && pass "update-state.sh --skill — 12 skill 전부 자기 이름으로 호출 (+ mistake 의 --last-mistake)"
 
 # ───────────────────────────────────────────────────────────
 section "9. .ax/scripts/bash/ 핵심 스크립트 — 문법 + 실행권한 + e2e JSON"
@@ -592,7 +583,7 @@ SCRIPTS_DIR="$REPO/templates/default/.ax/scripts/bash"
 for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
          check-spec-clarity slug-from-text check-templates-drift check-manifest-install promote-mistake \
          check-rule-enforcement check-sensor-liveness \
-         build-memory spirit-lint rules-index doctor-scan status-note constitution-apply \
+         build-memory spirit-lint rules-index doctor-scan status-note update-task update-state constitution-apply \
          tasks-plan tasks-gate lanes-hotfiles lanes-dispatch spec-review \
          zero-init zero-probe zero-verify zero-domain-risk; do
     f="$SCRIPTS_DIR/$s.sh"
@@ -637,7 +628,9 @@ for cmd in \
     "spirit-lint.sh --json" \
     "rules-index.sh --json" \
     "doctor-scan.sh --json --plugin-dir $REPO" \
-    "status-note.sh --show --json"; do
+    "status-note.sh --show --json" \
+    "update-task.sh --phase spec --dry-run --json" \
+    "update-task.sh --phase --json"; do
     out=$(bash "$REPO/templates/default/.ax/scripts/bash/"$cmd 2>/dev/null) || true
     if echo "$out" | jq -e '.status' >/dev/null 2>&1; then
         pass "$cmd → valid JSON"
@@ -899,6 +892,21 @@ if command -v jq >/dev/null 2>&1; then
                       || fail "update-state — CONVENTION=$CONV (expected 3, heading 패턴 합산)"
     [ "$L1_ACTIVE" = "true" ] && pass "update-state — L1 active (rules > 0)" \
                               || fail "update-state — L1 active=$L1_ACTIVE"
+    # --skill — last_skill·skill_calls(+1 누적)·(mistake) last_mistake_file 을 같은 락·같은 쓰기 안에서
+    CLAUDE_PROJECT_DIR=$US_FX bash "$US_FX/.ax/scripts/bash/update-state.sh" --skill triage >/dev/null 2>&1
+    CLAUDE_PROJECT_DIR=$US_FX bash "$US_FX/.ax/scripts/bash/update-state.sh" --skill mistake --last-mistake ".ax/mistakes/x.md" >/dev/null 2>&1
+    jq -e '.last_skill=="mistake" and .skill_calls==2 and .last_mistake_file==".ax/mistakes/x.md" and .layers.L1_constitution.rules>0' "$US_FX/.ax/state.json" >/dev/null 2>&1 \
+        && pass "update-state --skill — last_skill · skill_calls 누적 · --last-mistake · derived 도 같은 쓰기" \
+        || fail "update-state --skill — 불일치: $(jq -c '{last_skill,skill_calls,last_mistake_file}' "$US_FX/.ax/state.json" 2>/dev/null)"
+    US_B=$(cat "$US_FX/.ax/state.json"); us_bad=0
+    for a in "--skill" "--skill --json" "--skill 'a b'" "--last-mistake" "--bogus"; do
+        # shellcheck disable=SC2086
+        eval CLAUDE_PROJECT_DIR=$US_FX bash "$US_FX/.ax/scripts/bash/update-state.sh" $a >/dev/null 2>&1 && { us_bad=$((us_bad+1)); fail "update-state '$a' 가 exit 0"; }
+    done
+    [ "$us_bad" -eq 0 ] && [ "$(cat "$US_FX/.ax/state.json")" = "$US_B" ] \
+        && pass "update-state --skill 검증 5종 — exit 1 + 파일 불변" || fail "update-state --skill 검증 — 실패 뒤 파일 변동"
+    CLAUDE_PROJECT_DIR=$US_FX bash "$US_FX/.ax/scripts/bash/update-state.sh" --json --skill zzz >/dev/null 2>&1
+    [ "$(cat "$US_FX/.ax/state.json")" = "$US_B" ] && pass "update-state --json --skill — stdout 만, 파일 불변" || fail "update-state --json --skill 이 파일을 씀"
 fi
 rm -rf "$US_FX"
 
@@ -2328,20 +2336,21 @@ else
         || fail "update-task — triage 모양 불일치: $(echo "$UT" | jq -c .result) $(jq -c '{phase,size,unknown_key,open:(.handoff.open|length)}' "$RS/.ax/current-task.json")"
     rs update-task.sh --merge-intent '{"scope":"b"}' --json >/dev/null
     jq -e '.intent_notes=={"why":"a","scope":"b"}' "$RS/.ax/current-task.json" >/dev/null \
-        && pass "update-task --merge-intent — 얕은 병합 (기존 키 유지)" || fail "update-task --merge-intent — 병합 불일치: $(jq -c .intent_notes "$RS/.ax/current-task.json")"
+        && rs update-task.sh --merge-intent '{}' --json | jq -e '.result.changed==["updated_at"]' >/dev/null \
+        && pass "update-task --merge-intent — 얕은 병합 (기존 키 유지) · '{}' 는 changed 에 안 뜸" || fail "update-task --merge-intent — 병합 불일치: $(jq -c .intent_notes "$RS/.ax/current-task.json")"
     rs update-task.sh --phase spec_blocked --blocked-by '["spec.md:42 NEEDS"]' --json >/dev/null
     rs update-task.sh --phase spec_checked --blocked-by '[]' --json >/dev/null
     jq -e '.phase=="spec_checked" and .blocked_by==[]' "$RS/.ax/current-task.json" >/dev/null \
         && pass "update-task --blocked-by — 통째 교체 · '[]' 로 비움" || fail "update-task --blocked-by 불일치: $(jq -c '{phase,blocked_by}' "$RS/.ax/current-task.json")"
     # 값 검증 — 하나라도 틀리면 아무것도 안 써요. [a-z] 범위가 아니라 enum 이라 'Medium'·'l1' 이 못 지나가요
     UT_B=$(cat "$RS/.ax/current-task.json"); ut_bad=0
-    for args in "--phase Done" "--set size=Medium" "--set risk=l1" "--set spec_tier=Full" "--set foo=bar" "--set domain=" "--set nokv" "--blocked-by 5" "--merge-intent 5" "--json"; do
+    for args in "--phase Done" "--phase idle" "--phase ''" "--phase" "--set --json" "--blocked-by ''" "--merge-intent ''" "--set size=Medium" "--set risk=l1" "--set spec_tier=Full" "--set foo=bar" "--set domain=" "--set nokv" "--blocked-by 5" "--merge-intent 5" "--json"; do
         # shellcheck disable=SC2086
         out=$(rs update-task.sh $args --json); rc=$?
         { [ "$rc" -eq 1 ] && printf '%s' "$out" | jq -e '.status=="error"' >/dev/null; } || { ut_bad=$((ut_bad+1)); fail "update-task 검증 — '$args' 가 exit=$rc (기대 1/error)"; }
     done
     [ "$ut_bad" -eq 0 ] && [ "$(cat "$RS/.ax/current-task.json")" = "$UT_B" ] \
-        && pass "update-task 검증 실패 10종 — exit 1 + error 봉투 + 파일 불변" || fail "update-task 검증 — 실패 뒤 파일이 바뀜"
+        && pass "update-task 검증 실패 16종 — exit 1 + error 봉투 + 파일 불변 (빈 값 · 옵션 토큰 · idle 포함)" || fail "update-task 검증 — 실패 뒤 파일이 바뀜"
     rs update-task.sh --phase review --dry-run --json | jq -e '.result.dry_run==true and .result.phase=="review"' >/dev/null \
         && [ "$(jq -r .phase "$RS/.ax/current-task.json")" = spec_checked ] && [ ! -d "$RS/.ax/current-task.json.lock" ] \
         && pass "update-task --dry-run — 바뀔 키만 답하고 파일·락 안 건드림" || fail "update-task --dry-run — 파일/락 변동"
@@ -2371,17 +2380,33 @@ else
     rm -rf "$RS"
 fi
 
-# writer 계약 — current-task.json 을 쓰는 건 update-task.sh(task 필드) · status-note.sh(handoff) ·
-# tier-from-state.sh --reset 셋뿐이에요. 셋 다 같은 락 문자열을 잡고 in-place 로 써요. SKILL.md·agents 가 인라인 jq 로
-# 직접 쓰면 (a) 무락이라 두 세션에서 handoff 항목이 lost-update 되고 (b) 객체를 통째로 재조립하면 모르는 키가 사라져요.
-# 그래서 skills·agents 에서는 리다이렉트든 `.tmp` 든 **어떤 쓰기도** 금지, 출고 스크립트는 셋 밖에서 금지예요.
-CTW=$(grep -rnE 'current-task\.json\.tmp|>[[:space:]]*"?[^" ]*current-task\.json"?([[:space:]]|$)' "$REPO/skills" "$REPO/agents" 2>/dev/null || true)
-[ -z "$CTW" ] && pass "current-task.json writer — skills·agents 는 직접 안 씀 (update-task.sh · status-note.sh 경유)" \
-              || fail "current-task.json writer — skills/agents 가 직접 씀 (무락·미지 키 유실): $CTW"
-CTW=$(grep -rnE '>[[:space:]]*"?[^" ]*current-task\.json(\.tmp(\.\$\$)?)?"?([[:space:]]|$)' "$REPO/templates/default/.ax/scripts/bash" 2>/dev/null \
-      | grep -vE '^[^:]*/(update-task|status-note|tier-from-state)\.sh:' | grep -vE '^[^:]*:[0-9]+:[[:space:]]*#' || true)
-[ -z "$CTW" ] && pass "current-task.json writer — 출고 스크립트는 update-task · status-note · tier-from-state 셋뿐" \
-              || fail "current-task.json writer — 셋 밖의 스크립트가 씀 (락 문자열 계약 밖): $CTW"
+# writer 계약 — 상태 파일 둘(current-task.json · state.json)은 정해진 출고 스크립트만 써요. 셋/둘이 같은 락 문자열을
+# 잡고 in-place 로 쓰는데, SKILL.md·agents 가 인라인 jq 로 직접 쓰면 (a) 무락이라 두 세션에서 항목이 lost-update 되고
+# (b) 객체를 통째로 재조립하면 모르는 키(handoff 등)가 사라져요. 그래서 skills·agents 에서는 리다이렉트든 `.tmp` 든
+# **어떤 쓰기도** 금지 — 산문에 `<파일>.tmp` 를 적어도 걸려요 (의도한 거예요: 그 문자열이 SKILL.md 에 있을 이유가 없어요).
+# 출고 스크립트는 허용 목록 밖에서 금지인데, 경로를 변수에 담아 쓰는 것(`F=.ax/state.json; jq … > "$F.tmp"`)도 잡아요 —
+# 실제 writer 둘 다 그렇게 쓰고 있어서 직접 경로만 보면 허용 목록이 한 번도 안 걸려요.
+writer_contract() {   # writer_contract <파일명> <허용 스크립트 정규식(basename)>
+    local fname="$1" allow="$2" hits="" f vars v
+    hits=$(grep -rnE "${fname//./\\.}\\.tmp|>[[:space:]]*\"?[^\" ]*${fname//./\\.}\"?([[:space:]]|\$)" "$REPO/skills" "$REPO/agents" 2>/dev/null || true)
+    [ -z "$hits" ] && pass "$fname writer — skills·agents 는 직접 안 씀 (스크립트 경유)" \
+                   || fail "$fname writer — skills/agents 가 직접 씀 (무락·미지 키 유실): $hits"
+    hits=""
+    for f in "$SCRIPTS_DIR"/*.sh; do
+        printf '%s' "$(basename "$f")" | grep -qE "^(${allow})\.sh$" && continue
+        # (a) 직접 경로
+        hits="$hits$(grep -nE ">[[:space:]]*\"?[^\" ]*${fname//./\\.}(\\.tmp(\\.\\\$\\\$)?)?\"?([[:space:]]|\$)" "$f" | grep -vE '^[0-9]+:[[:space:]]*#' | sed "s|^|$(basename "$f"):|" || true)"
+        # (b) 변수에 담은 경로 — 그 변수로 리다이렉트·mv 하면 쓰기예요
+        vars=$(grep -oE "^[[:space:]]*(local[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=[^=]*${fname//./\\.}\"?[[:space:]]*\$" "$f" | sed -E 's/^[[:space:]]*(local[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/\2/' | sort -u || true)
+        for v in $vars; do
+            hits="$hits$(grep -nE ">[[:space:]]*\"?\\\$\\{?${v}([^A-Za-z0-9_]|\$)|mv[[:space:]].*\"?\\\$\\{?${v}([^A-Za-z0-9_]|\$)" "$f" | grep -vE '^[0-9]+:[[:space:]]*#' | sed "s|^|$(basename "$f"):(\$$v) |" || true)"
+        done
+    done
+    [ -z "$hits" ] && pass "$fname writer — 출고 스크립트는 ${allow//|/ · } 만 (변수 경로 포함)" \
+                   || fail "$fname writer — 허용 목록 밖 스크립트가 씀 (락 문자열 계약 밖): $hits"
+}
+writer_contract current-task.json 'update-task|status-note|tier-from-state'
+writer_contract state.json        'update-state|tasks-gate'
 ut_edge=0
 for pair in "triage|--start --phase triaged" "triage|--merge-intent" "spec|--phase spec " "spec-validate|--phase spec_checked" "spec-validate|--phase spec_blocked" "spec-tasks|--phase tasks" "spec-implement|--phase implementing" "spec-implement|--phase review"; do
     sk="${pair%%|*}"; needle="${pair#*|}"

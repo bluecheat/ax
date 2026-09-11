@@ -204,7 +204,5 @@ plugin skill 은 plugin 디렉토리에 있어 자가 삭제가 안 돼요 — �
 ## state.json 갱신
 
 ```bash
-bash .ax/scripts/bash/update-state.sh          # canonical — Q5 [a] 후 layer.active 등 derived
-jq '.last_skill = "onboarding" | .skill_calls = ((.skill_calls // 0) + 1)' \
- .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+bash .ax/scripts/bash/update-state.sh --skill onboarding   # canonical — Q5 [a] 후 layer.active 등 derived + last_skill·skill_calls
 ```

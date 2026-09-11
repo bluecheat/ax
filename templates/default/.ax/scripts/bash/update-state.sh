@@ -8,14 +8,18 @@
 #   - hud.{plugin_version, review_required, cached_at} — statusline 캐시 (statusline 은 스크립트를 못 불러요)
 #   - updated_at
 #
-# 모든 skill의 마무리에서 호출. ad-hoc jq 대신 이 스크립트 한 줄.
+# 모든 skill의 마무리에서 호출. ad-hoc jq 대신 이 스크립트 한 줄 — `--skill <name>` 이 last_skill·skill_calls 도
+# 같은 락·같은 쓰기 안에서 찍어요. SKILL.md 가 state.json 을 인라인 jq 로 쓰면 무락이라 tasks-gate.sh(task_seal) 와
+# 경합할 때 한쪽이 사라져요 (smoke 가 인라인 쓰기를 막아요).
 # state.json schema·ownership: docs/state-ownership.md (plugin repo).
 #
 # 사용:
-#   bash .ax/scripts/bash/update-state.sh           # in-place update (기본)
-#   bash .ax/scripts/bash/update-state.sh --json    # stdout JSON only (state.json은 안 건드림)
-#   bash .ax/scripts/bash/update-state.sh --dry     # 계산 결과 미리보기 (stderr)
-#   bash .ax/scripts/bash/update-state.sh --help    # 사용법만 출력, 부작용 없음
+#   bash .ax/scripts/bash/update-state.sh                     # in-place update (기본)
+#   bash .ax/scripts/bash/update-state.sh --skill <name>      # + last_skill=<name> · skill_calls+=1 (skill 마무리)
+#   bash .ax/scripts/bash/update-state.sh --skill mistake --last-mistake <file>   # + last_mistake_file
+#   bash .ax/scripts/bash/update-state.sh --json              # stdout JSON only (state.json은 안 건드림)
+#   bash .ax/scripts/bash/update-state.sh --dry               # 계산 결과 미리보기 (stderr)
+#   bash .ax/scripts/bash/update-state.sh --help              # 사용법만 출력, 부작용 없음
 #
 # 의존: jq (필수), grep, find, awk, common.sh
 # 프로젝트 루트: $GOAX_PROJECT_DIR > $CLAUDE_PROJECT_DIR > ancestor 탐색 (common.sh find_project_root)
@@ -27,20 +31,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 . "$SCRIPT_DIR/common.sh"
 
-MODE="${1:-update}"
-
-case "$MODE" in
-    --help|-h)
-        awk 'NR>=2 && /^#/ { sub(/^# ?/, ""); print; next } NR>=2 { exit }' "${BASH_SOURCE[0]}"
-        exit "$EXIT_OK"
-        ;;
-    update|--json|--dry) ;;
-    *)
-        # 알 수 없는 옵션 — 호출자가 --json 을 안 줬으니 stderr 사람용 에러 (다른 스크립트와 동일)
-        goax_error "unknown option: $MODE (사용법: --help)"
-        exit "$EXIT_ERROR"
-        ;;
-esac
+MODE="update"; SKILL=""; LAST_MISTAKE=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h) goax_help "${BASH_SOURCE[0]}"; exit "$EXIT_OK" ;;
+        update|--json|--dry) MODE="$1" ;;
+        --skill)
+            shift
+            # skill 이름 — 비었거나 공백·따옴표가 있으면 오타예요. 다음 토큰이 옵션(--…)이면 값이 빠진 거예요.
+            case "${1:-}" in ''|--*|*[[:space:]\'\"]*) goax_error "--skill <name> 이 필요해요 (받은 값: '${1:-}')"; exit "$EXIT_ERROR" ;; esac
+            SKILL="$1" ;;
+        --last-mistake)
+            shift
+            case "${1:-}" in ''|--*) goax_error "--last-mistake <file> 이 필요해요"; exit "$EXIT_ERROR" ;; esac
+            LAST_MISTAKE="$1" ;;
+        *)
+            # 알 수 없는 옵션 — 호출자가 --json 을 안 줬으니 stderr 사람용 에러 (다른 스크립트와 동일)
+            goax_error "unknown option: $1 (사용법: --help)"
+            exit "$EXIT_ERROR"
+            ;;
+    esac
+    shift
+done
 
 # WS 검출 — GOAX_PROJECT_DIR > CLAUDE_PROJECT_DIR > ancestor 탐색
 WS=$(find_project_root) || exit "$EXIT_ERROR"
@@ -213,6 +225,13 @@ JQ_FILTER='
 | .cross_cut.mistakes.count = ($misc | tonumber)
 | .sensors_mode = $smode
 '"$LAST_AUDIT_PIPE$DUE_DAYS_PIPE$VERSION_PIPE$HUD_PIPE"
+# --skill: last_skill · skill_calls 는 derived 가 아니라 "누가 마지막으로 다녀갔나" 예요 — skill 마무리에서만.
+# 같은 jq 호출 안에 넣는 이유는 락을 한 번만 잡고 쓰기를 한 번만 하려고요.
+[ -n "$SKILL" ] && JQ_FILTER="$JQ_FILTER"'
+| .last_skill = $skill
+| .skill_calls = ((.skill_calls // 0) + 1)'
+[ -n "$LAST_MISTAKE" ] && JQ_FILTER="$JQ_FILTER"'
+| .last_mistake_file = $mf'
 
 JQ_ARGS=(
     --arg now      "$NOW"
@@ -236,6 +255,8 @@ JQ_ARGS=(
     --arg ver      "$GOAX_VER"
     --arg rreq     "$REVIEW_REQ"
     --arg pver     "$PLUGIN_VER"
+    --arg skill    "$SKILL"
+    --arg mf       "$LAST_MISTAKE"
 )
 
 case "$MODE" in
@@ -262,7 +283,7 @@ case "$MODE" in
         if jq "${JQ_ARGS[@]}" "$JQ_FILTER" "$S" > "$TMP" 2>/dev/null; then
             mv "$TMP" "$S"
             goax_unlock "$S.lock"
-            goax_log "state.json updated — L:$L0_ACTIVE/$L1_ACTIVE/$L2_ACTIVE/$L3_ACTIVE Sp:$SP_ACTIVE Ml:$ML_ACTIVE mode:$SENSORS_MODE"
+            goax_log "state.json updated — L:$L0_ACTIVE/$L1_ACTIVE/$L2_ACTIVE/$L3_ACTIVE Sp:$SP_ACTIVE Ml:$ML_ACTIVE mode:$SENSORS_MODE${SKILL:+ last_skill:$SKILL}"
         else
             rm -f "$TMP"
             goax_unlock "$S.lock"

@@ -200,10 +200,9 @@ bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --merge --json >/dev/null
 이 skill이 끝날 때 `.ax/state.json` 갱신 항목:
 - current_task.spec_passed
 
-갱신 방법: jq로 in-place. 실패해도 skill 본 작업은 영향 X (HUD는 부수효과).
+갱신 방법: `update-state.sh --skill` (락 안에서 in-place). 실패해도 skill 본 작업은 영향 X (HUD는 부수효과).
 ```bash
-jq '.last_skill = "spec-validate" | .skill_calls = ((.skill_calls // 0) + 1) | .updated_at = (now | todate)' \
- .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+bash .ax/scripts/bash/update-state.sh --skill spec-validate   # canonical(derived·hud 캐시) + last_skill·skill_calls 를 같은 락 안에서
 ```
 
 ## current-task.json 갱신 

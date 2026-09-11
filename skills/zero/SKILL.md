@@ -351,8 +351,5 @@ bash .ax/scripts/bash/status-note.sh --add open "<미룬 축 — 있을 때만>"
 이 skill 이 끝날 때 `.ax/state.json` 갱신 항목: 전체 (Layer 1·3 + Spirit 이 여기서 생겨요).
 
 ```bash
-bash .ax/scripts/bash/update-state.sh
-
-jq '.last_skill = "zero" | .skill_calls = ((.skill_calls // 0) + 1)' \
- .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+bash .ax/scripts/bash/update-state.sh --skill zero   # canonical(derived·hud 캐시) + last_skill·skill_calls 를 같은 락 안에서
 ```

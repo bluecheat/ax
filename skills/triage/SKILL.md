@@ -258,10 +258,5 @@ spec/spec-tasks 는 이 `intent_notes` 를 입력으로 받아 §3 acceptance cr
 이 데이터를 봐요 — triage 가 안 찍으면 `goax_version: null`·`skill_calls: 0` 인 죽은
 state 로 남아서 doctor 가 stale 로 오진해요).
 ```bash
-# canonical 갱신 (layer.active, sensors_mode, goax_version, updated_at) — 결정론 스크립트
-bash .ax/scripts/bash/update-state.sh
-
-# 메타데이터 (last_skill, skill_calls)만 별도
-jq '.last_skill = "triage" | .skill_calls = ((.skill_calls // 0) + 1)' \
- .ax/state.json > .ax/state.json.tmp && mv .ax/state.json.tmp .ax/state.json
+bash .ax/scripts/bash/update-state.sh --skill triage   # canonical(derived·hud 캐시) + last_skill·skill_calls 를 같은 락 안에서
 ```
