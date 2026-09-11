@@ -643,9 +643,11 @@ rm -rf "$TMP_E2E"
 
 # --help 는 헤더 주석 블록 전체 — 손으로 든 `sed -n '2,NNp'` 는 헤더가 자라면 잘리고(Exit: 계약 유실) 줄면
 # `set -euo pipefail` 까지 찍었어요 (실측 19/37). goax_help 하나로 통일했으니 줄 번호 방식은 다시 못 들어와요.
-HELP_SED=$(grep -lE "sed -n '2,[0-9]+p'" "$SCRIPTS_DIR"/*.sh 2>/dev/null || true)
-[ -z "$HELP_SED" ] && pass "--help — 하드코딩 줄 범위(sed -n '2,NNp') 0개 (goax_help 통일)" \
-                   || fail "--help — 줄 범위를 손으로 든 스크립트: $(echo "$HELP_SED" | xargs -n1 basename | tr '\n' ' ')"
+# 큰따옴표(`sed -n "2,33p"`)도, goax_help 와 같은 awk 를 스크립트 안에 사설로 복사한 것도 막아요 — 둘 다 아래 per-script
+# 검사의 눈 밖이라 (goax_help 문자열이 없어서) 헤더가 자라도 아무도 못 봐요.
+HELP_SED=$(grep -lE "sed -n ['\"]2,[0-9]+p|awk 'NR ?>= ?2 .*sub\(/\^# \?/" "$SCRIPTS_DIR"/*.sh 2>/dev/null | grep -v '/common\.sh$' || true)
+[ -z "$HELP_SED" ] && pass "--help — 하드코딩 줄 범위(sed -n '2,NNp' · \"2,NNp\") · 사설 awk 0개 (goax_help 통일)" \
+                   || fail "--help — 줄 범위/사설 awk 를 든 스크립트: $(echo "$HELP_SED" | xargs -n1 basename | tr '\n' ' ')"
 help_bad=0
 for hf in "$SCRIPTS_DIR"/*.sh; do
     [ "$(basename "$hf")" = common.sh ] && continue   # 헬퍼 정의 자체 — CLI 아님

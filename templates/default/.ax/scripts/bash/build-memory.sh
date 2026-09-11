@@ -56,8 +56,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    # 선두 주석 블록(연속 '#' 라인)만 출력 — 헤더가 길어져도 코드까지 새지 않음
-    awk 'NR>=2 && /^#/ { sub(/^# ?/, ""); print; next } NR>=2 { exit }' "${BASH_SOURCE[0]}"
+    goax_help "${BASH_SOURCE[0]}"
     exit "$EXIT_OK"
 fi
 
