@@ -212,15 +212,10 @@ jq '.last_skill = "spec-validate" | .skill_calls = ((.skill_calls // 0) + 1) | .
 
 ```bash
 # 통과 — 명료성 + (required 면) spec-review pass
-jq '.phase = "spec_checked" | .blocked_by = [] | .updated_at = (now | todate)' \
- .ax/current-task.json \
- > .ax/current-task.json.tmp && mv .ax/current-task.json.tmp .ax/current-task.json
+bash .ax/scripts/bash/update-task.sh --phase spec_checked --blocked-by '[]' --json
 bash .ax/scripts/bash/update-state.sh >/dev/null 2>&1 || true     # HUD: spec ✓ › tasks ●
 
 # 미해소 — blocked_by 에 위치/카테고리 기록 (합의 리뷰 미통과도 여기)
 BLOCKED='["spec.md:42 NEEDS","spec.md:18 placeholder","review-spec: evaluator 보강 필요"]'
-jq --argjson bb "$BLOCKED" \
- '.phase = "spec_blocked" | .blocked_by = $bb | .updated_at = (now | todate)' \
- .ax/current-task.json > .ax/current-task.json.tmp \
- && mv .ax/current-task.json.tmp .ax/current-task.json
+bash .ax/scripts/bash/update-task.sh --phase spec_blocked --blocked-by "$BLOCKED" --json
 ```

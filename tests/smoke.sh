@@ -2205,7 +2205,7 @@ grep -q '^verdict:' "$REPO/agents/architect.md" && grep -q 'review-spec.architec
     && pass "architect — spec 리뷰 verdict 파일 계약 명시" || fail "architect — spec 리뷰 계약 없음"
 grep -q 'review-spec.evaluator.md' "$REPO/agents/evaluator.md" \
     && pass "evaluator — spec 모드 파일 계약 명시" || fail "evaluator — spec 모드 없음"
-grep -q '\.phase = "implementing"' "$REPO/skills/spec-implement/SKILL.md" && grep -q '\.phase = "review"' "$REPO/skills/spec-implement/SKILL.md" \
+grep -q 'update-task.sh --phase implementing' "$REPO/skills/spec-implement/SKILL.md" && grep -q 'update-task.sh --phase review' "$REPO/skills/spec-implement/SKILL.md" \
     && pass "spec-implement — phase implementing/review 를 실제로 씀 (HUD 가 움직이는 조건)" || fail "spec-implement — phase 기록 없음 (HUD 가 tasks 에 멈춤)"
 grep -q 'hud' "$REPO/templates/default/.ax/hud/state.json.template" && grep -q 'hud.plugin_version' "$REPO/docs/state-ownership.md" \
     && pass "state.json hud 캐시 — template · ownership 문서 동기화" || fail "state.json hud 캐시 3-way 동기화 누락"
@@ -2221,7 +2221,7 @@ else
     RS=$(mktemp -d)
     mkdir -p "$RS/.ax/scripts/bash" "$RS/.ax/spirit/rules" "$RS/.ax/modules/order" "$RS/.ax/_templates/spirit" \
              "$RS/.ax/docs/spec/003-x/checklists" "$RS/.ax/hooks/pre-edit" "$RS/.claude"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,spirit-lint,rules-index,doctor-scan,status-note,constitution-apply}.sh "$RS/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,spirit-lint,rules-index,doctor-scan,status-note,update-task,tier-from-state,reset-task,constitution-apply}.sh "$RS/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/spirit/"{values,tone}.md "$RS/.ax/spirit/"
     cp "$REPO/templates/default/.ax/_templates/spirit/rule.md" "$RS/.ax/_templates/spirit/"
     printf -- '---\ncategory: security\n---\n## SP-SEC-001: 시크릿 커밋 금지\n## SP-SEC-002: 토큰 로그 금지\n' > "$RS/.ax/spirit/rules/security.md"
@@ -2301,6 +2301,43 @@ else
         && pass "status-note --clear now — now 비움 + now_at null" \
         || fail "status-note --clear now — now/now_at 잔존: $(jq -c '.handoff|{now,now_at}' "$RS/.ax/current-task.json" 2>/dev/null)"
 
+    # update-task — SKILL.md 인라인 jq 5곳을 흡수한 writer. in-place 라 handoff · 모르는 키가 살아요.
+    jq '.unknown_key = "keep"' "$RS/.ax/current-task.json" > "$RS/ct.tmp" && mv "$RS/ct.tmp" "$RS/.ax/current-task.json"
+    UT=$(rs update-task.sh --start --phase triaged --set task_id=T-1 --set "description=두 줄
+째" --set size=M --set risk=L2 --set domain=payment --merge-intent '{"why":"a"}' --json)
+    echo "$UT" | jq -e '.status=="ok" and .result.phase=="triaged" and (.result.changed|index("started_at"))!=null' >/dev/null \
+        && jq -e '.phase=="triaged" and .size=="M" and .risk=="L2" and .domain=="payment" and .task_id=="T-1" and (.description|test("\n"))
+                  and .intent_notes.why=="a" and (.started_at|test("^[0-9]{4}-")) and (.updated_at|test("Z$")) and .unknown_key=="keep"
+                  and (.handoff.open|length)>=40' "$RS/.ax/current-task.json" >/dev/null \
+        && pass "update-task — triage 모양(--start·--set×5·--merge-intent) in-place · handoff·미지 키 보존 · 값 안 줄바꿈 생존" \
+        || fail "update-task — triage 모양 불일치: $(echo "$UT" | jq -c .result) $(jq -c '{phase,size,unknown_key,open:(.handoff.open|length)}' "$RS/.ax/current-task.json")"
+    rs update-task.sh --merge-intent '{"scope":"b"}' --json >/dev/null
+    jq -e '.intent_notes=={"why":"a","scope":"b"}' "$RS/.ax/current-task.json" >/dev/null \
+        && pass "update-task --merge-intent — 얕은 병합 (기존 키 유지)" || fail "update-task --merge-intent — 병합 불일치: $(jq -c .intent_notes "$RS/.ax/current-task.json")"
+    rs update-task.sh --phase spec_blocked --blocked-by '["spec.md:42 NEEDS"]' --json >/dev/null
+    rs update-task.sh --phase spec_checked --blocked-by '[]' --json >/dev/null
+    jq -e '.phase=="spec_checked" and .blocked_by==[]' "$RS/.ax/current-task.json" >/dev/null \
+        && pass "update-task --blocked-by — 통째 교체 · '[]' 로 비움" || fail "update-task --blocked-by 불일치: $(jq -c '{phase,blocked_by}' "$RS/.ax/current-task.json")"
+    # 값 검증 — 하나라도 틀리면 아무것도 안 써요. [a-z] 범위가 아니라 enum 이라 'Medium'·'l1' 이 못 지나가요
+    UT_B=$(cat "$RS/.ax/current-task.json"); ut_bad=0
+    for args in "--phase Done" "--set size=Medium" "--set risk=l1" "--set spec_tier=Full" "--set foo=bar" "--set domain=" "--set nokv" "--blocked-by 5" "--merge-intent 5" "--json"; do
+        # shellcheck disable=SC2086
+        out=$(rs update-task.sh $args --json); rc=$?
+        { [ "$rc" -eq 1 ] && printf '%s' "$out" | jq -e '.status=="error"' >/dev/null; } || { ut_bad=$((ut_bad+1)); fail "update-task 검증 — '$args' 가 exit=$rc (기대 1/error)"; }
+    done
+    [ "$ut_bad" -eq 0 ] && [ "$(cat "$RS/.ax/current-task.json")" = "$UT_B" ] \
+        && pass "update-task 검증 실패 10종 — exit 1 + error 봉투 + 파일 불변" || fail "update-task 검증 — 실패 뒤 파일이 바뀜"
+    rs update-task.sh --phase review --dry-run --json | jq -e '.result.dry_run==true and .result.phase=="review"' >/dev/null \
+        && [ "$(jq -r .phase "$RS/.ax/current-task.json")" = spec_checked ] && [ ! -d "$RS/.ax/current-task.json.lock" ] \
+        && pass "update-task --dry-run — 바뀔 키만 답하고 파일·락 안 건드림" || fail "update-task --dry-run — 파일/락 변동"
+    # reset — 파일이 없으면 만들지 않아요 (설치본엔 템플릿이 없고, 최소 파일은 /up 의 seed 를 막아요)
+    mv "$RS/.ax/current-task.json" "$RS/ct.bak"
+    out=$(rs reset-task.sh --json); rc=$?
+    [ "$rc" -eq 1 ] && printf '%s' "$out" | jq -e '.status=="error"' >/dev/null && [ ! -f "$RS/.ax/current-task.json" ] \
+        && pass "reset-task — current-task.json 없으면 exit 1 · 파일 안 만듦 (템플릿 fallback 제거)" \
+        || fail "reset-task — 파일 없을 때 exit=$rc / 생성=$([ -f "$RS/.ax/current-task.json" ] && echo yes || echo no)"
+    mv "$RS/ct.bak" "$RS/.ax/current-task.json"
+
     # constitution-apply — prepend 보존 · 중복 스캔은 구 본문만 · drop 은 [a] 뒤 · 인덱스
     printf '# X — Constitution\n\n## META — 핵심 가드레일\n\n🔴 **`AX:CRITICAL:001`** — 결제 API 는 멱등성 키 필수\n' > "$RS/block.md"
     printf '# old\n\n## Database\n파일명 규칙: 결제 API 는 멱등성 키 필수\n짧은줄\n' > "$RS/CLAUDE.md"
@@ -2319,13 +2356,24 @@ else
     rm -rf "$RS"
 fi
 
-# writer 보존 — current-task.json 은 skill 다섯 곳이 인라인 jq 로 `.x = …` 갱신해요. 누가 객체를 통째로
-# 재조립하면 (jq -n · echo/printf 리다이렉트) 그 skill 이 모르는 키(handoff 등)가 조용히 사라져요.
-# 합법 writer 는 전부 `> ….tmp && mv` 라 "current-task.json 으로 곧장 리다이렉트" 하나만 잡으면 돼요 (산문·`.tmp` 는 비매치).
-# skills 만이 아니라 agents · 출고 스크립트도 같은 계약이에요 — 나중에 생길 writer 스크립트가 자동으로 여기 걸려요.
-CTW=$(grep -rnE '>[[:space:]]*"?[^" ]*current-task\.json"?[[:space:]]*(#.*|<<.*)?$' "$REPO/skills" "$REPO/agents" "$REPO/templates/default/.ax/scripts/bash" 2>/dev/null || true)
-[ -z "$CTW" ] && pass "current-task.json writer — 전부 in-place jq (미지 키 보존)" \
-              || fail "current-task.json writer — 통째 재조립 (미지 키 유실): $CTW"
+# writer 계약 — current-task.json 을 쓰는 건 update-task.sh(task 필드) · status-note.sh(handoff) ·
+# tier-from-state.sh --reset 셋뿐이에요. 셋 다 같은 락 문자열을 잡고 in-place 로 써요. SKILL.md·agents 가 인라인 jq 로
+# 직접 쓰면 (a) 무락이라 두 세션에서 handoff 항목이 lost-update 되고 (b) 객체를 통째로 재조립하면 모르는 키가 사라져요.
+# 그래서 skills·agents 에서는 리다이렉트든 `.tmp` 든 **어떤 쓰기도** 금지, 출고 스크립트는 셋 밖에서 금지예요.
+CTW=$(grep -rnE 'current-task\.json\.tmp|>[[:space:]]*"?[^" ]*current-task\.json"?([[:space:]]|$)' "$REPO/skills" "$REPO/agents" 2>/dev/null || true)
+[ -z "$CTW" ] && pass "current-task.json writer — skills·agents 는 직접 안 씀 (update-task.sh · status-note.sh 경유)" \
+              || fail "current-task.json writer — skills/agents 가 직접 씀 (무락·미지 키 유실): $CTW"
+CTW=$(grep -rnE '>[[:space:]]*"?[^" ]*current-task\.json(\.tmp(\.\$\$)?)?"?([[:space:]]|$)' "$REPO/templates/default/.ax/scripts/bash" 2>/dev/null \
+      | grep -vE '^[^:]*/(update-task|status-note|tier-from-state)\.sh:' | grep -vE '^[^:]*:[0-9]+:[[:space:]]*#' || true)
+[ -z "$CTW" ] && pass "current-task.json writer — 출고 스크립트는 update-task · status-note · tier-from-state 셋뿐" \
+              || fail "current-task.json writer — 셋 밖의 스크립트가 씀 (락 문자열 계약 밖): $CTW"
+ut_edge=0
+for pair in "triage|--start --phase triaged" "triage|--merge-intent" "spec|--phase spec " "spec-validate|--phase spec_checked" "spec-validate|--phase spec_blocked" "spec-tasks|--phase tasks" "spec-implement|--phase implementing" "spec-implement|--phase review"; do
+    sk="${pair%%|*}"; needle="${pair#*|}"
+    grep -qF "update-task.sh $needle" "$REPO/skills/$sk/SKILL.md" 2>/dev/null \
+        || { ut_edge=$((ut_edge+1)); fail "$sk — 'update-task.sh ${needle}' 호출 없음 (phase 전이 엣지 끊김)"; }
+done
+[ "$ut_edge" -eq 0 ] && pass "update-task.sh 호출 엣지 8곳 — triage(triaged·intent) · spec · spec-validate(checked·blocked) · spec-tasks · spec-implement(implementing·review)"
 
 # 엣지 연결 — 폐기된 skill 의 트리거를 누가 받는지, 새 스크립트를 누가 부르는지 파일에 적혀 있어야 해요.
 grep -q 'spirit-lint.sh' "$REPO/skills/doctor/SKILL.md" && grep -q 'rules-index.sh' "$REPO/skills/doctor/SKILL.md" && grep -q 'doctor-scan.sh' "$REPO/skills/doctor/SKILL.md" \
@@ -3270,7 +3318,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     LK=$(mktemp -d)
     mkdir -p "$LK/.ax/scripts/bash" "$LK/.ax/docs" "$LK/.claude"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,status-note,tier-from-state,register-spirit-hook,build-memory,zero-init,constitution-apply,zero-domain-risk}.sh "$LK/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,status-note,update-task,tier-from-state,register-spirit-hook,build-memory,zero-init,constitution-apply,zero-domain-risk}.sh "$LK/.ax/scripts/bash/"
     LKB="$LK/.ax/scripts/bash"
     # 최소 대상 — 출고 AGENTS.md 는 이미 `## 4계층 인덱스` 와 AX 토큰을 담고 있어서
     # prepend·index 두 모드가 전부 skip(exit 2) 로 빠져요. 경합을 재려면 둘 다 없어야 해요.
@@ -3366,6 +3414,19 @@ else
     [ "$ct_both" -eq 5 ] && pass "status-note --add ‖ tier-from-state --reset 5회 — 둘 다 생존 (락 경로 문자열 동일)" \
                          || fail "status-note --add ‖ tier-from-state --reset — $ct_both/5회만 둘 다 생존"
 
+    # update-task(phase) ‖ status-note(handoff) — 예전엔 phase 쪽이 SKILL.md 인라인 jq 라 무락이었고, 이 조합이
+    # handoff 항목을 잃던 자리예요. 이제 셋이 같은 락이라 둘 다 살아야 해요.
+    ut_both=0
+    for i in 1 2 3 4 5; do
+        seed_lk
+        ( lkrun update-task.sh --phase implementing --set "domain=d$i" --json >/dev/null 2>&1 ) &
+        ( lkrun status-note.sh --add open "질문$i" --json >/dev/null 2>&1 ) &
+        wait
+        jq -e --arg i "- 질문$i" --arg d "d$i" '(.handoff.open|index($i))!=null and .phase=="implementing" and .domain==$d' "$LK/.ax/current-task.json" >/dev/null 2>&1 && ut_both=$((ut_both+1))
+    done
+    [ "$ut_both" -eq 5 ] && pass "update-task --phase ‖ status-note --add 5회 — 둘 다 생존 (인라인 jq 시절의 lost-update 자리)" \
+                         || fail "update-task ‖ status-note — $ut_both/5회만 둘 다 생존"
+
     survive=0
     for i in 1 2 3 4 5; do
         seed_lk
@@ -3403,13 +3464,14 @@ else
     seed_lk
     lkrun status-note.sh --add next "드라이" --dry-run --json >/dev/null 2>&1
     lkrun status-note.sh --set now "드라이" --dry-run --json >/dev/null 2>&1
+    lkrun update-task.sh --phase spec --dry-run --json >/dev/null 2>&1
     lkrun register-spirit-hook.sh --dry-run --json >/dev/null 2>&1
     lkrun build-memory.sh --dry-run --json >/dev/null 2>&1
     lkrun zero-init.sh --plugin-dir "$REPO" --dry-run --json >/dev/null 2>&1
     lkrun constitution-apply.sh --block "$LK/block.md" --target AGENTS.md --dry-run --json >/dev/null 2>&1
     lkrun zero-domain-risk.sh --set "payment=L3" --dry-run --json >/dev/null 2>&1
     [ "$(find "$LK" -name '*.lock' | wc -l | tr -d ' ')" -eq 0 ] && jq -e 'has("handoff")|not' "$LK/.ax/current-task.json" >/dev/null 2>&1 \
-        && pass "--dry-run 7종 — .lock 을 안 만들고 handoff 도 안 만듦" \
+        && pass "--dry-run 8종 — .lock 을 안 만들고 handoff 도 안 만듦" \
         || fail "--dry-run — .lock $(find "$LK" -name '*.lock' | wc -l | tr -d ' ')개 / handoff $(jq -r 'has("handoff")' "$LK/.ax/current-task.json" 2>/dev/null)"
 
     # 4) 계약 — 이미 잡힌 락 앞에서는 exit 1 + {"status":"error"} (기본 10s 를 기다리지 않게 =1)
@@ -3434,7 +3496,8 @@ else
     check_locked constitution-apply constitution-apply.sh --block "$LK/block.md" --target AGENTS.md --force --json
     check_locked zero-domain-risk   zero-domain-risk.sh --set "payment=L2" --json
     check_locked tier-from-state    tier-from-state.sh --reset --json
-    [ "$lock_bad" -eq 0 ] && pass "락 대기 초과 7종 — exit 1 + {\"status\":\"error\"} 봉투 (GOAX_LOCK_TIMEOUT=1)"
+    check_locked update-task        update-task.sh --phase spec --json
+    [ "$lock_bad" -eq 0 ] && pass "락 대기 초과 8종 — exit 1 + {\"status\":\"error\"} 봉투 (GOAX_LOCK_TIMEOUT=1)"
     # 손으로 만든 락엔 pid 파일이 없고 stale 문턱에 닿기 전에 타임아웃 나서, 뺏기지 않아요
     [ "$(find "$LK" -name '*.lock' -type d | wc -l | tr -d ' ')" -eq 5 ] \
         && pass "락 대기 초과 — 남의 락을 뺏지 않음 (5개 그대로)" \

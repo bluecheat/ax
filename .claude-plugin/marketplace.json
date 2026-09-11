@@ -10,7 +10,7 @@
     {
       "name": "goax",
       "description": "AI 에이전트 결과 일관성을 환경으로 통제하는 4계층 하네스 (Triage·Constitution·Module·Spec/ADR) + Spirit·Mistake Loop. bash+markdown only, 자연어로 도입. Claude Code·OpenCode 지원.",
-      "version": "0.5.11",
+      "version": "0.5.12",
       "author": {
         "name": "bluecheat",
         "email": "itsinil@gmail.com"
@@ -30,5 +30,5 @@
       ]
     }
   ],
-  "version": "0.5.11"
+  "version": "0.5.12"
 }

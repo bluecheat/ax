@@ -4,6 +4,7 @@
 
 ## 버전
 
+- [0.5.12](0.5.12.md) — current-task.json 을 쓰는 인라인 jq 가 무락이던 것 (`update-task.sh` 신설 · 5 skill 8군데 흡수 · reset 템플릿 fallback 제거)
 - [0.5.11](0.5.11.md) — 인계 노트가 세 번째 상태 파일이던 것 (`.ax/docs/STATUS.md` → `current-task.json` 의 `handoff`)
 - [0.5.10](0.5.10.md) — dry-run 이 spec 번호를 태우던 것 (예약은 쓰기인데 호출부가 --dry-run 을 안 넘김) + 중첩 `.suggested` gitignore 구멍
 - [0.5.9](0.5.9.md) — I5 가 pre-commit hook 을 늘 미등록으로 세던 것 (glob 디스패처를 안 봐서 — 문서는 처음부터 맞게 적혀 있었어요)

@@ -391,7 +391,7 @@ goax_rules_matching() {
 #   mkdir 은 POSIX 에서 원자적이라 flock(리눅스 전용) 없이 macOS/BSD 에서도 상호배제가 돼요.
 #
 #   같은 `tmp.$$` && `mv` 패턴을 쓰는 스크립트는 전부 이 헬퍼를 거쳐야 해요:
-#     lanes-dispatch · tasks-gate · status-note · tier-from-state(--reset) · register-spirit-hook ·
+#     lanes-dispatch · tasks-gate · status-note · update-task · tier-from-state(--reset) · register-spirit-hook ·
 #     build-memory · zero-init · zero-domain-risk · constitution-apply · update-state
 #
 # Usage:

@@ -144,14 +144,8 @@ NEXT_STEP=$(echo "$RESULT" | jq -r '.next_step')
 ## 3.5. current-task.json 갱신
 
 ```bash
-jq --arg id "$SPEC_ID" \
- --arg dir "$SPEC_DIR" \
- --arg tier "$TIER" \
- '.spec_id = $id | .spec_dir = $dir | .spec_tier = $tier
-  | .phase = "spec"
-  | .updated_at = (now | todate)' \
- .ax/current-task.json > .ax/current-task.json.tmp \
- && mv .ax/current-task.json.tmp .ax/current-task.json
+bash .ax/scripts/bash/update-task.sh --phase spec \
+ --set "spec_id=$SPEC_ID" --set "spec_dir=$SPEC_DIR" --set "spec_tier=$TIER" --json
 ```
 
 ## 4. ✓ 메시지

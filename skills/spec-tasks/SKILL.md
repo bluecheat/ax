@@ -137,8 +137,7 @@ task 가 있으면 그건 spec 에 없는 일을 하고 있다는 신호예요.
 ## 4. current-task.json 갱신
 
 ```bash
-jq '.phase = "tasks" | .updated_at = (now | todate)' .ax/current-task.json \
- > .ax/current-task.json.tmp && mv .ax/current-task.json.tmp .ax/current-task.json
+bash .ax/scripts/bash/update-task.sh --phase tasks --json
 ```
 
 ## 5. 출력
