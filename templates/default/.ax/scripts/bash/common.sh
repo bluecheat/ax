@@ -250,6 +250,14 @@ goax_inject_fresh() {
 #   렉시컬 정규화 — `.`·`..`·중복 슬래시 해소 후 절대경로 출력.
 #   파일시스템을 건드리지 않아요 (아직 없는 파일도 처리 — Write 는 새 파일을 만듦).
 #   realpath 비의존 = macOS/Linux 동일 동작. bash 3.2 호환.
+# --help — 헤더 주석 블록(2행부터 첫 비-`#` 행 전까지)을 `# ` 벗겨서 그대로 찍어요.
+#   예전엔 스크립트마다 `sed -n '2,NNp'` 로 줄 번호를 손으로 들고 있었는데, 헤더가 자라면 `Exit:` 계약 줄이
+#   잘리고 줄면 `set -euo pipefail` 까지 찍혔어요 (실측 19/37 스크립트가 어긋나 있었어요). 줄 번호를 없애요.
+# Usage: if [ "$SHOW_HELP" = true ]; then goax_help "${BASH_SOURCE[0]}"; exit "$EXIT_OK"; fi
+goax_help() {
+    awk 'NR == 1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "$1"
+}
+
 goax_normalize_path() {
     local p="${1:-}" base="${2:-$PWD}" out="" seg oldIFS
     [ -z "$p" ] && return 0

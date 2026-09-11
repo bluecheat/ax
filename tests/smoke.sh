@@ -648,6 +648,21 @@ done
 popd >/dev/null || true
 rm -rf "$TMP_E2E"
 
+# --help 는 헤더 주석 블록 전체 — 손으로 든 `sed -n '2,NNp'` 는 헤더가 자라면 잘리고(Exit: 계약 유실) 줄면
+# `set -euo pipefail` 까지 찍었어요 (실측 19/37). goax_help 하나로 통일했으니 줄 번호 방식은 다시 못 들어와요.
+HELP_SED=$(grep -lE "sed -n '2,[0-9]+p'" "$SCRIPTS_DIR"/*.sh 2>/dev/null || true)
+[ -z "$HELP_SED" ] && pass "--help — 하드코딩 줄 범위(sed -n '2,NNp') 0개 (goax_help 통일)" \
+                   || fail "--help — 줄 범위를 손으로 든 스크립트: $(echo "$HELP_SED" | xargs -n1 basename | tr '\n' ' ')"
+help_bad=0
+for hf in "$SCRIPTS_DIR"/*.sh; do
+    [ "$(basename "$hf")" = common.sh ] && continue   # 헬퍼 정의 자체 — CLI 아님
+    grep -q 'goax_help "${BASH_SOURCE\[0\]}"' "$hf" || continue
+    h_last=$(awk 'NR>1 && !/^#/ {exit} NR>1 {sub(/^# ?/,""); print}' "$hf" | tail -1)
+    h_out=$(bash "$hf" --help 2>/dev/null | tail -1)
+    [ "$h_out" = "$h_last" ] || { help_bad=$((help_bad+1)); fail "$(basename "$hf") --help — 마지막 줄이 헤더 끝('$h_last')이 아님: '$h_out'"; }
+done
+[ "$help_bad" -eq 0 ] && pass "--help — goax_help 스크립트 전부 헤더 끝까지 정확히 (set -euo 누출 없음)"
+
 # zero-* 4개는 오래 §9 명시 목록 밖이라 실행권한·`--help`·JSON 계약 검사를 못 받았어요
 # (`bash -n` 은 §7 의 glob 이 이미 훑고 있었고요). 실행 계약까지 여기서 고정해요.
 TMP_Z=$(mktemp -d)

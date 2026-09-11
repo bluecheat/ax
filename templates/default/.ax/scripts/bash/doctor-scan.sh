@@ -47,7 +47,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    goax_help "${BASH_SOURCE[0]}"
     exit "$EXIT_OK"
 fi
 if ! command -v jq >/dev/null 2>&1; then

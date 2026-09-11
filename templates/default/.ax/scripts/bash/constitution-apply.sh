@@ -45,7 +45,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'   # 2..'# Exit:' 줄까지
+    goax_help "${BASH_SOURCE[0]}"   # 2..'# Exit:' 줄까지
     exit "$EXIT_OK"
 fi
 fail() { if [ "$JSON_MODE" = true ]; then json_error "$1"; fi; goax_error "$1"; exit "$EXIT_ERROR"; }

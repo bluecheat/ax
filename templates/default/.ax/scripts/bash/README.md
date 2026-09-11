@@ -50,7 +50,7 @@
 
 - shebang: `#!/usr/bin/env bash`
 - `set -euo pipefail`
-- 옵션: `--json` (기계 출력), `--dry-run` (해당 시), `--help/-h`
+- 옵션: `--json` (기계 출력), `--dry-run` (해당 시), `--help/-h` — `--help` 는 `goax_help "${BASH_SOURCE[0]}"` 로 헤더 주석 블록을 그대로 찍어요 (줄 번호 `sed -n '2,NNp'` 금지 — 헤더가 자라면 `Exit:` 계약이 잘려요, smoke 가 잡아요)
 - stderr: `[goax]` prefix 로그·경고
 - stdout: `--json` 시 JSON, 아니면 사용자 친화 텍스트
 - exit code: `0` ok(경고 있어도 ok), `1` error(`--strict` 위반 포함), `2` skipped (대상 없음 · graceful degradation)
