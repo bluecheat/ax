@@ -2321,8 +2321,9 @@ fi
 
 # writer 보존 — current-task.json 은 skill 다섯 곳이 인라인 jq 로 `.x = …` 갱신해요. 누가 객체를 통째로
 # 재조립하면 (jq -n · echo/printf 리다이렉트) 그 skill 이 모르는 키(handoff 등)가 조용히 사라져요.
-# 합법 writer 는 전부 `> ….tmp && mv` 라 "current-task.json 으로 곧장 리다이렉트" 하나만 잡으면 돼요 (산문·`.tmp` 는 비매치)
-CTW=$(grep -rnE '>[[:space:]]*"?[^" ]*current-task\.json"?[[:space:]]*(#.*|<<.*)?$' "$REPO/skills" 2>/dev/null || true)
+# 합법 writer 는 전부 `> ….tmp && mv` 라 "current-task.json 으로 곧장 리다이렉트" 하나만 잡으면 돼요 (산문·`.tmp` 는 비매치).
+# skills 만이 아니라 agents · 출고 스크립트도 같은 계약이에요 — 나중에 생길 writer 스크립트가 자동으로 여기 걸려요.
+CTW=$(grep -rnE '>[[:space:]]*"?[^" ]*current-task\.json"?[[:space:]]*(#.*|<<.*)?$' "$REPO/skills" "$REPO/agents" "$REPO/templates/default/.ax/scripts/bash" 2>/dev/null || true)
 [ -z "$CTW" ] && pass "current-task.json writer — 전부 in-place jq (미지 키 보존)" \
               || fail "current-task.json writer — 통째 재조립 (미지 키 유실): $CTW"
 

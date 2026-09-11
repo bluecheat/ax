@@ -51,7 +51,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# //'
+    sed -n '2,27p' "${BASH_SOURCE[0]}" | sed 's/^# //'
     exit "$EXIT_OK"
 fi
 
