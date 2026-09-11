@@ -57,6 +57,10 @@ done
 # WS 검출 — GOAX_PROJECT_DIR > CLAUDE_PROJECT_DIR > ancestor 탐색
 WS=$(find_project_root) || exit "$EXIT_ERROR"
 S="$WS/.ax/state.json"
+# --json/--dry 는 파일을 안 써요 (다른 스크립트의 --json 과 달리 "출력만" 모드) — --skill 을 같이 주면 조용히 안 찍히는 함정
+if [ "$MODE" != update ] && { [ -n "$SKILL" ] || [ -n "$LAST_MISTAKE" ]; }; then
+    goax_warn "$MODE 는 state.json 을 안 써요 — --skill/--last-mistake 가 기록되지 않아요 (쓰려면 $MODE 를 빼요)"
+fi
 
 if [ ! -f "$S" ]; then
     goax_error "state.json 없음 ($S) — installer 먼저 실행"

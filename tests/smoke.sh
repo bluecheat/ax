@@ -2399,9 +2399,11 @@ writer_contract() {   # writer_contract <파일명> <허용 스크립트 정규�
         # (a) 직접 경로
         hits="$hits$(grep -nE ">[[:space:]]*\"?[^\" ]*${fname//./\\.}(\\.tmp(\\.\\\$\\\$)?)?\"?([[:space:]]|\$)" "$f" | grep -vE '^[0-9]+:[[:space:]]*#' | sed "s|^|$(basename "$f"):|" || true)"
         # (b) 변수에 담은 경로 — 그 변수로 리다이렉트·mv 하면 쓰기예요
-        vars=$(grep -oE "^[[:space:]]*(local[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=[^=]*${fname//./\\.}\"?[[:space:]]*\$" "$f" | sed -E 's/^[[:space:]]*(local[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/\2/' | sort -u || true)
+        # 대입 뒤에 `; REL=…` 나 `# 주석` 이 붙은 줄도 대입이에요 — 줄 끝 앵커만 보면 update-task.sh 의 `FILE=…; REL=…` 꼴이
+        # 새 스크립트로 복사될 때 빠져나가요. `(` 를 빼는 건 `X=$(jq … .json …)` 명령 치환을 대입으로 안 보려고요.
+        vars=$(grep -oE "^[[:space:]]*(local[[:space:]]+)?[[:alpha:]_][[:alnum:]_]*=[^=;#(]*${fname//./\\.}\"?([[:space:];#]|\$)" "$f" | sed -E 's/^[[:space:]]*(local[[:space:]]+)?([[:alpha:]_][[:alnum:]_]*)=.*/\2/' | sort -u || true)
         for v in $vars; do
-            hits="$hits$(grep -nE ">[[:space:]]*\"?\\\$\\{?${v}([^A-Za-z0-9_]|\$)|mv[[:space:]].*\"?\\\$\\{?${v}([^A-Za-z0-9_]|\$)" "$f" | grep -vE '^[0-9]+:[[:space:]]*#' | sed "s|^|$(basename "$f"):(\$$v) |" || true)"
+            hits="$hits$(grep -nE ">[[:space:]]*\"?\\\$\\{?${v}([^[:alnum:]_]|\$)|mv[[:space:]].*\"?\\\$\\{?${v}([^[:alnum:]_]|\$)" "$f" | grep -vE '^[0-9]+:[[:space:]]*#' | sed "s|^|$(basename "$f"):(\$$v) |" || true)"
         done
     done
     [ -z "$hits" ] && pass "$fname writer — 출고 스크립트는 ${allow//|/ · } 만 (변수 경로 포함)" \
