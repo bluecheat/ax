@@ -27,10 +27,10 @@
 | `update-state.sh` | `.ax/` 실측 → `.ax/state.json` (layers/cross_cut/sensors_mode + HUD 캐시 `hud.{plugin_version,review_required,cached_at}`) 갱신 | `up`, `onboarding`, `audit`, `doctor`, `hud`, `mistake`, `spec-validate`, `spec-implement` |
 | `triage-search.sh` | KEYWORDS 로 6 군데(specs/adrs/mistakes/rules/modules/imported) 검색 + 동의어 확장 + 매칭수 랭킹 + 스니펫 + 도메인 boost | `triage` |
 | `build-memory.sh` | `.ax/` 상태 → `.ax/MEMORY.md` 한 줄 포인터 인덱스 재생성 (triage 가 먼저 read) | `triage` |
-| `status-note.sh` | 세션 간 인계 노트 `.ax/docs/STATUS.md` — `--show/--init/--add/--done/--set <now|next|open|renamed>`. 형식 고정 · 40줄 상한 · 끝난 항목은 지움 | `triage`(읽기), `spec-implement`, `zero`, `onboarding` |
+| `status-note.sh` | 세션 간 인계 노트 — `.ax/current-task.json` 의 `handoff` — `--show/--init/--add/--done/--set <now|next|open|renamed>`. 형식 고정 · 40개 항목 상한 · 끝난 항목은 지움 · jq 필수(없으면 exit 2) | `triage`(읽기), `spec-implement`, `zero`, `onboarding` |
 | `spirit-lint.sh` | Spirit 무결성 — 필수 파일 · frontmatter · `## SP-CAT-NNN:` 헤더 형식 · 토큰 중복(spirit ↔ modules) · placeholder. 자동 수정 없음 | `doctor` ("spirit 점검") |
 | `rules-index.sh` | 룰 통합 인덱스 — Constitution(🔴/🟡/🔵 시그널 라인) + Spirit + Module 의 `SP-*` 를 한 목록으로. `--level/--source/--category/--find` | `doctor` ("rules 보여줘"), `/goax` |
-| `doctor-scan.sh` | doctor 의 인라인 진단 셋 — 마이그레이션 잔재 · template 기준 hook 등록(파일 + **이벤트 키**) · 문서↔실제 메커니즘 · **도달 지도**(룰 소스별 배관 생사) · **인계 노트 기한**(STATUS.md `- [ ] YYYY-MM-DD`, I3 규칙) | `doctor` |
+| `doctor-scan.sh` | doctor 의 인라인 진단 셋 — 마이그레이션 잔재(`.ax/docs/STATUS.md` 잔재 통지 포함) · template 기준 hook 등록(파일 + **이벤트 키**) · 문서↔실제 메커니즘 · **도달 지도**(룰 소스별 배관 생사) · **인계 노트 기한**(`current-task.json` `handoff` `- [ ] YYYY-MM-DD`, I3 규칙) | `doctor` |
 | `constitution-apply.sh` | onboarding Q5 의 Constitution 블록 적용 — `--block` prepend(기존 본문 `---` 아래 보존) · `--scan-duplicates` · `--drop-exact`(사용자 [a] 뒤에만) · `--append-index` | `onboarding` |
 | `tasks-plan.sh` | tasks.md → ready / blocked / parallel + `[P]` 파일 겹침 violations. 항목별 승격 — wave(배리어) 없음, 자동 실행 없음 | `lane`, `spec-implement` |
 | `tasks-gate.sh` | spec 완료 게이트 G1~G6 — 미완료 · AC 커버리지 · orphan · 유실 · 레인 원장 · evaluator verdict(`review.md`) | `spec-implement`, `lane`, pre-commit hook |
@@ -41,7 +41,7 @@
 | `zero-domain-risk.sh` | `config.yml` 의 `domain_risk` 블록 통째 교체 (`--show/--set/--default`) — 출고 예시 키가 남으면 triage 가 영원히 default_risk 로 흘러요 | `zero` |
 | `zero-probe.sh` | 네거티브 프로브 — 일부러 위반을 만들어 차단이 실제로 도는지 확인 | `zero` |
 | `zero-verify.sh` | `config.yml commands` 를 파이프 없이 실행하고 증거 블록 생성 — 안 돌린 게이트도 보고 (하나도 안 돌면 exit 2) | `zero` |
-| `zero-ablation.sh` | 산문 룰 전체를 끄고 무엇이 깨지는지 재는 ablation (`--off/--on/--status`) — `--on` 이 회차를 기록하고 다음 기한(+180일)을 STATUS.md 에 체크박스로 (doctor 가 추적) | `zero`, `doctor` |
+| `zero-ablation.sh` | 산문 룰 전체를 끄고 무엇이 깨지는지 재는 ablation (`--off/--on/--status`) — `--on` 이 회차를 기록하고 다음 기한(+180일)을 인계 노트 `next` 에 체크박스로 (doctor 가 추적) | `zero`, `doctor` |
 | `zero-guard-bash.sh` | **(`.ax/hooks/pre-bash/` 에 설치 — 이 디렉터리 밖)** pre-bash 가드: `git add -A` 차단(exit 2) · 검증 명령 파이프 경고. hook 규약이라 `--json` 표준 밖이에요 | (hook) |
 | `vendor-skills.sh` | goax skill/command/agent 를 저장소에 동봉(`--plugin-dir` cp) — 모노레포처럼 ADE 루트 ≠ 프로젝트 루트일 때 `.goax-root` 포인터도 씀. `--check` 로 동봉본 ↔ plugin 버전 비교만 | `vendor`, `doctor` |
 
@@ -93,7 +93,7 @@ LLM(SKILL.md)이 이 JSON을 받아 사용자에게 ✓ 메시지 출력. 결정
 
 ## 쓰기 규약 — 여러 세션이 같은 파일을 건드릴 때
 
-`tasks.md`·`state.json`·`STATUS.md`·`.claude/settings.json`·`AGENTS.md`·`.ax/config.yml` 처럼 여러
+`tasks.md`·`state.json`·`current-task.json`·`.claude/settings.json`·`AGENTS.md`·`.ax/config.yml` 처럼 여러
 스크립트·여러 세션이 같은 파일을 `read → 가공 → tmp.$$ → mv` 하는 자리는 **락 없이는 동시 쓰기에서
 갱신이 유실돼요** (읽은 뒤 서로를 못 보고 덮어써요). `common.sh` 의 헬퍼로 감싸요:
 
@@ -153,7 +153,7 @@ fence { next }
 ## 설계 원칙 (왜 이렇게 만들었나)
 
 1. **LLM 선의 의존 제거**까지 마크다운에 박힌 bash를 LLM이 매번 재해석. 동일 작업이 매번 다르게 실행될 위험. 스크립트로 분리 = 결정론
-2. **데이터 흐름 SSOT** — `.ax/current-task.json`이 triage→spec→audit 사이 컨텍스트 전달
+2. **데이터 흐름 SSOT** — `.ax/current-task.json`이 triage→spec→audit 사이 컨텍스트 전달 + 세션 간 인계(handoff)
 3. **빠른 실행** — bash 한 번 호출이 LLM 재추론보다 100× 빠름
 4. **테스트 가능** — `tests/smoke.sh`가 `bash -n` + `--help` + `--json` syntax 검증
 5. **단일 OS** — bash만, PowerShell pair 없음 (Linux/macOS only)

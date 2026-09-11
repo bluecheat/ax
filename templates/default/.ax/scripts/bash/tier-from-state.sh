@@ -3,6 +3,7 @@
 #
 # Usage:
 #   bash tier-from-state.sh [--json] [--size S|M|L|XL] [--risk L0|L1|L2|L3] [--help]
+#   bash tier-from-state.sh --reset [--json]   # current-task.json → idle (handoff 는 남겨요)
 #
 # 우선순위:
 #   1. CLI --size --risk 인자
@@ -50,7 +51,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# //'
+    sed -n '2,27p' "${BASH_SOURCE[0]}" | sed 's/^# //'
     exit "$EXIT_OK"
 fi
 
@@ -58,13 +59,22 @@ PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
 TASK_FILE="$PROJECT_ROOT/.ax/current-task.json"
 
 # --reset: current-task.json을 phase=idle 로 리셋 (작업 완료 후 호출)
-# 새 작업이 들어오면 triage가 다시 발동해야 하므로 size/risk/domain 등도 모두 null
+# 새 작업이 들어오면 triage가 다시 발동해야 하므로 size/risk/domain 등도 모두 null.
+# 필드를 하나씩 null 로 두는 이유 — 인계 노트(handoff: next·open·renamed)는 task 를 넘어 살아야 해요.
+# 객체를 통째로 다시 만들면 handoff 가 조용히 사라져요.
 if [ "$RESET" = true ]; then
     if [ ! -f "$TASK_FILE" ]; then
         TEMPLATE="$PROJECT_ROOT/.ax/current-task.json.template"
         [ -f "$TEMPLATE" ] && cp "$TEMPLATE" "$TASK_FILE"
     fi
     if [ -f "$TASK_FILE" ] && command -v jq >/dev/null 2>&1; then
+        # status-note.sh 와 같은 파일을 써요 — 락 단위는 파일이라 락 경로 문자열도 같아야 해요
+        LOCK="$(goax_normalize_path "$PROJECT_ROOT/.ax/current-task.json" "$PROJECT_ROOT").lock"
+        if ! goax_lock "$LOCK" "${GOAX_LOCK_TIMEOUT:-10}"; then
+            MSG="다른 프로세스가 .ax/current-task.json 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
+            if [ "$JSON_MODE" = true ]; then json_error "$MSG"; fi
+            goax_error "$MSG"; exit "$EXIT_ERROR"
+        fi
         jq '.task_id = null
             | .description = null
             | .size = null
@@ -78,7 +88,14 @@ if [ "$RESET" = true ]; then
             | .phase = "idle"
             | .intent_notes = {}
             | .blocked_by = []' "$TASK_FILE" \
-            > "${TASK_FILE}.tmp" && mv "${TASK_FILE}.tmp" "$TASK_FILE"
+            > "${TASK_FILE}.tmp" && mv "${TASK_FILE}.tmp" "$TASK_FILE" || {
+            # jq 가 죽으면(JSON 깨짐) 원본은 그대로 두고 tmp 만 치워요 — ok 로 넘기지 않아요
+            rm -f "${TASK_FILE}.tmp"; goax_unlock "$LOCK"
+            MSG=".ax/current-task.json 을 읽지 못했어요 — JSON 이 깨졌는지 봐요"
+            if [ "$JSON_MODE" = true ]; then json_error "$MSG"; fi
+            goax_error "$MSG"; exit "$EXIT_ERROR"
+        }
+        goax_unlock "$LOCK"
     fi
     # 다음 nudge 허용 — 마커 정리
     rm -f "$PROJECT_ROOT/.ax/.triage-nudged"

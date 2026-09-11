@@ -1,6 +1,6 @@
 ---
 name: zero
-description: "zero to one — 아이디어 하나를 팔 수 있는 제품으로 끌고 가요. '/zero', 'zero to one', '0에서 시작', '새 제품 시작', '처음부터 만들자', '아이디어부터', 'PRD 부터', 'greenfield', '빈 리포에서 시작'. up 의 greenfield 분기가 넘겨받아요. 앞단(문제·대상·가치가설·안 만들 것·단위경제·성공중단기준·첫 사용자) → 중단(PRD·되돌리기 비싼 결정 ADR·시안 게이트) → 뒷단(domain_risk·스캐폴드·집행 배관·첫 배포·STATUS). 대신 정하지 않고 역면접으로 끌어내요."
+description: "zero to one — 아이디어 하나를 팔 수 있는 제품으로 끌고 가요. '/zero', 'zero to one', '0에서 시작', '새 제품 시작', '처음부터 만들자', '아이디어부터', 'PRD 부터', 'greenfield', '빈 리포에서 시작'. up 의 greenfield 분기가 넘겨받아요. 앞단(문제·대상·가치가설·안 만들 것·단위경제·성공중단기준·첫 사용자) → 중단(PRD·되돌리기 비싼 결정 ADR·시안 게이트) → 뒷단(domain_risk·스캐폴드·집행 배관·첫 배포·인계 노트). 대신 정하지 않고 역면접으로 끌어내요."
 ---
 
 # goax zero — 아이디어에서 팔 수 있는 것까지
@@ -150,7 +150,7 @@ bash .ax/scripts/bash/zero-init.sh --plugin-dir "$PLUGIN_ROOT" --json
 - **중단 기준** — 시간·돈·의지 셋 다. 셋 중 하나가 먼저 바닥나요
 - **처음 10명** — 이름을 댈 수 있어야 해요. 못 대면 그게 1순위 위험 가정이에요
 - **다음 100명** — 채널·비용·준비물
-- 다음 검토일 (`.ax/docs/STATUS.md` 에 체크박스로 박아요)
+- 다음 검토일 (인계 노트 `next` 에 체크박스로 박아요, `status-note.sh --add next`)
 
 **산출물**: `.ax/docs/product/{success-and-stop,first-users}.md`
 **안 하면**: 접어야 할 때 접는 대신 기능을 더 붙여요. 그리고 다 만든 뒤에
@@ -288,9 +288,9 @@ bash .ax/scripts/bash/zero-probe.sh --json     # 차단이 살아 있는지 확�
 **산출물**: 배포 주소 또는 빌드 번호 + 그 로그 줄
 **안 하면**: 심사·서명 같은 긴 리드타임을 출시 직전에 만나요.
 
-## 13. STATUS 개설 + 다음 라운드 인계
+## 13. 인계 노트 개설 + 다음 라운드 인계
 
-`.ax/docs/STATUS.md` 는 **공용 인계 노트**예요 — zero 뿐 아니라 `triage` 가 매 작업 진입 때 먼저 읽고,
+`.ax/current-task.json` 의 `handoff` 는 **공용 인계 노트**예요 — zero 뿐 아니라 `triage` 가 매 작업 진입 때 먼저 읽고,
 `spec-implement` 가 halt·완료·레인 보고 시점에 갱신해요. 손으로 쓰지 말고 스크립트로 적어요 (형식이
 고정돼야 다음 세션이 파싱해요). **끝난 항목은 지웁니다.** 완료 사실의 SSOT 는 `git log` 와 ADR 이에요.
 
@@ -302,7 +302,7 @@ bash .ax/scripts/bash/status-note.sh --add next "- [ ] <6개월 뒤 날짜> 룰 
 bash .ax/scripts/bash/status-note.sh --add open "<미룬 축 — 있을 때만>" --json
 ```
 
-`## 다음` 의 두 체크박스(1순위 가정 검증 · ablation 재검토)는 빠지면 안 돼요 — 문서 안에만 있는
+`next` 의 두 체크박스(1순위 가정 검증 · ablation 재검토)는 빠지면 안 돼요 — 문서 안에만 있는
 날짜는 아무도 안 봐요.
 
 인계 출력:

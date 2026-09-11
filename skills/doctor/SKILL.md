@@ -58,7 +58,7 @@ Spirit 카테고리 수를 `spirit-lint.sh` 로, mistake 카테고리 집계를 
 | **Sensors — Liveness** | 장치 생사 C1~C4 | `check-sensor-liveness.sh` (§3.10) |
 | **번호 무결성** | spec/ADR 중복 번호 | `next-spec-num.sh --check-duplicates` (§3.11) |
 | **동봉본** | vendored skills 신선도 | `vendor-skills.sh --check` (§3.12) |
-| **인계 노트** | STATUS.md 기한(`- [ ] YYYY-MM-DD`) 임박·초과 — zero 의 가정 검증 · ablation 재검토 | `doctor-scan.sh handoff` (§3.6~) |
+| **인계 노트** | current-task.json `handoff` 기한(`- [ ] YYYY-MM-DD`) 임박·초과 — zero 의 가정 검증 · ablation 재검토 | `doctor-scan.sh handoff` (§3.6~) |
 
 각 항목 ✅ / ⚠️ / ❌. 규칙은 §4.
 
@@ -122,6 +122,7 @@ SCAN=$(bash "$ROOT/.ax/scripts/bash/doctor-scan.sh" --json ${PLUGIN_ROOT:+--plug
 S_FIND=$(echo "$SCAN" | jq -r '.result.findings // 0')
 S_GI=$(echo "$SCAN" | jq -r '.result.migration.gitignore_missing | join(", ")')
 S_OS=$(echo "$SCAN" | jq -r '.result.migration.stale_output_style')
+S_SM=$(echo "$SCAN" | jq -r '.result.migration.stale_status_md')
 S_SG=$(echo "$SCAN" | jq -r '.result.migration.suggested | join(", ")')
 S_SR=$(echo "$SCAN" | jq -r '.result.migration.spec_readme_stale | length')
 S_SE=$(echo "$SCAN" | jq -r '.result.migration.spec_empty_dirs | length')
@@ -139,10 +140,11 @@ D_BAD=$(echo "$SCAN" | jq -r '.result.handoff.deadlines[] | select(.status!="ok"
 🧹  마이그레이션 잔재
    ⚠️ .gitignore 누락 엔트리 — <S_GI>
    ⚠️ .ax/spirit/rules/output-style.md — plugin meta 로 분류되어 출고에서 제거됨
+   ⚠️ .ax/docs/STATUS.md — 인계 노트가 current-task.json 으로 옮겨져 남은 잔재        ← S_SM == true 일 때만
    ⚠️ 미처리 .suggested — <S_SG> (머지 후 rm)
    ⚠️ spec README.md 잔재 <S_SR>건 · 빈 checklists/contracts <S_SE>건 (slim 정책 — rm/rmdir 권장)
 ```
-다음 단계 `[m] ✅ 마이그레이션 잔재 처리 — .gitignore 보강 + 잔재 제거 (사용자 동의 후, git 영향)`.
+다음 단계 `[m] ✅ 마이그레이션 잔재 처리 — .gitignore 보강 + 잔재 제거 (STATUS.md 는 남길 줄을 status-note.sh --add 로 옮긴 뒤 rm · 사용자 동의 후, git 영향)`.
 
 **3.7 hook 등록** (`H_CHK=false` 면 통째로 skip — plugin 경로 미도출. `H_MISS` 비었으면 본 표의 ✅ 만):
 ```
@@ -170,7 +172,7 @@ D_BAD=$(echo "$SCAN" | jq -r '.result.handoff.deadlines[] | select(.status!="ok"
 ```
 다음 단계 `[reach] ✅ 배관 잇기 — constitution: CLAUDE.md 에 '@AGENTS.md' 한 줄 / spirit-universal: Constitution CONVENTION 절에 @import / scoped·module: [s] hook 등록`. **라벨이 완벽해도 배관이 끊기면 룰은 0개예요** — 이 표가 doctor 에서 가장 먼저 봐야 할 줄이에요.
 
-**인계 노트 기한** (`D_BAD` 비었으면 생략) — `.ax/docs/STATUS.md` 의 `- [ ] YYYY-MM-DD …` 를 I3 와 같은 규칙(≤7일 임박 · 초과)으로 봐요. zero 의 "1순위 가정 검증" 과 "룰 ablation 재검토" 가 여기 살아요 — 날짜가 문서 안에만 있으면 아무도 안 봐요.
+**인계 노트 기한** (`D_BAD` 비었으면 생략) — `.ax/current-task.json` 의 `handoff` 에 있는 `- [ ] YYYY-MM-DD …` 를 I3 와 같은 규칙(≤7일 임박 · 초과)으로 봐요. zero 의 "1순위 가정 검증" 과 "룰 ablation 재검토" 가 여기 살아요 — 날짜가 문서 안에만 있으면 아무도 안 봐요.
 ```
 📅  인계 노트 기한
    ⚠️  overdue 2026-03-01 (-12일) — 룰 ablation 재검토 (.ax/_templates/zero/ablation.md)

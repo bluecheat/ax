@@ -6,14 +6,16 @@
 #
 # 검사 (doctor SKILL.md 3.6 · 3.7(3) · 3.8 이 산문 bash 로 하던 것 + 신규 도달 지도):
 #   migration   .gitignore 누락 엔트리 · spirit/rules/output-style.md 잔재 · 미처리 .suggested ·
-#               spec README.md 잔재 · 빈 checklists/contracts 디렉토리
+#               spec README.md 잔재 · 빈 checklists/contracts 디렉토리 · .ax/docs/STATUS.md 잔재
+#               (인계 노트가 current-task.json handoff 로 옮겨진 뒤 남은 파일 — 자동 import 안 해요)
 #   hooks       settings.json.template(SSOT) 이 선언한 (이벤트 키, .ax/hooks/*.sh) **쌍** 전부가
 #               .claude/settings.json 의 같은 이벤트 아래 있는지 — 훅은 등록된 이벤트에서만 발화하니
 #               Stop 훅이 PreToolUse 에 적혀 있으면 미등록이에요
 #               (파일 자체가 없으면 missing_files — 초기 설치 미완). PLUGIN_DIR 없으면 skip
 #   doc_actual  CLAUDE.md/AGENTS.md 가 설명하는 path-scoped 메커니즘(hook vs 폐기된 shim) ↔ 실제 설치 상태
 #   hooks.events settings.json 에 template 의 이벤트 키(UserPromptSubmit·PreToolUse·PostToolUse·SubagentStart·Stop)가 다 있는지
-#   handoff     인계 노트(.ax/docs/STATUS.md)의 `- [ ] YYYY-MM-DD …` 기한 — ≤7일 임박 · 초과 (I3 와 같은 규칙)
+#   handoff     인계 노트(.ax/current-task.json handoff — now·next·open·renamed 네 절 전부)의
+#               `- [ ] YYYY-MM-DD …` 기한 — ≤7일 임박 · 초과 (I3 와 같은 규칙)
 #   reach       도달 지도 — 룰 소스마다 "어떤 배관으로 세션에 닿는가, 그 배관이 살아 있는가":
 #                 constitution   AGENTS.md 본문이 Claude Code 에 닿으려면 CLAUDE.md 가 있고 @AGENTS.md 를 import 해야 해요.
 #                                AGENTS.md 만 있으면 Constitution 이 어디에도 안 가요 (Claude Code 는 AGENTS.md 를 안 읽어요)
@@ -45,7 +47,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 if [ "$SHOW_HELP" = true ]; then
-    sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "$EXIT_OK"
 fi
 if ! command -v jq >/dev/null 2>&1; then
@@ -84,6 +86,7 @@ while IFS= read -r line; do
 "; fi
 done <<< "$GI_EXPECT"
 STALE_OS=false; [ -f .ax/spirit/rules/output-style.md ] && STALE_OS=true
+STALE_SM=false; [ -f .ax/docs/STATUS.md ] && STALE_SM=true
 SUGGESTED=$(find .ax -maxdepth 2 -name '*.suggested' 2>/dev/null | sed 's|^\./||' | sort)
 SPEC_README=""; SPEC_EMPTY=""
 while IFS= read -r d; do
@@ -97,12 +100,12 @@ while IFS= read -r d; do
 done < <(find .ax/docs/spec -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sed 's|^\./||' | sort)
 GI_N=$(printf '%s' "$GI_MISSING" | grep -c . || true); SG_N=$(printf '%s' "$SUGGESTED" | grep -c . || true)
 SR_N=$(printf '%s' "$SPEC_README" | grep -c . || true); SE_N=$(printf '%s' "$SPEC_EMPTY" | grep -c . || true)
-MIG_N=$(( GI_N + SG_N + SR_N + SE_N )); [ "$STALE_OS" = true ] && MIG_N=$((MIG_N + 1))
+MIG_N=$(( GI_N + SG_N + SR_N + SE_N )); [ "$STALE_OS" = true ] && MIG_N=$((MIG_N + 1)); [ "$STALE_SM" = true ] && MIG_N=$((MIG_N + 1))
 FINDINGS=$((FINDINGS + MIG_N))
-MIG=$(jq -nc --argjson gi "$(printf '%s' "$GI_MISSING" | to_json_arr)" --argjson os "$STALE_OS" \
+MIG=$(jq -nc --argjson gi "$(printf '%s' "$GI_MISSING" | to_json_arr)" --argjson os "$STALE_OS" --argjson sm "$STALE_SM" \
     --argjson sg "$(printf '%s' "$SUGGESTED" | to_json_arr)" --argjson sr "$(printf '%s' "$SPEC_README" | to_json_arr)" \
     --argjson se "$(printf '%s' "$SPEC_EMPTY" | to_json_arr)" --arg n "$MIG_N" \
-    '{gitignore_missing:$gi,stale_output_style:$os,suggested:$sg,spec_readme_stale:$sr,spec_empty_dirs:$se,findings:($n|tonumber)}')
+    '{gitignore_missing:$gi,stale_output_style:$os,stale_status_md:$sm,suggested:$sg,spec_readme_stale:$sr,spec_empty_dirs:$se,findings:($n|tonumber)}')
 
 # ── hooks — template SSOT 기반 ────────────────────────────────────
 TPL="$PLUGIN_DIR/templates/default/.claude/settings.json.template"
@@ -255,9 +258,10 @@ fi
 
 # ── handoff — 인계 노트의 기한 (`- [ ] YYYY-MM-DD …`) — I3 와 같은 규칙: ≤7일 임박 · 초과 ──
 # zero 의 "1순위 가정 검증" 과 "룰 ablation 재검토" 가 여기 살아요. 날짜가 문서 안에만 있으면 아무도 안 봐요.
+# 인계 노트는 current-task.json 의 handoff 객체예요 — 네 절(now·next·open·renamed)을 전부 훑어요.
 to_epoch() { date -j -u -f '%Y-%m-%d' "$1" +%s 2>/dev/null || date -u -d "$1" +%s 2>/dev/null || echo ""; }
-NOTE=".ax/docs/STATUS.md"; DL_JSON="[]"; DL_IMM=0; DL_OVER=0; NOTE_PRESENT=false
-if [ -f "$NOTE" ]; then
+NOTE=".ax/current-task.json"; DL_JSON="[]"; DL_IMM=0; DL_OVER=0; NOTE_PRESENT=false
+if [ -f "$NOTE" ] && jq -e '.handoff | type == "object"' "$NOTE" >/dev/null 2>&1; then
     NOTE_PRESENT=true
     TODAY_E=$(to_epoch "$(date +%F)")
     while IFS= read -r ln; do
@@ -269,7 +273,8 @@ if [ -f "$NOTE" ]; then
         st=ok; [ "$days" -le 7 ] && st=imminent; [ "$days" -lt 0 ] && st=overdue
         [ "$st" = imminent ] && DL_IMM=$((DL_IMM + 1)); [ "$st" = overdue ] && DL_OVER=$((DL_OVER + 1))
         DL_JSON=$(printf '%s' "$DL_JSON" | jq -c --arg d "$d" --arg t "$txt" --arg n "$days" --arg s "$st" '. + [{date:$d,text:$t,days_left:($n|tonumber),status:$s}]')
-    done < <(grep -E '^- \[ \] [0-9]{4}-[0-9]{2}-[0-9]{2}' "$NOTE" 2>/dev/null || true)
+    done < <(jq -r '(.handoff // {}) | [.now[]?, .next[]?, .open[]?, .renamed[]?] | .[]' "$NOTE" 2>/dev/null \
+             | grep -E '^- \[ \] [0-9]{4}-[0-9]{2}-[0-9]{2}' || true)
 fi
 FINDINGS=$((FINDINGS + DL_IMM + DL_OVER))
 HANDOFF=$(jq -nc --argjson p "$NOTE_PRESENT" --argjson d "$DL_JSON" --arg i "$DL_IMM" --arg o "$DL_OVER" \
@@ -287,6 +292,7 @@ printf '🩺 doctor-scan — %s\n' "$PROJECT_ROOT"
 printf '\n🧹 마이그레이션 잔재 — %s건\n' "$MIG_N"
 [ "$GI_N" -gt 0 ] && printf '   ⚠ .gitignore 누락 %s줄: %s\n' "$GI_N" "$(printf '%s' "$GI_MISSING" | tr '\n' ' ')"
 [ "$STALE_OS" = true ] && printf '   ⚠ .ax/spirit/rules/output-style.md — 출고에서 제거된 잔재\n'
+[ "$STALE_SM" = true ] && printf '   ⚠ .ax/docs/STATUS.md — 인계 노트가 .ax/current-task.json 으로 옮겨져 남은 잔재 (필요한 줄은 status-note.sh --add 로 옮기고 rm)\n'
 [ "$SG_N" -gt 0 ] && printf '   ⚠ 미처리 .suggested %s개: %s\n' "$SG_N" "$(printf '%s' "$SUGGESTED" | tr '\n' ' ')"
 [ "$SR_N" -gt 0 ] && printf '   ⚠ spec README.md 잔재 %s건\n' "$SR_N"
 [ "$SE_N" -gt 0 ] && printf '   ⚠ spec 빈 디렉토리 %s건\n' "$SE_N"
@@ -297,7 +303,7 @@ if [ "$HOOKS_CHECKED" = true ]; then
     [ "$MF_N" -gt 0 ] && printf '   ✗ 파일 자체가 없음 (초기 설치 미완 → /up): %s\n' "$(printf '%s' "$MISSING_FILES" | tr '\n' ' ')"
     [ "$EVM_N" -gt 0 ] && printf '   ⚠ 이벤트 키 미등록: %s — settings.json 에 그 이벤트가 아예 없어요\n' "$(printf '%s' "$EV_MISS" | tr '\n' ' ')"
 else printf 'skip (plugin 경로 미도출 — --plugin-dir)\n'; fi
-printf '\n📅 인계 노트 기한 — 임박 %s · 초과 %s\n' "$DL_IMM" "$DL_OVER"
+printf '\n📅 인계 노트 기한 (current-task.json handoff) — 임박 %s · 초과 %s\n' "$DL_IMM" "$DL_OVER"
 printf '%s' "$DL_JSON" | jq -r '.[] | select(.status!="ok") | "   ⚠ \(.status) \(.date) (\(.days_left)일) — \(.text)"'
 printf '\n📑 문서 ↔ 실제 — %s건\n' "$MM_N"
 printf '%s' "$MM" | sed '/^$/d; s/^/   ⚠ /'

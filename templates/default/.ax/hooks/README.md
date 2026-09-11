@@ -25,8 +25,8 @@ compaction 뒤엔 4시간 TTL 이 다시 줄 여지를 남겨요. 세션 id 가 
 `stop/spec-gate.sh` 는 `current-task.json` 의 phase 가 `implementing`·`review` 이고 `tasks-gate.sh` 가 위반을
 보고할 때만 `{"decision":"block","reason":…}` 로 한 턴을 더 줘요. Claude Code 가 재시도할 땐
 `stop_hook_active=true` 로 오고 그땐 무조건 통과 — 무한 루프는 공식 계약이 막아요. 인계 노트
-(`.ax/docs/STATUS.md` "지금 상태")에 그 spec 이 **24시간 안에** 적혀 있으면 멈추는 게 의도라고 보고 잡지 않아요 —
-`status-note.sh --set now` 이 줄 끝에 `(YYYY-MM-DDTHH:MMZ)` 를 박고 게이트가 그 시각을 봐요. 시각이 없는 옛
+(`current-task.json` 의 `handoff.now`)에 그 spec 이 **24시간 안에** 적혀 있으면 멈추는 게 의도라고 보고 잡지 않아요 —
+`status-note.sh --set now` 가 `handoff.now_at` 필드에 시각을 적고 게이트가 그 시각을 봐요. 시각이 없는 옛
 노트는 인정하지 않아요 (예전엔 spec 이름만 있으면 통과라서 몇 주 전 노트 한 줄이 새 세션의 게이트를 영구히
 침묵시켰어요). 지울 땐 `status-note.sh --clear now`. 이 훅은 지나가며 `.ax/.session/*` 의 24시간 넘은
 디렉토리도 지워요 — 그 청소가 pre-edit 훅에만 있어서 Edit 없는 세션은 아무것도 못 지웠거든요.

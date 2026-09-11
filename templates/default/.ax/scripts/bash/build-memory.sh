@@ -25,8 +25,8 @@
 # 크기 게이트: 인덱스가 가리킬 본문 합계 < GOAX_MEMORY_LEAN_BYTES(기본 12000)면 자동 lean.
 #   작은 프로젝트에선 인덱스가 오버헤드라 열거를 접고 포인터만 남겨요. lean 이어도 🔴/🟡 룰 토큰과
 #   현재 작업은 항상 남아요 — 이게 빠지면 triage 의 CRITICAL/MANDATORY 도달이 끊겨요. 접히는 건 열거뿐.
-# 세션 간 인계(막힌 것·열린 질문·바뀐 이름·다음 할 일)는 이 인덱스가 아니라 .ax/docs/STATUS.md 예요
-#   (status-note.sh). 있으면 맨 위에 포인터 한 줄을 넣어요.
+# 세션 간 인계(막힌 것·열린 질문·바뀐 이름·다음 할 일)는 이 인덱스가 아니라 .ax/current-task.json 의
+#   handoff 객체예요 (status-note.sh). 항목이 있으면 맨 위에 포인터 한 줄을 넣어요 (jq 있을 때만).
 # 의존: grep, sed, awk, find. jq 권장(현재 작업 파싱) — 없으면 그 섹션만 생략.
 
 set -u
@@ -198,8 +198,13 @@ emit_memory() {
     printf '<!-- build-memory.sh 가 .ax/ 상태에서 재생성. triage 가 가장 먼저 읽는 1줄 포인터 인덱스. -->\n'
     printf '_생성: %s_\n' "$NOW"
     [ -n "$MODE_NOTE" ] && printf '%s\n' "$MODE_NOTE"
-    # 인계 노트가 있으면 첫 포인터 — triage 는 이걸 MEMORY.md 보다 먼저 읽어요 (세션 간 인계)
-    [ -f .ax/docs/STATUS.md ] && printf '_인계 노트: .ax/docs/STATUS.md — 다음 · 열린 질문 · 바뀐 이름 (status-note.sh --show)_\n'
+    # 인계 노트에 항목이 있으면 첫 포인터 — triage 는 이걸 MEMORY.md 보다 먼저 읽어요 (세션 간 인계).
+    # current-task.json 을 파싱하는 아래 "현재 작업" 과 같은 HAS_JQ 가드예요 — jq 없으면 포인터도 생략.
+    if [ "$HAS_JQ" = true ] && [ -f .ax/current-task.json ]; then
+        local hn
+        hn=$(jq -r '(.handoff // {}) | [.now[]?, .next[]?, .open[]?, .renamed[]?] | length' .ax/current-task.json 2>/dev/null || echo 0)
+        [ "${hn:-0}" -gt 0 ] 2>/dev/null && printf '_인계 노트: .ax/current-task.json handoff — 지금 · 다음 · 열린 질문 · 바뀐 이름 (status-note.sh --show)_\n'
+    fi
     printf '\n'
 
     # 현재 작업

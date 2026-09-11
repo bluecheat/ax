@@ -408,8 +408,8 @@ universal 룰(secrets·파괴 명령·보호 경로)은 이미 hook 이 있어 �
 📂 .ax/ runtime 파일은 .gitignore 자동 처리됨
  .ax/state.json, .ax/current-task.json — per-machine 상태, PR에 들어가지 않음
 
-📝 인계 노트 — .ax/docs/STATUS.md
- 다음 세션이 처음 읽는 파일이에요. "다음" 절에 첫 할 일 1~3개가 들어갔어요.
+📝 인계 노트 — .ax/current-task.json (handoff) · status-note.sh --show
+ 다음 세션이 처음 읽는 자리예요. "다음" 절에 첫 할 일 1~3개가 들어갔어요.
 
 📋 Mistake Loop — 주 1회 audit 권장
  실수는 "실수 기록해줘" 로 캡처해요 (.ax/mistakes/). HUD 의 mistakes:N 이 누적을 보여줘요.

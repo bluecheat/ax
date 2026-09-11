@@ -11,5 +11,12 @@
   "updated_at": null,
   "phase": "idle",
   "intent_notes": {},
-  "blocked_by": []
+  "blocked_by": [],
+  "handoff": {
+    "now": [],
+    "now_at": null,
+    "next": [],
+    "open": [],
+    "renamed": []
+  }
 }
