@@ -2214,7 +2214,7 @@ grep -q 'hud' "$REPO/templates/default/.ax/hud/state.json.template" && grep -q '
 section "34. 폐기·스크립트화 — spirit-lint · rules-index · doctor-scan · status-note · constitution-apply"
 # ───────────────────────────────────────────────────────────
 # rules·spirit skill 은 "grep 해서 찍어라" 산문이었고, doctor 3.6~3.8 은 SKILL.md 안의 bash 였어요.
-# 스크립트가 됐으니 픽스처로 판정을 고정해요. 인계 노트(STATUS.md)는 형식이 고정돼야 다음 세션이 파싱해요.
+# 스크립트가 됐으니 픽스처로 판정을 고정해요. 인계 노트(current-task.json handoff)는 형식이 고정돼야 다음 세션이 파싱해요.
 if ! command -v jq >/dev/null 2>&1; then
     pass "§34 skip (jq 없음)"
 else
@@ -2230,6 +2230,7 @@ else
     printf '# X\n\n## CRITICAL\n\n🔴 **`AX:CRITICAL:001`** — 결제 API 는 멱등성 키 필수\n\n## MANDATORY\n\n🟡 **`AX:MANDATORY:001`** ADR 필수\n\n## CONVENTION\n\n@.ax/spirit/rules/security.md\n' > "$RS/AGENTS.md"
     touch "$RS/.ax/docs/spec/003-x/README.md"; printf '.ax/state.json\n' > "$RS/.gitignore"
     echo '{"hooks":{}}' > "$RS/.claude/settings.json"
+    echo '{"phase":"idle"}' > "$RS/.ax/current-task.json"
     rs() { GOAX_PROJECT_DIR="$RS" bash "$RS/.ax/scripts/bash/$1" "${@:2}" 2>/dev/null; }
 
     # spirit-lint — 비표준 헤더 · 교차 중복 · 카운트
@@ -2280,8 +2281,25 @@ else
         && pass "status-note --done — 끝난 항목 제거" || fail "status-note --done 실패"
     for i in $(seq 1 40); do rs status-note.sh --add open "q$i" >/dev/null; done
     rs status-note.sh --show --json | jq -e '.status=="warning" and .result.over_cap==true' >/dev/null \
-        && pass "status-note — 40줄 상한 초과 warning" || fail "status-note — 상한 초과를 ok 로"
-    grep -q '^## 이번에 바뀐 이름' "$RS/.ax/docs/STATUS.md" && pass "status-note — 4절 헤더 형식 고정" || fail "status-note — 절 헤더 누락"
+        && pass "status-note — 40개 상한 초과 warning" || fail "status-note — 상한 초과를 ok 로"
+    jq -e '.handoff | keys == ["next","now","now_at","open","renamed"] and .now_at != null' "$RS/.ax/current-task.json" >/dev/null \
+        && jq -e '.phase=="idle"' "$RS/.ax/current-task.json" >/dev/null \
+        && pass "status-note — handoff 키 5개 고정 + now_at 스탬프 + 다른 키 보존" \
+        || fail "status-note — handoff 형식/스탬프/키 보존 불일치: $(jq -c '{keys:(.handoff|keys?),now_at:.handoff.now_at,phase}' "$RS/.ax/current-task.json" 2>/dev/null)"
+    # now_at 이 바뀌는 건 --set now 뿐이에요 — --add now 가 갱신하면 Stop 게이트의 24시간 침묵 창이 넓어져요
+    BEFORE=$(jq -r .handoff.now_at "$RS/.ax/current-task.json")
+    rs status-note.sh --add now "x" --json >/dev/null
+    [ "$(jq -r .handoff.now_at "$RS/.ax/current-task.json")" = "$BEFORE" ] \
+        && pass "status-note --add now — now_at 불변 (게이트 침묵 창 불변)" \
+        || fail "status-note --add now — now_at 이 바뀜 ($BEFORE → $(jq -r .handoff.now_at "$RS/.ax/current-task.json"))"
+    rs status-note.sh --done now "x" --json >/dev/null
+    jq -e --arg b "$BEFORE" '(.handoff.now|length)==2 and .handoff.now_at==$b' "$RS/.ax/current-task.json" >/dev/null \
+        && pass "status-note --done now — 남은 줄이 있으면 now_at 유지" \
+        || fail "status-note --done now — now/now_at 불일치: $(jq -c '.handoff|{now,now_at}' "$RS/.ax/current-task.json" 2>/dev/null)"
+    rs status-note.sh --clear now --json >/dev/null
+    jq -e '.handoff.now==[] and .handoff.now_at==null' "$RS/.ax/current-task.json" >/dev/null \
+        && pass "status-note --clear now — now 비움 + now_at null" \
+        || fail "status-note --clear now — now/now_at 잔존: $(jq -c '.handoff|{now,now_at}' "$RS/.ax/current-task.json" 2>/dev/null)"
 
     # constitution-apply — prepend 보존 · 중복 스캔은 구 본문만 · drop 은 [a] 뒤 · 인덱스
     printf '# X — Constitution\n\n## META — 핵심 가드레일\n\n🔴 **`AX:CRITICAL:001`** — 결제 API 는 멱등성 키 필수\n' > "$RS/block.md"
@@ -2301,6 +2319,13 @@ else
     rm -rf "$RS"
 fi
 
+# writer 보존 — current-task.json 은 skill 다섯 곳이 인라인 jq 로 `.x = …` 갱신해요. 누가 객체를 통째로
+# 재조립하면 (jq -n · echo/printf 리다이렉트) 그 skill 이 모르는 키(handoff 등)가 조용히 사라져요.
+# 합법 writer 는 전부 `> ….tmp && mv` 라 "current-task.json 으로 곧장 리다이렉트" 하나만 잡으면 돼요 (산문·`.tmp` 는 비매치)
+CTW=$(grep -rnE '>[[:space:]]*"?[^" ]*current-task\.json"?[[:space:]]*(#.*|<<.*)?$' "$REPO/skills" 2>/dev/null || true)
+[ -z "$CTW" ] && pass "current-task.json writer — 전부 in-place jq (미지 키 보존)" \
+              || fail "current-task.json writer — 통째 재조립 (미지 키 유실): $CTW"
+
 # 엣지 연결 — 폐기된 skill 의 트리거를 누가 받는지, 새 스크립트를 누가 부르는지 파일에 적혀 있어야 해요.
 grep -q 'spirit-lint.sh' "$REPO/skills/doctor/SKILL.md" && grep -q 'rules-index.sh' "$REPO/skills/doctor/SKILL.md" && grep -q 'doctor-scan.sh' "$REPO/skills/doctor/SKILL.md" \
     && pass "doctor — spirit-lint · rules-index · doctor-scan 을 실제로 호출" || fail "doctor — 스크립트 호출 엣지 없음"
@@ -2308,13 +2333,13 @@ grep -q 'spirit 점검' "$REPO/skills/doctor/SKILL.md" && grep -q 'rules 보여�
     && pass "doctor — 폐기된 spirit·rules 트리거를 description 에서 받음" || fail "doctor — spirit/rules 트리거 미인수 (자연어 라우팅 끊김)"
 grep -q 'rules-index.sh' "$REPO/commands/goax.md" && grep -q 'spirit-lint.sh' "$REPO/commands/goax.md" \
     && pass "/goax 인덱스 — rules·spirit 행이 스크립트를 가리킴" || fail "/goax 인덱스 — 폐기 skill 잔재"
-grep -q 'status-note.sh --show' "$REPO/skills/triage/SKILL.md" && grep -q 'STATUS.md' "$REPO/skills/triage/SKILL.md" \
-    && pass "triage — STATUS.md 를 MEMORY.md 보다 먼저 읽음" || fail "triage — 인계 노트 선독 없음"
+grep -q 'status-note.sh --show' "$REPO/skills/triage/SKILL.md" && grep -q 'handoff' "$REPO/skills/triage/SKILL.md" \
+    && pass "triage — 인계 노트를 MEMORY.md 보다 먼저 읽음" || fail "triage — 인계 노트 선독 없음"
 grep -q 'status-note.sh' "$REPO/skills/spec-implement/SKILL.md" && grep -q 'references/lane-mode.md' "$REPO/skills/spec-implement/SKILL.md" \
     && pass "spec-implement — halt·완료 시 status-note 갱신 + 레인 루프는 references" || fail "spec-implement — 인계 노트/레인 참조 없음"
 grep -q 'status-note.sh --add renamed' "$REPO/skills/spec-implement/references/lane-mode.md" \
     && pass "lane-mode — 레인 보고의 바뀐 이름을 인계 노트로" || fail "lane-mode — renamed 인계 없음"
-grep -q 'status-note.sh' "$REPO/skills/zero/SKILL.md" && pass "zero — STATUS 개설을 스크립트로" || fail "zero — STATUS 를 손으로 씀"
+grep -q 'status-note.sh' "$REPO/skills/zero/SKILL.md" && pass "zero — 인계 노트 개설을 스크립트로" || fail "zero — 인계 노트를 손으로 씀"
 grep -qE '^disallowedTools:.*Write.*Edit' "$REPO/agents/lane-scout.md" \
     && pass "lane-scout — disallowedTools 로 편집 금지 (allowlist 아님)" || fail "lane-scout — 편집 금지가 산문뿐"
 grep -qE '^tools:' "$REPO/agents/lane-scout.md" && fail "lane-scout — tools: allowlist 사용 (한 항목이라도 안 풀리면 에이전트가 안 뜸)" || true
@@ -2362,6 +2387,8 @@ else
     [ -z "$(printf '{"session_id":"s3","stop_hook_active":false}' | hx $STOP)" ] \
         && pass "stop 게이트 — 인계 노트에 spec 이 적혀 있으면 통과 (멈추는 게 의도)" || fail "stop 게이트 — 인계 노트를 무시"
     CLAUDE_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/status-note.sh" --set now "" --json >/dev/null 2>&1
+    jq -e '.handoff.now==[] and .handoff.now_at==null' "$HX/.ax/current-task.json" >/dev/null 2>&1 \
+        && pass "status-note --set now \"\" — now 비움 + now_at null" || fail "status-note --set now \"\" — now/now_at 잔존: $(jq -c '.handoff|{now,now_at}' "$HX/.ax/current-task.json" 2>/dev/null)"
     echo '{"phase":"spec","spec_dir":".ax/docs/spec/014-x"}' > "$HX/.ax/current-task.json"
     [ -z "$(printf '{"session_id":"s4","stop_hook_active":false}' | hx $STOP)" ] \
         && pass "stop 게이트 — 계획 단계(phase=spec)엔 안 잡음" || fail "stop 게이트 — 계획 단계를 잡음"
@@ -2379,6 +2406,15 @@ else
         && pass "subagent-start — goax 자기 에이전트는 건너뜀 (이미 spirit 선언)" || fail "subagent-start — 자기 에이전트에도 주입"
     echo "$O" | jq -e '(.hookSpecificOutput.additionalContext|length) < 600' >/dev/null 2>&1 \
         && pass "subagent-start — 경로만 (600자 미만, 본문 주입 아님)" || fail "subagent-start — 본문을 밀어 넣음"
+    # 인계 노트 포인터 — handoff 에 항목이 있을 때만, 경로만 (명령은 싣지 않아요)
+    CLAUDE_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/status-note.sh" --add open "q" --json >/dev/null 2>&1
+    OH=$(printf '{"session_id":"s1","hook_event_name":"SubagentStart","agent_type":"Explore"}' | hx .ax/hooks/subagent-start/harness-pointer.sh)
+    echo "$OH" | jq -e '.hookSpecificOutput.additionalContext | test("current-task.json") and test("handoff") and (test("status-note.sh")|not) and length < 600' >/dev/null 2>&1 \
+        && pass "subagent-start — handoff 가 있으면 인계 노트 경로 한 줄 (명령 없음 · 600자 미만)" || fail "subagent-start — 인계 노트 포인터 불일치: ${OH:0:160}"
+    CLAUDE_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/status-note.sh" --done open "q" --json >/dev/null 2>&1
+    printf '{"session_id":"s1","hook_event_name":"SubagentStart","agent_type":"Explore"}' | hx .ax/hooks/subagent-start/harness-pointer.sh \
+        | jq -e '.hookSpecificOutput.additionalContext | test("인계 노트") | not' >/dev/null 2>&1 \
+        && pass "subagent-start — handoff 가 비면 인계 노트 줄 없음" || fail "subagent-start — 빈 handoff 에도 인계 노트 줄"
 
     # 주입 중복 제거
     J='{"session_id":"d1","tool_input":{"file_path":"'"$HX"'/src/A.kt"}}'
@@ -2393,20 +2429,39 @@ else
     echo "$M1" | jq -e '.hookSpecificOutput.additionalContext|test("Layer 2") and test("Layer 3")' >/dev/null 2>&1 && [ -z "$M2" ] \
         && pass "module-rules-inject — 모듈·spec 포인터도 세션당 한 번" || fail "module-rules-inject — 중복 주입: [$M2]"
 
-    # doctor-scan — 이벤트 키 · 인계 노트 기한
-    printf '## 다음\n- [ ] 2020-01-01 룰 ablation 재검토\n- [ ] 2099-01-01 far\n' > "$HX/.ax/docs/STATUS.md"
+    # doctor-scan — 이벤트 키 · 인계 노트 기한 · STATUS.md 잔재
+    # 기한 줄은 writer 로 심어요 — 형식 보정까지 실사용과 같은 길을 타야 doctor 의 파싱이 실질이에요
+    CLAUDE_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/status-note.sh" --add next "- [ ] 2020-01-01 룰 ablation 재검토" --json >/dev/null 2>&1
+    CLAUDE_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/status-note.sh" --add next "- [ ] 2099-01-01 far" --json >/dev/null 2>&1
     DS=$(GOAX_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/doctor-scan.sh" --json --plugin-dir "$REPO" 2>/dev/null)
     echo "$DS" | jq -e '(.result.hooks.events.missing|index("Stop"))!=null and (.result.hooks.events.missing|index("SubagentStart"))!=null' >/dev/null 2>&1 \
         && pass "doctor-scan — settings.json 에 Stop·SubagentStart 키가 없으면 events.missing" || fail "doctor-scan — 이벤트 키 검사 없음"
     echo "$DS" | jq -e '.result.handoff.overdue==1 and .result.handoff.imminent==0 and .result.handoff.deadlines[0].status=="overdue"' >/dev/null 2>&1 \
         && pass "doctor-scan — 인계 노트 기한 초과 1 · 먼 기한은 ok (I3 규칙)" || fail "doctor-scan — 기한 판정 불일치: $(echo "$DS" | jq -c .result.handoff)"
+    # 옛 인계 노트 파일이 남아 있으면 잔재로 알려요 — 자동 삭제·import 는 없어요
+    mkdir -p "$HX/.ax/docs"; touch "$HX/.ax/docs/STATUS.md"
+    DS2=$(GOAX_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/doctor-scan.sh" --json --plugin-dir "$REPO" 2>/dev/null)
+    echo "$DS2" | jq -e --argjson before "$(echo "$DS" | jq '.result.findings // -1')" '.result.migration.stale_status_md==true and .result.findings==$before+1' >/dev/null 2>&1 \
+        && pass "doctor-scan — .ax/docs/STATUS.md 잔재 → migration.stale_status_md · findings +1" \
+        || fail "doctor-scan — STATUS.md 잔재 미검출: stale=$(echo "$DS2" | jq -r '.result.migration.stale_status_md') findings=$(echo "$DS" | jq -r .result.findings)→$(echo "$DS2" | jq -r .result.findings)"
+    rm -f "$HX/.ax/docs/STATUS.md"
+    GOAX_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/doctor-scan.sh" --json --plugin-dir "$REPO" 2>/dev/null | jq -e '.result.migration.stale_status_md==false' >/dev/null 2>&1 \
+        && pass "doctor-scan — STATUS.md 없으면 stale_status_md false" || fail "doctor-scan — STATUS.md 없는데 잔재로 봄"
 
     # zero-ablation — 회차 기록 + 다음 기한
     GOAX_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/zero-ablation.sh" --off --json >/dev/null 2>&1
     AB=$(GOAX_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/zero-ablation.sh" --on --json 2>/dev/null)
-    echo "$AB" | jq -e '.result.last_round!="" and .result.next_due!=""' >/dev/null 2>&1 && grep -q '^- \[ \] 20[0-9][0-9]-[0-9][0-9]-[0-9][0-9] 룰 ablation 재검토' "$HX/.ax/docs/STATUS.md" \
-        && ! grep -q '2020-01-01 룰 ablation' "$HX/.ax/docs/STATUS.md" \
-        && pass "zero-ablation --on — 회차 기록 + 다음 기한(+180일)을 STATUS.md 체크박스로 (옛 기한은 제거)" || fail "zero-ablation — 회차/기한 기록 실패: $(echo "$AB" | jq -c .result)"
+    echo "$AB" | jq -e '.result.last_round!="" and .result.next_due!=""' >/dev/null 2>&1 \
+        && jq -e '.handoff.next | any(test("^- \\[ \\] 20[0-9]{2}-[0-9]{2}-[0-9]{2} 룰 ablation 재검토"))' "$HX/.ax/current-task.json" >/dev/null 2>&1 \
+        && jq -e '.handoff.next | any(test("2020-01-01 룰 ablation")) | not' "$HX/.ax/current-task.json" >/dev/null 2>&1 \
+        && pass "zero-ablation --on — 회차 기록 + 다음 기한(+180일)을 인계 노트 체크박스로 (옛 기한은 제거)" || fail "zero-ablation — 회차/기한 기록 실패: $(echo "$AB" | jq -c .result) next=$(jq -c .handoff.next "$HX/.ax/current-task.json" 2>/dev/null)"
+
+    # tier-from-state --reset — task 필드는 비우고 handoff 는 남겨요 (next·open·renamed 는 task 를 넘어 살아요).
+    # HX 의 phase 는 아직 implementing 이라 idle 판정이 실질이에요 — 이 검사가 §35 의 마지막이어야 해요.
+    CLAUDE_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/status-note.sh" --add next "살아남기" --json >/dev/null 2>&1
+    GOAX_PROJECT_DIR="$HX" bash "$HX/.ax/scripts/bash/tier-from-state.sh" --reset --json >/dev/null 2>&1
+    jq -e '.phase=="idle" and (.handoff.next|index("- 살아남기"))!=null' "$HX/.ax/current-task.json" >/dev/null 2>&1 \
+        && pass "tier-from-state --reset — handoff 는 지우지 않아요" || fail "tier-from-state --reset — phase/handoff 불일치: $(jq -c '{phase,next:.handoff.next}' "$HX/.ax/current-task.json" 2>/dev/null)"
     rm -rf "$HX"
 fi
 
@@ -2421,6 +2476,8 @@ grep -q '"SubagentStart"' "$REPO/templates/default/.claude/settings.json.templat
     && pass "settings.json.template — SubagentStart · Stop 이벤트 등록" || fail "settings.json.template — 새 이벤트 미등록"
 grep -q 'events.missing' "$REPO/skills/doctor/SKILL.md" && grep -q 'handoff.deadlines' "$REPO/skills/doctor/SKILL.md" \
     && pass "doctor — 이벤트 키 · 인계 노트 기한을 실제로 읽음" || fail "doctor — 새 검사 결과를 안 읽음"
+grep -q 'stale_status_md' "$REPO/skills/doctor/SKILL.md" \
+    && pass "doctor — STATUS.md 잔재(stale_status_md)를 실제로 읽음" || fail "doctor — 잔재 통지 결과를 안 읽음"
 grep -q 'goax_inject_fresh' "$REPO/templates/default/.ax/hooks/pre-edit/spirit-rules-inject.sh" && grep -q 'goax_inject_fresh' "$REPO/templates/default/.ax/hooks/pre-edit/module-rules-inject.sh" \
     && pass "주입 훅 둘 다 goax_inject_fresh 로 세션 dedupe" || fail "주입 훅 dedupe 누락"
 
@@ -2863,12 +2920,12 @@ else
     echo '{"phase":"implementing","spec_dir":".ax/docs/spec/014-x","size":"M","risk":"L1"}' > "$ST/.ax/current-task.json"
     echo '{"hooks":{}}' > "$ST/.claude/settings.json"
     CLAUDE_PROJECT_DIR="$ST" bash "$ST/.ax/scripts/bash/status-note.sh" --set now "spec 014-x 에서 멈춤 — T001" --json >/dev/null 2>&1
-    grep -qE '\([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z\)$' "$ST/.ax/docs/STATUS.md" \
-        && pass "status-note --set now — 마지막 줄에 (YYYY-MM-DDTHH:MMZ) 시각" || fail "status-note --set now — 시각 없음 (기한 판정 불가)"
+    jq -r '.handoff.now_at' "$ST/.ax/current-task.json" 2>/dev/null | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z$' \
+        && pass "status-note --set now — now_at 에 YYYY-MM-DDTHH:MMZ" || fail "status-note --set now — now_at 없음 (기한 판정 불가): $(jq -c '.handoff.now_at' "$ST/.ax/current-task.json" 2>/dev/null)"
     [ -z "$(printf '{"session_id":"f1","stop_hook_active":false}' | CLAUDE_PROJECT_DIR="$ST" bash "$ST/.ax/hooks/stop/spec-gate.sh" 2>/dev/null)" ] \
         && pass "stop 게이트 — 방금 쓴 인계 노트는 인정 (통과)" || fail "stop 게이트 — 신선한 노트를 무시"
     # 시각만 과거로 바꿔요 — 노트 내용은 그대로인데 24시간이 지났어요
-    sed 's/([0-9-]*T[0-9:]*Z)$/(2020-01-01T00:00Z)/' "$ST/.ax/docs/STATUS.md" > "$ST/status.tmp" && mv "$ST/status.tmp" "$ST/.ax/docs/STATUS.md"
+    jq '.handoff.now_at="2020-01-01T00:00Z"' "$ST/.ax/current-task.json" > "$ST/ct.tmp" && mv "$ST/ct.tmp" "$ST/.ax/current-task.json"
     printf '{"session_id":"f2","stop_hook_active":false}' | CLAUDE_PROJECT_DIR="$ST" bash "$ST/.ax/hooks/stop/spec-gate.sh" 2>/dev/null \
         | jq -e '.decision=="block"' >/dev/null 2>&1 \
         && pass "stop 게이트 — 24시간 지난 인계 노트는 불인정 (영구 통과증 아님)" || fail "stop 게이트 — 오래된 노트로 영구 통과"
@@ -3200,7 +3257,7 @@ fi
 # ───────────────────────────────────────────────────────────
 section "43. 파일 쓰기 락 — 같은 파일을 두 프로세스가 쓸 때"
 # ───────────────────────────────────────────────────────────
-# §36 이 원장(tasks.md·state.json)을 봤다면 여기는 나머지 넷이에요 — STATUS.md ·
+# §36 이 원장(tasks.md·state.json)을 봤다면 여기는 나머지 넷이에요 — current-task.json(handoff) ·
 # .claude/settings.json · AGENTS.md · .ax/config.yml. 락 창이 `mv` 가 아니라 **"바꿀지 정하는
 # 첫 읽기"** 부터여야 멱등 프로브가 보호돼요. 실측(수정 전): zero-init 5개 동시 실행이 같은
 # 훅을 3번 등록했고, status-note --add 동시 2개는 10회 중 10회 한쪽을 잃었어요.
@@ -3212,7 +3269,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     LK=$(mktemp -d)
     mkdir -p "$LK/.ax/scripts/bash" "$LK/.ax/docs" "$LK/.claude"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,status-note,register-spirit-hook,build-memory,zero-init,constitution-apply,zero-domain-risk}.sh "$LK/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,status-note,tier-from-state,register-spirit-hook,build-memory,zero-init,constitution-apply,zero-domain-risk}.sh "$LK/.ax/scripts/bash/"
     LKB="$LK/.ax/scripts/bash"
     # 최소 대상 — 출고 AGENTS.md 는 이미 `## 4계층 인덱스` 와 AX 토큰을 담고 있어서
     # prepend·index 두 모드가 전부 skip(exit 2) 로 빠져요. 경합을 재려면 둘 다 없어야 해요.
@@ -3220,7 +3277,8 @@ else
         printf '{"hooks":{}}\n' > "$LK/.claude/settings.json"
         printf '# 픽스처 — Constitution\n\n## 개요\n\n회귀용 최소 대상이에요.\n' > "$LK/AGENTS.md"
         printf 'default_risk: L1\ndomain_risk:\n  payment: L3\n  search: L1\n  billing: L2\n  auth: L3\n' > "$LK/.ax/config.yml"
-        rm -rf "$LK/.ax/docs/STATUS.md" "$LK"/*.lock "$LK"/.ax/*.lock "$LK"/.claude/*.lock "$LK"/.ax/docs/*.lock
+        echo '{"phase":"idle"}' > "$LK/.ax/current-task.json"
+        rm -rf "$LK"/*.lock "$LK"/.ax/*.lock "$LK"/.claude/*.lock "$LK"/.ax/docs/*.lock
     }
     printf '## FIXTURE — 회귀용 가드레일\n\n🔴 **`AX:CRITICAL:901`** — 시크릿을 커밋하지 않아요.\n' > "$LK/block.md"
     printf '## 4계층 인덱스\n\n- Layer 1 — Constitution\n' > "$LK/.ax/AGENTS.md.suggested"
@@ -3264,9 +3322,10 @@ else
     for i in 1 2 3 4 5; do ( lkrun status-note.sh --init --json >/dev/null 2>&1; echo $? > "$LK/rc.$i" ) & done
     wait
     for i in 1 2 3 4 5; do rc4="$rc4$(cat "$LK/rc.$i")"; done
-    [ "$(grep -c '^## 다음' "$LK/.ax/docs/STATUS.md")" -eq 1 ] && [ "$rc4" = "00000" ] \
-        && pass "status-note --init ×5 동시 — 절 헤더가 한 번씩만 (전부 exit 0)" \
-        || fail "status-note --init ×5 동시 — '## 다음' $(grep -c '^## 다음' "$LK/.ax/docs/STATUS.md")회 / rc=$rc4"
+    jq -e '.handoff | keys == ["next","now","now_at","open","renamed"]' "$LK/.ax/current-task.json" >/dev/null 2>&1 \
+        && jq -e '.phase=="idle"' "$LK/.ax/current-task.json" >/dev/null 2>&1 && [ "$rc4" = "00000" ] \
+        && pass "status-note --init ×5 동시 — handoff 키 5개 정확히 · phase 보존 (전부 exit 0)" \
+        || fail "status-note --init ×5 동시 — $(jq -c '{keys:(.handoff|keys?),phase}' "$LK/.ax/current-task.json" 2>/dev/null) / rc=$rc4"
 
     # 2) 교차 실행 — 락 경로가 갈리면 여기서 빨개져요
     lost=0
@@ -3275,7 +3334,7 @@ else
         ( lkrun status-note.sh --add next "항목A" --json >/dev/null 2>&1 ) &
         ( lkrun status-note.sh --add next "항목B" --json >/dev/null 2>&1 ) &
         wait
-        grep -q '항목A' "$LK/.ax/docs/STATUS.md" && grep -q '항목B' "$LK/.ax/docs/STATUS.md" || lost=$((lost+1))
+        jq -e '.handoff.next | (index("- 항목A")!=null and index("- 항목B")!=null)' "$LK/.ax/current-task.json" >/dev/null 2>&1 || lost=$((lost+1))
     done
     [ "$lost" -eq 0 ] && pass "status-note --add 동시 10회 — 항목 유실 0 (수정 전 10/10 유실)" \
                       || fail "status-note --add 동시 10회 — ${lost}회 유실"
@@ -3292,6 +3351,19 @@ else
     done
     [ "$both" -eq 5 ] && pass "register-spirit-hook ‖ zero-init 5회 — 두 훅 다 생존 (락 경로 문자열 동일)" \
                       || fail "register-spirit-hook ‖ zero-init — $both/5회만 둘 다 생존"
+
+    # current-task.json 을 쓰는 두 스크립트 — status-note 의 handoff 추가와 tier-from-state 의 task 필드 리셋이
+    # 같은 락을 잡아야 해요. seed 는 implementing — idle 로 심으면 phase 판정이 공허해요.
+    ct_both=0
+    for i in 1 2 3 4 5; do
+        seed_lk; echo '{"phase":"implementing"}' > "$LK/.ax/current-task.json"
+        ( lkrun status-note.sh --add next "항목$i" --json >/dev/null 2>&1 ) &
+        ( lkrun tier-from-state.sh --reset --json >/dev/null 2>&1 ) &
+        wait
+        jq -e --arg i "- 항목$i" '(.handoff.next|index($i))!=null and .phase=="idle"' "$LK/.ax/current-task.json" >/dev/null 2>&1 && ct_both=$((ct_both+1))
+    done
+    [ "$ct_both" -eq 5 ] && pass "status-note --add ‖ tier-from-state --reset 5회 — 둘 다 생존 (락 경로 문자열 동일)" \
+                         || fail "status-note --add ‖ tier-from-state --reset — $ct_both/5회만 둘 다 생존"
 
     survive=0
     for i in 1 2 3 4 5; do
@@ -3335,14 +3407,14 @@ else
     lkrun zero-init.sh --plugin-dir "$REPO" --dry-run --json >/dev/null 2>&1
     lkrun constitution-apply.sh --block "$LK/block.md" --target AGENTS.md --dry-run --json >/dev/null 2>&1
     lkrun zero-domain-risk.sh --set "payment=L3" --dry-run --json >/dev/null 2>&1
-    [ "$(find "$LK" -name '*.lock' | wc -l | tr -d ' ')" -eq 0 ] && [ ! -f "$LK/.ax/docs/STATUS.md" ] \
-        && pass "--dry-run 7종 — .lock 을 안 만들고 STATUS.md 도 안 만듦" \
-        || fail "--dry-run — .lock $(find "$LK" -name '*.lock' | wc -l | tr -d ' ')개 / STATUS.md $([ -f "$LK/.ax/docs/STATUS.md" ] && echo 생성됨 || echo 없음)"
+    [ "$(find "$LK" -name '*.lock' | wc -l | tr -d ' ')" -eq 0 ] && jq -e 'has("handoff")|not' "$LK/.ax/current-task.json" >/dev/null 2>&1 \
+        && pass "--dry-run 7종 — .lock 을 안 만들고 handoff 도 안 만듦" \
+        || fail "--dry-run — .lock $(find "$LK" -name '*.lock' | wc -l | tr -d ' ')개 / handoff $(jq -r 'has("handoff")' "$LK/.ax/current-task.json" 2>/dev/null)"
 
     # 4) 계약 — 이미 잡힌 락 앞에서는 exit 1 + {"status":"error"} (기본 10s 를 기다리지 않게 =1)
     seed_lk
     lkrun status-note.sh --init --json >/dev/null 2>&1
-    mkdir -p "$LK/.ax/docs/STATUS.md.lock" "$LK/.claude/settings.json.lock" "$LK/.ax/MEMORY.md.lock" \
+    mkdir -p "$LK/.ax/current-task.json.lock" "$LK/.claude/settings.json.lock" "$LK/.ax/MEMORY.md.lock" \
              "$LK/AGENTS.md.lock" "$LK/.ax/config.yml.lock"
     lock_bad=0
     check_locked() {   # check_locked <라벨> <스크립트> [인자…]
@@ -3360,7 +3432,8 @@ else
     check_locked zero-init          zero-init.sh --plugin-dir "$REPO" --json
     check_locked constitution-apply constitution-apply.sh --block "$LK/block.md" --target AGENTS.md --force --json
     check_locked zero-domain-risk   zero-domain-risk.sh --set "payment=L2" --json
-    [ "$lock_bad" -eq 0 ] && pass "락 대기 초과 6종 — exit 1 + {\"status\":\"error\"} 봉투 (GOAX_LOCK_TIMEOUT=1)"
+    check_locked tier-from-state    tier-from-state.sh --reset --json
+    [ "$lock_bad" -eq 0 ] && pass "락 대기 초과 7종 — exit 1 + {\"status\":\"error\"} 봉투 (GOAX_LOCK_TIMEOUT=1)"
     # 손으로 만든 락엔 pid 파일이 없고 stale 문턱에 닿기 전에 타임아웃 나서, 뺏기지 않아요
     [ "$(find "$LK" -name '*.lock' -type d | wc -l | tr -d ' ')" -eq 5 ] \
         && pass "락 대기 초과 — 남의 락을 뺏지 않음 (5개 그대로)" \

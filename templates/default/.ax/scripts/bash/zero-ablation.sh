@@ -18,8 +18,8 @@
 #   --off  `.ax/spirit/rules/<name>.md` → `<name>.md.ablated` 로 rename (내용 보존)
 #   --on   `.ablated` 를 전부 되돌려요
 #   --status 지금 꺼진 룰과 켜진 룰, 마지막 회차(.ax/.ablation-last)와 다음 기한(+180일)
-#   --on 은 한 회차의 끝 — 마지막 회차를 기록하고 다음 기한을 .ax/docs/STATUS.md "다음" 에 체크박스로 넣어요
-#   (status-note.sh). doctor 가 그 날짜를 I3 처럼 추적해요 (임박·초과)
+#   --on 은 한 회차의 끝 — 마지막 회차를 기록하고 다음 기한을 인계 노트(status-note.sh --show) "다음" 에
+#   체크박스로 넣어요 (status-note.sh --add next). doctor 가 그 날짜를 I3 처럼 추적해요 (임박·초과)
 #
 #   `.ax/spirit/rules/*.md.ablated` 는 확장자가 `.md` 가 아니라서 주입 훅·doctor 가 안 봐요.
 #   절차 문서: `.ax/_templates/zero/ablation.md`
@@ -145,7 +145,7 @@ if [ "$ACTIVE_N" -eq 0 ] && [ "$ABLATED_N" -eq 0 ]; then
 fi
 
 # ── 회차 기록 — --on 이 한 회차의 끝이에요. 다음 기한(6개월)을 인계 노트에 체크박스로 박아요.
-# 날짜가 문서 안에만 있으면 이 절차는 영영 안 돌아요 — doctor 가 STATUS.md 의 기한을 I3 처럼 추적해요.
+# 날짜가 문서 안에만 있으면 이 절차는 영영 안 돌아요 — doctor 가 인계 노트(status-note.sh --show)의 기한을 I3 처럼 추적해요.
 LAST_FILE="$PROJECT_ROOT/.ax/.ablation-last"
 if [ "$MODE" = "on" ] && [ "$DRY_RUN" = false ] && [ "$CHANGED" -gt 0 ]; then
     date +%F > "$LAST_FILE" 2>/dev/null || true
@@ -153,7 +153,7 @@ if [ "$MODE" = "on" ] && [ "$DRY_RUN" = false ] && [ "$CHANGED" -gt 0 ]; then
     if [ -n "$DUE" ] && [ -f "$SCRIPT_DIR/status-note.sh" ]; then
         bash "$SCRIPT_DIR/status-note.sh" --done next "룰 ablation 재검토" --json >/dev/null 2>&1 || true
         bash "$SCRIPT_DIR/status-note.sh" --add next "- [ ] $DUE 룰 ablation 재검토 (.ax/_templates/zero/ablation.md)" --json >/dev/null 2>&1 || true
-        NEXT="$NEXT · 다음 회차 $DUE 를 .ax/docs/STATUS.md 에 적었어요"
+        NEXT="$NEXT · 다음 회차 $DUE 를 인계 노트(status-note.sh --show)에 적었어요"
     fi
 fi
 LAST_ROUND=""; [ -f "$LAST_FILE" ] && LAST_ROUND=$(tr -d '[:space:]' < "$LAST_FILE" 2>/dev/null || true)
@@ -162,7 +162,7 @@ if [ -n "$LAST_ROUND" ]; then
     NEXT_DUE=$(date -j -v+180d -f '%Y-%m-%d' "$LAST_ROUND" +%F 2>/dev/null || date -d "$LAST_ROUND +180 days" +%F 2>/dev/null || true)
 fi
 if [ "$MODE" = "status" ] && [ -z "$LAST_ROUND" ]; then
-    NEXT="$NEXT · 아직 한 회차도 안 돌았어요 — 첫 기한은 zero §13 이 STATUS.md 에 적어요"
+    NEXT="$NEXT · 아직 한 회차도 안 돌았어요 — 첫 기한은 zero §13 이 인계 노트(status-note.sh --show)에 적어요"
 fi
 
 # 되돌리지 못한 게 있으면 ok 로 넘기지 않아요 — 사용자가 합쳐야 끝나는 상태예요

@@ -39,7 +39,7 @@ done
 # Spirit
 [ -f .ax/spirit/values.md ] && LINES="${LINES}  Spirit · 가치·말투        →  .ax/spirit/values.md · .ax/spirit/tone.md"$'\n'
 
-# Layer 3 — 진행 중인 spec
+# Layer 3 — 진행 중인 spec · 인계 노트 (둘 다 current-task.json 하나에서)
 if [ -f .ax/current-task.json ]; then
     PHASE=$(jq -r '.phase // "idle"' .ax/current-task.json 2>/dev/null || echo idle)
     SPEC_DIR=$(jq -r '.spec_dir // empty' .ax/current-task.json 2>/dev/null || true)
@@ -48,10 +48,11 @@ if [ -f .ax/current-task.json ]; then
         [ -f "$SPEC_DIR/tasks.md" ] && LINES="${LINES} · ${SPEC_DIR}/tasks.md"
         LINES="${LINES}"$'\n'
     fi
+    # 인계 노트 — handoff 네 절에 항목이 하나라도 있으면 경로만 (본문·명령은 싣지 않아요)
+    HANDOFF_N=$(jq -r '(.handoff // {}) | [.now[]?, .next[]?, .open[]?, .renamed[]?] | length' .ax/current-task.json 2>/dev/null || echo 0)
+    [ "${HANDOFF_N:-0}" -gt 0 ] 2>/dev/null \
+        && LINES="${LINES}  인계 노트                →  .ax/current-task.json  (handoff: 막힌 것 · 열린 질문 · 바뀐 이름)"$'\n'
 fi
-
-# 인계 노트
-[ -f .ax/docs/STATUS.md ] && LINES="${LINES}  인계 노트                →  .ax/docs/STATUS.md  (막힌 것 · 열린 질문 · 바뀐 이름)"$'\n'
 
 [ -z "$LINES" ] && exit 0
 

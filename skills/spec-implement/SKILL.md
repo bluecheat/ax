@@ -400,7 +400,7 @@ jq '.last_skill = "spec-implement" | .skill_calls = ((.skill_calls // 0) + 1) | 
 ## 관련 룰
 
 - `references/lane-mode.md` — 레인 모드 코디네이터 루프 (`LANE_N > 0` 일 때만)
-- `.ax/docs/STATUS.md` — 인계 노트 (`status-note.sh`). halt·완료·레인 보고 시점에 갱신해요
+- `.ax/current-task.json` `handoff` — 인계 노트 (`status-note.sh`). halt·완료·레인 보고 시점에 갱신해요
 
 - `.ax/docs/reference/confirmation-policy.md` — friction 결정 규칙 SSOT (C1~C5)
 - `.ax/docs/reference/triage-matrix.md` — size×risk 별 friction 모드 매핑

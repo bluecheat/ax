@@ -68,11 +68,14 @@ idle → triaged → spec → spec_checked → tasks → implementing → review
 | `review` | spec-implement §8.1 (evaluator 대기) | `review ●` |
 | `idle` | spec-implement §8.2 (`reset-task.sh`) | `idle` |
 
+`handoff` 하위 객체 (`current-task.json.handoff`) — 누가 쓰나: `status-note.sh` 만. 언제: halt·완료·레인 보고·zero §13·onboarding 9단계.
+`reset-task.sh` 의 phase 리셋에 살아남아요 (next·open·renamed 는 task 를 넘어 살아야 해요).
+
 `done`·`blocked` 는 폐기됐어요 — 완료는 `reset-task.sh` 가 곧바로 idle 로 닫고, 막힘은 `blocked_by` 배열이 표현해요.
 
 각 skill이 phase 갱신. `doctor`가 phase 보고 결손 진단.
 
-**세션 간 인계는 phase 가 아니라 `.ax/docs/STATUS.md`** 예요 (`status-note.sh` — 지금 상태 · 다음 · 열린 질문 · 이번에 바뀐 이름). `triage` 가 매 작업 진입 때 MEMORY.md 보다 먼저 읽고, `spec-implement` 가 halt·완료·레인 보고 시점에 갱신하고, `zero` 가 첫날 끝에 개설해요. 대화가 압축되면 사라지는 것만 담고, 끝난 항목은 지워요.
+**세션 간 인계는 phase 가 아니라 `current-task.json` 의 `handoff`** 예요 (`status-note.sh` — 지금 상태 · 다음 · 열린 질문 · 이번에 바뀐 이름). `triage` 가 매 작업 진입 때 MEMORY.md 보다 먼저 읽고, `spec-implement` 가 halt·완료·레인 보고 시점에 갱신하고, `zero` 가 첫날 끝에 개설해요. 대화가 압축되면 사라지는 것만 담고, 끝난 항목은 지워요.
 
 ## Mistake Loop — capture(mistake) vs review(audit) 분리
 

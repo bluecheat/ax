@@ -35,11 +35,11 @@ description: "사용자가 새 작업·기능·수정·리팩토링·버그 fix�
 
 LLM 분류 전에 **bash로 후보 자료를 좁혀요**. 큰 프로젝트(>1000 파일)일수록 이게 정확도·속도를 결정해요.
 
-### 1.0 STATUS.md → MEMORY.md — 인계 노트 먼저, 그다음 룰 토큰
+### 1.0 인계 노트 → MEMORY.md — 인계 노트 먼저, 그다음 룰 토큰
 
 검색 전에 두 파일을 순서대로 읽어요. 둘 다 작아요.
 
-**① `.ax/docs/STATUS.md` — 세션 간 인계 노트.** 결정은 ADR, 진행은 tasks.md, 단계는 current-task.json 에
+**① `.ax/current-task.json` 의 `handoff` — 세션 간 인계 노트.** 결정은 ADR, 진행은 tasks.md, 단계는 current-task.json 의 `phase` 에
 있지만 "막힌 것 · 열린 질문 · 이번에 바뀐 공유 이름 · 다음 세션이 처음 할 일" 은 여기에만 있어요. 대화가
 압축되면 사라지는 것들이라 파일로 받아요.
 
@@ -50,7 +50,7 @@ bash .ax/scripts/bash/status-note.sh --show --json   # result.sections.{now,next
 - `next` 에 항목이 있고 사용자 요청이 그것과 같으면 → 새 분류 없이 그 작업으로 이어가요 (3.5단계에서 `phase` 유지)
 - `open` 에 사용자 결정 대기가 있고 지금 요청이 그 결정에 걸리면 → 0단계 의도 확인에서 **그 질문부터** 물어요
 - `renamed` 는 키워드 추출(1.1)에 넣어요 — 옛 이름으로 검색하면 못 찾아요
-- 파일이 없으면 그냥 넘어가요 (첫 세션이거나 `zero`·`spec-implement` 가 아직 안 적은 거예요)
+- `exists:false` 면 그냥 넘어가요 (첫 세션이거나 `zero`·`spec-implement` 가 아직 안 적은 거예요)
 
 **② `.ax/MEMORY.md` — 룰 토큰 인덱스.** 재생성하고 읽어요:
 

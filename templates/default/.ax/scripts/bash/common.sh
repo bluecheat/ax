@@ -391,8 +391,8 @@ goax_rules_matching() {
 #   mkdir 은 POSIX 에서 원자적이라 flock(리눅스 전용) 없이 macOS/BSD 에서도 상호배제가 돼요.
 #
 #   같은 `tmp.$$` && `mv` 패턴을 쓰는 스크립트는 전부 이 헬퍼를 거쳐야 해요:
-#     lanes-dispatch · tasks-gate · status-note · register-spirit-hook · build-memory ·
-#     zero-init · zero-domain-risk · constitution-apply · update-state
+#     lanes-dispatch · tasks-gate · status-note · tier-from-state(--reset) · register-spirit-hook ·
+#     build-memory · zero-init · zero-domain-risk · constitution-apply · update-state
 #
 # Usage:
 #   goax_lock "$FILE.lock" || fail "다른 프로세스가 원장을 쓰는 중이에요"
