@@ -4,6 +4,7 @@
 
 ## 버전
 
+- [0.5.13](0.5.13.md) — `spec-completion-gate.sh` 가 spec 없는 triage 직후 매 커밋마다 jq 에러를 찍던 것
 - [0.5.12](0.5.12.md) — 상태 파일을 쓰는 SKILL.md 인라인 jq 가 무락이던 것 (`update-task.sh` 신설 · `update-state.sh --skill` · 20군데 흡수 · writer 계약 · `goax_help`)
 - [0.5.11](0.5.11.md) — 인계 노트가 세 번째 상태 파일이던 것 (`.ax/docs/STATUS.md` → `current-task.json` 의 `handoff`)
 - [0.5.10](0.5.10.md) — dry-run 이 spec 번호를 태우던 것 (예약은 쓰기인데 호출부가 --dry-run 을 안 넘김) + 중첩 `.suggested` gitignore 구멍
