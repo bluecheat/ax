@@ -1619,6 +1619,14 @@ echo '{"phase":"idle"}' > "$TGH/.ax/current-task.json"
 OUT_H=$(CLAUDE_PROJECT_DIR=$TGH bash "$TGH/.ax/hooks/pre-commit/spec-completion-gate.sh" 2>&1)
 [ -z "$OUT_H" ] && pass "spec-completion-gate — phase=idle 이면 조용히 통과" \
                 || fail "spec-completion-gate — idle 인데 출력함: $OUT_H"
+
+# phase=triaged 인데 spec_id/spec_dir 이 없으면 tasks-gate 가 status:skipped, result:{} 를
+# 내는데, 예전엔 result.ac_uncovered 에 jq 가 null 을 못 돌아 매 커밋마다 jq 에러를 찍었어요
+echo '{"phase":"triaged"}' > "$TGH/.ax/current-task.json"
+OUT_H2=$(CLAUDE_PROJECT_DIR=$TGH bash "$TGH/.ax/hooks/pre-commit/spec-completion-gate.sh" 2>&1); RC_H2=$?
+[ -z "$OUT_H2" ] && [ "$RC_H2" -eq 0 ] \
+    && pass "spec-completion-gate — phase=triaged·spec 없음이면 jq 에러 없이 조용히 통과" \
+    || fail "spec-completion-gate — triaged·spec 없음인데 출력함(exit $RC_H2): $OUT_H2"
 rm -rf "$TGH"
 
 # ───────────────────────────────────────────────────────────

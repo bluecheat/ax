@@ -38,12 +38,20 @@ OUT=$(bash "$GATE" --json 2>/dev/null || true)
 [ -z "$OUT" ] && exit 0
 printf '%s' "$OUT" | jq -e '.result' >/dev/null 2>&1 || exit 0
 
+# skipped/error 는 result 가 항상 {} — 검사 못 했다는 뜻이지 위반이 아니에요.
+# tasks-gate.sh 가 이미 자기 next_step 으로 사유를 말하니 여기선 조용히 통과.
+STATUS=$(printf '%s' "$OUT" | jq -r '.status // ""')
+case "$STATUS" in
+    ok|warning) ;;
+    *) exit 0 ;;
+esac
+
 SPEC=$(printf '%s' "$OUT" | jq -r '.result.spec // ""')
 OPEN=$(printf '%s' "$OUT" | jq -r '.result.open // 0')
 PAUSED=$(printf '%s' "$OUT" | jq -r '.result.paused // 0')
 DONE=$(printf '%s' "$OUT" | jq -r '.result.done // 0')
 TOTAL=$(printf '%s' "$OUT" | jq -r '.result.total // 0')
-UNCOV=$(printf '%s' "$OUT" | jq -r '.result.ac_uncovered | join(", ")')
+UNCOV=$(printf '%s' "$OUT" | jq -r '(.result.ac_uncovered // []) | join(", ")')
 DROP=$(printf '%s' "$OUT" | jq -r '.result.task_count_drop // 0')
 UNREP=$(printf '%s' "$OUT" | jq -r '(.result.dispatched_unreported // []) | join(", ")')
 NOREP=$(printf '%s' "$OUT" | jq -r '(.result.done_without_report // []) | join(", ")')
