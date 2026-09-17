@@ -8,8 +8,9 @@
 # 장치 자체의 생사를 봐요 — 라벨이 완벽해도 아래가 죽어 있으면 아무것도 차단되지 않아요.
 #
 # Checks:
-#   C1. grep 스캐폴드 미작성 — critical-rule-grep.sh 에 #goax-grep-scaffold 마커 잔존
-#       (또는 구버전 출고본의 데모 내용 잔존: hydration/kotlin-mutable-domain 패턴)
+#   C1. grep 훅에 프로젝트 패턴이 하나도 없음 — 룰 파일의 `<!-- 검출 패턴: -->` 이 0건이고
+#       critical-rule-grep.sh 의 #goax-grep-scaffold 마커도 잔존 (둘 중 하나라도 있으면 훅은 살아 있음).
+#       구버전 출고본의 데모 내용 잔존(hydration/kotlin-mutable-domain 패턴)은 별도 finding.
 #   C2. git pre-commit 미설치 — 사람이 터미널에서 하는 커밋은 Claude Code
 #       PreToolUse 훅이 못 잡아요. install-git-hooks.sh 로 설치해야 커버.
 #   C3. 차단 능력 0 — sensors.mode 가 warning/off 이고 C2 도 미설치면, 어떤 위반도
@@ -20,7 +21,7 @@
 # JSON output schema (--json):
 #   { status: ok|warning|error,
 #     result: {
-#       grep_scaffold_unfilled: bool, grep_demo_content: bool,
+#       grep_scaffold_unfilled: bool, grep_demo_content: bool, pattern_rules: N (검출 패턴이 있는 룰 수),
 #       git_precommit_installed: bool, sensors_mode: "warning|fail|off",
 #       blocking_zero: bool, session_root_mismatch: bool,
 #       project_root: "...", claude_project_dir: "..."|null
@@ -74,6 +75,17 @@ if [ -f "$GREP_HOOK" ]; then
     # 쓰면 오탐이니, 구버전 설치가 소멸하는 시점에 이 분기 제거.
     grep -qE 'kotlin-mutable-domain|Hydration 위험' "$GREP_HOOK" 2>/dev/null && DEMO=true
 fi
+# 룰 파일의 검출 패턴 수 — 하나라도 있으면 grep 훅은 그걸로 살아 있어요 (스캐폴드 case 문은 보조)
+PATTERN_RULES=0
+if type goax_rule_patterns >/dev/null 2>&1; then
+    for rf in "$ROOT"/.ax/spirit/rules/*.md "$ROOT"/.ax/modules/*/rules.md; do
+        [ -f "$rf" ] || continue
+        case "$(basename "$rf")" in README.md) continue ;; esac
+        n=$(goax_rule_patterns "$rf" | cut -f1 | sort -u | grep -c . || true)   # 마커 수가 아니라 룰(토큰) 수
+        PATTERN_RULES=$((PATTERN_RULES + ${n:-0}))
+    done
+fi
+[ "$PATTERN_RULES" -gt 0 ] && SCAFFOLD=false     # 패턴 룰이 있으면 스캐폴드 미작성은 finding 이 아니에요
 { [ "$SCAFFOLD" = true ] || [ "$DEMO" = true ]; } && FINDINGS=$((FINDINGS + 1))
 
 # ─── C2: git pre-commit ──────────────────────────────────────────
@@ -119,13 +131,14 @@ if [ "$JSON_MODE" = true ]; then
     result=$(jq -n \
         --argjson scaffold "$SCAFFOLD" \
         --argjson demo "$DEMO" \
+        --argjson prn "$PATTERN_RULES" \
         --argjson githook "$GIT_HOOK_OK" \
         --arg mode "$SENSOR_MODE" \
         --argjson bz "$BLOCKING_ZERO" \
         --argjson rm "$ROOT_MISMATCH" \
         --arg root "$ROOT" \
         --arg cpd "$CPD" \
-        '{grep_scaffold_unfilled: $scaffold, grep_demo_content: $demo,
+        '{grep_scaffold_unfilled: $scaffold, grep_demo_content: $demo, pattern_rules: $prn,
           git_precommit_installed: $githook, sensors_mode: $mode,
           blocking_zero: $bz, session_root_mismatch: $rm,
           project_root: $root,
@@ -140,7 +153,7 @@ else
         goax_log "✓ sensor liveness pass (mode=$SENSOR_MODE, git pre-commit ✓)"
     else
         goax_log "⚠ sensor liveness: $FINDINGS finding"
-        [ "$SCAFFOLD" = true ] && echo "  C1 grep 스캐폴드 미작성 — AGENTS.md 🔴 룰의 패턴을 채우세요" >&2
+        [ "$SCAFFOLD" = true ] && echo "  C1 프로젝트 grep 패턴 0건 — 룰 파일에 \`<!-- 검출 패턴: <ERE> -->\` 를 채우세요 (스캐폴드 case 문은 패턴으로 못 쓰는 경우만)" >&2
         [ "$DEMO" = true ] && echo "  C1 grep 훅에 구버전 데모 내용 잔존 — /up 재실행으로 스캐폴드 갱신" >&2
         [ "$GIT_HOOK_OK" = false ] && echo "  C2 git pre-commit 미설치 — bash .ax/scripts/bash/install-git-hooks.sh" >&2
         [ "$BLOCKING_ZERO" = true ] && echo "  C3 차단 능력 0 — mode=$SENSOR_MODE$([ "$GIT_HOOK_OK" = false ] && echo " + git hook 부재"). 지금 어떤 위반도 자동 차단되지 않아요" >&2

@@ -20,7 +20,10 @@ adr:                                # 이 모듈의 결정 근거 ADR (선택) �
   2. 새 룰 = `## SP-<MODULE_PREFIX>-<NNN>: <한 줄 제목>` 헤더로 시작
   3. ID는 모듈 안에서 sequential (001, 002, ...)
   4. MODULE_PREFIX는 4자 이내 (예: PAY, ORD, AUTH)
-  5. 자동 검출 가능하면 `검출 패턴:` 라인에 regex
+  5. grep 으로 잡히는 룰이면 아래 `검출 패턴: <regex>` 주석 줄에 ERE 를 채우세요 — **실제로 돌아요.**
+     critical-rule-grep.sh 가 위 `paths:` 에 맞는 staged 파일을 검사해요. frontmatter 에
+     `severity: critical` 을 두면 (mode=fail 에서) 커밋을 막고, 없으면 경고만 해요.
+     ❌/✅ 예시는 zero-probe.sh 의 pattern-rules 프로브가 패턴 검증에 써요
   6. 결정 근거 있으면 `<!-- adr: .ax/docs/adr/NNNN-*.md -->` 코멘트
 -->
 

@@ -4,6 +4,7 @@ tags: [doctor, enforcement]
 runs: 3
 max_turns: 12
 timeout_seconds: 300
+allowed_tools: [Read, Glob, Grep, Skill, Agent]
 ---
 
 지금부터 이 디렉토리는 goax 가 설치된 프로젝트라고 가정해요. 먼저 다음으로 "집행

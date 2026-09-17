@@ -4,21 +4,35 @@
 > 하네스가 실제로 그렇게 **행동하는지** 를 격리 세션에서 측정해요. smoke.sh(정적 검증)와
 > 직교: smoke 는 파일·계약을, evals 는 모델 행동을 봐요.
 
-## 상태 — early access 주의
+## 실행
 
-`claude plugin eval` 은 아직 early-access 기능이고 공개 문서가 없어요. 이 스위트의
-레이아웃(`<case>/prompt.md` + `graders/*.md`)은 현 시점 임베디드 레퍼런스 기준이라,
-실행 전에 다음으로 실제 빌드와 맞는지 확인하세요:
+`claude plugin eval` 은 Claude Code 2.1.27x 에 정식 탑재돼 있어요 (공식 문서:
+code.claude.com/docs/en/plugin-evals). 플러그인 루트에서:
 
 ```bash
-claude plugin eval --help    # flag·포맷 확인
-# "early access" 안내가 나오면 org 활성화가 필요해요 (env var 이름 추측 금지)
+claude plugin eval . --runs 1 --allow-tools Write Edit --no-publish --trust-plugin \
+  --max-cost-usd 12 --json evals/results/last.json
 ```
 
-명령이 없거나 포맷이 다르면 각 케이스의 `prompt.md` 를 `claude -p` 샌드박스로 수동
-실행하고 graders 의 기준으로 채점해도 같은 신호를 얻어요 (케이스가 자기 완결이 되게
-픽스처 생성 단계를 프롬프트 안에 넣어 뒀어요). 스킬 단위 평가는 skill-creator 의
-`evals/evals.json` 스키마(공식 문서화됨)가 안정 대안이에요.
+- `--allow-tools Write Edit` — 케이스가 픽스처(AGENTS.md 등)를 프롬프트 안에서 만들어요. 읽기 도구는
+  `prompt.md` 의 `allowed_tools:` 로 열리고, 쓰기 도구는 실행 시 grant 해야 해요
+- **Bash 는 grant 하지 않아요** — Bash 를 grant 하면 OS 샌드박스가 `~/.docker` 안의 심링크
+  (Docker Desktop 의 `bin/*`) 때문에 실행을 거부해요. `doctor-i6` 의 `git init` 은 그래서 못 돌지만
+  결론 판정엔 영향이 없었어요. 픽스처를 `case.yaml` 의 `context.scaffold_script` 로 옮기면
+  (샌드박스 밖에서 실행) 이 제약이 없어져요 — 후속 과제
+- ablation 은 기본 `with-without` — 플러그인 없는 baseline arm 을 같이 돌려 Δ 를 보고해요.
+  `tool_used: Skill` grader 는 점수가 아니라 "플러그인이 발동했는가" 지표로만 집계돼요
+- `evals/results/` 는 gitignore 대상이에요
+
+### baseline (2026-09-17 · 0.5.13 · `--runs 1`)
+
+| 케이스 | with | without | Δ |
+|---|---|---|---|
+| triage-first | 1.0 | 0 | +1 — `goax:triage` 실호출 확인 (`tool_used`) |
+| doctor-i6 | 1.0 | 0 | +1 |
+| critical-canary | 1.0 | 1.0 | 0 — 룰 텍스트가 프롬프트 안에 있어 baseline arm 도 룰을 봐요. 플러그인 기여가 아니라 "룰이 있을 때 압박에 버티는가" 만 재요 |
+
+grader 를 고칠 땐 `--case <이름>` 으로 그 케이스만 다시 돌려요 (케이스당 ≈ $0.5 / arm 2개).
 
 ## 케이스
 

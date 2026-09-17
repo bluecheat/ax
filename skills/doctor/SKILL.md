@@ -210,9 +210,10 @@ RE_I1=$(echo "$RESULT" | jq -r '.result.i1_violations | length'); RE_I2=$(echo "
 RE_I3IM=$(echo "$RESULT" | jq -r '.result.i3_imminent | length'); RE_I3OD=$(echo "$RESULT" | jq -r '.result.i3_overdue | length')
 RE_I5F=$(echo "$RESULT" | jq -r '.result.i5_file_missing | length'); RE_I5R=$(echo "$RESULT" | jq -r '.result.i5_not_registered | length')
 RE_I6=$(echo "$RESULT" | jq -r '.result.i6_no_trigger | length')
+RE_I7P=$(echo "$RESULT" | jq -r '.result.i7_grep_without_pattern | length'); RE_I7H=$(echo "$RESULT" | jq -r '.result.i7_pattern_without_paths | length')
 ```
 
-- **I1** 🔴 의 `enforced_by` 는 `hook:*`/`external:*` 만 · **I2** `TODO:*` 는 deadline 필수 · **I3** 임박(≤7일)/초과 · **I5** hook 파일 존재 + settings 등록 · **I6** `external:*` 면 자동 트리거(CI workflow / git pre-commit / husky / lefthook)가 실재 — goax wrapper 만 있는 pre-commit 은 트리거로 안 쳐요. 본문: `.ax/docs/reference/rule-enforcement.md`.
+- **I1** 🔴 의 `enforced_by` 는 `hook:*`/`external:*` 만 · **I2** `TODO:*` 는 deadline 필수 · **I3** 임박(≤7일)/초과 · **I5** hook 파일 존재 + settings 등록 · **I6** `external:*` 면 자동 트리거(CI workflow / git pre-commit / husky / lefthook)가 실재 — goax wrapper 만 있는 pre-commit 은 트리거로 안 쳐요 · **I7** grep 류 룰(`enforced_kind: grep` 또는 `critical-rule-grep.sh` 를 가리키는 파일)은 룰마다 `<!-- 검출 패턴: -->` 이 있어야 하고, 패턴이 있으면 `paths:` 가 비면 안 돼요 — 둘 다 "적혀 있지만 아무것도 막지 않는" 상태예요. 본문: `.ax/docs/reference/rule-enforcement.md`.
 
 위반 0 이면 ✅ 만, 1+ 이면:
 ```
@@ -222,8 +223,9 @@ RE_I6=$(echo "$RESULT" | jq -r '.result.i6_no_trigger | length')
    ⚠️  I3 임박 N건 / 초과 N건 (deadline + days)
    ⚠️  I5 위반 — hook 파일 부재 N건 / 미등록 N건
    ❌ I6 위반 — external 인데 자동 트리거 없음 N건
+   ❌ I7 위반 — grep 류 룰인데 검출 패턴 없음 N건: <token (file)> / 패턴은 있는데 paths 비어 안 돎 N건
 ```
-다음 단계 (무거운 것부터): `[r] 라벨 강등 🔴→🟡 (I1) [최우선]` · `[w] hook 작성 후 🔴 유지 (장기)` · `[d] deadline 갱신 (강등 거부 시 — 3회 이상 연기는 강등 권장)` · `[g] deadline 입력 (I2)` · `[t] 트리거 설치 (I6) — CI 워크플로우 또는 프로젝트 전용 pre-commit + install-git-hooks.sh`. 강등은 사용자 의도 변경이라 명시 동의 필수.
+다음 단계 (무거운 것부터): `[r] 라벨 강등 🔴→🟡 (I1) [최우선]` · `[w] hook 작성 후 🔴 유지 (장기)` · `[p] 검출 패턴 채우기 (I7) — 룰 아래 \`<!-- 검출 패턴: <ERE> -->\` 한 줄 + frontmatter paths:, 채운 뒤 \`zero-probe.sh --only pattern-rules\` 로 ❌/✅ 예시 대조` · `[d] deadline 갱신 (강등 거부 시 — 3회 이상 연기는 강등 권장)` · `[g] deadline 입력 (I2)` · `[t] 트리거 설치 (I6) — CI 워크플로우 또는 프로젝트 전용 pre-commit + install-git-hooks.sh`. 강등은 사용자 의도 변경이라 명시 동의 필수.
 
 ### 3.10 Sensors — Liveness — `check-sensor-liveness.sh`
 
@@ -231,12 +233,13 @@ RE_I6=$(echo "$RESULT" | jq -r '.result.i6_no_trigger | length')
 
 ```bash
 RESULT_L=$(bash "$ROOT/.ax/scripts/bash/check-sensor-liveness.sh" --json 2>/dev/null)
-L_SCAFFOLD=$(echo "$RESULT_L" | jq -r '.result.grep_scaffold_unfilled'); L_GITHOOK=$(echo "$RESULT_L" | jq -r '.result.git_precommit_installed')
+L_SCAFFOLD=$(echo "$RESULT_L" | jq -r '.result.grep_scaffold_unfilled'); L_PATTERNS=$(echo "$RESULT_L" | jq -r '.result.pattern_rules // 0'); L_GITHOOK=$(echo "$RESULT_L" | jq -r '.result.git_precommit_installed')
 L_BZ=$(echo "$RESULT_L" | jq -r '.result.blocking_zero'); L_RM=$(echo "$RESULT_L" | jq -r '.result.session_root_mismatch'); L_ROOT=$(echo "$RESULT_L" | jq -r '.result.project_root')
 ```
 ```
 🫀 Sensors — Liveness
-   ⚠️  C1 grep 훅 미작성/데모 잔존 — AGENTS.md 🔴 룰의 패턴을 채우거나 /up 재실행
+   ⚠️  C1 프로젝트 grep 패턴 0건 — 룰 파일에 `<!-- 검출 패턴: <ERE> -->` 를 채우세요 (스캐폴드 case 문은 패턴으로 못 쓰는 경우만) / 구버전 데모 잔존이면 /up 재실행
+   ·   검출 패턴 룰 <L_PATTERNS>건 (0 이 아니면 C1 은 finding 이 아니에요)
    ⚠️  C2 git pre-commit 미설치 — bash .ax/scripts/bash/install-git-hooks.sh (사람 터미널 커밋은 PreToolUse 를 우회해요)
    ❌ C3 차단 능력 0 — mode=<sensors_mode> (+ git hook 부재). 지금 어떤 위반도 자동 차단되지 않아요
    ⚠️  C4 세션 루트 이탈 — 세션을 <L_ROOT> 에서 시작하세요

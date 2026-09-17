@@ -390,6 +390,135 @@ goax_rules_matching() {
     done
 }
 
+# ─── 룰 패턴 — 룰 파일의 `<!-- 검출 패턴: <ERE> -->` 를 기계가 읽어요 ──────────
+# goax_rule_patterns <rule-file>
+#   출력: TSV `SP-<CAT>-<NNN>\t<ERE>` — 마커 한 줄에 한 행, 파일 순서대로.
+#   `## SP-<CAT>-<NNN>:` 헤더가 현재 룰이고, 그 아래 `<!-- 검출 패턴: X -->` 의 X 가 패턴이에요
+#   (`검출 패턴:` 뒤 공백부터 ` -->` 앞까지, 앞뒤 공백 trim, 따옴표 없음). `<regex>`·`<ERE>` 처럼
+#   `<…>` 로만 된 값은 자리표시자라 버려요. frontmatter 와 코드펜스(```·~~~) 안은 안 봐요 — 출고 템플릿이 사용법을 펜스 안에 적어요.
+#   헤더 앞에 나온 마커는 귀속할 룰이 없어서 버려요.
+#
+#   이 마커는 오래전부터 두 템플릿에 있었지만 읽는 쪽이 없어서 장식이었어요 —
+#   `critical-rule-grep.sh` 가 이걸로 staged 파일을 검사하고, `zero-probe.sh` 가
+#   ❌/✅ 예시로 패턴 자체를 검증해요. 같은 마커를 두 곳이 따로 파싱하면 갈라져요 — 여기 하나예요.
+goax_rule_patterns() {
+    local file="${1:-}"
+    [ -f "$file" ] || return 0
+    awk '
+        BEGIN { fm=0; fmdone=0; fence=0; tok="" }
+        NR==1 && /^---[[:space:]]*$/ { fm=1; next }
+        fm==1 { if (/^---[[:space:]]*$/) { fm=0; fmdone=1 } next }
+        /^[[:space:]]*(```|~~~)/ { fence=!fence; next }
+        fence { next }
+        /^## SP-[[:upper:][:digit:]]+-[[:digit:]]+:/ {
+            tok=$0; sub(/^## /, "", tok); sub(/:.*$/, "", tok); next
+        }
+        /^[[:space:]]*<!--[[:space:]]*검출 패턴:/ {
+            if (tok == "") next
+            pat=$0
+            sub(/^[[:space:]]*<!--[[:space:]]*검출 패턴:[[:space:]]*/, "", pat)
+            sub(/[[:space:]]*-->[[:space:]]*$/, "", pat)
+            if (pat == "" || pat ~ /^<[^>]*>$/) next    # `<regex>`·`<ERE>` 같은 자리표시자는 패턴이 아니에요
+            printf "%s\t%s\n", tok, pat
+        }
+    ' "$file"
+}
+
+# goax_rule_examples <rule-file>
+#   출력: TSV `SP-<CAT>-<NNN>\t<bad|good>\t<예시 텍스트>`.
+#   룰 본문의 `❌ …`/`✅ …` 줄(템플릿 형식)과 `- 위반 예: …`/`- 대안: …` 줄(audit 승격 형식)을 읽어요.
+#   백틱 span 이 있으면 span 마다 한 행(위반 예를 여러 개 나열하는 형식), 없으면 줄 전체가 한 행이에요.
+#   `zero-probe.sh` 의 pattern-rules 프로브가 "❌ 는 걸리고 ✅ 는 안 걸린다" 를 재는 데 써요.
+goax_rule_examples() {
+    local file="${1:-}"
+    [ -f "$file" ] || return 0
+    awk '
+        function emit(kind, text,   n, i, parts, s) {
+            if (tok == "") return
+            n = split(text, parts, "`")
+            if (n >= 3) {
+                for (i = 2; i <= n; i += 2) { s = parts[i]; if (s != "") printf "%s\t%s\t%s\n", tok, kind, s }
+                return
+            }
+            sub(/^[[:space:]]+|[[:space:]]+$/, "", text)
+            if (text != "" && text !~ /^<.*>$/) printf "%s\t%s\t%s\n", tok, kind, text
+        }
+        BEGIN { fm=0; fence=0; tok="" }
+        NR==1 && /^---[[:space:]]*$/ { fm=1; next }
+        fm==1 { if (/^---[[:space:]]*$/) fm=0; next }
+        /^[[:space:]]*(```|~~~)/ { fence=!fence; next }
+        fence { next }
+        /^## SP-[[:upper:][:digit:]]+-[[:digit:]]+:/ { tok=$0; sub(/^## /, "", tok); sub(/:.*$/, "", tok); next }
+        /^[[:space:]]*❌/            { t=$0; sub(/^[[:space:]]*❌[[:space:]]*/, "", t); emit("bad", t); next }
+        /^[[:space:]]*✅/            { t=$0; sub(/^[[:space:]]*✅[[:space:]]*/, "", t); emit("good", t); next }
+        /^[[:space:]]*-[[:space:]]*위반 예:/ { t=$0; sub(/^[[:space:]]*-[[:space:]]*위반 예:[[:space:]]*/, "", t); emit("bad", t); next }
+        /^[[:space:]]*-[[:space:]]*대안:/    { t=$0; sub(/^[[:space:]]*-[[:space:]]*대안:[[:space:]]*/, "", t); emit("good", t); next }
+    ' "$file"
+}
+
+# goax_frontmatter_scalar <file> <key>
+#   frontmatter 의 스칼라 값 하나 (따옴표·인라인 주석 제거). 없으면 빈 문자열.
+#   `severity:` 처럼 파일 단위 메타를 읽을 때 써요 — 배열은 goax_yaml_list.
+goax_frontmatter_scalar() {
+    local file="${1:-}" key="${2:-}"
+    [ -f "$file" ] || return 0
+    awk -v key="$key" '
+        BEGIN { c=0 }
+        /^---[[:space:]]*$/ { c++; if (c==2) exit; next }
+        c==1 && $0 ~ ("^" key ":") {
+            v=$0; sub("^" key ":[[:space:]]*", "", v)
+            sub(/(^|[[:space:]])#.*$/, "", v)
+            gsub(/^[[:space:]\042\047]+|[[:space:]\042\047]+$/, "", v)
+            print v; exit
+        }
+    ' "$file"
+}
+
+# goax_glob_filter <glob>
+#   stdin 의 경로 목록에서 glob 에 맞는 것만 출력. `goax_glob_match` 와 같은 규칙인데
+#   python 을 **한 번만** 띄워요 — staged 50개 × 룰 10개를 경로마다 호출하면 프로세스 500개예요.
+#   python3 가 없으면 goax_glob_match 와 같은 substring degrade.
+goax_glob_filter() {
+    local pattern="${1:-}"
+    [ -z "$pattern" ] && return 0
+    if command -v python3 >/dev/null 2>&1; then
+        # 스크립트는 -c 로 줘요 — heredoc 으로 주면 그게 stdin 을 차지해서 경로 목록이 안 들어와요.
+        python3 -c '
+import sys, re
+pattern = sys.argv[1]
+def glob_to_regex(g):
+    out, i, n = [], 0, len(g)
+    while i < n:
+        c = g[i]
+        if c == "*":
+            if i + 1 < n and g[i+1] == "*":
+                out.append(".*"); i += 2
+                if i < n and g[i] == "/": i += 1
+                continue
+            out.append("[^/]*")
+        elif c == "?":
+            out.append("[^/]")
+        elif c in ".+(){}[]|^$\\":
+            out.append("\\" + c)
+        else:
+            out.append(c)
+        i += 1
+    return "^" + "".join(out) + "$"
+rx = re.compile(glob_to_regex(pattern))
+for line in sys.stdin:
+    p = line.rstrip("\n")
+    if p and rx.match(p):
+        print(p)
+' "$pattern" 2>/dev/null
+        return 0
+    fi
+    local tail="${pattern##*\*\*/}" p
+    while IFS= read -r p; do
+        [ -z "$p" ] && continue
+        case "$p" in *"$tail"*) printf '%s\n' "$p" ;; esac
+    done
+}
+
 # ─── 파일 쓰기 락 ───────────────────────────────────────────────────
 # goax_lock <lockdir> [timeout_s]  ·  goax_unlock <lockdir>  ·  goax_unlock_all
 #   read → 변환 → tmp → mv 를 통째로 감싸요. `mv` 자체는 원자적이지만 lost-update 는 못 막아요 —

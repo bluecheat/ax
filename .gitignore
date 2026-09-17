@@ -17,3 +17,6 @@ __pycache__/
 # Claude Code 로컬 설정 — 사람마다 다르고 로컬 경로·권한이 들어가요.
 # (사용자 전역 gitignore 에만 의존하면 다른 기여자·CI 에서 새어나가요)
 .claude/settings.local.json
+
+# claude plugin eval 실행 결과 — 매 실행마다 새 타임스탬프 디렉토리
+evals/results/

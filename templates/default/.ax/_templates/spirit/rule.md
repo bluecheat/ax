@@ -12,7 +12,8 @@ severity: convention                # critical | mandatory | convention
 enforced_by:                        # 무엇이 이 룰을 실제로 막나 — **이 줄이 없으면 검사에서
   - human:pr-review                 # 통째로 빠져요** (위반이 아니라 무검사). 쓸 수 있는 값:
                                     # hook:<경로> · external:<도구> · human:<게이트> · TODO:<YYYY-MM-DD>
-enforced_kind: human                # block | warn | arch | human | missing
+enforced_kind: human                # block | warn | grep | arch | human | missing
+                                    # grep = 아래 룰의 `검출 패턴:` 마커가 집행 (패턴 없는 룰은 doctor I7)
 # adr: .ax/docs/adr/NNNN-*.md           # 결정 근거 ADR (선택)
 ---
 
@@ -29,7 +30,10 @@ enforced_kind: human                # block | warn | arch | human | missing
   1. 새 룰 = `## SP-<PREFIX>-<NNN>: <한 줄 제목>` 헤더로 시작
   2. ID는 카테고리 안에서 sequential (001, 002, ...)
   3. PREFIX는 카테고리 prefix 4자 이내 (예: SEC, NAMING, ERR)
-  4. 자동 검출 가능하면 `검출 패턴:` 라인에 regex
+  4. grep 으로 잡히는 룰이면 아래 `검출 패턴: <regex>` 주석 줄에 ERE 를 채우세요 — **실제로 돌아요.**
+     pre-commit 의 critical-rule-grep.sh 가 위 `paths:` 에 맞는 staged 파일을 이 정규식으로
+     검사하고, severity 가 critical 이면 (mode=fail 에서) 커밋을 막아요. `paths:` 가 비면 안 돌아요.
+     ❌/✅ 예시는 프로브가 써요 — zero-probe.sh 가 "❌ 는 걸리고 ✅ 는 안 걸린다" 를 재요
   5. 결정 근거 있으면 `<!-- adr: .ax/docs/adr/NNNN-*.md -->` 코멘트
   6. doctor §3.7 spirit lint 로 검증 (헤더 형식 + SP-* 토큰 중복)
 -->
