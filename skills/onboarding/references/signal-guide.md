@@ -20,8 +20,8 @@ CRITICAL 로 분류하기 전에 **그 룰을 막는 hook 파일 경로**를 정
 |---|---|---|---|
 | 파괴적 명령 (`rm -rf /`, `git push --force`) | ✅ | 🔴 | `pre-bash/block-destructive.sh` grep |
 | 보호 경로(`CLAUDE.md`, `.ax/`) 무단 수정 | ✅ | 🔴 | `pre-edit/check-protected-paths.sh` |
-| DDL 파일명 `V{타임스탬프}__*.sql` | ✅ | 🔴 | `pre-commit/critical-rule-grep.sh` 에 추가 |
-| 신규 테스트 = Kotest+MockK | ✅ (부분) | 🔴 또는 🟡 | import grep 가능. 단 hook 등록 필수 |
+| DDL 파일명 `V{타임스탬프}__*.sql` | ✅ | 🔴 | 룰 아래 `<!-- 검출 패턴: -->` 마커 (critical-rule-grep.sh 가 읽어요) |
+| 신규 테스트 = Kotest+MockK | ✅ (부분) | 🔴 또는 🟡 | import grep 가능 — 마커 + `paths:` 로 끝나요 |
 | Spring 테스트 = `@Tags("Integration")` | ✅ | 🔴 | grep 으로 `@SpringBootTest` ↔ `@Tags` 매칭 |
 | **모듈 의존 단방향** (`Core → Adapter` 금지) | ❌ | 🟡 | grep 으로 못 잡음 — ArchUnit/Konsist 빌드 게이트 필요. 없으면 사람 리뷰 = MANDATORY |
 | 순환 의존 금지 | ❌ | 🟡 | 정적 분석 도구 없으면 MANDATORY |
@@ -82,10 +82,15 @@ invariant (doctor 가 매 호출 검증 — `check-rule-enforcement.sh`):
 
 ## hook 등록 시점 — Q5 (d.1) 각 답의 후속
 
-**[a] 지금 작성**:
+**[a] 지금 작성** — 대부분은 훅 파일이 아니라 **룰 파일의 마커 한 줄**이에요:
 1. 룰 패턴 이름·grep regex 를 사용자에게 받음 (예: "DDL 은 V숫자__이름.sql")
-2. `.ax/hooks/pre-commit/<project>-<rule>.sh` 신규 파일로 작성 (아래 가드 템플릿). shipped 파일 수정 금지
-3. diff 를 보여주고 적용 동의
+2. `.ax/spirit/rules/<project>-<category>.md` 에 룰을 적고, 그 아래 `<!-- 검출 패턴: <ERE> -->` 한 줄 +
+   frontmatter `paths:` (검사 대상 글롭) + `severity: critical` + `enforced_by: hook:.ax/hooks/pre-commit/critical-rule-grep.sh` +
+   `enforced_kind: grep`. 출고 훅이 이 마커를 읽어 staged 파일을 검사해요 — 훅 파일을 새로 만들 게 없어요
+3. `❌`/`✅` 예시(또는 `- 위반 예:`/`- 대안:`)를 실제 문자열로 적고 `bash .ax/scripts/bash/zero-probe.sh --only pattern-rules --json` 으로
+   "❌ 는 걸리고 ✅ 는 안 걸린다" 를 확인 — 안 잰 패턴은 집행이 아니에요
+4. diff 를 보여주고 적용 동의
+5. 제외 경로·여러 파일에 걸친 조건처럼 **패턴 한 줄로 안 되는 경우만** 아래 "전용 훅" 절로
 
 **[b] 나중에** (deadline 강제 + ADR checklist):
 1. deadline 입력: "언제까지 작성? (기본 +4w = `<absolute YYYY-MM-DD>`)" — 상대 형식은 즉시 절대화 (I2)
@@ -95,14 +100,38 @@ invariant (doctor 가 매 호출 검증 — `check-rule-enforcement.sh`):
    🟡 **`<scope>:MANDATORY:NNN`** *(deferred — hook 작성 전까지 임시)*
    - enforced_by: TODO:<absolute-YYYY-MM-DD>
    - enforced_kind: missing
-   - 해야 할 일: `.ax/hooks/pre-commit/<name>.sh` 작성 후 🔴 승급
+   - 해야 할 일: 룰에 `<!-- 검출 패턴: -->` 작성 (또는 전용 훅 `.ax/hooks/pre-commit/<name>.sh`) 후 🔴 승급
    ```
-4. ADR 0001 checklist 자동 추가: `- [ ] <YYYY-MM-DD> hook <name>.sh 작성 또는 룰 강등 (<scope>:MANDATORY:NNN)` — doctor 가 `- [ ]` 를 grep + deadline 비교
+4. ADR 0001 checklist 자동 추가: `- [ ] <YYYY-MM-DD> 검출 패턴/hook <name> 작성 또는 룰 강등 (<scope>:MANDATORY:NNN)` — doctor 가 `- [ ]` 를 grep + deadline 비교
 
 **[c] 강등**: 시그널을 🟡 또는 🔵 로 바꿔 prepend. ADR 0001 에 "ArchUnit 등 자동화 미도입 → MANDATORY" 명시.
 
-## 프로젝트 hook 작성 가드 — 이 블록을 그대로 복사해서 시작
+## 마커 한 줄로 끝나는 룰 — 기본 경로
 
+아래 전용 훅 예시(JUnit5 import 금지)는 마커로는 이렇게 끝나요:
+
+```markdown
+---
+category: testing
+severity: critical
+paths:
+  - "**/src/test/**/*.kt"
+enforced_by:
+  - hook:.ax/hooks/pre-commit/critical-rule-grep.sh
+enforced_kind: grep
+---
+## SP-TEST-001: 테스트는 Kotest — JUnit5 import 금지
+❌ import org.junit.jupiter.api.Test
+✅ import io.kotest.core.spec.style.DescribeSpec
+<!-- 검출 패턴: ^import[[:space:]]+(static[[:space:]]+)?org\.junit\.jupiter\. -->
+```
+
+`paths:` 가 검사 범위고 마커가 검사예요. 훅 파일도, settings.json 등록도 추가로 없어요 (출고 훅이 이미 배선돼 있어요).
+`import static` 도 정규식 한 줄에 들어가요. 못 들어가는 건 **제외 경로**(`*test/context/*` 는 skip) 같은 것 — 그때만 아래로.
+
+## 전용 훅이 필요한 경우 — 이 블록을 그대로 복사해서 시작
+
+패턴 한 줄로 표현이 안 될 때만이에요: 제외 경로 화이트리스트, 여러 파일에 걸친 조건, 파일 내용이 아니라 파일명·디렉토리 구조 검사.
 plugin shipped hook 파일은 직접 수정하지 않아요 — plugin 갱신 시 출고본으로 회귀해서 직접 넣은 패턴이 조용히 사라져요. 프로젝트별 CRITICAL 의 hook 은 *반드시 새 파일*. `pre-bash/grep-on-commit.sh` 가 `pre-commit/*.sh` 를 자동 chain 하니 새 파일은 즉시 잡혀요.
 
 ```bash

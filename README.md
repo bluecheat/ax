@@ -69,6 +69,7 @@
        │ Cross-cut: Spirit                     │ Cross-cut: Mistake Loop
        │ .ax/spirit/{values, tone, rules}      │ .ax/mistakes/ — manually captured (mistake skill)
        │ → shared attitude across sub-agents   │ → /audit review → promote to rule
+       │                                       │   (grep rules carry a `검출 패턴:` marker the pre-commit hook enforces)
 
 Sensors (deterministic):  .ax/hooks/{user-prompt, pre-bash, pre-edit, post-edit, pre-commit, subagent-start, stop}/*.sh
 Scripts (deterministic):  .ax/scripts/bash/*.sh — --json standard

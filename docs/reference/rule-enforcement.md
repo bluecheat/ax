@@ -66,12 +66,56 @@ enforced_by:
 |---|---|
 | `block` | 위반 시 commit/edit 자체 차단 (exit ≠ 0) |
 | `warn` | stderr 경고만, 작업 진행 허용 |
-| `grep` | 패턴 매칭 (block 또는 warn 의 한 형식) |
+| `grep` | 룰 아래 `<!-- 검출 패턴: <ERE> -->` 마커를 `critical-rule-grep.sh` 가 실행. 아래 "검출 패턴 마커" 절 |
 | `arch` | 의존 그래프·layer 검증 (ArchUnit/Konsist 류) |
 | `human` | 사람 검토. 도구 X. |
 | `missing` | enforce 메커니즘 자체 없음 — `🔵 CONVENTION` 외 사용 금지 |
 
 `enforced_kind` 는 정보 분류 — `enforced_by` 가 SSOT 이고, `kind` 는 reader 편의용. spec 검증은 `enforced_by` 만으로 충분.
+
+## 검출 패턴 마커 — grep 류 룰의 집행 실체
+
+`enforced_by: hook:.ax/hooks/pre-commit/critical-rule-grep.sh` 는 **그 자체로는 아무것도 안 막아요.** 출고 훅은
+secrets 표만 들고 있고, 프로젝트 룰의 패턴은 룰 파일 안에서 읽어요. 룰 하나마다 이 한 줄이 집행이에요:
+
+```markdown
+## SP-SEC-001: 시크릿 hardcode 금지
+- 위반 예: `password = "<plain-value>"`
+- 대안: `password = System.getenv("DB_PASSWORD")`
+<!-- 검출 패턴: (password|secret|api[_-]?key|token)[[:space:]]*[=:][[:space:]]*["'][^"']{6,} -->
+```
+
+**문법 (고정)**
+- 한 줄. `검출 패턴:` 다음 공백부터 ` -->` 앞까지가 ERE (`grep -E`) 원문. 따옴표 없음, 앞뒤 공백 trim.
+- `## SP-<CAT>-<NNN>:` 헤더 아래에 둬요 — 마커는 **직전 헤더의 룰**에 귀속돼요. 헤더 앞에 있으면 버려져요.
+- 한 룰에 마커 여러 줄 = OR. 코드펜스 안의 마커는 무시 (템플릿이 사용법을 펜스 안에 적어요).
+- 파서는 `common.sh` 의 `goax_rule_patterns` 하나예요 — 훅·프로브·doctor·rules-index 가 전부 이걸 써요.
+- `[a-z]` 류 브래킷 대신 `[[:lower:]]`/`[[:alnum:]]` 을 쓰세요 (훅은 `LC_COLLATE=C` 로 돌지만, 습관이 안전해요).
+
+**검사 범위·강도** — 파일 frontmatter 가 정해요:
+
+| frontmatter | 역할 |
+|---|---|
+| `paths:` | 검사 대상 글롭. **비면 그 파일의 패턴은 안 돌아요** (주입 훅과 같은 규칙 — "비우면 자동 X"). `.ax/**` 는 항상 제외 — 룰 파일 자신의 ❌ 예시가 자기 패턴에 걸려요 |
+| `severity:` | 차단 강도 (아래 표) |
+| `enforced_kind: grep` | 표기. doctor I7 이 "grep 류인데 마커 없는 룰" 을 찾는 기준 |
+
+| severity | `sensors.mode: fail` | `warning` | `off` |
+|---|---|---|---|
+| `critical` | **exit 2 (차단)** | 경고 | 무음 |
+| `mandatory` | 경고 | 경고 | 무음 |
+| `convention` | 경고 | 경고 | 무음 |
+
+🔴 만 자동 차단 — 라벨 의미 그대로예요. 위반 출력은 `file:line — SP-XXX-NNN` 뿐, 매칭 줄 본문은 안 찍어요
+(시크릿 재유출 방지). 깨진 ERE 는 `검출 패턴 문법 오류` 경고 후 그 패턴만 건너뛰어요 — 무음으로 넘기지 않아요.
+
+**예시가 패턴을 검증해요** — `zero-probe.sh` 의 내장 프로브 `pattern-rules` 가 룰의 `❌ …`/`- 위반 예:` 는 패턴에
+걸리고 `✅ …`/`- 대안:` 은 안 걸리는지를 재요. 워킹트리·인덱스를 건드리지 않아요. 예시가 없는 패턴 룰은 `skip`
+— 안 잰 패턴은 집행이 아니에요. 시크릿 류 룰의 예시 값은 `"<plain-value>"` 처럼 `<…>` 로 — 룰 패턴엔 걸리고
+secrets 스캐너는 건너뛰어요 (진짜 토큰 모양을 쓰면 룰 파일 커밋이 시크릿으로 막혀요).
+
+**한 줄로 안 되는 검사** (제외 경로, 여러 파일에 걸친 조건, 파일명·구조) 는 전용 훅 파일이에요 —
+`skills/onboarding/references/signal-guide.md` "전용 훅이 필요한 경우".
 
 ## TODO deadline 형식
 
@@ -92,6 +136,7 @@ enforced_by:
 - **I4. deadline 초과는 강등 권장** — 자동 강등 X (UX 안전: 사용자 confirm 필요). 단 doctor 는 강등 명령을 옵션 [r] 로 강조.
 - **I5. hook 경로는 실제 존재 + 배선됨** — `enforced_by: hook:.ax/hooks/...sh` 면 (a) 파일 실제 존재 (b) 배선됨. 둘 다 OK 여야 enforce 보장. 한 쪽만이면 ⚠ "활성화 안 됨". **배선의 판정은 hook 이 어디 사는지에 달렸음** — `.ax/hooks/pre-commit/*.sh` 는 `.claude/settings.json` 에 개별 등록하지 **않는** 게 정상이라 basename 으로 찾으면 안 됨. 디스패처 둘이 디렉토리째 glob 하므로 그 존재로 판정: settings.json 에 등록된 `pre-bash/grep-on-commit.sh`(에이전트 커밋) 또는 `.git/hooks/pre-commit` 의 goax chain wrapper(사람 터미널 커밋). 둘 다 없으면 위반 — 오탐을 피하려다 통과시키면 "선언한 hook 이 실제로 돈다" 는 I5 의 값어치가 사라짐. 그 밖의 hook 은 settings.json 등록을 요구.
 - **I6. external 은 자동 트리거 실재 필수** — `enforced_by: external:*` 면 그 도구를 자동으로 실행하는 표면(CI workflow[GitHub/GitLab/Circle/Jenkins/Azure/Buildkite] / `.git/hooks/pre-commit` / husky / pre-commit-framework / lefthook)이 리포에 1개 이상 있어야 함. 도구 **내용**까지는 검증하지 않지만(도구별이라 비목표 유지), **무엇이 그걸 돌리는가** 는 도구 무관하게 검증 가능. 트리거 0 이면 I1 을 통과해도 "누군가 손으로 돌릴 때만" 도는 라벨뿐인 룰. **goax wrapper 만 있는 pre-commit 은 트리거로 안 침** — up 이 전 환경 기본 설치하는 wrapper 는 `.ax/hooks/pre-commit/*.sh` 를 chain 할 뿐 external 도구를 직접 실행하지 않아서, 그걸 인정하면 I6 가 항상 통과하는 자기 무력화가 됨. 출고 훅 이외의 프로젝트 전용 chain 훅이 있을 때만 `git:pre-commit-chain` 으로 인정.
+- **I7. grep 류 룰은 패턴이 있어야 함** — 파일이 `enforced_kind: grep` 이거나 `enforced_by` 가 `critical-rule-grep.sh` 를 가리키면 그 파일의 **모든** `## SP-` 룰에 `<!-- 검출 패턴: -->` 이 있어야 해요 (`i7_grep_without_pattern`). 반대로 패턴이 있는데 `paths:` 가 비면 훅이 안 돌아요 (`i7_pattern_without_paths`). 둘 다 "적혀 있지만 아무것도 막지 않는" 상태 — I1 의 거짓 약속과 같은 종류라 `--strict` 에서 exit 1 이에요. 대응: 마커를 채우거나, grep 으로 못 잡는 룰이면 `enforced_kind` 를 `human` 으로 바꾸고 별도 파일로 옮겨요.
 
 ## 룰 파일 frontmatter / inline 표기 — 두 형태 허용
 
@@ -187,6 +232,8 @@ RULES_HOOK_MISSING=()  # enforced_by: hook:<path> 인데 파일/등록 어느 �
 - **deadline 초과 자동 강등** — UX 안전 위해 사용자 confirm 필수.
 - **`enforced_kind` 의 자동 분류** — 자유 형식 입력 → spec enum 자동 매핑은 fragile. 사용자 명시 입력.
 - **외부 도구(ArchUnit 등) 동작 검증** — `enforced_by: external:archunit` 이 선언만 — 실제 도구 활성 여부는 별도 검증.
+- **검출 패턴의 제외 글롭·다중 파일 조건** — 마커는 "파일 하나의 줄 하나가 ERE 에 걸리는가" 만 봐요. 그 밖은 전용 훅 파일 (`signal-guide.md`).
+- **AGENTS.md 인라인 룰의 패턴** — 인라인 룰엔 `paths:` 가 없어 v1 은 spirit/rules·modules/*/rules.md 만 집행해요.
 
 ## 검증 시나리오 (acceptance)
 
@@ -206,6 +253,10 @@ RULES_HOOK_MISSING=()  # enforced_by: hook:<path> 인데 파일/등록 어느 �
 | 11b | 🔴 + `external:archunit` + 자동 트리거 0 | ❌ I6 위반 — "external 인데 손으로만 돌아감" |
 | 11c | 🔴 + `external:archunit` + goax wrapper 만 (출고 훅 only) | ❌ I6 위반 — wrapper 는 external 을 실행하지 않음 |
 | 12 | 같은 룰 ID 가 CLAUDE.md inline + spirit/rules frontmatter 양쪽 | frontmatter 가 우선, doctor 출력에 "duplicated declaration" 경고 |
+| 13 | `enforced_kind: grep` 파일에 `<!-- 검출 패턴: -->` 없는 `## SP-` 룰 | ❌ I7 위반 — "grep 류인데 패턴 없음" (`--strict` exit 1) |
+| 14 | 패턴 있는 룰 + frontmatter `paths:` 비어 있음 | ❌ I7 위반 — "패턴은 있는데 paths 비어 훅이 안 돎" |
+| 15 | critical + `paths: ["**/*.kt"]` + 패턴, `mode: fail`, 위반 `.kt` stage | 훅 exit 2 · stderr `file:line — SP-…` · 본문 없음 |
+| 16 | 같은 조건에서 `severity: mandatory` | 훅 exit 0 · 경고 1줄 |
 
 ## 호환·이행
 

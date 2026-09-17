@@ -108,7 +108,7 @@ if [ "$APPLY" = true ]; then
         [ "${#MARKED[@]}" -eq 0 ] && marked_json="[]"
         RESULT=$(printf '{"token":"%s","category":"%s","marked_count":%s,"marked":%s}' \
                         "$TOKEN" "$CATEGORY" "${#MARKED[@]}" "$marked_json")
-        json_output "ok" "$RESULT" "MANDATORY 2 steps remain: (1) Edit .ax/spirit/rules/<project>-${CATEGORY}.md — add ${TOKEN} with frontmatter paths/severity/enforced_by (new file or append). (2) bash .ax/scripts/bash/promote-mistake.sh --archive --token ${TOKEN} — moves marked mistakes to _archive/YYYY/MM/. Skill must NOT report success until both done — mistake 가 .ax/mistakes/ root 에 promoted_to 마킹된 채 남아 있으면 미완료."
+        json_output "ok" "$RESULT" "MANDATORY 2 steps remain: (1) Edit .ax/spirit/rules/<project>-${CATEGORY}.md — add ${TOKEN} with frontmatter paths/severity/enforced_by (new file or append); grep 으로 잡히는 룰이면 룰 아래 <!-- 검출 패턴: <ERE> --> 한 줄 (critical-rule-grep.sh 가 실제로 돌려요 — zero-probe.sh --only pattern-rules 로 검증). (2) bash .ax/scripts/bash/promote-mistake.sh --archive --token ${TOKEN} — moves marked mistakes to _archive/YYYY/MM/. Skill must NOT report success until both done — mistake 가 .ax/mistakes/ root 에 promoted_to 마킹된 채 남아 있으면 미완료."
     else
         goax_log "✓ marked ${#MARKED[@]} mistake(s) with promoted_to=$TOKEN — MANDATORY: (1) edit spirit/rules/<project>-${CATEGORY}.md add ${TOKEN}, (2) run --archive --token ${TOKEN}"
     fi

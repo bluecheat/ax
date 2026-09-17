@@ -64,13 +64,22 @@ find .ax/mistakes -name "*.md" -mtime -7 2>/dev/null | sort # 최근 7일
  🎯 목표 반복 패턴 → CRITICAL/MANDATORY/CONVENTION 룰 승격
    (.ax/config.yml의 promotion_threshold 기준)
 
+ ▸ 집행 사다리 — 후보마다 **위에서부터** 물어요. 산문 룰은 마지막이에요
+   ① 구조로 제거할 수 있나? (디렉토리·타입·의존 방향으로 아예 못 쓰게)  → ADR + 리팩토링 task
+   ② 이미 있는 lint/CI 가 잡을 수 있나?                                → enforced_by: external:<도구> + 프로브
+   ③ grep 한 줄로 잡히나?                                               → 룰 아래 <!-- 검출 패턴: <ERE> --> (이번 커밋에서 집행)
+   ④ 셋 다 아니면                                                        → 산문 룰 (🟡/🔵 · 사람 게이트)
+   근거: 룰·스킬·스타일 가이드는 soft — 모델은 잊어요. 리뷰 코멘트로 룰을 지키게 하는 순간이
+   code smell 이고, 그 자리는 lint·CI 실패·구조 제거로 옮겨야 해요. ③ 은 이 스킬이 바로 해요.
+
  ─ 승격 후보 ──────────────────────────────────────
 
  [a] ✓ security → 🔴 CRITICAL     [권장 — 3회+]
   패턴 PG 키 평문 노출 2회 + DB 비번 로그 1회
+  사다리 ③ grep — `(password|secret|api[_-]?key|token)[[:space:]]*[=:][[:space:]]*["'][^"']{6,}` (①·② 해당 없음)
   제안 SP-SEC-NNN — 시크릿 hardcode 절대 금지 (frontmatter severity: critical, enforced_by: hook:...)
   생성 .ax/spirit/rules/<project>-security.md 에 SP-SEC-NNN 추가 (없으면 신설)
-        frontmatter paths: ["**/*.kt", "**/*.kts", ...] 명시 — path-scoped hook 이 매 작업 inject
+        frontmatter paths: ["**/*.kt", "**/*.kts", ...] 명시 — 주입 훅과 grep 집행 둘 다 이 paths 를 봐요 (비면 둘 다 안 돌아요)
   ※ plugin shipped 파일 (security.md, ops.md 등) 직접 append 금지 — project-specific 새 파일로 만들기
         (onboarding 절대 금지 #6 참조). plugin 갱신 시 clobber 방지.
   ※ CLAUDE.md 는 안 건드림 — 룰 본문은 spirit/rules 가 SSOT, hook 이 inject. CLAUDE.md 누적 = heavy
@@ -84,6 +93,7 @@ find .ax/mistakes -name "*.md" -mtime -7 2>/dev/null | sort # 최근 7일
 
  [c] pr → 🟡 MANDATORY       [검토]
   패턴 refactor + feature 한 PR 로 묶음 4회
+  사다리 ④ 산문 — 한 PR 의 의도는 diff 로 못 재요 (①~③ 해당 없음)
   제안 SP-PR-NNN — refactor + feature 한 PR 금지 (severity: mandatory, enforced_by: human:pr-review)
   생성/수정/영향 (spirit/rules 만)
 
@@ -137,26 +147,34 @@ paths:
 severity: critical
 enforced_by:
   - hook:.ax/hooks/pre-commit/critical-rule-grep.sh
-enforced_kind: block
+enforced_kind: grep
 ---
 
 ## SP-SEC-001: 시크릿·API 키·비번 hardcode 금지
-- 위반 예: `password = "..."`, `apiKey: "ghp_..."`, `private val pgKey = "rk_live_..."`
-- 대안: AWS Secrets Manager / Vault / 환경변수 (CI/CD secret store)
-- 검증: pre-commit grep `(password|secret|api[_-]?key|token).*=.*["']`
+- 위반 예: `password = "<plain-value>"`, `apiKey: "<plain-value>"`, `private val pgKey = "<plain-value>"`
+- 대안: `password = System.getenv("DB_PASSWORD")` (Secrets Manager / Vault / 환경변수)
+<!-- 검출 패턴: (password|secret|api[_-]?key|token|pgKey)[[:space:]]*[=:][[:space:]]*["'][^"']{6,} -->
 ```
+
+**`검출 패턴:` 마커가 집행이에요** — `critical-rule-grep.sh` 가 이 줄을 읽어 frontmatter `paths:` 에
+맞는 staged 파일을 검사하고, `severity: critical` 이면 (mode=fail 에서) 커밋을 막아요. 산문 bullet
+(`- 검증: pre-commit grep …`) 은 아무도 안 읽어요 — 마커로 쓰세요. `- 위반 예:` 의 백틱 항목은
+실제로 패턴에 걸리는 문자열이어야 해요 (`"..."` 같은 자리표시자 X) — `zero-probe.sh` 가 그걸로
+패턴을 검증해요. 단 **시크릿 류 룰의 예시 값은 `"<plain-value>"` 처럼 `<…>` 로 감싸요** — 룰 패턴(`"[^"]{6,}`)엔
+걸리면서, 룰 파일을 커밋할 때 secrets 스캐너(값이 `<`·`$`·`{` 로 시작하면 참조 표기로 보고 건너뜀)엔 안 걸려요.
+`hunter2xyz`·`ghp_…` 같은 진짜 모양을 쓰면 룰 파일 자체가 시크릿으로 차단돼요. `paths:` 가 비면 패턴이 안 돌아요 (doctor I7).
 
 **압축·탈맥락 원칙 (룰 본문·CLAUDE.md 공통)**
 
 룰은 매 turn hook 으로 inject 돼요. verbose 하면 매 작업마다 토큰 낭비. 그리고 매번 새 세션에서 읽히는 evergreen 문서 — 이전 세션 흔적 (시간 부사·발견 경위·일회성 ref) 이 본문에 박히면 6개월 뒤엔 노이즈.
 
 **압축**
-- **3줄 골격 권장** — `위반 예` / `대안` / `검증`. 헤더 1줄 + 본문 3 bullet = 4줄로 끝나면 베스트.
+- **3줄 골격 권장** — `위반 예` / `대안` / `검증`(grep 이면 `<!-- 검출 패턴: -->` 마커, 아니면 external 도구·사람 게이트 한 줄). 헤더 1줄 + 본문 3줄 = 4줄로 끝나면 베스트.
 - **한 줄 한 사실** — 한 bullet 에 사실 1개. "A 이고 B 이며 C" 는 3 bullet 으로 쪼개기.
 - **의례적 표현 제거** — "다음과 같이", "~할 수 있어요", "참고로", "필요시", "일반적으로" 다 삭제. `~해요` 체 자체는 유지 (tone).
 - **단정·명령형** — "~하면 좋습니다" → "~해요" / "~금지". 완곡 어법 X.
 - **약어 OK** — PR, DB, API, CI, regex 같은 표준 약어는 그대로. 처음 등장 풀네임 X.
-- **보존 필수 (절대 압축 X)** — 코드블록(백틱), URL, SP 토큰 (`SP-SEC-001`), 파일경로, 정규식, frontmatter 스키마. 식별자·기술용어는 원본 유지.
+- **보존 필수 (절대 압축 X)** — 코드블록(백틱), URL, SP 토큰 (`SP-SEC-001`), 파일경로, 정규식, frontmatter 스키마, `<!-- 검출 패턴: -->` 마커. 식별자·기술용어는 원본 유지.
 - **목표 길이** — CRITICAL/MANDATORY 룰: 헤더 포함 5~8줄. CONVENTION 룰: 3~5줄. 10줄 넘으면 압축 부족.
 
 **탈맥락 (세션·시간 흔적 금지)**
@@ -175,7 +193,7 @@ before / after 예시:
 + ## SP-SEC-001: 시크릿·API 키·비번 hardcode 금지
 + - 위반 예: `password = "..."`, `apiKey: "ghp_..."`, `private val pgKey = "rk_live_..."`
 + - 대안: AWS Secrets Manager / Vault / 환경변수
-+ - 검증: pre-commit grep `(password|secret|api[_-]?key|token).*=.*["']`
++ <!-- 검출 패턴: (password|secret|api[_-]?key|token)[[:space:]]*[=:][[:space:]]*["'][^"']{6,} -->
 ```
 
 **왜 spirit/rules 만?**: path-scoped hook (`spirit-rules-inject.sh`) 이 매 작업마다 frontmatter `paths:` 매칭해서 자동 inject — 매 turn CLAUDE.md 에 누적할 필요 없음. Constitution(AGENTS.md) 은 META(Triage First)·핵심 가드만 유지 (heavy 회피).
@@ -183,6 +201,16 @@ before / after 예시:
 **plugin shipped 파일 append 금지**: `security.md`, `ops.md` 같은 plugin 출고본에 직접 append X. project-specific 별도 파일 (`<project>-<category>.md`) 로 만들고, 같은 카테고리 룰이 누적되면 그 파일에 SP-<CAT>-NNN 만 추가.
 
 **완료 검증 (다음 단계 진입 전 필수)** — `grep '^## SP-SEC-001' .ax/spirit/rules/*.md` 가 1줄 이상 hit 해야 함. 0 hit 면 룰 본문 안 쓰인 것 — 추가 Edit 후 재검증. 0 hit 인 채로 4.3 시도하면 archive 스크립트가 `SP token not found` 에러로 거부.
+
+사다리 ③(grep) 으로 승격했으면 하나 더 — 패턴이 자기 예시를 실제로 잡는지:
+
+```bash
+PROBE=$(bash .ax/scripts/bash/zero-probe.sh --only pattern-rules --json)
+echo "$PROBE" | jq -r '.result.probes[] | select(.name=="pattern-rules") | .tail_lines[]'
+```
+
+`FAIL SP-SEC-001 — ❌ 예시가 패턴에 안 걸려요` 가 나오면 패턴이나 예시를 고친 뒤 재실행. `skip … ❌ 예시가 없어` 면
+`- 위반 예:` 에 실제 문자열을 적어요. 통과 전엔 4.3 으로 못 가요 — 안 잰 패턴은 집행이 아니에요.
 
 ### 4.3 archive — `promote-mistake.sh --archive` (필수)
 
@@ -229,6 +257,7 @@ grep -h '^model:' .ax/mistakes/*.md .ax/mistakes/_archive/*/*/*.md 2>/dev/null \
 - 사용자 동의 없이 룰을 자동 승격 X
 - mistakes 파일 삭제 X — 이력은 보존 (archive 는 mv 이지 rm 아님)
 - 1회만 있는 패턴은 승격 후보로 띄우지 않음 (소음)
+- **grep 으로 잡히는 룰을 패턴 없이 산문으로만 승격 X** — 사다리 ③ 이면 `<!-- 검출 패턴: -->` 이 룰 본문의 일부예요. 산문만 쓰면 다음 audit 에 같은 카테고리가 또 올라와요
 - 캡처만 하고 audit 안 함 → 누적만 됨 (주 1회는 회고)
 - **마킹 (4.1) 만 하고 룰 본문 (4.2) 또는 archive (4.3) 스킵 후 보고 X** — promoted_to 마킹된 mistake 가 `.ax/mistakes/` root 에 남아있으면 미완료. 4.3 archive 까지 끝낸 후 검증 (root 에 promoted_to 마킹 0건) 후 보고.
 

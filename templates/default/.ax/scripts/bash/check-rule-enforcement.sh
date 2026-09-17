@@ -19,6 +19,10 @@
 #         glob 되므로 디스패처 존재로 판정해요: settings.json 의 grep-on-commit.sh
 #         (에이전트 커밋) 또는 .git/hooks/pre-commit 의 goax chain wrapper (사람 커밋)
 #   I6. enforced_by: external:* 면 그걸 자동 실행하는 트리거가 리포에 실재해야 함
+#   I7. grep 류 룰은 패턴이 있어야 함 — 파일이 `enforced_kind: grep` 이거나 enforced_by 가
+#       critical-rule-grep.sh 를 가리키는데 `<!-- 검출 패턴: -->` 없는 룰(i7_grep_without_pattern),
+#       패턴은 있는데 frontmatter `paths:` 가 비어 훅이 안 도는 룰(i7_pattern_without_paths).
+#       둘 다 "적혀 있지만 아무것도 막지 않는" 상태 — I1 의 거짓 약속과 같은 종류예요.
 #       (CI workflow[GitHub/GitLab/Circle/Jenkins/Azure/Buildkite] / git pre-commit /
 #        husky / pre-commit-framework / lefthook 중 1+)
 #       — goax wrapper 만 있는 pre-commit 은 트리거로 안 쳐요 (up 이 기본 설치하므로
@@ -37,7 +41,8 @@
 #       i1_violations: [...], i2_violations: [...],
 #       i3_imminent: [...], i3_overdue: [...],
 #       i5_file_missing: [...], i5_not_registered: [...],
-#       i6_no_trigger: [...], placeholder_rules: [...],
+#       i6_no_trigger: [...], i7_grep_without_pattern: [...], i7_pattern_without_paths: [...],
+#       placeholder_rules: [...],
 #       trigger_surfaces: [...],
 #       rule_count: N, source_files: [...]
 #     },
@@ -375,8 +380,42 @@ while IFS=$'\t' read -r rid label eb ek file; do
     done
 done < "$ALL_RULES"
 
+# ─── (4.5) I7 — grep 류 룰의 패턴 실재 ──────────────────────────────
+# 룰 단위 판정이라 ALL_RULES(파일 단위) 가 아니라 파일을 직접 다시 읽어요.
+# 패턴 파서는 common.sh 의 goax_rule_patterns — 훅과 같은 파서예요 (따로 파싱하면 갈라져요).
+I7_NOPAT=()   # grep-kind 파일인데 패턴 없는 룰
+I7_NOPATH=()  # 패턴 있는데 paths 비어 훅이 안 도는 룰
+if type goax_rule_patterns >/dev/null 2>&1; then
+    for rf in "$ROOT/.ax/spirit/rules/"*.md "$ROOT/.ax/modules/"*/rules.md; do
+        [ -f "$rf" ] || continue
+        case "$(basename "$rf")" in README.md) continue ;; esac
+        rf_rel="${rf#$ROOT/}"
+        ek_f=$(goax_frontmatter_scalar "$rf" enforced_kind)
+        eb_f=$(goax_yaml_list "$rf" enforced_by; goax_frontmatter_scalar "$rf" enforced_by)
+        grep_kind=false
+        case "$ek_f" in grep) grep_kind=true ;; esac
+        case "$eb_f" in *critical-rule-grep.sh*) grep_kind=true ;; esac
+        pats=$(goax_rule_patterns "$rf")
+        paths_n=$(goax_yaml_list "$rf" paths | grep -c . || true)
+
+        # 파일의 룰 토큰 전부 (펜스 안 제외)
+        toks=$(awk '/^[[:space:]]*```/{fence=!fence; next} fence{next} /^## SP-[[:upper:][:digit:]]+-[[:digit:]]+:/{t=$0; sub(/^## /,"",t); sub(/:.*$/,"",t); print t}' "$rf")
+        while IFS= read -r tok; do
+            [ -z "$tok" ] && continue
+            has_pat=false
+            printf '%s\n' "$pats" | grep -q "^${tok}"$'\t' && has_pat=true
+            if [ "$grep_kind" = true ] && [ "$has_pat" = false ]; then
+                I7_NOPAT+=("$tok|$ek_f|no_pattern|$rf_rel")
+            fi
+            if [ "$has_pat" = true ] && [ "${paths_n:-0}" -eq 0 ]; then
+                I7_NOPATH+=("$tok|pattern|no_paths|$rf_rel")
+            fi
+        done <<< "$toks"
+    done
+fi
+
 # ─── (5) 보고 ────────────────────────────────────────────────────
-TOTAL_VIOLATIONS=$((${#I1[@]} + ${#I2[@]} + ${#I3_OVERDUE[@]} + ${#I5_FILE[@]} + ${#I5_REG[@]} + ${#I6[@]}))
+TOTAL_VIOLATIONS=$((${#I1[@]} + ${#I2[@]} + ${#I3_OVERDUE[@]} + ${#I5_FILE[@]} + ${#I5_REG[@]} + ${#I6[@]} + ${#I7_NOPAT[@]} + ${#I7_NOPATH[@]}))
 
 if [ "$JSON_MODE" = true ]; then
     # 배열 → JSON. set -u 환경에서 빈 배열 expand 안전하게.
@@ -393,10 +432,12 @@ if [ "$JSON_MODE" = true ]; then
         --argjson i5f "$(arr_to_json ${I5_FILE[@]+"${I5_FILE[@]}"})" \
         --argjson i5r "$(arr_to_json ${I5_REG[@]+"${I5_REG[@]}"})" \
         --argjson i6 "$(arr_to_json ${I6[@]+"${I6[@]}"})" \
+        --argjson i7np "$(arr_to_json ${I7_NOPAT[@]+"${I7_NOPAT[@]}"})" \
+        --argjson i7nh "$(arr_to_json ${I7_NOPATH[@]+"${I7_NOPATH[@]}"})" \
         --argjson ph "$(arr_to_json ${PLACEHOLDERS[@]+"${PLACEHOLDERS[@]}"})" \
         --argjson ts "$(if [ "${#TRIGGER_SURFACES[@]}" -eq 0 ]; then echo "[]"; else printf '%s\n' "${TRIGGER_SURFACES[@]}" | jq -R . | jq -s .; fi)" \
         --argjson rc "$RULE_COUNT" \
-        '{i1_violations: $i1, i2_violations: $i2, i3_imminent: $i3im, i3_overdue: $i3od, i5_file_missing: $i5f, i5_not_registered: $i5r, i6_no_trigger: $i6, placeholder_rules: $ph, trigger_surfaces: $ts, rule_count: $rc}')
+        '{i1_violations: $i1, i2_violations: $i2, i3_imminent: $i3im, i3_overdue: $i3od, i5_file_missing: $i5f, i5_not_registered: $i5r, i6_no_trigger: $i6, i7_grep_without_pattern: $i7np, i7_pattern_without_paths: $i7nh, placeholder_rules: $ph, trigger_surfaces: $ts, rule_count: $rc}')
 
     if [ "${#PLACEHOLDERS[@]}" -gt 0 ]; then
         warnings_json=$(printf 'placeholder %d건 — enforced_by 가 아직 예시 자리표시자예요 (실제 값으로 채우면 검사 대상)\n' "${#PLACEHOLDERS[@]}" | jq -R . | jq -sc .)
@@ -424,6 +465,8 @@ else
         [ "${#I5_FILE[@]}" -gt 0 ] && printf '  I5 (hook 파일 부재) %d건\n' "${#I5_FILE[@]}" >&2
         [ "${#I5_REG[@]}" -gt 0 ] && printf '  I5 (settings.json 미등록) %d건\n' "${#I5_REG[@]}" >&2
         [ "${#I6[@]}" -gt 0 ] && printf '  I6 (external 인데 자동 트리거 부재 — CI/git hook 없음) %d건\n' "${#I6[@]}" >&2
+        [ "${#I7_NOPAT[@]}" -gt 0 ] && printf '  I7 (grep 류 룰인데 검출 패턴 없음 — 적혀만 있고 안 막아요) %d건\n' "${#I7_NOPAT[@]}" >&2
+        [ "${#I7_NOPATH[@]}" -gt 0 ] && printf '  I7 (검출 패턴은 있는데 paths 비어 훅이 안 돌아요) %d건\n' "${#I7_NOPATH[@]}" >&2
         goax_log "자세한 보고: $0 --json | jq"
     fi
 fi

@@ -3721,6 +3721,184 @@ EOF
 fi
 
 # ───────────────────────────────────────────────────────────
+section "45. 룰 패턴 집행 — 마커 파싱 · 훅 차단 · 프로브 · I7 · rules-index"
+# 두 룰 템플릿의 `<!-- 검출 패턴: -->` 은 오래 장식이었어요 — 읽는 쪽이 없었어요. 여기는 그 마커가
+# (a) common.sh 파서로 읽히고 (b) critical-rule-grep.sh 가 staged 파일을 실제로 막고
+# (c) zero-probe.sh 가 ❌/✅ 예시로 패턴을 검증하고 (d) check-rule-enforcement.sh I7 이 빈 약속을 잡는지 봐요.
+if command -v jq >/dev/null 2>&1; then
+    RP=$(mktemp -d)
+    pushd "$RP" >/dev/null || fail "RP pushd 실패"
+    git init -q . >/dev/null 2>&1
+    mkdir -p .ax/scripts/bash .ax/hooks/pre-commit .ax/spirit/rules .ax/modules/pay src/main src/test
+    for sc in common.sh zero-probe.sh check-rule-enforcement.sh check-sensor-liveness.sh rules-index.sh; do
+        cp "$REPO/templates/default/.ax/scripts/bash/$sc" .ax/scripts/bash/
+    done
+    cp "$REPO/templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh" .ax/hooks/pre-commit/
+    printf '# C\n' > CLAUDE.md; printf '# A\n' > AGENTS.md; printf 'sensors:\n  mode: fail\n' > .ax/config.yml
+
+    # (a) 파서 — 헤더 귀속 · 펜스 무시 · 자리표시자 무시 · 다중 마커 · 예시 추출
+    cat > .ax/spirit/rules/fx.md <<'EOF'
+---
+category: fx
+severity: critical
+paths:
+  - "**/*.kt"
+enforced_by:
+  - hook:.ax/hooks/pre-commit/critical-rule-grep.sh
+enforced_kind: grep
+---
+<!-- 검출 패턴: orphan-before-header -->
+## SP-FX-001: 첫 룰 — PII 로그 금지
+- 위반 예: `log.info("email=" + email)`, `log.debug("phone: " + phone)`
+- 대안: `log.info("userId=" + userId)`
+<!-- 검출 패턴: log\.(info|debug|warn)\(.*(email|phone) -->
+```
+## SP-FX-999: 펜스 안
+<!-- 검출 패턴: fenced -->
+❌ fenced bad
+```
+## SP-FX-002: 둘째 룰
+❌ import org.junit.jupiter.api.Test
+✅ import io.kotest.core.spec.style.DescribeSpec
+<!-- 검출 패턴: ^import[[:space:]]+(static[[:space:]]+)?org\.junit\.jupiter\. -->
+<!--  검출 패턴:   second   -->
+## SP-FX-003: 자리표시자
+❌ <나쁜 예>
+<!-- 검출 패턴: <regex> -->
+## SP-FX-004: 예시 없음
+<!-- 검출 패턴: whatever -->
+EOF
+    # shellcheck disable=SC1091
+    RP_PATS=$(bash -c 'source .ax/scripts/bash/common.sh; goax_rule_patterns .ax/spirit/rules/fx.md')
+    [ "$(printf '%s\n' "$RP_PATS" | grep -c .)" -eq 4 ] \
+        && pass "goax_rule_patterns — 마커 4개 (헤더 앞 orphan · 펜스 안 · <regex> 자리표시자는 제외)" \
+        || fail "goax_rule_patterns — 기대 4행, 실제: $(printf '%s' "$RP_PATS" | grep -c .)"
+    printf '%s\n' "$RP_PATS" | grep -q $'^SP-FX-002\tsecond$' \
+        && pass "goax_rule_patterns — 다중 마커 + 앞뒤 공백 trim" \
+        || fail "goax_rule_patterns — 둘째 마커 trim 실패: $RP_PATS"
+    RP_EX=$(bash -c 'source .ax/scripts/bash/common.sh; goax_rule_examples .ax/spirit/rules/fx.md')
+    [ "$(printf '%s\n' "$RP_EX" | grep -c $'^SP-FX-001\tbad\t')" -eq 2 ] \
+        && [ "$(printf '%s\n' "$RP_EX" | grep -c $'^SP-FX-002\tgood\t')" -eq 1 ] \
+        && ! printf '%s\n' "$RP_EX" | grep -q 'SP-FX-003' \
+        && pass "goax_rule_examples — 백틱 span 별 bad 2 · ✅ good 1 · <나쁜 예> 자리표시자 제외" \
+        || fail "goax_rule_examples — 예시 추출 불일치: $RP_EX"
+    RP_GF=$(printf 'a/b.kt\nc.ts\nx.kt\n' | bash -c 'source .ax/scripts/bash/common.sh; goax_glob_filter "**/*.kt"' | tr '\n' ' ')
+    [ "$RP_GF" = "a/b.kt x.kt " ] \
+        && pass "goax_glob_filter — stdin 경로 목록을 글롭으로 거름 (python 1회)" \
+        || fail "goax_glob_filter — 기대 'a/b.kt x.kt ', 실제 '$RP_GF'"
+
+    # (b) 훅 — AC1 critical 차단 · AC2 paths 불일치 통과 · AC3 mandatory 경고만 · AC6 룰 파일 자신 · AC5 출고 템플릿
+    cat > .ax/modules/pay/rules.md <<'EOF'
+---
+module: pay
+severity: mandatory
+paths:
+  - "src/main/**"
+---
+## SP-PAY-001: Double 금지
+❌ val amount: Double = 1.0
+<!-- 검출 패턴: :[[:space:]]*Double -->
+EOF
+    printf 'import org.junit.jupiter.api.Test\nclass FooTest\n' > src/test/FooTest.kt
+    printf 'import org.junit.jupiter.api.Test\n' > src/test/Not.ts
+    printf 'val amount: Double = 1.0\n' > src/main/Pay.kt
+    rp_hook() { git reset -q >/dev/null 2>&1; git add "$@" >/dev/null 2>&1; CLAUDE_PROJECT_DIR="$RP" bash .ax/hooks/pre-commit/critical-rule-grep.sh 2>&1 >/dev/null; }
+    RP_OUT=$(rp_hook src/test/FooTest.kt); RP_RC=$?
+    [ "$RP_RC" -eq 2 ] && printf '%s' "$RP_OUT" | grep -q 'src/test/FooTest.kt:1 — SP-FX-002' \
+        && pass "critical-rule-grep — critical 패턴 위반 .kt stage → exit 2 + file:line + 토큰" \
+        || fail "critical-rule-grep — 기대 exit 2 + 'FooTest.kt:1 — SP-FX-002', 실제 rc=$RP_RC: $RP_OUT"
+    printf '%s' "$RP_OUT" | grep -q 'org.junit.jupiter' \
+        && fail "critical-rule-grep — 매칭 줄 본문을 그대로 출력 (내용이 로그로 새요)" \
+        || pass "critical-rule-grep — file:line 만 보고, 매칭 줄 본문은 안 찍음"
+    RP_OUT=$(rp_hook src/test/Not.ts); RP_RC=$?
+    [ "$RP_RC" -eq 0 ] && ! printf '%s' "$RP_OUT" | grep -q 'SP-FX-002' \
+        && pass "critical-rule-grep — paths 에 안 맞는 .ts 는 패턴에 걸려도 통과" \
+        || fail "critical-rule-grep — paths 밖 파일을 검사함 rc=$RP_RC: $RP_OUT"
+    RP_OUT=$(rp_hook src/main/Pay.kt); RP_RC=$?
+    [ "$RP_RC" -eq 0 ] && printf '%s' "$RP_OUT" | grep -q 'SP-PAY-001' && printf '%s' "$RP_OUT" | grep -q '차단 안 함' \
+        && pass "critical-rule-grep — mandatory 파일의 패턴은 mode=fail 이어도 경고만 (exit 0)" \
+        || fail "critical-rule-grep — mandatory 가 차단하거나 경고가 없음 rc=$RP_RC: $RP_OUT"
+    RP_OUT=$(rp_hook .ax/spirit/rules/fx.md .ax/modules/pay/rules.md); RP_RC=$?
+    [ "$RP_RC" -eq 0 ] && ! printf '%s' "$RP_OUT" | grep -q 'SP-FX-\|SP-PAY-' \
+        && pass "critical-rule-grep — 룰 파일 자신(❌ 예시 포함)을 stage 해도 .ax/ 제외로 위반 0" \
+        || fail "critical-rule-grep — 룰 파일의 예시가 자기 패턴에 걸림 rc=$RP_RC: $RP_OUT"
+    cat > .ax/spirit/rules/broken.md <<'EOF'
+---
+category: broken
+severity: convention
+paths: ["**/*.kt"]
+---
+## SP-BRK-001: 깨진 정규식
+<!-- 검출 패턴: ([unclosed -->
+EOF
+    RP_OUT=$(rp_hook src/test/FooTest.kt); RP_RC=$?
+    [ "$RP_RC" -eq 2 ] && printf '%s' "$RP_OUT" | grep -q 'SP-BRK-001 — 검출 패턴 문법 오류' \
+        && pass "critical-rule-grep — 깨진 ERE 는 경고 후 그 패턴만 생략, 다른 critical 은 여전히 차단" \
+        || fail "critical-rule-grep — 깨진 패턴 처리 rc=$RP_RC: $RP_OUT"
+    rm .ax/spirit/rules/broken.md
+
+    # (c) 프로브 — ok/skip · ❌ 미검출 fail · ✅ 오탐 fail
+    RP_PR=$(bash .ax/scripts/bash/zero-probe.sh --json 2>/dev/null); RP_RC=$?
+    [ "$RP_RC" -eq 0 ] && echo "$RP_PR" | jq -e '.result.probes[] | select(.name=="pattern-rules") | .ok == true' >/dev/null 2>&1 \
+        && echo "$RP_PR" | jq -e '[.result.probes[] | select(.name=="pattern-rules") | .tail_lines[] | select(startswith("ok   SP-FX-001") or startswith("ok   SP-FX-002") or startswith("ok   SP-PAY-001"))] | length == 3' >/dev/null 2>&1 \
+        && pass "zero-probe pattern-rules — ❌ 걸리고 ✅ 안 걸리는 룰 3개 ok — 마커 2개(SP-FX-002)는 OR (프로브 파일 없이 내장 실행)" \
+        || fail "zero-probe pattern-rules — 정상 케이스 판정 실패 rc=$RP_RC: $RP_PR"
+    echo "$RP_PR" | jq -e '[.result.probes[] | select(.name=="pattern-rules") | .tail_lines[] | select(startswith("skip SP-FX-004"))] | length == 1' >/dev/null 2>&1 \
+        && pass "zero-probe pattern-rules — ❌/✅ 없는 룰(SP-FX-004)은 skip 으로 보고, ok 로 안 셈" \
+        || fail "zero-probe pattern-rules — 예시 없는 룰이 skip 이 아님: $RP_PR"
+    sed -i.bak 's/(email|phone) -->/(nomatch) -->/' .ax/spirit/rules/fx.md && rm -f .ax/spirit/rules/fx.md.bak
+    RP_PR=$(bash .ax/scripts/bash/zero-probe.sh --json 2>/dev/null); RP_RC=$?
+    [ "$RP_RC" -eq 1 ] && echo "$RP_PR" | jq -e '.result.failed == 1' >/dev/null 2>&1 \
+        && echo "$RP_PR" | jq -e '[.result.probes[] | select(.name=="pattern-rules") | .tail_lines[] | select(startswith("FAIL SP-FX-001") and contains("❌ 예시가 패턴에 안 걸려요"))] | length >= 1' >/dev/null 2>&1 \
+        && pass "zero-probe pattern-rules — ❌ 예시를 못 잡는 패턴은 FAIL + exit 1" \
+        || fail "zero-probe pattern-rules — ❌ 미검출을 통과시킴 rc=$RP_RC: $RP_PR"
+    sed -i.bak 's/log\\.(info|debug|warn)\\(.\*(nomatch) -->/log\\.info -->/' .ax/spirit/rules/fx.md && rm -f .ax/spirit/rules/fx.md.bak
+    RP_PR=$(bash .ax/scripts/bash/zero-probe.sh --json 2>/dev/null); RP_RC=$?
+    [ "$RP_RC" -eq 1 ] && echo "$RP_PR" | jq -e '[.result.probes[] | select(.name=="pattern-rules") | .tail_lines[] | select(startswith("FAIL SP-FX-001") and contains("오탐"))] | length == 1' >/dev/null 2>&1 \
+        && pass "zero-probe pattern-rules — ✅ 예시까지 잡는 패턴은 오탐 FAIL" \
+        || fail "zero-probe pattern-rules — 오탐을 통과시킴 rc=$RP_RC: $RP_PR"
+    sed -i.bak 's/<!-- 검출 패턴: log\\.info -->/<!-- 검출 패턴: log\\.(info|debug|warn)\\(.*(email|phone) -->/' .ax/spirit/rules/fx.md && rm -f .ax/spirit/rules/fx.md.bak
+
+    # (d) I7 — grep-kind 인데 패턴 없음 · 패턴 있는데 paths 없음 · --strict exit 1
+    cat > .ax/spirit/rules/nopaths.md <<'EOF'
+---
+category: nopaths
+severity: mandatory
+enforced_by:
+  - human:pr-review
+---
+## SP-NP-001: 패턴은 있는데 paths 없음
+<!-- 검출 패턴: baz -->
+EOF
+    RP_RE=$(bash .ax/scripts/bash/check-rule-enforcement.sh --json 2>/dev/null)
+    echo "$RP_RE" | jq -e '[.result.i7_grep_without_pattern[] | .rule_id] == ["SP-FX-003"]' >/dev/null 2>&1 \
+        && pass "check-rule-enforcement I7 — grep-kind 파일의 마커 없는 룰(SP-FX-003)만 i7_grep_without_pattern" \
+        || fail "check-rule-enforcement I7 — no_pattern 판정 불일치: $(echo "$RP_RE" | jq -c '.result.i7_grep_without_pattern')"
+    echo "$RP_RE" | jq -e '[.result.i7_pattern_without_paths[] | .rule_id] == ["SP-NP-001"]' >/dev/null 2>&1 \
+        && pass "check-rule-enforcement I7 — 패턴 있는데 paths 빈 룰(SP-NP-001)만 i7_pattern_without_paths" \
+        || fail "check-rule-enforcement I7 — no_paths 판정 불일치: $(echo "$RP_RE" | jq -c '.result.i7_pattern_without_paths')"
+    bash .ax/scripts/bash/check-rule-enforcement.sh --strict >/dev/null 2>&1; RP_RC=$?
+    [ "$RP_RC" -eq 1 ] \
+        && pass "check-rule-enforcement I7 — --strict 에서 exit 1 (CI 게이트)" \
+        || fail "check-rule-enforcement I7 — --strict 인데 exit $RP_RC"
+
+    # (e) liveness C1 · rules-index pattern 필드
+    RP_LV=$(bash .ax/scripts/bash/check-sensor-liveness.sh --json 2>/dev/null)
+    echo "$RP_LV" | jq -e '.result.pattern_rules == 5 and .result.grep_scaffold_unfilled == false' >/dev/null 2>&1 \
+        && pass "check-sensor-liveness — 패턴 룰이 있으면 C1(스캐폴드 미작성)은 finding 이 아니고 pattern_rules 를 셈" \
+        || fail "check-sensor-liveness — pattern_rules/C1 불일치: $(echo "$RP_LV" | jq -c '.result | {pattern_rules, grep_scaffold_unfilled}')"
+    RP_RI=$(bash .ax/scripts/bash/rules-index.sh --json 2>/dev/null)
+    echo "$RP_RI" | jq -e '([.result.rules[] | select(.pattern == true) | .token] | sort) == ["SP-FX-001","SP-FX-002","SP-FX-004","SP-NP-001","SP-PAY-001"]' >/dev/null 2>&1 \
+        && pass "rules-index — 마커 있는 룰만 pattern:true" \
+        || fail "rules-index — pattern 필드 불일치: $(echo "$RP_RI" | jq -c '[.result.rules[] | {token, pattern}]')"
+
+    popd >/dev/null || true
+    rm -rf "$RP"
+else
+    pass "§45 — jq 없음, skip"
+fi
+
+# ───────────────────────────────────────────────────────────
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────
 if [ "$fail_count" -eq 0 ]; then
