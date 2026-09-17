@@ -399,7 +399,7 @@ if type goax_rule_patterns >/dev/null 2>&1; then
         paths_n=$(goax_yaml_list "$rf" paths | grep -c . || true)
 
         # 파일의 룰 토큰 전부 (펜스 안 제외)
-        toks=$(awk '/^[[:space:]]*```/{fence=!fence; next} fence{next} /^## SP-[[:upper:][:digit:]]+-[[:digit:]]+:/{t=$0; sub(/^## /,"",t); sub(/:.*$/,"",t); print t}' "$rf")
+        toks=$(awk '/^[[:space:]]*(```|~~~)/{fence=!fence; next} fence{next} /^## SP-[[:upper:][:digit:]]+-[[:digit:]]+:/{t=$0; sub(/^## /,"",t); sub(/:.*$/,"",t); print t}' "$rf")
         while IFS= read -r tok; do
             [ -z "$tok" ] && continue
             has_pat=false

@@ -151,7 +151,7 @@ enforced_kind: grep
 ---
 
 ## SP-SEC-001: 시크릿·API 키·비번 hardcode 금지
-- 위반 예: `password = "<plain-value>"`, `apiKey: "<plain-value>"`, `private val pgKey = "<plain-value>"`
+- 위반 예: `password = "<plain-value>"`, `api_key: "<plain-value>"`, `private val pgKey = "<plain-value>"`
 - 대안: `password = System.getenv("DB_PASSWORD")` (Secrets Manager / Vault / 환경변수)
 <!-- 검출 패턴: (password|secret|api[_-]?key|token|pgKey)[[:space:]]*[=:][[:space:]]*["'][^"']{6,} -->
 ```
@@ -191,9 +191,9 @@ before / after 예시:
 - - 최근 사건들을 보면 AWS Secrets Manager 나 Vault 같은 시크릿 매니저, 혹은 환경변수를 사용하시면 됩니다
 - - 제가 조사해보니 pre-commit hook 에서 정규식 `(password|secret|api[_-]?key|token).*=.*["']` 로 grep 하면 좋아요
 + ## SP-SEC-001: 시크릿·API 키·비번 hardcode 금지
-+ - 위반 예: `password = "..."`, `apiKey: "ghp_..."`, `private val pgKey = "rk_live_..."`
-+ - 대안: AWS Secrets Manager / Vault / 환경변수
-+ <!-- 검출 패턴: (password|secret|api[_-]?key|token)[[:space:]]*[=:][[:space:]]*["'][^"']{6,} -->
++ - 위반 예: `password = "<plain-value>"`, `api_key: "<plain-value>"`, `private val pgKey = "<plain-value>"`
++ - 대안: `password = System.getenv("DB_PASSWORD")` (Secrets Manager / Vault / 환경변수)
++ <!-- 검출 패턴: (password|secret|api[_-]?key|token|pgKey)[[:space:]]*[=:][[:space:]]*["'][^"']{6,} -->
 ```
 
 **왜 spirit/rules 만?**: path-scoped hook (`spirit-rules-inject.sh`) 이 매 작업마다 frontmatter `paths:` 매칭해서 자동 inject — 매 turn CLAUDE.md 에 누적할 필요 없음. Constitution(AGENTS.md) 은 META(Triage First)·핵심 가드만 유지 (heavy 회피).

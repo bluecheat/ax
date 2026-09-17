@@ -20,7 +20,7 @@ CRITICAL 로 분류하기 전에 **그 룰을 막는 hook 파일 경로**를 정
 |---|---|---|---|
 | 파괴적 명령 (`rm -rf /`, `git push --force`) | ✅ | 🔴 | `pre-bash/block-destructive.sh` grep |
 | 보호 경로(`CLAUDE.md`, `.ax/`) 무단 수정 | ✅ | 🔴 | `pre-edit/check-protected-paths.sh` |
-| DDL 파일명 `V{타임스탬프}__*.sql` | ✅ | 🔴 | 룰 아래 `<!-- 검출 패턴: -->` 마커 (critical-rule-grep.sh 가 읽어요) |
+| DDL 파일명 `V{타임스탬프}__*.sql` | ✅ | 🔴 | **파일명** 검사라 마커(파일 *내용* grep)로는 못 잡아요 — 전용 훅 (아래 "전용 훅이 필요한 경우") |
 | 신규 테스트 = Kotest+MockK | ✅ (부분) | 🔴 또는 🟡 | import grep 가능 — 마커 + `paths:` 로 끝나요 |
 | Spring 테스트 = `@Tags("Integration")` | ✅ | 🔴 | grep 으로 `@SpringBootTest` ↔ `@Tags` 매칭 |
 | **모듈 의존 단방향** (`Core → Adapter` 금지) | ❌ | 🟡 | grep 으로 못 잡음 — ArchUnit/Konsist 빌드 게이트 필요. 없으면 사람 리뷰 = MANDATORY |

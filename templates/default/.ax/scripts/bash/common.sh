@@ -394,8 +394,8 @@ goax_rules_matching() {
 # goax_rule_patterns <rule-file>
 #   출력: TSV `SP-<CAT>-<NNN>\t<ERE>` — 마커 한 줄에 한 행, 파일 순서대로.
 #   `## SP-<CAT>-<NNN>:` 헤더가 현재 룰이고, 그 아래 `<!-- 검출 패턴: X -->` 의 X 가 패턴이에요
-#   (`검출 패턴:` 뒤 공백부터 ` -->` 앞까지, 앞뒤 공백 trim, 따옴표 없음).
-#   frontmatter 와 코드펜스 안은 안 봐요 — 출고 템플릿이 사용법을 펜스 안에 적어요.
+#   (`검출 패턴:` 뒤 공백부터 ` -->` 앞까지, 앞뒤 공백 trim, 따옴표 없음). `<regex>`·`<ERE>` 처럼
+#   `<…>` 로만 된 값은 자리표시자라 버려요. frontmatter 와 코드펜스(```·~~~) 안은 안 봐요 — 출고 템플릿이 사용법을 펜스 안에 적어요.
 #   헤더 앞에 나온 마커는 귀속할 룰이 없어서 버려요.
 #
 #   이 마커는 오래전부터 두 템플릿에 있었지만 읽는 쪽이 없어서 장식이었어요 —
@@ -408,7 +408,7 @@ goax_rule_patterns() {
         BEGIN { fm=0; fmdone=0; fence=0; tok="" }
         NR==1 && /^---[[:space:]]*$/ { fm=1; next }
         fm==1 { if (/^---[[:space:]]*$/) { fm=0; fmdone=1 } next }
-        /^[[:space:]]*```/ { fence=!fence; next }
+        /^[[:space:]]*(```|~~~)/ { fence=!fence; next }
         fence { next }
         /^## SP-[[:upper:][:digit:]]+-[[:digit:]]+:/ {
             tok=$0; sub(/^## /, "", tok); sub(/:.*$/, "", tok); next
@@ -418,7 +418,7 @@ goax_rule_patterns() {
             pat=$0
             sub(/^[[:space:]]*<!--[[:space:]]*검출 패턴:[[:space:]]*/, "", pat)
             sub(/[[:space:]]*-->[[:space:]]*$/, "", pat)
-            if (pat == "" || pat == "<regex>") next
+            if (pat == "" || pat ~ /^<[^>]*>$/) next    # `<regex>`·`<ERE>` 같은 자리표시자는 패턴이 아니에요
             printf "%s\t%s\n", tok, pat
         }
     ' "$file"
@@ -446,7 +446,7 @@ goax_rule_examples() {
         BEGIN { fm=0; fence=0; tok="" }
         NR==1 && /^---[[:space:]]*$/ { fm=1; next }
         fm==1 { if (/^---[[:space:]]*$/) fm=0; next }
-        /^[[:space:]]*```/ { fence=!fence; next }
+        /^[[:space:]]*(```|~~~)/ { fence=!fence; next }
         fence { next }
         /^## SP-[[:upper:][:digit:]]+-[[:digit:]]+:/ { tok=$0; sub(/^## /, "", tok); sub(/:.*$/, "", tok); next }
         /^[[:space:]]*❌/            { t=$0; sub(/^[[:space:]]*❌[[:space:]]*/, "", t); emit("bad", t); next }

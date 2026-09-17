@@ -50,7 +50,8 @@ report() {
     VIOLATIONS=$((VIOLATIONS + 1))
 }
 
-STAGED=$(git diff --cached --name-only 2>/dev/null || true)
+# core.quotePath=false — 기본값이면 한글 등 비ASCII 파일명이 "\355\225\234…" 로 인용돼 `-f` 검사에서 빠져요
+STAGED=$(git -c core.quotePath=false diff --cached --name-only 2>/dev/null || true)
 [ -z "$STAGED" ] && { echo "[goax] staged 파일 없음" >&2; exit 0; }
 
 echo "[goax] CRITICAL 룰 검사 (mode=$SENSOR_MODE) — 대상 $(echo "$STAGED" | wc -l | tr -d ' ')개 파일"
@@ -160,11 +161,13 @@ if [ -n "$STAGED_SRC" ] && type goax_rule_patterns >/dev/null 2>&1; then
             fi
             while IFS= read -r tf; do
                 [ -z "$tf" ] && continue
-                # -n 줄번호 · -H 파일명 강제(단일 파일도) · -I 바이너리 제외. 내용은 cut 으로 버려요.
-                HITS=$(grep -nHIE -e "$pat" -- "$tf" 2>/dev/null | cut -d: -f1,2 || true)
+                # -n 줄번호 · -I 바이너리 제외. 줄번호만 남기고 내용은 버려요 — 파일명은 이미 아니까
+                # `file:line` 은 직접 조합해요 (파일명에 `:` 가 있어도 안 깨져요).
+                HITS=$(grep -nIE -e "$pat" -- "$tf" 2>/dev/null | cut -d: -f1 || true)
                 [ -z "$HITS" ] && continue
-                while IFS= read -r hit; do
-                    [ -z "$hit" ] && continue
+                while IFS= read -r ln; do
+                    [ -z "$ln" ] && continue
+                    hit="$tf:$ln"
                     if [ "$SEV" = "critical" ]; then
                         report "rule-pattern" "$hit — $token (critical · $RF_REL)"
                     else

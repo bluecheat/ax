@@ -101,17 +101,27 @@ PY
     fi
 }
 
+# paths: 파싱과 글롭 매칭은 common.sh 헬퍼가 우선이에요 — 인라인 `paths: ["**/*.kt"]` 형식은 위 로컬
+# 파서가 못 읽고, 같은 룰을 grep 훅(critical-rule-grep.sh)은 집행하는데 여기선 주입 안 하는 갈림이 생겨요.
+# common.sh 가 없을 때만 로컬 함수로 degrade 해요.
+list_paths() {
+    if type goax_yaml_list >/dev/null 2>&1; then goax_yaml_list "$1" paths; else extract_paths_from_file "$1"; fi
+}
+glob_hit() {   # 0 = 매치
+    if type goax_glob_match >/dev/null 2>&1; then goax_glob_match "$1" "$2"; else [ "$(match_glob "$1" "$2")" = "1" ]; fi
+}
+
 MATCHED=()
 for f in "$SPIRIT_DIR"/*.md; do
     [ -f "$f" ] || continue
     matched_this=false
     while IFS= read -r glob; do
         [ -z "$glob" ] && continue
-        if [ "$(match_glob "$glob" "$TARGET_REL")" = "1" ]; then
+        if glob_hit "$glob" "$TARGET_REL"; then
             matched_this=true
             break
         fi
-    done < <(extract_paths_from_file "$f")
+    done < <(list_paths "$f")
     [ "$matched_this" = true ] && MATCHED+=(".ax/spirit/rules/$(basename "$f")")
 done
 

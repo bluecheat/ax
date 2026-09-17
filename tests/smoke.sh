@@ -3735,6 +3735,8 @@ if command -v jq >/dev/null 2>&1; then
     done
     cp "$REPO/templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh" .ax/hooks/pre-commit/
     printf '# C\n' > CLAUDE.md; printf '# A\n' > AGENTS.md; printf 'sensors:\n  mode: fail\n' > .ax/config.yml
+    # 디스패처 등록 — I5(미등록) 가 같이 잡히면 아래 --strict 검증이 I7 과 무관하게 exit 1 이라 허위 통과예요
+    mkdir -p .claude && printf '{"hooks":{"PreToolUse":[{"hooks":[{"command":"bash .ax/hooks/pre-bash/grep-on-commit.sh"}]}]}}\n' > .claude/settings.json
 
     # (a) 파서 — 헤더 귀속 · 펜스 무시 · 자리표시자 무시 · 다중 마커 · 예시 추출
     cat > .ax/spirit/rules/fx.md <<'EOF'
@@ -3767,12 +3769,22 @@ enforced_kind: grep
 <!-- 검출 패턴: <regex> -->
 ## SP-FX-004: 예시 없음
 <!-- 검출 패턴: whatever -->
+## SP-FX-005: ERE 자리표시자
+<!-- 검출 패턴: <ERE> -->
+~~~
+## SP-FX-998: 물결 펜스 안
+<!-- 검출 패턴: tilde-fenced -->
+~~~
 EOF
     # shellcheck disable=SC1091
     RP_PATS=$(bash -c 'source .ax/scripts/bash/common.sh; goax_rule_patterns .ax/spirit/rules/fx.md')
-    [ "$(printf '%s\n' "$RP_PATS" | grep -c .)" -eq 4 ] \
-        && pass "goax_rule_patterns — 마커 4개 (헤더 앞 orphan · 펜스 안 · <regex> 자리표시자는 제외)" \
-        || fail "goax_rule_patterns — 기대 4행, 실제: $(printf '%s' "$RP_PATS" | grep -c .)"
+    [ "$(printf '%s\n' "$RP_PATS" | grep -c .)" -eq 4 ] && ! printf '%s\n' "$RP_PATS" | grep -q 'SP-FX-005\|SP-FX-998' \
+        && pass "goax_rule_patterns — 마커 4개 (헤더 앞 orphan · \`\`\`/~~~ 펜스 안 · <regex>/<ERE> 자리표시자는 제외)" \
+        || fail "goax_rule_patterns — 기대 4행(FX-005·FX-998 제외), 실제: $RP_PATS"
+    RP_OPS=$(bash -c 'source .ax/scripts/bash/common.sh; goax_rule_patterns "$0"' "$REPO/templates/default/.ax/_templates/spirit/ops.md")
+    [ -z "$RP_OPS" ] \
+        && pass "goax_rule_patterns — 출고 ops.md 는 패턴 0건 (SP-OPS-001 의 산문 주석이 마커로 안 읽힘)" \
+        || fail "goax_rule_patterns — 출고 ops.md 에서 패턴을 읽음 (산문이 정규식으로 집행됨): $RP_OPS"
     printf '%s\n' "$RP_PATS" | grep -q $'^SP-FX-002\tsecond$' \
         && pass "goax_rule_patterns — 다중 마커 + 앞뒤 공백 trim" \
         || fail "goax_rule_patterns — 둘째 마커 trim 실패: $RP_PATS"
@@ -3802,6 +3814,7 @@ EOF
     printf 'import org.junit.jupiter.api.Test\nclass FooTest\n' > src/test/FooTest.kt
     printf 'import org.junit.jupiter.api.Test\n' > src/test/Not.ts
     printf 'val amount: Double = 1.0\n' > src/main/Pay.kt
+    printf 'class A\nimport org.junit.jupiter.api.Test\n' > 'src/test/한글:이름.kt'
     rp_hook() { git reset -q >/dev/null 2>&1; git add "$@" >/dev/null 2>&1; CLAUDE_PROJECT_DIR="$RP" bash .ax/hooks/pre-commit/critical-rule-grep.sh 2>&1 >/dev/null; }
     RP_OUT=$(rp_hook src/test/FooTest.kt); RP_RC=$?
     [ "$RP_RC" -eq 2 ] && printf '%s' "$RP_OUT" | grep -q 'src/test/FooTest.kt:1 — SP-FX-002' \
@@ -3810,6 +3823,10 @@ EOF
     printf '%s' "$RP_OUT" | grep -q 'org.junit.jupiter' \
         && fail "critical-rule-grep — 매칭 줄 본문을 그대로 출력 (내용이 로그로 새요)" \
         || pass "critical-rule-grep — file:line 만 보고, 매칭 줄 본문은 안 찍음"
+    RP_OUT=$(rp_hook 'src/test/한글:이름.kt'); RP_RC=$?
+    [ "$RP_RC" -eq 2 ] && printf '%s' "$RP_OUT" | grep -q 'src/test/한글:이름.kt:2 — SP-FX-002' \
+        && pass "critical-rule-grep — 비ASCII·콜론 파일명도 검사 (quotePath=false) 하고 file:line 이 안 깨짐" \
+        || fail "critical-rule-grep — 한글/콜론 파일명 rc=$RP_RC: $RP_OUT"
     RP_OUT=$(rp_hook src/test/Not.ts); RP_RC=$?
     [ "$RP_RC" -eq 0 ] && ! printf '%s' "$RP_OUT" | grep -q 'SP-FX-002' \
         && pass "critical-rule-grep — paths 에 안 맞는 .ts 는 패턴에 걸려도 통과" \
@@ -3871,16 +3888,16 @@ enforced_by:
 <!-- 검출 패턴: baz -->
 EOF
     RP_RE=$(bash .ax/scripts/bash/check-rule-enforcement.sh --json 2>/dev/null)
-    echo "$RP_RE" | jq -e '[.result.i7_grep_without_pattern[] | .rule_id] == ["SP-FX-003"]' >/dev/null 2>&1 \
-        && pass "check-rule-enforcement I7 — grep-kind 파일의 마커 없는 룰(SP-FX-003)만 i7_grep_without_pattern" \
+    echo "$RP_RE" | jq -e '[.result.i7_grep_without_pattern[] | .rule_id] == ["SP-FX-003","SP-FX-005"]' >/dev/null 2>&1 \
+        && pass "check-rule-enforcement I7 — grep-kind 파일의 마커 없는 룰(SP-FX-003) + <ERE> 자리표시자 룰(SP-FX-005) 이 i7_grep_without_pattern" \
         || fail "check-rule-enforcement I7 — no_pattern 판정 불일치: $(echo "$RP_RE" | jq -c '.result.i7_grep_without_pattern')"
     echo "$RP_RE" | jq -e '[.result.i7_pattern_without_paths[] | .rule_id] == ["SP-NP-001"]' >/dev/null 2>&1 \
         && pass "check-rule-enforcement I7 — 패턴 있는데 paths 빈 룰(SP-NP-001)만 i7_pattern_without_paths" \
         || fail "check-rule-enforcement I7 — no_paths 판정 불일치: $(echo "$RP_RE" | jq -c '.result.i7_pattern_without_paths')"
     bash .ax/scripts/bash/check-rule-enforcement.sh --strict >/dev/null 2>&1; RP_RC=$?
-    [ "$RP_RC" -eq 1 ] \
-        && pass "check-rule-enforcement I7 — --strict 에서 exit 1 (CI 게이트)" \
-        || fail "check-rule-enforcement I7 — --strict 인데 exit $RP_RC"
+    [ "$RP_RC" -eq 1 ] && echo "$RP_RE" | jq -e '(.result.i5_not_registered | length) == 0 and (.next_step | test("^3 violations"))' >/dev/null 2>&1 \
+        && pass "check-rule-enforcement I7 — 다른 위반 0 인 상태에서 I7 3건만으로 --strict exit 1 (CI 게이트)" \
+        || fail "check-rule-enforcement I7 — --strict rc=$RP_RC, next_step=$(echo "$RP_RE" | jq -r .next_step), i5=$(echo "$RP_RE" | jq -c .result.i5_not_registered)"
 
     # (e) liveness C1 · rules-index pattern 필드
     RP_LV=$(bash .ax/scripts/bash/check-sensor-liveness.sh --json 2>/dev/null)
