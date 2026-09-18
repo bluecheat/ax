@@ -4,7 +4,7 @@
 
 ## 버전
 
-- [0.6.1](0.6.1.md) — 진단이 인프라 실패를 초록불로 찍던 것 (`goax_mktemp` · `goax_git_hook_path` · I6 출고 훅 목록) + 결정론 층까지 닿는 eval (hook 미러 shim · scaffold 케이스 3개)
+- [0.6.1](0.6.1.md) — external 룰의 "자동 실행 안 됨" 경고(I6)가 git 프로젝트에서 한 번도 안 뜨던 것 + 임시 파일·git 이 막힌 환경에서 doctor·`up` 이 틀리게 통과하던 것 (일반 환경 체감 없음) + eval 이 hook·스크립트 층까지
 - [0.6.0](0.6.0.md) — 룰의 `검출 패턴:` 마커를 실제로 집행 (grep 룰의 승격 = 집행)
 - [0.5.13](0.5.13.md) — `spec-completion-gate.sh` 가 spec 없는 triage 직후 매 커밋마다 jq 에러를 찍던 것
 - [0.5.12](0.5.12.md) — 상태 파일을 쓰는 SKILL.md 인라인 jq 가 무락이던 것 (`update-task.sh` 신설 · `update-state.sh --skill` · 20군데 흡수 · writer 계약 · `goax_help`)
