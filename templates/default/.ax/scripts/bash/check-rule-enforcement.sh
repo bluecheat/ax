@@ -271,10 +271,14 @@ if [ -n "$GIT_PC" ]; then
             # 기본으로 설치하므로 wrapper 존재 자체는 external 실행의 근거가 못 돼요
             # (그걸 근거로 치면 I6 가 항상 통과하는 자기 무력화). 출고 훅 이외의
             # 프로젝트 전용 훅이 1개 이상 있을 때만 트리거로 인정해요.
+            # 아래 제외 목록은 templates/default/.ax/hooks/pre-commit/ 의 출고 훅 전부여야 해요 —
+            # 하나라도 빠지면 갓 설치한 프로젝트에서 그 훅이 "프로젝트 전용" 으로 세어져 I6 가
+            # 영원히 통과해요 (spec-completion-gate.sh 가 빠져 있던 동안 실제로 그랬어요 — evals/doctor-i6
+            # 스캐폴드가 잡았어요). tests/smoke.sh §47 이 이 목록과 출고 디렉토리를 대조해요.
             for _h in "$ROOT/.ax/hooks/pre-commit/"*.sh; do
                 [ -f "$_h" ] || continue
                 case "$(basename "$_h")" in
-                    critical-rule-grep.sh|check-mistake-secrets.sh) ;;
+                    critical-rule-grep.sh|check-mistake-secrets.sh|spec-completion-gate.sh) ;;
                     *) TRIGGER_SURFACES+=("git:pre-commit-chain"); break ;;
                 esac
             done

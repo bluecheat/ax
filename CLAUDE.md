@@ -34,6 +34,7 @@ There is no `npm`/`make`/`gradle`. Anything more complex is invoked through Clau
 - `docs/reference/{rules-tokens,critical-rules,glossary,triage-matrix,rule-enforcement,confirmation-policy,opencode-compat}.md` — read-only reference (7 files). The installer copies the whole `docs/reference/` directory into `.ax/docs/reference/` in user projects, so user-facing docs (CLAUDE.md.template, spirit rules) reference these paths.
 - `changelog/<version>.md` — release notes. One file per version.
 - `tests/smoke.sh` — single shell test. The structural contract for the whole plugin lives here; read it first if you change file layout, frontmatter, or version strings.
+- `evals/<case>/{prompt.md,case.yaml,scaffold.sh,graders/*.md}` — `claude plugin eval` behavior suite, orthogonal to smoke (model behavior, not files). The sandbox never reads a project `.claude/settings.json`, so scaffold cases install `.ax/` with `scripts/provision.sh` and load `tests/eval-hook-shim/` next to the plugin — the shim re-registers `settings.json.template`'s hooks as plugin hooks (smoke §46 keeps the two identical; regenerate with `jq '{hooks: .hooks}'`). Always run with `--scaffold`; `evals/README.md` has the measured sandbox facts and the baseline table.
 
 ## Architecture — the harness model
 

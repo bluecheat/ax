@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: doctor-i6
+tags: [doctor, enforcement, hooks]
+# goax + hook 미러 shim (tests/eval-hook-shim/README.md) — 샌드박스는 프로젝트 settings.json 을 안 읽어요
+plugins: ["../..", "../../tests/eval-hook-shim"]
+context:
+  scaffold_script: scaffold.sh   # provision.sh 로 실제 설치 + 🔴 external:vitest 룰 하나, 트리거(CI·프로젝트 훅) 없음

@@ -3916,6 +3916,77 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────
+section "46. eval hook 미러 — tests/eval-hook-shim/hooks/hooks.json ↔ settings.json.template"
+# ───────────────────────────────────────────────────────────
+# `claude plugin eval` 샌드박스는 프로젝트 .claude/settings.json 을 읽지 않아요 (실측 — 던지기 config 에
+# cwd 의 trust 기록이 없음). 그래서 goax 가 등록하는 hook 을 플러그인 hook 으로 미러한 shim 을
+# scaffold 케이스가 같이 로드해요 (tests/eval-hook-shim/README.md). 미러가 템플릿과 어긋나면 eval 은
+# "설치되는 hook" 이 아니라 "옛 hook" 을 재고, shim 을 plugins: 에 빠뜨리면 hook 없이 돌아 Δ 가 조용히 0 이 돼요.
+SHIM="$REPO/tests/eval-hook-shim/hooks/hooks.json"
+SHIM_TPL="$REPO/templates/default/.claude/settings.json.template"
+if command -v jq >/dev/null 2>&1; then
+    if [ -f "$SHIM" ] && jq -e . "$SHIM" >/dev/null 2>&1; then
+        if [ "$(jq -S .hooks "$SHIM")" = "$(jq -S .hooks "$SHIM_TPL")" ]; then
+            pass "eval-hook-shim hooks.json .hooks == settings.json.template .hooks"
+        else
+            fail "eval-hook-shim hooks.json 이 템플릿과 달라요 — jq '{hooks: .hooks}' templates/default/.claude/settings.json.template > tests/eval-hook-shim/hooks/hooks.json"
+        fi
+    else
+        fail "tests/eval-hook-shim/hooks/hooks.json 없음 또는 JSON 아님"
+    fi
+    SHIM_MISS=0
+    for sc in "$REPO"/evals/*/scaffold.sh; do
+        [ -f "$sc" ] || continue
+        grep -q 'provision\.sh' "$sc" || continue          # .ax/ 를 설치하는 scaffold 만 대상
+        cy="$(dirname "$sc")/case.yaml"
+        if ! grep -q 'tests/eval-hook-shim' "$cy" 2>/dev/null; then
+            fail "$(basename "$(dirname "$sc")")/case.yaml — provision.sh 로 .ax/ 를 깔면서 plugins: 에 eval-hook-shim 이 없어요"
+            SHIM_MISS=1
+        fi
+    done
+    [ "$SHIM_MISS" -eq 0 ] && pass "provision.sh 를 쓰는 scaffold 케이스는 전부 plugins: 에 eval-hook-shim 포함"
+else
+    pass "§46 — jq 없음, skip"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "47. I6 출고 훅 제외 목록 ↔ templates/default/.ax/hooks/pre-commit/ — 갓 설치에서 external 룰이 '트리거 있음' 으로 새면 안 돼요"
+# ───────────────────────────────────────────────────────────
+# check-rule-enforcement.sh I6 는 goax wrapper 를 트리거로 안 치고, 출고 훅 *이외의* pre-commit 훅이 있을 때만
+# 트리거로 인정해요. 그 "출고 훅" 목록이 리터럴이라 새 훅(spec-completion-gate.sh)이 출고되면서 목록에서 빠졌고,
+# 그동안 갓 설치한 모든 프로젝트에서 I6 가 영원히 통과했어요 (evals/doctor-i6 스캐폴드가 잡음). 여기서 둘을 대조하고,
+# 실제 트리로 "출고 훅만 = I6 발화 / 프로젝트 훅 추가 = 해제" 를 고정해요.
+CRE="$REPO/templates/default/.ax/scripts/bash/check-rule-enforcement.sh"
+I6_LIST=$(grep -oE '^[[:space:]]*[a-z-]+\.sh(\|[a-z-]+\.sh)*\) ;;' "$CRE" | head -1 | tr -d ' )' | sed 's/;;$//' | tr '|' '\n' | sort)
+SHIPPED=$(ls "$REPO/templates/default/.ax/hooks/pre-commit/"*.sh | xargs -n1 basename | sort)
+if [ -n "$I6_LIST" ] && [ "$I6_LIST" = "$SHIPPED" ]; then
+    pass "I6 출고 훅 제외 목록 == pre-commit/ 출고 파일 ($(printf '%s' "$SHIPPED" | tr '\n' ' '))"
+else
+    fail "I6 제외 목록이 출고 훅과 달라요 — 목록: [$(printf '%s' "$I6_LIST" | tr '\n' ' ')] 출고: [$(printf '%s' "$SHIPPED" | tr '\n' ' ')]"
+fi
+if command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
+    I6T=$(mktemp -d)
+    mkdir -p "$I6T/.ax/scripts/bash" "$I6T/.ax/hooks/pre-commit" "$I6T/.claude"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$I6T/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/hooks/pre-commit/"*.sh "$I6T/.ax/hooks/pre-commit/"
+    git -C "$I6T" init -q
+    printf '#!/usr/bin/env bash\n#goax-pre-commit-chain\nexit 0\n' > "$I6T/.git/hooks/pre-commit"; chmod +x "$I6T/.git/hooks/pre-commit"
+    printf '# X\n\n## CRITICAL\n\n🔴 **`EVL:CRITICAL:001`** 카피 안전선\n- enforced_by: external:vitest\n- enforced_kind: test\n' > "$I6T/AGENTS.md"
+    I6R=$(GOAX_PROJECT_DIR="$I6T" bash "$I6T/.ax/scripts/bash/check-rule-enforcement.sh" --json 2>/dev/null)
+    echo "$I6R" | jq -e '(.result.i6_no_trigger|length)==1 and .result.i6_no_trigger[0].rule_id=="EVL:CRITICAL:001"' >/dev/null 2>&1 \
+        && pass "I6 — wrapper + 출고 훅만 있는 갓 설치에서 external:vitest 가 no_trigger 로 잡힘" \
+        || fail "I6 — 갓 설치에서 external 룰이 안 잡혀요: $(echo "$I6R" | jq -c '{i6: .result.i6_no_trigger, surfaces: .result.trigger_surfaces}')"
+    printf '#!/usr/bin/env bash\nnpx vitest run\n' > "$I6T/.ax/hooks/pre-commit/run-vitest.sh"; chmod +x "$I6T/.ax/hooks/pre-commit/run-vitest.sh"
+    I6R=$(GOAX_PROJECT_DIR="$I6T" bash "$I6T/.ax/scripts/bash/check-rule-enforcement.sh" --json 2>/dev/null)
+    echo "$I6R" | jq -e '(.result.i6_no_trigger|length)==0' >/dev/null 2>&1 \
+        && pass "I6 — 프로젝트 전용 pre-commit 훅을 추가하면 트리거로 인정돼 해제" \
+        || fail "I6 — 프로젝트 훅 추가 후에도 no_trigger: $(echo "$I6R" | jq -c '.result.i6_no_trigger')"
+    rm -rf "$I6T"
+else
+    pass "§47 실행 검사 — jq/git 없음, skip"
+fi
+
+# ───────────────────────────────────────────────────────────
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────
 if [ "$fail_count" -eq 0 ]; then
