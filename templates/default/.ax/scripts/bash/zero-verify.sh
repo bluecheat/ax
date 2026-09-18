@@ -110,7 +110,8 @@ fi
 PASSED=0; FAILED=0; SKIPPED=0
 CHECKS_JSON=""
 EVIDENCE=""
-LOG_DIR=$(mktemp -d)
+LOG_DIR=$(goax_mktemp -d "$PROJECT_ROOT") || { goax_tmp_error; exit "$EXIT_ERROR"; }
+trap '[ -n "${LOG_DIR:-}" ] && rm -rf "$LOG_DIR"' EXIT   # 조기 종료에도 지워요 — 폴백이면 프로젝트 트리(.ax/.session/tmp) 안이라 새면 보여요
 
 idx=0
 for name in "${NAMES[@]}"; do
@@ -198,6 +199,4 @@ else
     printf '%s\n' "$NEXT"
 fi
 
-unlink "$LOG_DIR"/*.log 2>/dev/null || true
-rmdir "$LOG_DIR" 2>/dev/null || true
 exit "$EXIT_CODE"

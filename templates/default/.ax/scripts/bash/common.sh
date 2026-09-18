@@ -249,6 +249,104 @@ goax_inject_fresh() {
     return 0
 }
 
+# ─── 임시 파일 — 인프라 실패가 초록불이 되지 않게 ──────────────────────
+# goax_mktemp [-d] [root]
+#   `mktemp` 가 실패하면 <root>/.ax/.session/tmp/ 아래로 폴백하고, 그것도 안 되면 1 을 돌려줘요.
+#   호출자는 `X=$(goax_mktemp "$ROOT") || { goax_tmp_error; exit "$EXIT_ERROR"; }` 로 받아야 해요 — 빈 경로로
+#   계속 가면 "룰 0건 검사 → all invariants pass" 가 돼요. 이 함수는 `$(...)` 안에서 불리니 사유는 stderr 에만
+#   적고 (stdout 에 쓰면 변수로 삼켜져요) JSON 에러 한 줄은 호출자의 goax_error 가 내요. 실측(claude plugin eval 샌드박스, $TMPDIR 쓰기 금지):
+#   check-rule-enforcement.sh 가 룰을 하나도 안 읽고 통과를 찍었어요. `-d` 는 디렉토리.
+#   폴백 디렉토리는 `.ax/.session/` 아래라 .gitignore.template 이 이미 가리고, 하루 넘은 세션
+#   디렉토리와 같이 goax_inject_fresh 가 지나가며 지워요.
+goax_mktemp() {
+    local dflag="" root fb out
+    if [ "${1:-}" = "-d" ]; then dflag="-d"; shift; fi
+    root="${1:-${CLAUDE_PROJECT_DIR:-$(find_project_root 2>/dev/null || pwd)}}"
+    # shellcheck disable=SC2086  # dflag 는 비었거나 -d
+    if out=$(mktemp $dflag 2>/dev/null) && [ -n "$out" ]; then
+        printf '%s\n' "$out"; return 0
+    fi
+    fb="$root/.ax/.session/tmp"
+    if ! mkdir -p "$fb" 2>/dev/null; then
+        printf '[goax] ERROR: 임시 파일을 못 만들어요 — mktemp 가 실패했고 (TMPDIR=%s) %s 도 만들 수 없어요\n' "${TMPDIR:-unset}" "$fb" >&2
+        return 1
+    fi
+    # shellcheck disable=SC2086
+    if out=$(mktemp $dflag "$fb/goax.XXXXXX" 2>/dev/null) && [ -n "$out" ]; then
+        printf '%s\n' "$out"; return 0
+    fi
+    # mktemp 바이너리 자체가 없거나 템플릿을 거부하는 환경 — 순수 bash 로 마지막 시도.
+    # mktemp 의 0600 을 흉내내려고 umask 077 로 만들어요 (프로젝트 트리 안이라 노출은 작지만 같은 계약을 지켜요)
+    out="$fb/goax.$$.$RANDOM"
+    if [ -n "$dflag" ]; then
+        ( umask 077; mkdir "$out" ) 2>/dev/null && { printf '%s\n' "$out"; return 0; }
+    else
+        ( umask 077; set -o noclobber; : > "$out" ) 2>/dev/null && { printf '%s\n' "$out"; return 0; }
+    fi
+    printf '[goax] ERROR: 임시 파일을 못 만들어요 — mktemp 가 실패했고 (TMPDIR=%s) %s 에 쓸 수 없어요\n' "${TMPDIR:-unset}" "$fb" >&2
+    return 1
+}
+
+# goax_tmp_error — goax_mktemp 실패 시 호출자가 내는 한 줄 (JSON 모드면 errors[], 아니면 stderr). exit 는 호출자가 해요:
+#   X=$(goax_mktemp "$ROOT") || { goax_tmp_error; exit "$EXIT_ERROR"; }
+# 헬퍼 안에서 exit 하면 안 돼요 — `$(...)` 서브셸만 끝나고 호출자는 빈 경로로 계속 가요 (그게 원래 버그예요).
+goax_tmp_error() {
+    goax_error "임시 파일을 못 만들어요 — mktemp 도 .ax/.session/tmp 도 실패했어요 (자세한 건 stderr 을 봐요)"
+}
+
+# ─── git hook 경로 — git 이 못 돌 때도 파일로 해석 ───────────────────────
+# goax_git_hook_path <root> <hook>
+#   `git rev-parse --git-path hooks/<hook>` (core.hooksPath · worktree · 별도 gitdir 반영) 을 먼저 쓰고,
+#   git 이 실패하면 `.git` (디렉토리 또는 `gitdir:` 포인터 파일) 과 `.git/config` 의 `core.hooksPath` 를
+#   직접 읽어요. 실측(claude plugin eval 샌드박스): `/usr/bin/git` xcrun 셔틀이 $TMPDIR 캐시를 못 써서
+#   죽고, check-sensor-liveness C2 가 "pre-commit 미설치" 오탐 · check-rule-enforcement I6 가 프로젝트 훅을
+#   못 봤어요. 절대경로를 출력하고, 저장소가 아니면 1. 존재 여부는 호출자가 봐요 (-f · -x).
+goax_git_hook_path() {
+    local root="$1" hook="$2" p gitdir hp common
+    p=$(git -C "$root" rev-parse --git-path "hooks/$hook" 2>/dev/null) || p=""
+    if [ -n "$p" ]; then
+        case "$p" in /*) ;; *) p="$root/$p" ;; esac
+        printf '%s\n' "$p"; return 0
+    fi
+    gitdir=""
+    if [ -d "$root/.git" ]; then
+        gitdir="$root/.git"
+    elif [ -f "$root/.git" ]; then
+        gitdir=$(sed -n 's/^gitdir:[[:space:]]*//p' "$root/.git" 2>/dev/null | head -1 | tr -d '\r')
+        case "$gitdir" in ""|/*) ;; *) gitdir="$root/$gitdir" ;; esac
+    fi
+    [ -n "$gitdir" ] && [ -d "$gitdir" ] || return 1
+    # linked worktree (`git worktree add`) 의 gitdir 은 .git/worktrees/<name> 이고 config 도 hooks 도 거기 없어요 —
+    # `commondir` 파일이 공용 .git 을 가리켜요 (gitdir 기준 상대경로)
+    if [ -f "$gitdir/commondir" ]; then
+        common=$(head -1 "$gitdir/commondir" 2>/dev/null | tr -d '\r')
+        case "$common" in ""|/*) ;; *) common="$gitdir/$common" ;; esac
+        # `../..` 를 접어요 — 안 접으면 .git/worktrees/<name>/../../hooks 처럼 나가 비교가 깨져요
+        [ -n "$common" ] && [ -d "$common" ] && gitdir=$(cd "$common" 2>/dev/null && pwd) || true
+    fi
+    # [core] 섹션의 hooksPath 만 — 로컬 config 뿐이에요 (global 은 git 이 살아 있을 때 위 경로가 봐요).
+    # git 처럼 `#`/`;` 주석과 둘러싼 큰따옴표를 벗겨요 — 안 벗기면 C2·I6 가 훅을 못 찾아요.
+    hp=$(awk '
+        /^[[:space:]]*\[/ { core = (tolower($0) ~ /^[[:space:]]*\[core\]/); next }   # 섹션 이름은 대소문자 무시 (git 과 같게)
+        core && /^[[:space:]]*hooksPath[[:space:]]*=/ {
+            sub(/^[^=]*=[[:space:]]*/, ""); sub(/[[:space:]]*[#;].*$/, ""); sub(/[[:space:]]+$/, "")
+            if (substr($0, 1, 1) == "\"" && substr($0, length($0), 1) == "\"" && length($0) >= 2) $0 = substr($0, 2, length($0) - 2)
+            print; exit
+        }
+    ' "$gitdir/config" 2>/dev/null)
+    if [ -n "$hp" ]; then
+        case "$hp" in
+            /*) ;;
+            "~/"*) hp="$HOME/${hp#\~/}" ;;
+            *) hp="$root/$hp" ;;   # 상대경로는 워킹트리 루트 기준 (git 문서)
+        esac
+        printf '%s/%s\n' "$hp" "$hook"
+    else
+        printf '%s/hooks/%s\n' "$gitdir" "$hook"
+    fi
+    return 0
+}
+
 # ─── 경로 정규화 / 경계 매칭 ────────────────────────────────────────
 # 보호 경로 검사처럼 "이 경로가 저 경로 안에 있나" 를 판정하는 곳은 반드시 이 둘을
 # 거쳐야 해요. 문자열 접두 비교만 하면 `./x`·`a/../x` 같은 표기 변형으로 우회되고,

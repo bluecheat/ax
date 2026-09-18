@@ -15,7 +15,7 @@ MARKER='Tests?[[:space:]]+[0-9]+|[0-9]+ (passed|failed)|zero-verify'
 command -v gh >/dev/null 2>&1 || { echo "gh CLI 없음 — skip"; exit 2; }
 gh auth status >/dev/null 2>&1 || { echo "gh 미인증 — skip"; exit 2; }
 
-LOG=$(mktemp)
+LOG=$(mktemp) || { echo "[probe] 임시 파일을 못 만들어요" >&2; exit 1; }   # 빈 경로로 계속 가면 안 돼요
 cleanup() { unlink "$LOG" 2>/dev/null || true; }
 trap cleanup EXIT
 

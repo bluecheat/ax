@@ -157,7 +157,7 @@ fi
 
 # ── 후보 모드 (default) ──
 # bash 3.2 호환 — associative array 대신 sort+uniq
-TMPLIST=$(mktemp)
+TMPLIST=$(goax_mktemp "$PROJECT_ROOT") || { goax_tmp_error; exit "$EXIT_ERROR"; }
 trap 'rm -f "$TMPLIST"' EXIT
 
 while IFS= read -r f; do

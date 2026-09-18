@@ -3987,6 +3987,102 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────
+section "48. goax_mktemp — 임시 파일 실패가 초록불이 되면 안 돼요 (샌드박스 \$TMPDIR 쓰기 금지 실측)"
+# ───────────────────────────────────────────────────────────
+# claude plugin eval 샌드박스에서 `mktemp` 가 죽자 check-rule-enforcement.sh 가 빈 경로로 계속 가 룰 0건 검사 →
+# "all invariants pass" 를 찍었어요. 이제 스크립트는 goax_mktemp 만 쓰고, 그건 .ax/.session/tmp 로 폴백하거나
+# error 로 끝나요. macOS mktemp 는 TMPDIR 이 뭐든 Darwin temp 로 떨어져서 밖에선 못 죽이니 가짜 mktemp 로 흉내내요.
+BARE_MKTEMP=$(grep -lE '^[^#]*(\$\([[:space:]]*mktemp|`[[:space:]]*mktemp)' "$REPO/templates/default/.ax/scripts/bash/"*.sh "$REPO/templates/default/.ax/hooks/"*/*.sh "$REPO/scripts/"*.sh 2>/dev/null | grep -v '/common\.sh$' || true)
+if [ -z "$BARE_MKTEMP" ]; then
+    pass "출고 스크립트·훅·provision.sh 에 맨 \$(mktemp) 없음 — 전부 goax_mktemp (provision 은 mktemp 가 죽으면 백업이 / 에 떨어지고 MANIFEST 복사가 사용자 템플릿을 덮어썼어요)"
+else
+    fail "맨 \$(mktemp) 사용 — goax_mktemp \"\$ROOT\" || { goax_error …; exit } 로: $(echo "$BARE_MKTEMP" | xargs -n1 basename | tr '\n' ' ')"
+fi
+if command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
+    MT=$(mktemp -d)
+    trap 'chmod -R u+w "$MT" 2>/dev/null; rm -rf "$MT"' EXIT   # chmod a-w 뒤 중단돼도 /tmp 에 못 지우는 트리를 안 남겨요
+    mkdir -p "$MT/.ax/scripts/bash" "$MT/fakebin"
+    printf '#!/bin/sh\nexit 1\n' > "$MT/fakebin/mktemp"; chmod +x "$MT/fakebin/mktemp"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$MT/.ax/scripts/bash/"
+    git -C "$MT" init -q
+    printf '# X\n\n## CRITICAL\n\n🔴 **`EVL:CRITICAL:001`** 카피\n- enforced_by: external:vitest\n- enforced_kind: test\n' > "$MT/AGENTS.md"
+    MTR=$(GOAX_PROJECT_DIR="$MT" PATH="$MT/fakebin:$PATH" bash "$MT/.ax/scripts/bash/check-rule-enforcement.sh" --json 2>/dev/null)
+    if echo "$MTR" | jq -e '.result.rule_count == 1' >/dev/null 2>&1 && [ -d "$MT/.ax/.session/tmp" ]; then
+        pass "mktemp 실패 → .ax/.session/tmp 폴백, 룰 1건 그대로 검사"
+    else
+        fail "mktemp 실패 폴백이 안 돼요: $(echo "$MTR" | jq -c '{status, rule_count: .result.rule_count}' 2>/dev/null)"
+    fi
+    if [ "$(id -u)" -ne 0 ]; then   # root 는 chmod a-w 를 무시해서 이 단정이 조용히 뒤집혀요
+        rm -rf "$MT/.ax/.session"; chmod a-w "$MT/.ax"
+        MTR=$(GOAX_PROJECT_DIR="$MT" PATH="$MT/fakebin:$PATH" bash "$MT/.ax/scripts/bash/check-rule-enforcement.sh" --json 2>/dev/null); MTRC=$?
+        chmod u+w "$MT/.ax"
+        if [ "$MTRC" -eq 1 ] && echo "$MTR" | jq -e '.status == "error"' >/dev/null 2>&1; then
+            pass "mktemp 실패 + 폴백 불가 → status error · exit 1 (초록불 아님)"
+        else
+            fail "임시 파일을 못 만드는데 통과를 찍어요: rc=$MTRC $(echo "$MTR" | jq -c '{status, rule_count: .result.rule_count}' 2>/dev/null)"
+        fi
+    else
+        pass "§48 폴백 불가 단정 — root 라 skip"
+    fi
+    rm -rf "$MT"; trap - EXIT
+else
+    pass "§48 실행 검사 — jq/git 없음, skip"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "49. goax_git_hook_path — git 이 못 돌아도 pre-commit 훅을 봐야 해요 (샌드박스 xcrun 셔틀 실측)"
+# ───────────────────────────────────────────────────────────
+# 샌드박스에서 `/usr/bin/git rev-parse --git-path` 가 죽자 check-sensor-liveness C2 가 "pre-commit 미설치" 오탐,
+# check-rule-enforcement I6 가 프로젝트 훅을 못 봤어요. 헬퍼는 git 이 실패하면 .git(디렉토리·gitdir 포인터)과
+# .git/config 의 core.hooksPath 를 직접 읽어요.
+BARE_GITPATH=$(grep -l '^[^#]*rev-parse --git-path' "$REPO/templates/default/.ax/scripts/bash/"*.sh 2>/dev/null | grep -v '/common\.sh$' || true)
+if [ -z "$BARE_GITPATH" ]; then
+    pass "출고 스크립트에 맨 rev-parse --git-path 없음 — 전부 goax_git_hook_path"
+else
+    fail "맨 rev-parse --git-path 사용 — goax_git_hook_path 로: $(echo "$BARE_GITPATH" | xargs -n1 basename | tr '\n' ' ')"
+fi
+if command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
+    GT=$(cd "$(mktemp -d)" && pwd -P)   # realpath — git 이 worktree 포인터에 realpath 를 써요 (macOS /var → /private/var)
+    mkdir -p "$GT/.ax/scripts/bash" "$GT/fakebin"
+    printf '#!/bin/sh\nexit 128\n' > "$GT/fakebin/git"; chmod +x "$GT/fakebin/git"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-sensor-liveness}.sh "$GT/.ax/scripts/bash/"
+    git -C "$GT" init -q
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$GT/.git/hooks/pre-commit"; chmod +x "$GT/.git/hooks/pre-commit"
+    GTR=$(GOAX_PROJECT_DIR="$GT" PATH="$GT/fakebin:$PATH" bash "$GT/.ax/scripts/bash/check-sensor-liveness.sh" --json 2>/dev/null)
+    echo "$GTR" | jq -e '.result.git_precommit_installed == true' >/dev/null 2>&1 \
+        && pass "git 죽음 + .git/hooks/pre-commit 있음 → C2 설치됨 (오탐 없음)" \
+        || fail "git 이 죽으면 C2 가 미설치로 오탐: $(echo "$GTR" | jq -c '.result.git_precommit_installed' 2>/dev/null)"
+    # core.hooksPath (husky v9) — 파일로 해석. 상대경로는 워킹트리 기준
+    printf '\thooksPath = .husky/_\n' >> "$GT/.git/config"
+    HP=$(bash -c "source '$GT/.ax/scripts/bash/common.sh'; PATH='$GT/fakebin:$PATH' goax_git_hook_path '$GT' pre-commit")
+    [ "$HP" = "$GT/.husky/_/pre-commit" ] \
+        && pass "git 죽음 + core.hooksPath → 파일로 해석 ($HP)" \
+        || fail "core.hooksPath 폴백이 틀려요: $HP"
+    # 따옴표·주석 — git 은 둘 다 벗겨요
+    sed -i.bak 's|hooksPath = .husky/_|hooksPath = "my hooks" ; why|' "$GT/.git/config"; rm -f "$GT/.git/config.bak"
+    HP=$(bash -c "source '$GT/.ax/scripts/bash/common.sh'; PATH='$GT/fakebin:$PATH' goax_git_hook_path '$GT' pre-commit")
+    [ "$HP" = "$GT/my hooks/pre-commit" ] \
+        && pass "git 죽음 + hooksPath 큰따옴표·주석 → 벗겨서 해석" \
+        || fail "hooksPath 의 따옴표·주석을 못 벗겨요: $HP"
+    sed -i.bak 's|hooksPath = "my hooks" ; why|hooksPath = .husky/_|' "$GT/.git/config"; rm -f "$GT/.git/config.bak"
+    # 실제 linked worktree — gitdir 은 .git/worktrees/<name>, config·hooks 는 commondir 너머 공용 .git 에
+    git -C "$GT" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+    git -C "$GT" worktree add -q "$GT/wt2" -b wt2 2>/dev/null
+    HP=$(bash -c "source '$GT/.ax/scripts/bash/common.sh'; PATH='$GT/fakebin:$PATH' goax_git_hook_path '$GT/wt2' pre-commit")
+    [ "$HP" = "$GT/wt2/.husky/_/pre-commit" ] \
+        && pass "git 죽음 + linked worktree → commondir 따라 공용 config 의 hooksPath 해석" \
+        || fail "linked worktree 폴백이 틀려요 (기대 $GT/wt2/.husky/_/pre-commit): $HP"
+    sed -i.bak '/hooksPath/d' "$GT/.git/config"; rm -f "$GT/.git/config.bak"
+    HP=$(bash -c "source '$GT/.ax/scripts/bash/common.sh'; PATH='$GT/fakebin:$PATH' goax_git_hook_path '$GT/wt2' pre-commit")
+    [ "$HP" = "$GT/.git/hooks/pre-commit" ] \
+        && pass "git 죽음 + linked worktree, hooksPath 없음 → 공용 .git/hooks" \
+        || fail "linked worktree 의 공용 hooks 경로가 틀려요 (기대 $GT/.git/hooks/pre-commit): $HP"
+    rm -rf "$GT"
+else
+    pass "§49 실행 검사 — jq/git 없음, skip"
+fi
+
+# ───────────────────────────────────────────────────────────
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────
 if [ "$fail_count" -eq 0 ]; then

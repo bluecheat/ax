@@ -29,7 +29,7 @@ case "$CUR" in
     *) echo "$VERSION_FILE 이 semver 가 아니에요 ($CUR) — skip"; exit 2 ;;
 esac
 
-ORIG=$(mktemp)
+ORIG=$(mktemp) || { echo "[probe] 임시 파일을 못 만들어요" >&2; exit 1; }   # 빈 경로로 계속 가면 안 돼요
 cleanup() {
     cp "$ORIG" "$VERSION_FILE" 2>/dev/null || true
     git reset -q -- "$VERSION_FILE" 2>/dev/null || true
