@@ -69,6 +69,8 @@ WARNINGS=""; SUGGESTED=""; PRESERVED=""; LINK_HITS=""
 COPIED=0; SEEDED_KEPT=0
 
 TPL="$PLUGIN_ROOT/templates/default"
+# shellcheck source=../templates/default/.ax/scripts/bash/common.sh
+source "$TPL/.ax/scripts/bash/common.sh"   # goax_mktemp — 설치기는 .ax/ 를 *만드는* 쪽이라 설치된 common.sh 가 아니라 템플릿의 것을 써요
 MANIFEST="$TPL/MANIFEST"
 [ -f "$MANIFEST" ] || die "MANIFEST 부재 — $MANIFEST"
 
@@ -162,7 +164,8 @@ if [ -f .ax/_templates/spec/.origin ]; then
 fi
 UM_BACKUP=""
 if [ -n "$USER_MODIFIED" ] && [ "$DRY_RUN" != true ]; then
-    UM_BACKUP=$(mktemp -d)
+    # 맨 mktemp 면 실패 시 빈 경로로 계속 가 백업이 / 에 떨어지고 MANIFEST 복사가 사용자 템플릿을 덮어써요 — 실패는 die
+    UM_BACKUP=$(goax_mktemp -d "$PROJECT_DIR") || die "임시 디렉토리를 만들 수 없어요 (mktemp · .ax/.session/tmp 둘 다 실패) — 사용자 수정 템플릿 백업 없이는 진행하지 않아요"
     while IFS= read -r f; do
         [ -z "$f" ] && continue
         mkdir -p "$UM_BACKUP/$(dirname "$f")"
@@ -243,7 +246,7 @@ fi
 if [ -f AGENTS.md ]; then
     # 비교 기준은 [PROJECT_NAME] 을 치환한 쪽이에요. 원본 템플릿과 비교하면 신규 설치
     # 직후에도 늘 "다름"이 떠서 .suggested 가 영구히 붙어요.
-    _agents_ref=$(mktemp)
+    _agents_ref=$(goax_mktemp "$PROJECT_DIR") || die "임시 파일을 만들 수 없어요 (mktemp · .ax/.session/tmp 둘 다 실패)"
     sed "s/\[PROJECT_NAME\]/$(basename "$PROJECT_DIR")/g" "$TPL/AGENTS.md.template" > "$_agents_ref" 2>/dev/null
     if ! same "$_agents_ref" AGENTS.md; then
         cpf "$TPL/AGENTS.md.template" .ax/AGENTS.md.suggested

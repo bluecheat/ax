@@ -89,7 +89,8 @@ if [ ! -f "$TARGET" ]; then
 fi
 
 # code fence 라인 제거한 본문을 임시 파일로
-TMP_BODY=$(mktemp)
+# --file 모드는 PROJECT_ROOT 가 비어 있어요 — 헬퍼가 스스로 루트를 찾아요
+TMP_BODY=$(goax_mktemp "${PROJECT_ROOT:-}") || { goax_tmp_error; exit "$EXIT_ERROR"; }
 trap 'rm -f "$TMP_BODY"' EXIT
 awk '
     /^```/ { in_fence = !in_fence; print ""; next }

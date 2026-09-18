@@ -1,0 +1,5 @@
+{
+  "name": "goax-eval-hook-shim",
+  "version": "0.0.1",
+  "description": "eval 전용 shim — claude plugin eval 샌드박스는 프로젝트 .claude/settings.json 을 로드하지 않아서, goax 가 사용자 프로젝트에 등록하는 hook 을 플러그인 hook 으로 대신 등록해요. 배포 대상 아님."
+}

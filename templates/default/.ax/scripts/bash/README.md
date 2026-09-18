@@ -7,7 +7,7 @@
 
 | 스크립트 | 용도 | 호출하는 skill |
 |---|---|---|
-| `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log, `goax_inject_fresh` 세션 내 중복 주입 제거, `goax_lock`/`goax_unlock`/`goax_unlock_all` 원장 락, `goax_resolve_spec` `--spec` 축약 해석, `goax_secret_rules`/`goax_secret_patterns`/`redact_secrets` 시크릿 패턴 SSOT — 검출과 마스킹이 같은 표에서 나와요) | (sourced by all) |
+| `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log, `goax_inject_fresh` 세션 내 중복 주입 제거, `goax_lock`/`goax_unlock`/`goax_unlock_all` 원장 락, `goax_mktemp` 폴백 임시 파일, `goax_git_hook_path` git 없이도 도는 훅 경로, `goax_resolve_spec` `--spec` 축약 해석, `goax_secret_rules`/`goax_secret_patterns`/`redact_secrets` 시크릿 패턴 SSOT — 검출과 마스킹이 같은 표에서 나와요) | (sourced by all) |
 | `detect-model.sh` | 지금 돌고 있는 모델 식별 — override → `$GOAX_MODEL` → transcript 스캔 → unknown | (진단·로깅용) |
 | `next-spec-num.sh` | 다음 spec NNN / ADR NNNN 번호 계산 (`--kind spec\|adr`) | `spec`, `adr` |
 | `tier-from-state.sh` | current-task.json + config.yml → tier 결정 + evaluator 필수 여부 + spec_review 필수 여부(Size 축만) (`--reset` 는 `reset-task.sh` 경유) | `spec`, `tasks-gate.sh`, `spec-review.sh`, `update-state.sh` |
@@ -54,6 +54,8 @@
 - stderr: `[goax]` prefix 로그·경고
 - stdout: `--json` 시 JSON, 아니면 사용자 친화 텍스트
 - exit code: `0` ok(경고 있어도 ok), `1` error(`--strict` 위반 포함), `2` skipped (대상 없음 · graceful degradation)
+- 임시 파일은 맨 `$(mktemp)` 대신 `goax_mktemp [-d] "$ROOT"` — `mktemp` 가 죽으면 `.ax/.session/tmp/` 로 폴백하고, 그것도 안 되면 1 을 돌려줘요. 호출자는 `|| { goax_tmp_error; exit "$EXIT_ERROR"; }` 로 받아요 (헬퍼 안에서 exit 하면 `$(...)` 서브셸만 끝나요) (`$(...)` 안이라 헬퍼는 stderr 에만 사유를 적어요). 실측: `claude plugin eval` 샌드박스는 `$TMPDIR` 쓰기를 막는데, `check-rule-enforcement.sh` 가 빈 경로로 계속 가 룰 0건 검사 → "all invariants pass" 를 찍었어요. 인프라 실패는 error 여야지 초록불이면 안 돼요 (smoke §48 이 맨 mktemp 를 잡아요)
+- git hook 경로는 맨 `git rev-parse --git-path` 대신 `goax_git_hook_path "$ROOT" pre-commit` — git 이 못 돌면 `.git`(디렉토리·`gitdir:` 포인터)과 `.git/config` 의 `core.hooksPath` 를 직접 읽어요. 실측: 샌드박스에서 `/usr/bin/git` xcrun 셔틀이 죽어 C2 가 "미설치" 오탐, I6 가 프로젝트 훅을 못 봤어요 (smoke §49)
 
 ### 의도적 편차 (documented deviation)
 

@@ -210,7 +210,9 @@ extract_frontmatter() {
 }
 
 # ─── (3) 룰 전체 수집 ────────────────────────────────────────────
-ALL_RULES=$(mktemp)
+# goax_mktemp — 샌드박스에서 $TMPDIR 이 막히면 .ax/.session/tmp 로 폴백하고, 그것도 안 되면 error 로 끝나요.
+# 옛 `$(mktemp)` 은 실패해도 빈 경로로 계속 가서 룰 0건 검사 → "all invariants pass" 를 찍었어요 (evals/doctor-i6 실측).
+ALL_RULES=$(goax_mktemp "$ROOT") || { goax_tmp_error; exit "$EXIT_ERROR"; }
 trap 'rm -f "$ALL_RULES"' EXIT
 
 extract_inline "$RULES_FILE" >> "$ALL_RULES"
@@ -261,20 +263,25 @@ done
 [ -d "$ROOT/.buildkite" ] && TRIGGER_SURFACES+=("ci:buildkite")
 
 # git pre-commit — core.hooksPath 설정(husky v9 등)까지 반영해 실제 경로로 확인.
-# 실행권한 없는 훅은 git 이 무시하므로 -x 까지 요구.
-GIT_PC=$(git -C "$ROOT" rev-parse --git-path hooks/pre-commit 2>/dev/null || echo "")
+# 실행권한 없는 훅은 git 이 무시하므로 -x 까지 요구. git 이 못 도는 환경(샌드박스)에선
+# goax_git_hook_path 가 .git/config 를 직접 읽어요 — 옛 `git rev-parse` 단독은 거기서 빈 값이 돼
+# 프로젝트 훅을 못 봤어요.
+GIT_PC=$(goax_git_hook_path "$ROOT" pre-commit 2>/dev/null || echo "")
 if [ -n "$GIT_PC" ]; then
-    case "$GIT_PC" in /*) ;; *) GIT_PC="$ROOT/$GIT_PC" ;; esac
     if [ -f "$GIT_PC" ] && [ -x "$GIT_PC" ]; then
         if grep -q "$GOAX_CHAIN_MARKER" "$GIT_PC" 2>/dev/null; then
             # goax wrapper 는 .ax/hooks/pre-commit/*.sh 만 chain 해요 — up 이 전 환경
             # 기본으로 설치하므로 wrapper 존재 자체는 external 실행의 근거가 못 돼요
             # (그걸 근거로 치면 I6 가 항상 통과하는 자기 무력화). 출고 훅 이외의
             # 프로젝트 전용 훅이 1개 이상 있을 때만 트리거로 인정해요.
+            # 아래 제외 목록은 templates/default/.ax/hooks/pre-commit/ 의 출고 훅 전부여야 해요 —
+            # 하나라도 빠지면 갓 설치한 프로젝트에서 그 훅이 "프로젝트 전용" 으로 세어져 I6 가
+            # 영원히 통과해요 (spec-completion-gate.sh 가 빠져 있던 동안 실제로 그랬어요 — evals/doctor-i6
+            # 스캐폴드가 잡았어요). tests/smoke.sh §47 이 이 목록과 출고 디렉토리를 대조해요.
             for _h in "$ROOT/.ax/hooks/pre-commit/"*.sh; do
                 [ -f "$_h" ] || continue
                 case "$(basename "$_h")" in
-                    critical-rule-grep.sh|check-mistake-secrets.sh) ;;
+                    critical-rule-grep.sh|check-mistake-secrets.sh|spec-completion-gate.sh) ;;
                     *) TRIGGER_SURFACES+=("git:pre-commit-chain"); break ;;
                 esac
             done

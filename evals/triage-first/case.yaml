@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: triage-first
+tags: [triage, meta, hooks]
+# goax + hook 미러 shim (tests/eval-hook-shim/README.md) — 샌드박스는 프로젝트 settings.json 을 안 읽어요
+plugins: ["../..", "../../tests/eval-hook-shim"]
+context:
+  scaffold_script: scaffold.sh   # provision.sh 로 실제 설치 + src/payment/ 픽스처. 프롬프트는 사용자 요청 한 문장

@@ -92,9 +92,10 @@ fi
 # core.hooksPath 설정(husky v9 등)까지 반영해 실제 경로로 확인.
 # 실행권한 없는 훅은 git 이 무시하므로 -x 까지 요구.
 GIT_HOOK_OK=false
-GIT_PC=$(git -C "$ROOT" rev-parse --git-path hooks/pre-commit 2>/dev/null || echo "")
+# git 이 못 도는 환경(샌드박스: /usr/bin/git xcrun 셔틀이 $TMPDIR 캐시를 못 씀)에선 goax_git_hook_path 가
+# .git/config 를 직접 읽어요 — 옛 `git rev-parse` 단독은 거기서 "pre-commit 미설치" 오탐을 냈어요.
+GIT_PC=$(goax_git_hook_path "$ROOT" pre-commit 2>/dev/null || echo "")
 if [ -n "$GIT_PC" ]; then
-    case "$GIT_PC" in /*) ;; *) GIT_PC="$ROOT/$GIT_PC" ;; esac
     [ -f "$GIT_PC" ] && [ -x "$GIT_PC" ] && GIT_HOOK_OK=true
 fi
 [ "$GIT_HOOK_OK" = false ] && FINDINGS=$((FINDINGS + 1))
