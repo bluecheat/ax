@@ -235,6 +235,7 @@ EOF
         PASS=true; REASON="둘 다 진행 · sha 일치 (round ${ROUND})"
     fi
 
+    OUT=""
     if [ "$MODE" = "merge" ] && [ "$DRY_RUN" != true ]; then
         OUT="$SPEC_DIR/review-spec.md"
         {
@@ -256,8 +257,10 @@ EOF
             --argjson ap "$A_P" --arg av "$A_V" --arg as "$A_S" --argjson am "$A_M" --arg af "$A_FILE" \
             --argjson ep "$E_P" --arg ev "$E_V" --arg es "$E_S" --argjson em "$E_M" --arg ef "$E_FILE" \
             --argjson pass "$PASS" --arg reason "$REASON" --arg mode "$MODE" --argjson dry "$DRY_RUN" \
+            --arg merged "${OUT:-}" \
             '{spec:$spec, sha:$sha, spec_sha:$ssha, tasks_sha:(if $tsha=="" then null else $tsha end),
               required:$req, required_source:$reqsrc, round:$round, mode:$mode, dry_run:$dry,
+              merged_file:(if $merged=="" then null else $merged end),
               changed_files:$ch,
               architect:{present:$ap, verdict:(if $av=="" then null else $av end), sha:(if $as=="" then null else $as end), sha_match:$am, file:$af},
               evaluator:{present:$ep, verdict:(if $ev=="" then null else $ev end), sha:(if $es=="" then null else $es end), sha_match:$em, file:$ef},
