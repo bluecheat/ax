@@ -9,7 +9,8 @@
 #   1. 미해결 마커 `**NEEDS CLARIFICATION**` 잔존 → fail
 #      (마커 형식만 — 산문에서 이름을 언급하는 건 안 잡아요)
 #   2. placeholder `<...>` 본문 잔존        → fail
-#      (표 셀 `^|` · URL `<http...>` · code fence ``` 화이트리스트)
+#      (표 셀 `^|` · URL `<http...>` · 이메일 · code fence ``` · 인라인 코드 `…` 화이트리스트)
+#      걸린 줄은 result.placeholder_lines 에 "줄번호: 본문" 으로 그대로 보여줘요 — 몇 건인지만 알면 찾으러 다녀요
 #   3. 필수 섹션 본문 1 라인 이상           → fail
 #      (§1.1 한 줄 정의, §3 성공 기준, §4 사용자 시나리오)
 #
@@ -23,6 +24,7 @@
 # Output (--json):
 #   {"status":"ok"|"error",
 #    "result":{"file":"...", "needs_clarification":N, "placeholders":N,
+#              "placeholder_lines":["12: 담당: <이름>", ...],
 #              "empty_sections":[...],
 #              "tasks_progress":{"total":N,"completed":N,"open":N},
 #              "ac_progress":{"total":N,"completed":N,"open":N}},
@@ -88,13 +90,13 @@ if [ ! -f "$TARGET" ]; then
     fi
 fi
 
-# code fence 라인 제거한 본문을 임시 파일로
+# code fence 라인과 인라인 코드 `…` 를 지운 본문을 임시 파일로 — `<패턴>` 같은 코드 인용은 placeholder 가 아니에요
 # --file 모드는 PROJECT_ROOT 가 비어 있어요 — 헬퍼가 스스로 루트를 찾아요
 TMP_BODY=$(goax_mktemp "${PROJECT_ROOT:-}") || { goax_tmp_error; exit "$EXIT_ERROR"; }
 trap 'rm -f "$TMP_BODY"' EXIT
 awk '
     /^```/ { in_fence = !in_fence; print ""; next }
-    { if (in_fence) print ""; else print }
+    { if (in_fence) { print "" } else { gsub(/`[^`]*`/, "``"); print } }
 ' "$TARGET" > "$TMP_BODY"
 
 # 1. NEEDS CLARIFICATION 검사
@@ -120,6 +122,18 @@ if [ -z "$PLACEHOLDER_LINES" ]; then
     PLACEHOLDER_COUNT=0
 else
     PLACEHOLDER_COUNT=$(printf '%s\n' "$PLACEHOLDER_LINES" | wc -l | tr -d ' ')
+fi
+# 걸린 줄을 "줄번호: 본문" 으로 — 앞뒤 공백을 떼고 120자에서 잘라요 (JSON 에 통째로 싣기엔 길어요)
+PLACEHOLDER_SHOWN=()
+if [ "$PLACEHOLDER_COUNT" -gt 0 ]; then
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        ln="${line%%:*}"; body="${line#*:}"
+        body=$(printf '%s' "$body" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | cut -c1-120)
+        PLACEHOLDER_SHOWN+=("${ln}: ${body}")
+    done <<EOF
+$PLACEHOLDER_LINES
+EOF
 fi
 
 # 3. 필수 섹션 본문 검사 (§1.1, §3, §4)
@@ -232,8 +246,17 @@ if [ "$JSON_MODE" = true ]; then
         warnings_json+="]"
     fi
 
-    RESULT=$(printf '{"file":"%s","needs_clarification":%s,"placeholders":%s,"empty_sections":%s,"tasks_progress":{"total":%s,"completed":%s,"open":%s},"ac_progress":{"total":%s,"completed":%s,"open":%s}}' \
-                    "$TARGET" "$NEEDS_COUNT" "$PLACEHOLDER_COUNT" "$empty_json" \
+    placeholder_json="["
+    first=true
+    for pl in ${PLACEHOLDER_SHOWN[@]+"${PLACEHOLDER_SHOWN[@]}"}; do
+        [ "$first" = true ] || placeholder_json+=","
+        placeholder_json+="\"$(printf '%s' "$pl" | sed 's/\\/\\\\/g; s/"/\\"/g')\""
+        first=false
+    done
+    placeholder_json+="]"
+
+    RESULT=$(printf '{"file":"%s","needs_clarification":%s,"placeholders":%s,"placeholder_lines":%s,"empty_sections":%s,"tasks_progress":{"total":%s,"completed":%s,"open":%s},"ac_progress":{"total":%s,"completed":%s,"open":%s}}' \
+                    "$TARGET" "$NEEDS_COUNT" "$PLACEHOLDER_COUNT" "$placeholder_json" "$empty_json" \
                     "$TASKS_TOTAL" "$TASKS_COMPLETED" "$TASKS_OPEN" \
                     "$AC_TOTAL" "$AC_COMPLETED" "$AC_OPEN")
 
@@ -266,6 +289,9 @@ else
         goax_error "✗ $TARGET — 명료성 미통과"
         for e in "${ERRORS[@]}"; do
             printf '  - %s\n' "$e" >&2
+        done
+        for pl in ${PLACEHOLDER_SHOWN[@]+"${PLACEHOLDER_SHOWN[@]}"}; do
+            printf '      %s\n' "$pl" >&2
         done
         if [ ${#WARNINGS[@]} -gt 0 ]; then
             for w in "${WARNINGS[@]}"; do

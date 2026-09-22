@@ -256,9 +256,13 @@ Spirit:        SP-<CATEGORY>-<id>       (예: SP-SEC-001)
 구현 세션이 쓰지 않는 것, 그게 분리의 실체예요. 같은 이유로 병렬 레인의 완료도 레인의 자기보고가
 아니라 코디네이터가 원장(`lanes-dispatch.sh`)에 `보고:` 를 찍고 검증 명령을 다시 돌린 뒤예요 (G5).
 
-같은 분리가 **계획 시점**에도 있어요 — `spec-validate` 가 명료성 게이트를 통과한 spec 에 대해 architect → evaluator 를
-새 컨텍스트로 **순차·독립**(서로 파일을 안 봄)으로 띄우고, 각자 `review-spec.<역할>.md` 첫 줄에 `verdict:` 와 sha 를 써요.
-`spec-review.sh` 가 둘을 집계해요 — size L/XL 필수, M 선택. OMC ralplan 의 구조에 파일 verdict 와 결정적 사전 게이트를 얹은 거예요.
+같은 분리가 **계획 시점**에도 있어요 — `spec-validate` 가 명료성 게이트를 통과한 spec 에 대해 architect 와 evaluator 를
+새 컨텍스트로 **병렬·독립**(서로 파일을 안 봄 — 독립은 순서가 아니라 격리에서 와요)으로 띄우고, 각자 `review-spec.<역할>.md`
+첫 줄에 `verdict:` 와 sha 를 써요. 렌즈가 달라요 — architect 는 구조·반대안·되돌리기 비용, evaluator 는 AC 검증 가능성·코드 현실·
+누락 엣지·tasks 분해. 둘 다 `## 비차단` 절은 verdict 에 안 세요. `spec-review.sh` 가 둘을 집계해요 — size L/XL 필수, M 선택.
+라운드는 리뷰어가 실제로 본 횟수만 세고(같은 sha 재사용 · 안 본 스냅샷 교체), 재리뷰는 `--delta` 로 바뀐 곳만 브리프에 붙이고,
+통과 뒤 오타는 `--fixup` 으로 받아들이고, tasks.md 가 생기면 `--stage tasks` 로 분해만 보는 짧은 라운드(상한 2)를 따로 세요.
+OMC ralplan 의 구조에 파일 verdict 와 결정적 사전 게이트를 얹은 거예요.
 
 ### 5.4 SDD — Spec-Driven Development
 
@@ -318,7 +322,7 @@ NEXT=$(bash .ax/scripts/bash/next-spec-num.sh --json | jq -r '.result.next')
 
 **해결**: confirmation 강도를 *데이터 함수* 로 결정해요. 무차별 묻기·무차별 자동 둘 다 anti-pattern.
 
-5개 결정 변수(이미 goax 안에 존재):
+6개 결정 변수(이미 goax 안에 존재):
 
 | 변수 | 출처 | 역할 |
 |---|---|---|
@@ -327,8 +331,9 @@ NEXT=$(bash .ax/scripts/bash/next-spec-num.sh --json | jq -r '.result.next')
 | sensors.mode | warning / fail | hooks 차단 강도 → LLM 추가 확인 redundancy |
 | mistake recurrence | 같은 카테고리 누적 | 동적 강화 신호 |
 | Spirit 매칭 | SP-SEC-* / SP-DATA-* | 위험 카테고리 식별 |
+| task 사전 승인 | `current-task.json.friction` (triage 가 적음) | 사용자가 미리 준 답 — 다시 묻지 않기 위한 파일 기록 |
 
-이 변수들로 5개 Decision Rules(C1~C5) 를 구성. 자세한 의사결정 매트릭스는 `.ax/docs/reference/confirmation-policy.md`.
+이 변수들로 6개 Decision Rules(C0~C5) 를 구성. 자세한 의사결정 매트릭스는 `.ax/docs/reference/confirmation-policy.md`.
 
 **핵심 원칙 3가지**:
 

@@ -237,10 +237,11 @@ python3 -c "import json; json.load(open('$REPO/templates/default/.ax/current-tas
 GI_TPL="$REPO/templates/default/.gitignore.template"
 if [ -f "$GI_TPL" ]; then
     missing=0
-    for entry in ".ax/state.json" ".ax/current-task.json" ".ax/*.suggested" ".ax/.onboarding-pending" "*.lock/"; do
+    for entry in ".ax/state.json" ".ax/current-task.json" ".ax/*.suggested" ".ax/.onboarding-pending" "*.lock/" \
+                 ".ax/docs/spec/*/.review-round" ".ax/docs/spec/*/.review-snapshot/" ".ax/docs/spec/*/review-spec.architect.md" ".ax/docs/spec/*/review-spec.evaluator.md"; do
         grep -qxF "$entry" "$GI_TPL" || { fail ".gitignore.template 누락 엔트리: $entry"; missing=$((missing+1)); }
     done
-    [ "$missing" -eq 0 ] && pass ".gitignore.template — runtime 엔트리 5종 모두 포함"
+    [ "$missing" -eq 0 ] && pass ".gitignore.template — runtime 엔트리 5종 + spec 리뷰 원장·리뷰어 파일 4종 포함"
 fi
 
 # 중첩 .suggested 가 실제로 무시되는가 — 엔트리 존재가 아니라 git 동작으로.
@@ -2229,6 +2230,70 @@ echo '{"phase":"spec","spec_dir":".ax/docs/spec/014-x","size":"M","risk":"L3"}' 
 rm -f "$SR/.ax/docs/spec/014-x"/review-spec.*.md
 sr --status --json | jq -e '.result.required=="optional" and .result.pass==true' >/dev/null 2>&1 \
     && pass "spec-review — M 은 리뷰 없으면 선택 통과 (risk 는 안 봄)" || fail "spec-review — M×L3 에 필수를 강제함"
+
+# 라운드는 리뷰어가 실제로 본 횟수예요 — --snapshot 을 부를 때마다 오르면 오타 한 번에 상한이 타요.
+# 같은 sha 는 재사용, 아무도 안 본 스냅샷은 교체, 누가 본 뒤에야 +1. 그리고 통과 뒤 오타는 --fixup,
+# 재리뷰 브리프는 --delta, tasks.md 가 생기면 --stage tasks 로 짧은 라운드(상한 2)를 따로 세요.
+mkdir -p "$SR/.ax/docs/spec/015-y"
+printf '# Spec\n## 3.\n- [ ] **AC1** a\n' > "$SR/.ax/docs/spec/015-y/spec.md"
+echo '{"phase":"spec","spec_dir":".ax/docs/spec/015-y","size":"L","risk":"L1"}' > "$SR/.ax/current-task.json"
+sy() { GOAX_PROJECT_DIR="$SR" bash "$SR/.ax/scripts/bash/spec-review.sh" --spec 015-y "$@" 2>/dev/null; }
+SY="$SR/.ax/docs/spec/015-y"
+sy_review() {  # 두 리뷰어가 지금 sha 로 봤다고 적어요 — $1 = architect verdict, $2 = evaluator verdict
+    local sha; sha=$(sy --status --json | jq -r '.result.sha')
+    printf 'verdict: %s\nsha: %s\n' "$1" "$sha" > "$SY/review-spec.architect.md"
+    printf 'verdict: %s\nsha: %s\n' "$2" "$sha" > "$SY/review-spec.evaluator.md"
+}
+sy --snapshot --json | jq -e '.result.round==1 and .result.stage=="spec" and .result.max_rounds==3 and .result.reused==false' >/dev/null 2>&1 \
+    && sy --snapshot --json | jq -e '.result.round==1 and .result.reused==true' >/dev/null 2>&1 \
+    && pass "spec-review --snapshot — 같은 sha 를 다시 찍어도 라운드 그대로 (reused)" || fail "spec-review --snapshot — 같은 sha 에 라운드가 오름"
+printf 'typo-before-review\n' >> "$SY/spec.md"
+sy --snapshot --json | jq -e '.result.round==1 and .result.replaced==true' >/dev/null 2>&1 \
+    && pass "spec-review --snapshot — 아무도 안 본 스냅샷은 바꿔 끼움 (replaced · 라운드 유지)" || fail "spec-review --snapshot — 안 본 스냅샷을 새 라운드로 셈"
+sy_review "보강 필요" "진행"
+printf 'after-round-1\n' >> "$SY/spec.md"
+sy --snapshot --json | jq -e '.result.round==2 and .result.replaced==false and .result.reused==false' >/dev/null 2>&1 \
+    && [ -f "$SY/.review-snapshot/reviewed/spec.md" ] && grep -q 'typo-before-review' "$SY/.review-snapshot/reviewed/spec.md" \
+    && ! grep -q 'after-round-1' "$SY/.review-snapshot/reviewed/spec.md" \
+    && pass "spec-review --snapshot — 누가 본 뒤에만 +1 · 본 본문은 .review-snapshot/reviewed/ 에 남음" || fail "spec-review --snapshot — 리뷰 뒤 라운드/보관 불일치: $(cat "$SY/.review-round" 2>/dev/null)"
+DL=$(sy --delta --json)
+echo "$DL" | jq -e '.result.base=="reviewed" and .result.changed_lines==1 and ([.result.files[]|select(.file=="spec.md")][0].changed_lines==1) and (.result.diff|test("\\+after-round-1"))' >/dev/null 2>&1 \
+    && [ -f "$(echo "$DL" | jq -r '.result.delta_file')" ] \
+    && pass "spec-review --delta — 리뷰어가 본 본문 대비 diff (줄 수 · 파일별 · delta_file)" || fail "spec-review --delta — diff 불일치: $(echo "$DL" | jq -c '.result|{base,changed_lines,files}')"
+sy_review "진행" "진행"
+sy --status --json | jq -e '.result.pass==true' >/dev/null 2>&1 || fail "spec-review — 라운드 2 통과가 안 됨 (fixup 검사 전제)"
+sy --fixup --json >/dev/null 2>&1; [ $? -eq 1 ] \
+    && pass "spec-review --fixup — 본문이 리뷰된 그대로면 거부 (exit 1)" || fail "spec-review --fixup — 바뀐 게 없는데 받음"
+printf 'typo-after-pass\n' >> "$SY/spec.md"
+sy --status --json | jq -e '.result.pass==false and (.result.reason|test("fixup"))' >/dev/null 2>&1 \
+    && pass "spec-review --status — 통과 뒤 편집은 미통과 + --fixup 안내" || fail "spec-review --status — 통과 뒤 편집을 안 잡거나 fixup 안내 없음"
+FX=$(sy --fixup --json)
+echo "$FX" | jq -e '.status=="ok" and .result.changed_lines==1 and .result.reviewed_sha!=.result.accepted_sha' >/dev/null 2>&1 \
+    && sy --status --json | jq -e '.result.pass==true and .result.fixup.applied==true' >/dev/null 2>&1 \
+    && sy --snapshot --json | jq -e '.result.reused==true and .result.round==2' >/dev/null 2>&1 \
+    && sy --status --json | jq -e '.result.pass==true' >/dev/null 2>&1 \
+    && pass "spec-review --fixup — 통과 뒤 오타를 리뷰 없이 받아들임 · 그 뒤 --snapshot 도 원장을 안 건드림" || fail "spec-review --fixup — 불일치: $(echo "$FX" | jq -c .result) $(sy --status --json | jq -c '.result|{pass,fixup}')"
+sy_review "진행" "보강 필요"     # fixup 은 통과한 뒤에만
+printf 'x\n' >> "$SY/spec.md"
+sy --fixup --json >/dev/null 2>&1; [ $? -eq 1 ] \
+    && pass "spec-review --fixup — 통과하지 않은 스냅샷엔 거부" || fail "spec-review --fixup — 보강 필요인데 받음"
+sy_review "진행" "진행"
+printf -- '- [ ] T001 [AC1] a — files: a.kt\n' > "$SY/tasks.md"
+TS=$(sy --snapshot --stage tasks --json)
+echo "$TS" | jq -e '.result.stage=="tasks" and .result.round==1 and .result.stage_reset==true and .result.max_rounds==2' >/dev/null 2>&1 \
+    && sy --status --json | jq -e '.result.stage=="tasks" and (.result.changed_files|index("tasks.md")==null)' >/dev/null 2>&1 \
+    && pass "spec-review --snapshot --stage tasks — 단계가 바뀌면 라운드 1 부터 · 상한 2 · --status 가 stage 보고" || fail "spec-review --stage tasks — 불일치: $(echo "$TS" | jq -c .result)"
+sy --delta --json | jq -e '.result.base=="reviewed" and ([.result.files[]|select(.file=="tasks.md")][0].changed_lines==1)' >/dev/null 2>&1 \
+    && pass "spec-review --delta — 리뷰 뒤 생긴 tasks.md 는 전부 바뀐 줄로" || fail "spec-review --delta — 새 tasks.md 를 못 셈"
+sy_review "진행" "진행"; printf 'y\n' >> "$SY/tasks.md"; sy --snapshot --json >/dev/null 2>&1
+sy_review "진행" "보강 필요"; printf 'z\n' >> "$SY/tasks.md"
+sy --snapshot --json | jq -e '.status=="warning" and .result.round==3 and .result.round_exceeded==true and (.warnings[0]|test("tasks 단계"))' >/dev/null 2>&1 \
+    && pass "spec-review --snapshot — tasks 단계는 3 라운드째에 상한 경고" || fail "spec-review — tasks 단계 상한 2 가 안 걸림: $(cat "$SY/.review-round")"
+sy --snapshot --stage bogus --json >/dev/null 2>&1; [ $? -eq 1 ] \
+    && pass "spec-review --stage — spec|tasks 외 값은 exit 1" || fail "spec-review --stage — 아무 값이나 받음"
+printf '2|abc|2026-01-01T00:00Z|def||\n' > "$SY/.review-round"
+sy --status --json | jq -e '.result.round==2 and .result.stage=="spec" and .result.snapshot_sha=="abc" and .result.fixup.applied==false' >/dev/null 2>&1 \
+    && pass "spec-review — 옛 5필드 .review-round 도 읽음 (stage 기본 spec · fixup 없음)" || fail "spec-review — 옛 원장 형식에 깨짐"
 rm -rf "$SR"
 
 # 엣지 연결 — 보내는 쪽만 적고 받는 쪽이 모르면 산문 약속이에요.
@@ -2238,10 +2303,44 @@ grep -q '^verdict:' "$REPO/agents/architect.md" && grep -q 'review-spec.architec
     && pass "architect — spec 리뷰 verdict 파일 계약 명시" || fail "architect — spec 리뷰 계약 없음"
 grep -q 'review-spec.evaluator.md' "$REPO/agents/evaluator.md" \
     && pass "evaluator — spec 모드 파일 계약 명시" || fail "evaluator — spec 모드 없음"
+# 렌즈 분리·병렬·비차단 — 두 agent 가 같은 눈으로 보면 같은 지적이 두 번 오고, 순차는 시간만 더해요
+grep -q '^## 비차단' "$REPO/agents/architect.md" && grep -q '^## 비차단' "$REPO/agents/evaluator.md" \
+    && grep -q '하지 않는 것' "$REPO/agents/architect.md" && grep -q '하지 않는 것' "$REPO/agents/evaluator.md" \
+    && pass "architect·evaluator — spec 모드에 '하지 않는 것' 절 + '## 비차단' 절 (렌즈 분리 · verdict 에 안 세는 지적)" \
+    || fail "architect/evaluator — 렌즈 분리('하지 않는 것') 또는 '## 비차단' 절 없음"
+grep -q '한 메시지에 같이 띄' "$REPO/skills/spec-validate/SKILL.md" && ! grep -q '둘을 한 메시지에 같이 띄우지 마세요' "$REPO/skills/spec-validate/SKILL.md" \
+    && grep -q '병렬' "$REPO/agents/architect.md" && grep -q '병렬' "$REPO/agents/evaluator.md" \
+    && ! grep -q '순차·독립' "$REPO/CONCEPTS.md" && ! grep -q 'sequentially in fresh contexts' "$REPO/CLAUDE.md" \
+    && pass "spec-validate — architect·evaluator 병렬 기동 (agents · CONCEPTS · CLAUDE.md 동기화)" || fail "spec-validate — 순차 기동 문구 잔존"
+grep -q -- '--delta' "$REPO/skills/spec-validate/SKILL.md" && grep -q -- '--fixup' "$REPO/skills/spec-validate/SKILL.md" \
+    && grep -q -- '--stage tasks' "$REPO/skills/spec-validate/SKILL.md" && grep -q -- '--stage tasks' "$REPO/skills/spec-tasks/SKILL.md" \
+    && grep -q 'delta' "$REPO/agents/architect.md" && grep -q 'delta' "$REPO/agents/evaluator.md" \
+    && pass "spec-validate·spec-tasks·agents — --delta/--fixup/--stage tasks 가 호출부·수신부에 모두 있음" || fail "spec-review 새 옵션 — 스크립트만 있고 skill/agent 가 안 씀"
+grep -q '빌드·테스트' "$REPO/agents/architect.md" && grep -q '빌드·테스트' "$REPO/agents/evaluator.md" && grep -q '검증 예산' "$REPO/skills/spec-validate/SKILL.md" \
+    && pass "spec 리뷰 검증 예산 — grep·read 만, 빌드·테스트 금지 (agents + skill)" || fail "spec 리뷰 — 검증 예산 미명시"
 grep -q 'update-task.sh --phase implementing' "$REPO/skills/spec-implement/SKILL.md" && grep -q 'update-task.sh --phase review' "$REPO/skills/spec-implement/SKILL.md" \
     && pass "spec-implement — phase implementing/review 를 실제로 씀 (HUD 가 움직이는 조건)" || fail "spec-implement — phase 기록 없음 (HUD 가 tasks 에 멈춤)"
 grep -q 'hud' "$REPO/templates/default/.ax/hud/state.json.template" && grep -q 'hud.plugin_version' "$REPO/docs/state-ownership.md" \
     && pass "state.json hud 캐시 — template · ownership 문서 동기화" || fail "state.json hud 캐시 3-way 동기화 누락"
+# state.json 은 gitignore 라 새 워크트리엔 없어요 — "installer 먼저" 로 죽으면 skill 의 `|| true` 가 삼켜 HUD 가 영영 죽어요.
+# 템플릿이 있으면 그걸로 만들고 진행해요. 템플릿도 없으면 그때만 exit 1.
+if command -v jq >/dev/null 2>&1; then
+    US=$(mktemp -d); mkdir -p "$US/.ax/scripts/bash" "$US/.ax/hud"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,update-state}.sh "$US/.ax/scripts/bash/"
+    GOAX_PROJECT_DIR="$US" bash "$US/.ax/scripts/bash/update-state.sh" --skill triage >/dev/null 2>&1; us_rc=$?
+    [ "$us_rc" -eq 1 ] && [ ! -f "$US/.ax/state.json" ] \
+        && pass "update-state — state.json 도 템플릿도 없으면 exit 1 (파일 안 만듦)" || fail "update-state — 템플릿 없이 state.json 을 만들거나 exit=$us_rc"
+    cp "$REPO/templates/default/.ax/hud/state.json.template" "$US/.ax/hud/"
+    GOAX_PROJECT_DIR="$US" bash "$US/.ax/scripts/bash/update-state.sh" --skill triage >/dev/null 2>&1; us_rc=$?
+    [ "$us_rc" -eq 0 ] && jq -e '.last_skill=="triage" and .skill_calls==1 and .layers.L0_triage.active==true' "$US/.ax/state.json" >/dev/null 2>&1 \
+        && pass "update-state — state.json 없으면 hud/state.json.template 로 만들고 진행 (새 워크트리 자가 복구)" || fail "update-state — 자가 복구 실패 (exit=$us_rc): $(jq -c '{last_skill,skill_calls}' "$US/.ax/state.json" 2>/dev/null)"
+    GOAX_PROJECT_DIR="$US" bash "$US/.ax/scripts/bash/update-state.sh" --json >/dev/null 2>&1
+    rm -f "$US/.ax/state.json"
+    GOAX_PROJECT_DIR="$US" bash "$US/.ax/scripts/bash/update-state.sh" --json >/dev/null 2>&1; us_rc=$?
+    [ "$us_rc" -eq 1 ] && [ ! -f "$US/.ax/state.json" ] \
+        && pass "update-state --json — 출력 전용 모드는 seed 하지 않음 (exit 1)" || fail "update-state --json — 출력 전용인데 파일을 만듦 (exit=$us_rc)"
+    rm -rf "$US"
+fi
 
 # ───────────────────────────────────────────────────────────
 section "34. 폐기·스크립트화 — spirit-lint · rules-index · doctor-scan · status-note · constitution-apply"
@@ -2354,13 +2453,25 @@ else
         && pass "update-task --blocked-by — 통째 교체 · '[]' 로 비움" || fail "update-task --blocked-by 불일치: $(jq -c '{phase,blocked_by}' "$RS/.ax/current-task.json")"
     # 값 검증 — 하나라도 틀리면 아무것도 안 써요. [a-z] 범위가 아니라 enum 이라 'Medium'·'l1' 이 못 지나가요
     UT_B=$(cat "$RS/.ax/current-task.json"); ut_bad=0
-    for args in "--phase Done" "--phase idle" "--phase ''" "--phase" "--set --json" "--blocked-by ''" "--merge-intent ''" "--set size=Medium" "--set risk=l1" "--set spec_tier=Full" "--set foo=bar" "--set domain=" "--set nokv" "--blocked-by 5" "--merge-intent 5" "--json"; do
+    for args in "--phase Done" "--phase idle" "--phase ''" "--phase" "--set --json" "--blocked-by ''" "--merge-intent ''" "--set size=Medium" "--set risk=l1" "--set spec_tier=Full" "--set friction=yolo" "--set foo=bar" "--set domain=" "--set nokv" "--blocked-by 5" "--merge-intent 5" "--json"; do
         # shellcheck disable=SC2086
         out=$(rs update-task.sh $args --json); rc=$?
         { [ "$rc" -eq 1 ] && printf '%s' "$out" | jq -e '.status=="error"' >/dev/null; } || { ut_bad=$((ut_bad+1)); fail "update-task 검증 — '$args' 가 exit=$rc (기대 1/error)"; }
     done
     [ "$ut_bad" -eq 0 ] && [ "$(cat "$RS/.ax/current-task.json")" = "$UT_B" ] \
-        && pass "update-task 검증 실패 16종 — exit 1 + error 봉투 + 파일 불변 (빈 값 · 옵션 토큰 · idle 포함)" || fail "update-task 검증 — 실패 뒤 파일이 바뀜"
+        && pass "update-task 검증 실패 17종 — exit 1 + error 봉투 + 파일 불변 (빈 값 · 옵션 토큰 · idle · friction enum 포함)" || fail "update-task 검증 — 실패 뒤 파일이 바뀜"
+    # friction — 사용자가 이 task 에 미리 준 확인 강도. triage 가 적고 spec-implement 가 읽고 reset 이 비워요
+    rs update-task.sh --set friction=autopilot --json | jq -e '.status=="ok" and (.result.changed|index("friction"))!=null' >/dev/null \
+        && [ "$(jq -r .friction "$RS/.ax/current-task.json")" = autopilot ] \
+        && pass "update-task --set friction=autopilot — 기록" || fail "update-task — friction 키를 못 씀: $(jq -c .friction "$RS/.ax/current-task.json")"
+    rs tier-from-state.sh --reset --json >/dev/null 2>&1
+    jq -e '.friction==null and .phase=="idle"' "$RS/.ax/current-task.json" >/dev/null \
+        && pass "tier-from-state --reset — friction 도 비움 (task 하나에 한한 승인)" || fail "tier-from-state --reset — friction 잔존: $(jq -c .friction "$RS/.ax/current-task.json")"
+    rs update-task.sh --phase spec_checked --json >/dev/null 2>&1
+    grep -q '"friction": null' "$REPO/templates/default/.ax/current-task.json.template" \
+        && grep -q 'friction' "$REPO/skills/spec-implement/SKILL.md" && grep -q 'friction=' "$REPO/skills/triage/SKILL.md" \
+        && grep -q 'Rule C0' "$REPO/docs/reference/confirmation-policy.md" \
+        && pass "friction — template 키 · triage 기록 · spec-implement 읽기 · 정책 C0 네 곳 동기화" || fail "friction — 쓰는 곳/읽는 곳/정책 중 누락"
     rs update-task.sh --phase review --dry-run --json | jq -e '.result.dry_run==true and .result.phase=="review"' >/dev/null \
         && [ "$(jq -r .phase "$RS/.ax/current-task.json")" = spec_checked ] && [ ! -d "$RS/.ax/current-task.json.lock" ] \
         && pass "update-task --dry-run — 바뀔 키만 답하고 파일·락 안 건드림" || fail "update-task --dry-run — 파일/락 변동"
@@ -2702,8 +2813,13 @@ FILLEOF
         && pass "check-spec-clarity — 진짜 마커 1개면 exit 1" || fail "check-spec-clarity — 마커를 못 잡음"
     cp "$TPL/filled.base" "$FILLED"; printf '\n담당: <이름>\n' >> "$FILLED"
     csc >/dev/null 2>&1
-    [ $? -eq 1 ] && csc | jq -e '.result.placeholders == 1' >/dev/null 2>&1 \
-        && pass "check-spec-clarity — placeholder 1개면 exit 1" || fail "check-spec-clarity — placeholder 를 못 잡음"
+    [ $? -eq 1 ] && csc | jq -e '.result.placeholders == 1 and (.result.placeholder_lines|length)==1 and (.result.placeholder_lines[0]|test("^[0-9]+: 담당: <이름>$"))' >/dev/null 2>&1 \
+        && pass "check-spec-clarity — placeholder 1개면 exit 1 + placeholder_lines 에 '줄번호: 본문'" || fail "check-spec-clarity — placeholder 를 못 잡거나 줄을 안 보여줌: $(csc | jq -c '.result|{placeholders,placeholder_lines}')"
+    # 인라인 코드 `…` 안의 <패턴> 은 코드 인용이지 placeholder 가 아니에요 — 이 오탐 하나가 리뷰 라운드를 태웠어요
+    cp "$TPL/filled.base" "$FILLED"; printf '\n- [ ] **AC3** `grep -E "<a|b>"` 가 0건이고 `<패턴>` 도 안 남아요\n' >> "$FILLED"
+    csc >/dev/null 2>&1
+    [ $? -eq 0 ] && csc | jq -e '.result.placeholders == 0' >/dev/null 2>&1 \
+        && pass "check-spec-clarity — 인라인 코드 안의 <…> 는 placeholder 로 안 셈" || fail "check-spec-clarity — 인라인 코드 인용을 placeholder 로 오탐"
     rm -rf "$TPL"
 fi
 
@@ -2797,18 +2913,26 @@ else
         && pass "spec-review — tasks.md 만 바뀌어도 sha 불일치 + changed_files 로 어디가 바뀌었는지" \
         || fail "spec-review — sha 가 spec.md 만 봐서 tasks.md 재작성을 못 잡음"
 
-    # 라운드 상한 — 넘으면 warning (차단은 아니에요, exit 0 유지)
-    srv --snapshot --json >/dev/null 2>&1; srv --snapshot --json >/dev/null 2>&1
+    # 라운드 상한 — 리뷰어가 본 라운드만 세요. 3 번 보고 4 번째 스냅샷이면 warning (차단은 아니에요, exit 0 유지)
+    srv_seen() { local sha; sha=$(srv --status --json | jq -r '.result.sha'); printf 'verdict: 보강 필요\nsha: %s\n' "$sha" | tee "$SRV/.ax/docs/spec/020-a/review-spec.architect.md" > "$SRV/.ax/docs/spec/020-a/review-spec.evaluator.md"; }
+    srv --snapshot --json >/dev/null 2>&1          # 안 본 SHA_1 자리를 교체 → round 1
+    srv_seen; printf 'r2\n' >> "$SRV/.ax/docs/spec/020-a/spec.md"; srv --snapshot --json >/dev/null 2>&1   # round 2
+    srv_seen; printf 'r3\n' >> "$SRV/.ax/docs/spec/020-a/spec.md"; srv --snapshot --json >/dev/null 2>&1   # round 3
+    srv_seen; printf 'r4\n' >> "$SRV/.ax/docs/spec/020-a/spec.md"
     SRV_OUT=$(srv --snapshot --json); SRV_RC=$?
-    echo "$SRV_OUT" | jq -e '.status=="warning" and .result.round_exceeded==true and (.warnings|length)==1' >/dev/null 2>&1 && [ "$SRV_RC" -eq 0 ] \
-        && pass "spec-review --snapshot — 라운드 상한 초과는 warning (exit 0 유지)" || fail "spec-review — 라운드 상한이 침묵"
+    echo "$SRV_OUT" | jq -e '.status=="warning" and .result.round==4 and .result.round_exceeded==true and (.warnings|length)==1' >/dev/null 2>&1 && [ "$SRV_RC" -eq 0 ] \
+        && pass "spec-review --snapshot — 리뷰된 3 라운드 뒤 4 번째는 warning (exit 0 유지)" || fail "spec-review — 라운드 상한이 침묵 또는 오산: $(echo "$SRV_OUT" | jq -c '{status,round:.result.round}')"
 
     # --dry-run 은 어떤 파일도 안 만들어요
     cp "$SRV/.ax/docs/spec/020-a/.review-round" "$SRV/round.before"
     srv --snapshot --dry-run --json >/dev/null 2>&1
     srv --merge --dry-run --json >/dev/null 2>&1
+    printf 'dry\n' >> "$SRV/.ax/docs/spec/020-a/spec.md"
+    srv --snapshot --dry-run --json >/dev/null 2>&1
+    srv --delta --dry-run --json >/dev/null 2>&1
     cmp -s "$SRV/.ax/docs/spec/020-a/.review-round" "$SRV/round.before" && [ ! -f "$SRV/.ax/docs/spec/020-a/review-spec.md" ] \
-        && pass "spec-review --dry-run — .review-round 불변 + 합본 미생성" || fail "spec-review --dry-run — 파일을 씀"
+        && ! grep -q 'dry' "$SRV/.ax/docs/spec/020-a/.review-snapshot/current/spec.md" && [ ! -f "$SRV/.ax/docs/spec/020-a/.review-snapshot/delta.diff" ] \
+        && pass "spec-review --dry-run — .review-round · .review-snapshot · delta.diff 불변 + 합본 미생성" || fail "spec-review --dry-run — 파일을 씀"
 
     # 빈 상태 파일에 죽지 않아요 (jq --argjson 이 빈 문자열로 터지던 회귀)
     : > "$SRV/.ax/docs/spec/020-a/.review-round"

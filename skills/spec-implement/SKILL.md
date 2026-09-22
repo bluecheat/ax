@@ -97,15 +97,22 @@ MISTAKE_THRESHOLD="${MISTAKE_THRESHOLD:-3}"
 # 2. current-task.json 에서 분류 결과 읽기
 TASK_RISK=$(jq -r '.risk // "L0"' .ax/current-task.json)
 TASK_DOMAIN=$(jq -r '.domain // "default"' .ax/current-task.json)
+TASK_FRICTION=$(jq -r '.friction // empty' .ax/current-task.json)   # 사용자가 이 task 에 미리 준 확인 강도 (C0)
 
-# 3. effective mode 결정 (priority: C5 > C3 > C1)
-EFFECTIVE_MODE="$CONF_MODE"
-[ "$TASK_RISK" = "L3" ] && EFFECTIVE_MODE="$L3_OVERRIDE"   # C5: L3 override
+# 3. effective mode 결정 (priority: C5 > C3 > C0 > C1)
+EFFECTIVE_MODE="${TASK_FRICTION:-$CONF_MODE}"               # C0: task 단위 사전 승인이 config 기본값을 이겨요
+[ "$TASK_RISK" = "L3" ] && EFFECTIVE_MODE="$L3_OVERRIDE"   # C5: L3 override — 사전 승인도 못 넘어요
 
 # 4. mistake recurrence 체크 (C3)
 RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/dev/null | wc -l | tr -d ' ')
 [ "$RECURRENCE" -ge "$MISTAKE_THRESHOLD" ] && CATEGORY_GATED=true
 ```
+
+`TASK_FRICTION` 은 사용자가 "묻지 말고 쭉 해" · "phase 마다만 물어" 처럼 **이 task 에 한해** 미리 말한 걸
+triage 가 `update-task.sh --set friction=…` 으로 적어 둔 값이에요. 대화에서 들은 걸 이 세션이 기억하는 게
+아니라 파일에서 읽어요 — 압축 뒤에도, 다음 세션에도 같은 답이 나와야 해요. 없으면 config 기본값이에요.
+사용자가 구현 도중에 바꾸면 그때 `bash .ax/scripts/bash/update-task.sh --set friction=<모드> --json` 으로
+적고 다음 task 부터 적용해요.
 
 결정 결과:
 - `EFFECTIVE_MODE = autopilot` → 모든 task silent, 실패·범위이탈·elevated 만 halt
@@ -375,6 +382,7 @@ fi
 ## 절대 금지
 
 - **모드 불문 모든 task 에 [y/n] 묻기** — `EFFECTIVE_MODE` 결정 결과를 무시한 의례적 확인
+- **`friction=autopilot` 인데 Phase 경계에서 묻기** — 사용자가 미리 준 답을 다시 묻는 거예요. 파일에 적힌 값이 답이에요
 - **Phase 경계 게이트를 형식적 [y/n] 으로 축소** — 정보 밀도(이전 결과 + 다음 파일 + 룰 delta) 누락
 - **L3 + SP-SEC/DATA 매칭 task 자동 진행** — C5 우회는 거짓 약속 (invariant 위반)
 - **violations 가 남은 채로 진행** — §1.5 는 통과 의례가 아니에요. `/lane` 을 건너뛴 경우를 위해 있어요

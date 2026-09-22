@@ -24,6 +24,16 @@
 
 ## Decision Rules
 
+### Rule C0 — task 단위 사전 승인 (`current-task.json.friction`)
+
+사용자가 작업을 시작하며 "묻지 말고 쭉 해" · "phase 마다만 물어" 처럼 확인 강도를 미리 말하면 triage 가
+`update-task.sh --set friction=autopilot|phase_gate|per_task` 로 적어요. spec-implement 는 config 의
+`confirmation.mode`(C1) 대신 이 값을 써요. C5(L3 + SP-SEC/DATA)·C3(mistake 재발)는 여전히 이겨요.
+
+근거: 사용자가 이미 준 답을 Phase 경계마다 다시 묻는 건 friction 이 아니라 소음이에요. 그리고 그 답은
+대화가 아니라 파일에 있어야 — 압축 뒤에도, 다음 세션에도 같은 답이 나와요. `reset-task.sh` 가 task 와
+함께 비워요 (task 하나에 한한 승인이지 영구 설정이 아니에요 — 영구는 config.yml).
+
 ### Rule C1 — tier 기반 게이트 빈도
 
 | spec_tier | implement 게이트 |
@@ -80,6 +90,7 @@ cover_ratio < 0.5  + risk ≥ L2      → per-task 확인 강제
 C5 (L3 + SP-SEC/DATA)   ← 최우선, mode 불문 강제
 C3 (mistake recurrence) ← 2순위, 카테고리 단위 강제
 C4 (low coverage + L2+) ← 3순위
+C0 (task 사전 승인)      ← 4순위, current-task.json.friction — 있으면 C1 을 대신해요
 C1 (tier)               ← 기본값
 C2 (sensors.mode)       ← C1 의 modifier
 ```

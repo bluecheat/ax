@@ -113,7 +113,12 @@ The `spec` skill doesn't generate every artifact upfront. The triage result deci
 
 ```
 "create spec payment-refund"   → spec.md + tasks.md
-"break into tasks"              → tasks breakdown ([P] parallel marker)
+"spec check"                    → clarity gate (NEEDS / placeholder / empty section — inline `code` is
+                                  not a placeholder), then for L/XL a plan-time consensus review:
+                                  architect + evaluator in parallel fresh contexts with disjoint lenses,
+                                  verdicts as files (spec-review.sh — rounds count reviews actually seen,
+                                  --delta briefs re-reviews with the diff only, --fixup accepts post-pass typos)
+"break into tasks"              → tasks breakdown ([P] parallel marker); L/XL re-reviews with --stage tasks (cap 2)
 "start implementation"          → run tasks.md: sequential, or as lane coordinator when
                                   tasks carry lane assignments (lanes-dispatch.sh ledger)
                                   → completion gate G1–G6 (+ fresh-context evaluator for L / M×L3)

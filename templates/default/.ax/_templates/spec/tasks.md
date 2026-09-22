@@ -84,26 +84,9 @@ task 에 의존하는 걸로 읽혀서 영원히 blocked 가 돼요.
 
 ## 1.5 핫 파일 — 소유 레인 고정
 
-여러 task 가 노리는 파일은 **한 레인이 독점**해요. Phase 는 논리적 순서고, 병렬
-실행의 단위는 *누가 어떤 파일을 쓰는가* 예요 — Phase 가 달라도 같은 파일이면 충돌해요.
-
-```bash
-bash .ax/scripts/bash/lanes-hotfiles.sh --spec <NNN-slug> --json
-```
-
-| 파일 | 노리는 task | 소유 레인 | 처리 |
-|---|---|---|---|
-| `<경로>` | T010, T011 | 레인 A | 공유 부분을 T013 로 분리 |
-
-표가 비면 "핫 파일 없음" 이라고 한 줄 적어요 — 안 뽑은 것과 없는 것은 달라요.
-
-소유 레인을 정했으면 **원장에도** 적어요 — 표는 사람이 읽고, 원장은 기계가 읽어요:
-
-```bash
-bash .ax/scripts/bash/lanes-dispatch.sh --spec <NNN-slug> --assign "T010=A,T011=A,T020=B" --json
-```
-
-`lane_file_conflicts` 가 비어야 해요. 같은 파일을 두 레인이 갖고 있으면 `--dispatch` 가 거부돼요.
+단일 레인(한 세션이 순차로 구현)이면 **비워 두세요** — `/lane` 이 레인을 가를 때 이 절에
+핫 파일 표(파일 · 노리는 task · 소유 레인 · 처리)를 채우고 `lanes-dispatch.sh --assign` 으로
+원장에도 적어요. 표는 사람이 읽고, 원장은 기계가 읽어요.
 
 ---
 

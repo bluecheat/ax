@@ -89,6 +89,7 @@ if [ "$RESET" = true ]; then
         | .spec_id = null
         | .spec_dir = null
         | .spec_tier = null
+        | .friction = null
         | .started_at = null
         | .updated_at = (now | todate)
         | .phase = "idle"

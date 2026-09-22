@@ -207,6 +207,11 @@ bash .ax/scripts/bash/update-task.sh --start --phase triaged \
  --set "task_id=$TASK_ID" --set "description=$DESCRIPTION" \
  --set "size=$SIZE" --set "risk=$RISK" --set "domain=$DOMAIN" \
  --merge-intent "$INTENT_JSON" --json
+
+# 사용자가 확인 강도를 미리 말했으면 같이 적어요 — "묻지 말고 쭉 해" → autopilot · "phase 마다만" → phase_gate ·
+# "하나씩 확인" → per_task. spec-implement 가 config.yml 의 confirmation.mode 대신 이 값을 읽어요 (L3 는 여전히 override).
+# 말하지 않았으면 적지 않아요 — 기본값을 여기서 정하면 사용자가 config 를 바꿔도 안 먹어요.
+[ -n "${FRICTION:-}" ] && bash .ax/scripts/bash/update-task.sh --set "friction=$FRICTION" --json
 ```
 
 이후 spec 이 `.ax/scripts/bash/tier-from-state.sh --json`로 tier 자동 결정.
