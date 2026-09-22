@@ -258,7 +258,7 @@ Spirit:        SP-<CATEGORY>-<id>       (예: SP-SEC-001)
 
 같은 분리가 **계획 시점**에도 있어요 — `spec-validate` 가 명료성 게이트를 통과한 spec 에 대해 architect 와 evaluator 를
 새 컨텍스트로 **병렬·독립**(서로 파일을 안 봄 — 독립은 순서가 아니라 격리에서 와요)으로 띄우고, 각자 `review-spec.<역할>.md`
-첫 줄에 `verdict:` 와 sha 를 써요. 렌즈가 달라요 — architect 는 구조·반대안·되돌리기 비용, evaluator 는 AC 검증 가능성·코드 현실·
+첫 줄에 `verdict:` 와 sha 를 써요. 검토 범위가 달라요 — architect 는 구조·반대안·되돌리기 비용, evaluator 는 AC 검증 가능성·코드 현실·
 누락 엣지·tasks 분해. 둘 다 `## 비차단` 절은 verdict 에 안 세요. `spec-review.sh` 가 둘을 집계해요 — size L/XL 필수, M 선택.
 라운드는 리뷰어가 실제로 본 횟수만 세고(같은 sha 재사용 · 안 본 스냅샷 교체), 재리뷰는 `--delta` 로 바뀐 곳만 브리프에 붙이고,
 통과 뒤 오타는 `--fixup` 으로 받아들이고, tasks.md 가 생기면 `--stage tasks` 로 분해만 보는 짧은 라운드(상한 2)를 따로 세요.

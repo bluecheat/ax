@@ -2303,11 +2303,11 @@ grep -q '^verdict:' "$REPO/agents/architect.md" && grep -q 'review-spec.architec
     && pass "architect — spec 리뷰 verdict 파일 계약 명시" || fail "architect — spec 리뷰 계약 없음"
 grep -q 'review-spec.evaluator.md' "$REPO/agents/evaluator.md" \
     && pass "evaluator — spec 모드 파일 계약 명시" || fail "evaluator — spec 모드 없음"
-# 렌즈 분리·병렬·비차단 — 두 agent 가 같은 눈으로 보면 같은 지적이 두 번 오고, 순차는 시간만 더해요
+# 검토 범위 분리·병렬·비차단 — 두 agent 가 같은 것을 보면 같은 지적이 두 번 오고, 순차는 시간만 더해요
 grep -q '^## 비차단' "$REPO/agents/architect.md" && grep -q '^## 비차단' "$REPO/agents/evaluator.md" \
     && grep -q '하지 않는 것' "$REPO/agents/architect.md" && grep -q '하지 않는 것' "$REPO/agents/evaluator.md" \
-    && pass "architect·evaluator — spec 모드에 '하지 않는 것' 절 + '## 비차단' 절 (렌즈 분리 · verdict 에 안 세는 지적)" \
-    || fail "architect/evaluator — 렌즈 분리('하지 않는 것') 또는 '## 비차단' 절 없음"
+    && pass "architect·evaluator — spec 모드에 '하지 않는 것' 절 + '## 비차단' 절 (검토 범위 분리 · verdict 에 안 세는 지적)" \
+    || fail "architect/evaluator — 검토 범위 분리('하지 않는 것') 또는 '## 비차단' 절 없음"
 grep -q '한 메시지에 같이 띄' "$REPO/skills/spec-validate/SKILL.md" && ! grep -q '둘을 한 메시지에 같이 띄우지 마세요' "$REPO/skills/spec-validate/SKILL.md" \
     && grep -q '병렬' "$REPO/agents/architect.md" && grep -q '병렬' "$REPO/agents/evaluator.md" \
     && ! grep -q '순차·독립' "$REPO/CONCEPTS.md" && ! grep -q 'sequentially in fresh contexts' "$REPO/CLAUDE.md" \

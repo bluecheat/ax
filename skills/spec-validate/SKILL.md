@@ -1,6 +1,6 @@
 ---
 name: spec-validate
-description: "spec 명료성 게이팅 + 합의 리뷰 + 진행률 visibility — 'spec 확인', 'goax spec check', '스펙 게이트', '합의 리뷰', 'spec 리뷰', '--consensus'. spec.md 의 NEEDS CLARIFICATION + placeholder `<...>` + 빈 필수 섹션 3 항목을 게이팅하고, 그 뒤 size L/XL 은 architect·evaluator 를 새 컨텍스트로 병렬·독립 리뷰(렌즈가 달라요 — architect 는 구조·대안, evaluator 는 AC·코드 현실; spec-review.sh 가 리뷰어별 verdict 파일과 sha 를 집계하고 재리뷰는 --delta 로 바뀐 곳만, 통과 뒤 오타는 --fixup), M 은 '--consensus' 로 선택. tasks.md 진행률 + AC 진행률을 visibility 로 노출. 슬래시로도 호출 가능: '/spec-validate'."
+description: "spec 명료성 게이팅 + 합의 리뷰 + 진행률 visibility — 'spec 확인', 'goax spec check', '스펙 게이트', '합의 리뷰', 'spec 리뷰', '--consensus'. spec.md 의 NEEDS CLARIFICATION + placeholder `<...>` + 빈 필수 섹션 3 항목을 게이팅하고, 그 뒤 size L/XL 은 architect·evaluator 를 새 컨텍스트로 병렬·독립 리뷰(검토 범위가 달라요 — architect 는 구조·대안, evaluator 는 AC·코드 현실; spec-review.sh 가 리뷰어별 verdict 파일과 sha 를 집계하고 재리뷰는 --delta 로 바뀐 곳만, 통과 뒤 오타는 --fixup), M 은 '--consensus' 로 선택. tasks.md 진행률 + AC 진행률을 visibility 로 노출. 슬래시로도 호출 가능: '/spec-validate'."
 ---
 
 # goax spec-validate — 명료성 게이팅 + 진행률 visibility
@@ -103,7 +103,7 @@ DELTA=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --delta --json | jq 
      넣지 않아요. 이 대화도 넣지 않아요.
    - **검증 예산**: spec 단계 리뷰어는 grep·read 로만 봐요. 빌드·테스트를 돌리지 않아요 — 그건 구현
      리뷰(`tasks-gate.sh` G6)의 몫이고, 여기서 돌리면 리뷰 한 번이 구현 한 번만큼 비싸져요.
-2. 렌즈가 달라요 — 같은 걸 두 번 지적받지 않게 각 agent 의 "하지 않는 것" 절이 갈라 놨어요:
+2. 검토 범위가 달라요 — 같은 걸 두 번 지적받지 않게 각 agent 의 "하지 않는 것" 절이 갈라 놨어요:
    - **architect** — 반대안·트레이드오프·되돌리기 비용·ADR 후보. AC 문구·테스트 목록·grep 전수는 안 봐요
    - **evaluator** — AC 검증 가능성·코드 현실 대조·누락 엣지·배포 전제·tasks 분해. 대안 구조는 안 봐요
    - 둘 다 `## 비차단` 절을 따로 둬요 — 거기 적힌 건 verdict 에 안 세요. 이 세션은 비차단은 반영할지
@@ -155,7 +155,7 @@ task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비�
   쪽이 앞 절을 읽게 돼요
 - **병렬·독립** — 독립은 "상대 파일을 못 본다" 로 성립해요. 순차는 독립에 아무것도 더해 주지 않고 시간만
   더해요
-- **렌즈 분리** — 같은 spec 을 같은 눈으로 두 번 보면 같은 지적이 두 번 와요. 다른 눈이어야 합의가 뜻이 있어요
+- **검토 범위 분리** — 같은 spec 을 같은 범위로 두 번 보면 같은 지적이 두 번 와요. 범위가 달라야 합의가 뜻이 있어요
 - **sha 고정** — 리뷰 뒤에 spec 이 바뀌면 그 리뷰는 다른 문서에 대한 리뷰예요. 단 오타는 `--fixup` 으로
 - **상한** — 넘으면 리뷰가 아니라 spec 정의가 문제예요. 라운드를 더 돌리지 말고 사용자와 다시 정해요
 

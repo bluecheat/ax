@@ -4,7 +4,7 @@
 
 ## 버전
 
-- [0.6.2](0.6.2.md) — spec 합의 리뷰 마찰 절감: 라운드는 본 만큼만(재사용·교체) · architect·evaluator 병렬 + 렌즈 분리 + `## 비차단` · `--delta`/`--fixup`/`--stage tasks` · 인라인 코드 placeholder 오탐 · `friction` 사전 승인(C0) · `update-state` 자가 복구 · 리뷰 원장 gitignore
+- [0.6.2](0.6.2.md) — spec 합의 리뷰 마찰 절감: 라운드는 본 만큼만(재사용·교체) · architect·evaluator 병렬 + 검토 범위 분리 + `## 비차단` · `--delta`/`--fixup`/`--stage tasks` · 인라인 코드 placeholder 오탐 · `friction` 사전 승인(C0) · `update-state` 자가 복구 · 리뷰 원장 gitignore
 - [0.6.1](0.6.1.md) — external 룰의 "자동 실행 안 됨" 경고(I6)가 git 프로젝트에서 한 번도 안 뜨던 것 + 임시 파일·git 이 막힌 환경에서 doctor·`up` 이 틀리게 통과하던 것 (일반 환경 체감 없음) + eval 이 hook·스크립트 층까지
 - [0.6.0](0.6.0.md) — 룰의 `검출 패턴:` 마커를 실제로 집행 (grep 룰의 승격 = 집행)
 - [0.5.13](0.5.13.md) — `spec-completion-gate.sh` 가 spec 없는 triage 직후 매 커밋마다 jq 에러를 찍던 것
