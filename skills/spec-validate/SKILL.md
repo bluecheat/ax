@@ -1,6 +1,6 @@
 ---
 name: spec-validate
-description: "spec 명료성 게이팅 + 합의 리뷰 + 진행률 visibility — 'spec 확인', 'goax spec check', '스펙 게이트', '합의 리뷰', 'spec 리뷰', '--consensus'. spec.md 의 NEEDS CLARIFICATION + placeholder `<...>` + 빈 필수 섹션 3 항목을 게이팅하고, 그 뒤 size L/XL 은 architect → evaluator 를 새 컨텍스트로 순차·독립 리뷰(spec-review.sh 가 리뷰어별 verdict 파일과 sha 를 집계), M 은 '--consensus' 로 선택. tasks.md 진행률 + AC 진행률을 visibility 로 노출. 슬래시로도 호출 가능: '/spec-validate'."
+description: "spec 명료성 게이팅 + 합의 리뷰 + 진행률 visibility — 'spec 확인', 'goax spec check', '스펙 게이트', '합의 리뷰', 'spec 리뷰', '--consensus'. spec.md 의 NEEDS CLARIFICATION + placeholder `<...>` + 빈 필수 섹션 3 항목을 게이팅하고, 그 뒤 size L/XL 은 architect·evaluator 를 새 컨텍스트로 병렬·독립 리뷰(검토 범위가 달라요 — architect 는 구조·대안, evaluator 는 AC·코드 현실; spec-review.sh 가 리뷰어별 verdict 파일과 sha 를 집계하고 재리뷰는 --delta 로 바뀐 곳만, 통과 뒤 오타는 --fixup), M 은 '--consensus' 로 선택. tasks.md 진행률 + AC 진행률을 visibility 로 노출. 슬래시로도 호출 가능: '/spec-validate'."
 ---
 
 # goax spec-validate — 명료성 게이팅 + 진행률 visibility
@@ -60,7 +60,7 @@ WARNINGS=$(printf '%s\n' "$RESULT"    | jq -r '.warnings // [] | join("; ")')
 ## 2.5 합의 리뷰 — 명료성이 통과한 뒤에만
 
 계획의 품질은 diff 시점이 아니라 **계획 시점**에 리뷰해야 올라가요. OMC ralplan 의 구조를
-가져왔어요 — 고정 스냅샷 하나를 Architect·Critic 이 독립·순차로 보고, 종합은 Planner(이 세션)만.
+가져왔어요 — 고정 스냅샷 하나를 Architect·Critic 이 독립으로 보고, 종합은 Planner(이 세션)만.
 goax 가 얹은 건 둘이에요: 리뷰어는 §2 를 **통과한** spec 만 봐요(placeholder 지적에 리뷰어
 컨텍스트를 쓰지 않아요), 그리고 verdict 가 대화가 아니라 **파일**에 남아 게이트가 읽어요.
 
@@ -75,26 +75,39 @@ REQ=$(printf '%s\n' "$REVIEW" | jq -r '.result.required')      # required (L·XL
 |---|---|
 | `none` | 건너뛰어요. S 는 리뷰 대상이 아니에요 |
 | `optional` | 사용자가 이 대화에서 `--consensus`·"합의 리뷰" 라고 했거나, `current-task.json` 의 `intent_notes.consensus_review = "true"` (triage 의 M×L2 모호 영역 메뉴에서 켠 경우) 면 돌려요. 아니면 §3 으로 |
-| `required` | 돌려요. `pass` 가 true 가 될 때까지 (라운드 상한 3) |
+| `required` | 돌려요. `pass` 가 true 가 될 때까지 (상한: spec 단계 3 · tasks 단계 2) |
 
 risk 는 안 봐요 — risk 는 구현 리뷰(evaluator, `tasks-gate.sh` G6)가 이미 반영해요.
 
 ### 한 라운드
 
 ```bash
-SNAP=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --snapshot --json)
+SNAP=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --snapshot --json)     # spec-tasks 에서 왔으면 --stage tasks
 SHA=$(printf '%s\n' "$SNAP" | jq -r '.result.sha')
 A_FILE=$(printf '%s\n' "$SNAP" | jq -r '.result.architect_file')
 E_FILE=$(printf '%s\n' "$SNAP" | jq -r '.result.evaluator_file')
-printf '%s\n' "$SNAP" | jq -r '.warnings[]?'                    # 라운드 상한 경고
+printf '%s\n' "$SNAP" | jq -r '.result.note // empty, .warnings[]?'          # 라운드 재사용·교체 안내 · 상한 경고
+DELTA=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --delta --json | jq -r '.result.delta_file // empty')   # 재리뷰면 바뀐 곳
 ```
 
-1. **architect** 를 `Agent` 도구로 띄워요 (`goax:architect`, vendor 설치면 `architect`). 브리프에는
-   이것만: `$SPEC_DIR/spec.md` 경로 · `$SHA` · §7.5 진입 ADR 경로들 · **출력 파일 `$A_FILE`** ·
-   "첫 줄 `verdict:` 둘째 줄 `sha: $SHA`". **`$E_FILE` 은 넣지 않아요.** 이 대화도 넣지 않아요.
-2. architect 가 **끝난 뒤에** **evaluator** 를 띄워요 (`goax:evaluator`, spec 모드). 브리프: spec.md
-   경로 · `$SHA` · ADR · tasks.md 가 있으면 그 경로 · **출력 파일 `$E_FILE`**. `$A_FILE` 은 넣지
-   않아요. 둘을 한 메시지에 같이 띄우지 마세요 — 순차예요.
+`--snapshot` 은 부를 때마다 라운드를 올리지 않아요 — 같은 sha 면 그대로고, 직전 스냅샷을 아무도
+안 봤으면(리뷰어 띄우기 전에 고친 오타) 그 자리를 바꿔 끼워요. 라운드는 리뷰어가 **실제로 본
+횟수**예요.
+
+1. **architect 와 evaluator 를 한 메시지에 같이 띄워요** (`goax:architect` · `goax:evaluator` spec 모드,
+   vendor 설치면 접두사 없이). 둘은 서로의 파일을 못 보니 동시에 띄워도 독립이에요 — 순차로 띄우면
+   벽시계만 두 배예요. 브리프에 넣는 건 각자 이것뿐이에요:
+   - 공통: `$SPEC_DIR/spec.md` 경로 · `$SHA` · §7.5 진입 ADR 경로들 · tasks.md 가 있으면 그 경로 ·
+     "첫 줄 `verdict:` 둘째 줄 `sha: $SHA`" · **재리뷰면 `$DELTA` 경로와 "바뀐 곳만 보세요"**
+   - architect 에는 **출력 파일 `$A_FILE`** 만, evaluator 에는 **출력 파일 `$E_FILE`** 만. 상대 파일은
+     넣지 않아요. 이 대화도 넣지 않아요.
+   - **검증 예산**: spec 단계 리뷰어는 grep·read 로만 봐요. 빌드·테스트를 돌리지 않아요 — 그건 구현
+     리뷰(`tasks-gate.sh` G6)의 몫이고, 여기서 돌리면 리뷰 한 번이 구현 한 번만큼 비싸져요.
+2. 검토 범위가 달라요 — 같은 걸 두 번 지적받지 않게 각 agent 의 "하지 않는 것" 절이 갈라 놨어요:
+   - **architect** — 반대안·트레이드오프·되돌리기 비용·ADR 후보. AC 문구·테스트 목록·grep 전수는 안 봐요
+   - **evaluator** — AC 검증 가능성·코드 현실 대조·누락 엣지·배포 전제·tasks 분해. 대안 구조는 안 봐요
+   - 둘 다 `## 비차단` 절을 따로 둬요 — 거기 적힌 건 verdict 에 안 세요. 이 세션은 비차단은 반영할지
+     골라도 되고, 차단만 반드시 반영해요
 3. 집계해요:
 
 ```bash
@@ -104,23 +117,47 @@ printf '%s\n' "$REVIEW" | jq -r '"architect \(.result.architect.verdict // "없�
 ```
 
 4. `pass=false` 면 두 파일을 **이 세션이** 읽고 종합해 spec.md 를 고쳐요. 고치면 sha 가 바뀌니
-   §2 → `--snapshot` 부터 다시예요 (한쪽만 sha 가 어긋나면 그쪽만 다시 띄워요). `재논의 필요` 가
-   하나라도 있으면 spec 자체가 틀렸다는 뜻이라 사용자 결정으로 halt. **round ≥ 3 이면 지적을
-   더 반영하려 하지 말고 그 자체로 halt** — 라운드를 더 돌리는 건 리뷰가 아니라 spec 정의가
-   문제라는 신호예요 (아래 "상한 3" 참조). `--snapshot` 응답의 `warnings[]` 가 상한 경고를 줘요.
+   `--snapshot` 부터 다시예요 — 재리뷰 브리프엔 `--delta` 를 붙여 바뀐 곳만 보게 해요 (한쪽만 sha 가
+   어긋나면 그쪽만 다시 띄워요). `재논의 필요` 가 하나라도 있으면 spec 자체가 틀렸다는 뜻이라
+   사용자 결정으로 halt. **라운드가 상한을 넘으면 지적을 더 반영하려 하지 말고 그 자체로 halt** —
+   라운드를 더 돌리는 건 리뷰가 아니라 spec 정의가 문제라는 신호예요. `--snapshot` 응답의
+   `warnings[]` 가 상한 경고를 줘요.
 5. `pass=true` 면 합본을 남기고 §3 으로:
 
 ```bash
 bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --merge --json >/dev/null
 ```
 
+### 통과 뒤의 오타·문구 — `--fixup`
+
+통과한 뒤 spec.md 의 오타·문구·링크를 고치면 sha 가 어긋나 `pass=false` 로 돌아가요. 그걸로 리뷰어를
+다시 띄우지 마세요:
+
+```bash
+bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --fixup --json | jq -r '.result.changed_lines, .next_step'
+```
+
+`--fixup` 은 둘 다 `진행` 인 스냅샷이 있을 때만 받아요. 결과의 `changed_lines`·`diff` 를 한 번 보고
+**설계가 바뀐 거면 쓰지 않아요** — 그건 `--snapshot` 으로 새 라운드예요. 오타인지 설계인지는 이 세션의
+판단이고, 판단이 서지 않으면 새 라운드 쪽이에요.
+
+### tasks.md 가 생겼을 때 — `--stage tasks`
+
+sha 는 spec.md + tasks.md 합산이라 `/spec-tasks` 뒤엔 반드시 어긋나요. 그건 spec 을 다시 보는 게 아니라
+**분해를 보는** 라운드예요 — `--snapshot --stage tasks` 로 찍으면 라운드가 1 부터 다시 시작하고 상한은
+2 예요. 둘 다 띄우되 브리프가 짧아요: 공통으로 "spec.md 는 통과한 그대로예요 — `--delta` 는 tasks.md 뿐이니
+분해만 보세요". evaluator 는 컨텍스트 기준 분해인가 · `files:` 가 실제인가 · `[P]` 근거를, architect 는
+task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비싼 task 가 앞에 있는가만 봐요.
+
 ### 왜 이 규칙인가
 
 - **리뷰어별 파일** — 한 파일에 둘이 쓰면 첫 줄 verdict 하나로 "둘 다 진행" 을 못 담고, 뒤에 쓰는
   쪽이 앞 절을 읽게 돼요
-- **순차·독립** — 앞 리뷰를 읽은 뒤 리뷰는 그 리뷰의 메아리예요. 합의가 아니라 동조가 돼요
-- **sha 고정** — 리뷰 뒤에 spec 이 바뀌면 그 리뷰는 다른 문서에 대한 리뷰예요
-- **상한 3** — 넘으면 리뷰가 아니라 spec 정의가 문제예요. 라운드를 더 돌리지 말고 사용자와 다시 정해요
+- **병렬·독립** — 독립은 "상대 파일을 못 본다" 로 성립해요. 순차는 독립에 아무것도 더해 주지 않고 시간만
+  더해요
+- **검토 범위 분리** — 같은 spec 을 같은 범위로 두 번 보면 같은 지적이 두 번 와요. 범위가 달라야 합의가 뜻이 있어요
+- **sha 고정** — 리뷰 뒤에 spec 이 바뀌면 그 리뷰는 다른 문서에 대한 리뷰예요. 단 오타는 `--fixup` 으로
+- **상한** — 넘으면 리뷰가 아니라 spec 정의가 문제예요. 라운드를 더 돌리지 말고 사용자와 다시 정해요
 
 ## 3. 출력
 

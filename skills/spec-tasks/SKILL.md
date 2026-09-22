@@ -151,7 +151,7 @@ bash .ax/scripts/bash/update-task.sh --phase tasks --json
  📍 다음
   1. tasks.md 를 spec.md §3 acceptance + §7.5 Technical Context + ADR 기반으로 분해
   2. 각 task에 `files:` (필수) + `[P]` 마커 + `의존:`
-  3. L/XL 이면 "/spec-validate" 를 한 번 더 — spec-review 의 sha 가 tasks.md 도 포함해서(`spec:<sha>|tasks:<sha>`), tasks.md 를 바꾸면 재리뷰가 걸려요. evaluator 는 컨텍스트 기준 분해인가 · files: 가 실제인가 · [P] 근거를 봐요
+  3. L/XL 이면 "/spec-validate" 를 한 번 더 — spec-review 의 sha 가 tasks.md 도 포함해서(`spec:<sha>|tasks:<sha>`), tasks.md 를 바꾸면 재리뷰가 걸려요. 이번엔 `--snapshot --stage tasks` 로 찍어요 — spec 을 다시 보는 게 아니라 분해만 보는 라운드라 1 부터 다시 세고 상한이 2 예요. evaluator 는 컨텍스트 기준 분해인가 · files: 가 실제인가 · [P] 근거를 봐요
   4. 병렬로 나눌지 판단: "/lane" — 가를 수 있는 일인지 먼저 판정하고, 파일 소유권으로 레인을 그어요 (`레인:` 원장 기록까지)
   5. 구현 단계로: "/spec-implement" — `레인:` 배정이 있으면 코디네이터 모드, 없으면 단일 레인 순차
 ```

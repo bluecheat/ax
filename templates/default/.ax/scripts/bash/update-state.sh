@@ -21,6 +21,9 @@
 #   bash .ax/scripts/bash/update-state.sh --dry               # 계산 결과 미리보기 (stderr)
 #   bash .ax/scripts/bash/update-state.sh --help              # 사용법만 출력, 부작용 없음
 #
+# state.json 이 없으면(새 워크트리·클론 — gitignore 대상) .ax/hud/state.json.template 로 만들고 진행해요.
+# 템플릿까지 없으면 그때만 "installer 먼저" 로 exit 1.
+#
 # 의존: jq (필수), grep, find, awk, common.sh
 # 프로젝트 루트: $GOAX_PROJECT_DIR > $CLAUDE_PROJECT_DIR > ancestor 탐색 (common.sh find_project_root)
 
@@ -62,11 +65,20 @@ if [ "$MODE" != update ] && { [ -n "$SKILL" ] || [ -n "$LAST_MISTAKE" ]; }; then
     goax_warn "$MODE 는 state.json 을 안 써요 — --skill/--last-mistake 가 기록되지 않아요 (쓰려면 $MODE 를 빼요)"
 fi
 
-if [ ! -f "$S" ]; then
-    goax_error "state.json 없음 ($S) — installer 먼저 실행"
-    exit 1
-fi
 command -v jq >/dev/null || { goax_error "jq 필요 (brew install jq)"; exit 1; }
+# state.json 은 런타임 파일이라 gitignore 대상이에요 — 새 워크트리·클론엔 없어요. 그때마다 installer 를
+# 다시 돌리라고 하면 skill 들의 `update-state.sh … || true` 가 조용히 삼켜서 HUD 가 영영 죽은 채로 남아요.
+# 템플릿이 있으면 그걸로 seed 하고 진행해요 (installer 의 MANIFEST `->` seed 와 같은 원본).
+if [ ! -f "$S" ]; then
+    TPL="$WS/.ax/hud/state.json.template"
+    if [ -f "$TPL" ] && [ "$MODE" = update ]; then
+        mkdir -p "$(dirname "$S")" && cp "$TPL" "$S" \
+            && goax_warn "state.json 이 없어 템플릿으로 만들었어요 ($S)"
+    else
+        goax_error "state.json 없음 ($S) — installer 먼저 실행"
+        exit 1
+    fi
+fi
 
 # ─── derived values ─────────────────────────────────────
 

@@ -7,7 +7,10 @@
 #                       [--merge-intent '<json 객체>'] [--start] [--json] [--dry-run]
 #   phase:  triaged | spec | spec_checked | spec_blocked | tasks | implementing | review   (idle 은 reset-task.sh 만)
 #   --set 키:  task_id · description · size(S|M|L|XL) · risk(L0|L1|L2|L3) · domain ·
-#              spec_id · spec_dir · spec_tier(standard|full)   — 빈 값은 안 받아요 (비우는 건 reset-task.sh)
+#              spec_id · spec_dir · spec_tier(standard|full) ·
+#              friction(autopilot|phase_gate|per_task)   — 빈 값은 안 받아요 (비우는 건 reset-task.sh)
+#   friction 은 사용자가 이 task 에 한해 미리 준 확인 강도예요 ("묻지 말고 쭉 해" → autopilot).
+#     spec-implement 가 config.yml 의 confirmation.mode 대신 이 값을 써요. L3 override(C5)는 여전히 이겨요.
 #   --blocked-by    blocked_by 를 통째로 교체 (문자열 JSON 배열, '[]' 로 비움)
 #   --merge-intent  intent_notes 에 얕은 병합 (JSON 객체) — 같은 키는 새 값이 이겨요
 #   --start         started_at 을 지금(UTC)으로 — triage 가 새 task 를 열 때만
@@ -92,8 +95,9 @@ for kv in ${SET_KV[@]+"${SET_KV[@]}"}; do
         size)      case "$v" in S|M|L|XL) ;; *) fail "size 는 S|M|L|XL 중 하나예요 (받은 값: '${v}')" ;; esac ;;
         risk)      case "$v" in L0|L1|L2|L3) ;; *) fail "risk 는 L0|L1|L2|L3 중 하나예요 (받은 값: '${v}')" ;; esac ;;
         spec_tier) case "$v" in standard|full) ;; *) fail "spec_tier 는 standard|full 중 하나예요 (받은 값: '${v}')" ;; esac ;;
+        friction)  case "$v" in autopilot|phase_gate|per_task) ;; *) fail "friction 은 autopilot|phase_gate|per_task 중 하나예요 (받은 값: '${v}')" ;; esac ;;
         task_id|description|domain|spec_id|spec_dir) ;;
-        *) fail "--set 이 받는 키는 task_id·description·size·risk·domain·spec_id·spec_dir·spec_tier 예요 (받은 키: '${k}')" ;;
+        *) fail "--set 이 받는 키는 task_id·description·size·risk·domain·spec_id·spec_dir·spec_tier·friction 이에요 (받은 키: '${k}')" ;;
     esac
     SETS=$(jq -nc --argjson o "$SETS" --arg k "$k" --arg v "$v" '$o + {($k): $v}')
 done

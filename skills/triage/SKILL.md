@@ -178,7 +178,7 @@ M×L2 에서 사용자가 합의 리뷰를 켜면 `intent_notes.consensus_review
  🎯 권장   tier=standard (spec + tasks)
 
  사전 검색  관련 spec/ADR/mistakes 경로 + 매칭 룰 토큰
- friction  phase_gate
+ friction  phase_gate                                  ← config 기본 · 사용자가 말했으면 "autopilot ← "…" 로 이해했어요 (아니면 말씀)"
 
  [a] tier=standard (권장)  [b] tier=full 확대  [c] 합의 리뷰도 켜기 (architect·evaluator)  [d] 재분류
 ```
@@ -207,9 +207,38 @@ bash .ax/scripts/bash/update-task.sh --start --phase triaged \
  --set "task_id=$TASK_ID" --set "description=$DESCRIPTION" \
  --set "size=$SIZE" --set "risk=$RISK" --set "domain=$DOMAIN" \
  --merge-intent "$INTENT_JSON" --json
+
+# 사용자가 이 작업의 확인 강도를 말했으면 같이 적어요 (아래 "friction — 자연어로 받아요"). spec-implement 가
+# config.yml 의 confirmation.mode 대신 이 값을 읽어요 (L3 는 여전히 override).
+# 말하지 않았으면 적지 않아요 — 기본값을 여기서 정하면 사용자가 config 를 바꿔도 안 먹어요.
+[ -n "${FRICTION:-}" ] && bash .ax/scripts/bash/update-task.sh --set "friction=$FRICTION" --json
 ```
 
 이후 spec 이 `.ax/scripts/bash/tier-from-state.sh --json`로 tier 자동 결정.
+
+### friction — 자연어로 받아요, 되묻지 않고 되비춰요
+
+`$FRICTION` 은 문구 목록으로 잡는 게 아니라 **의도**로 판단해요 — 사용자 말이 "이 작업에서 얼마나 물을 것인가"
+에 대한 것인지가 기준이에요. 같은 뜻이면 어떤 문장이든 받아요:
+
+| 뜻 | 값 |
+|---|---|
+| 확인 없이 끝까지 — "묻지 말고 쭉", "확인 안 받아도 돼", "알아서 다 해줘", "자동으로" | `autopilot` |
+| 단계 넘어갈 때만 — "phase 마다만 물어", "큰 구간마다 보여줘" | `phase_gate` |
+| 하나씩 — "매번 확인받아", "한 task 씩 보고" | `per_task` |
+
+**확신이 없으면 적지 않아요.** 안 적으면 config 기본값이 적용돼 *더 묻는* 쪽이라 안전하고, 잘못 적으면 *덜 묻는*
+쪽이라 위험해요 — 그래서 오판 비용이 비대칭이에요. "파일 쭉 읽어봐" 의 "쭉" 은 확인에 대한 말이 아니고, "일단
+진행해" 는 이 turn 을 이어가라는 말이지 Phase 경계를 건너뛰라는 말이 아니에요. 그런 건 안 적어요.
+
+적었으면 3단계 출력의 `friction` 줄에 **해석을 되비춰요** — 되묻지 않아요:
+
+```
+ friction  autopilot ← "묻지 말고 쭉 해" 로 이해했어요 (아니면 말씀)
+```
+
+사용자가 아무 말 없이 넘어가면 그게 답이에요. 이 줄이 거부권이에요 — 파일에 적힌 값은 압축 뒤에도 다음 세션에도
+살아서 `spec-implement` 가 Phase 경계를 조용히 지나가게 하니까, 적는 순간 한 번은 눈에 보여야 해요.
 
 ## 4단계 — 역면접 (Reverse Interview)
 
