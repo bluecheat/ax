@@ -2472,6 +2472,13 @@ else
         && grep -q 'friction' "$REPO/skills/spec-implement/SKILL.md" && grep -q 'friction=' "$REPO/skills/triage/SKILL.md" \
         && grep -q 'Rule C0' "$REPO/docs/reference/confirmation-policy.md" \
         && pass "friction — template 키 · triage 기록 · spec-implement 읽기 · 정책 C0 네 곳 동기화" || fail "friction — 쓰는 곳/읽는 곳/정책 중 누락"
+    # 자연어로 받는 값이라 두 규율이 글로 있어야 해요 — 확신 없으면 안 적음(오판 비용 비대칭) · 적으면 되묻지 않고 되비춤(거부권).
+    # 되비추는 줄은 적는 쪽(triage)과 물려받는 쪽(spec-implement 진입) 둘 다, 그리고 Phase 경계마다 다시 읽어야 도중 변경이 먹어요.
+    grep -q '확신이 없으면 적지 않아요' "$REPO/skills/triage/SKILL.md" && grep -q '로 이해했어요' "$REPO/skills/triage/SKILL.md" \
+        && grep -q 'triage 사전 승인' "$REPO/skills/spec-implement/SKILL.md" && grep -q 'Phase 경계마다' "$REPO/skills/spec-implement/SKILL.md" \
+        && grep -q '확신이 없으면 적지 않아요' "$REPO/docs/reference/confirmation-policy.md" \
+        && pass "friction — 확신 없으면 안 적음 · 되묻지 않고 되비춤(triage · spec-implement 진입) · Phase 경계 재읽기" \
+        || fail "friction — 자연어 수신 규율(확신·되비춤·재읽기) 누락"
     rs update-task.sh --phase review --dry-run --json | jq -e '.result.dry_run==true and .result.phase=="review"' >/dev/null \
         && [ "$(jq -r .phase "$RS/.ax/current-task.json")" = spec_checked ] && [ ! -d "$RS/.ax/current-task.json.lock" ] \
         && pass "update-task --dry-run — 바뀔 키만 답하고 파일·락 안 건드림" || fail "update-task --dry-run — 파일/락 변동"

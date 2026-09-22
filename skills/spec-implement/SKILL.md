@@ -108,11 +108,20 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 [ "$RECURRENCE" -ge "$MISTAKE_THRESHOLD" ] && CATEGORY_GATED=true
 ```
 
-`TASK_FRICTION` 은 사용자가 "묻지 말고 쭉 해" · "phase 마다만 물어" 처럼 **이 task 에 한해** 미리 말한 걸
-triage 가 `update-task.sh --set friction=…` 으로 적어 둔 값이에요. 대화에서 들은 걸 이 세션이 기억하는 게
-아니라 파일에서 읽어요 — 압축 뒤에도, 다음 세션에도 같은 답이 나와야 해요. 없으면 config 기본값이에요.
-사용자가 구현 도중에 바꾸면 그때 `bash .ax/scripts/bash/update-task.sh --set friction=<모드> --json` 으로
-적고 다음 task 부터 적용해요.
+`TASK_FRICTION` 은 사용자가 **이 task 에 한해** 확인 강도를 말한 걸 triage 가 `update-task.sh --set friction=…`
+으로 적어 둔 값이에요 (triage §3.5 "friction — 자연어로 받아요"). 대화에서 들은 걸 이 세션이 기억하는 게 아니라
+파일에서 읽어요 — 압축 뒤에도, 다음 세션에도 같은 답이 나와야 해요. 없으면 config 기본값이에요.
+
+**값이 있으면 진입 때 한 줄 되비춰요** — 새 세션은 지난 세션이 준 승인을 이 줄로만 알아요. 되묻지 않아요:
+
+```
+ friction  autopilot — triage 사전 승인 (task 2026-09-22-017 · 2026-09-22T08:41Z). 바꾸려면 말씀
+```
+
+사용자가 구현 도중에 "이제부터 물어봐" · "그냥 쭉 해" 처럼 바꾸면 triage 와 같은 기준(의도 · 확신 없으면 안 적음)으로
+`bash .ax/scripts/bash/update-task.sh --set friction=<모드> --json` 으로 **파일에 먼저** 적고 같은 줄로 되비춰요.
+§4 의 Phase 경계마다 `jq -r '.friction // empty' .ax/current-task.json` 을 다시 읽어 `EFFECTIVE_MODE` 를 다시
+정해요 — 진입 때 한 번 읽은 값으로 끝까지 가면 도중에 바꾼 게 안 먹어요.
 
 결정 결과:
 - `EFFECTIVE_MODE = autopilot` → 모든 task silent, 실패·범위이탈·elevated 만 halt
@@ -204,6 +213,9 @@ triage 가 `update-task.sh --set friction=…` 으로 적어 둔 값이에요. �
 ```
 
 핵심: 이전 Phase 결과 요약 + 다음 Phase 파일 + 적용 룰 delta + 의존성 주의. *비판적 사고가 작동하도록* 정보 제공. `Phase N → Phase N+1` 전환 외에는 묻지 않음.
+
+경계에 설 때마다 §2 의 `TASK_FRICTION` 을 파일에서 다시 읽어요 — 도중에 사용자가 바꾼 값은 파일에만 있어요.
+`autopilot` 이면 이 박스를 찍지 않고 넘어가요 (사용자가 이미 준 답이에요). L3 override(C5) 는 그래도 이겨요.
 
 ## 5. 완료 마킹 — silent
 
