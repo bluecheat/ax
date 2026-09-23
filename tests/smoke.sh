@@ -2250,6 +2250,10 @@ sy --snapshot --json | jq -e '.result.round==1 and .result.stage=="spec" and .re
 printf 'typo-before-review\n' >> "$SY/spec.md"
 sy --snapshot --json | jq -e '.result.round==1 and .result.replaced==true' >/dev/null 2>&1 \
     && pass "spec-review --snapshot — 아무도 안 본 스냅샷은 바꿔 끼움 (replaced · 라운드 유지)" || fail "spec-review --snapshot — 안 본 스냅샷을 새 라운드로 셈"
+# 아직 아무도 안 봤으면 base 는 snapshot 이고, 방금 찍은 본문과 같으니 0줄이어야 해요.
+# base 이름표를 디렉토리 이름으로 쓰면 없는 경로와 비교해 "전부 바뀜" 이 나와요 (1 라운드 자리에서 실제로 그랬어요).
+sy --delta --json | jq -e '.result.base=="snapshot" and .result.changed_lines==0' >/dev/null 2>&1 \
+    && pass "spec-review --delta — 리뷰 전(base=snapshot)엔 방금 찍은 본문 대비 0줄 (이름표를 경로로 쓰지 않음)" || fail "spec-review --delta — base=snapshot 이 전부 바뀐 걸로 나옴: $(sy --delta --json | jq -c '.result|{base,changed_lines}')"
 sy_review "보강 필요" "진행"
 printf 'after-round-1\n' >> "$SY/spec.md"
 sy --snapshot --json | jq -e '.result.round==2 and .result.replaced==false and .result.reused==false' >/dev/null 2>&1 \
@@ -2273,6 +2277,12 @@ echo "$FX" | jq -e '.status=="ok" and .result.changed_lines==1 and .result.revie
     && sy --snapshot --json | jq -e '.result.reused==true and .result.round==2' >/dev/null 2>&1 \
     && sy --status --json | jq -e '.result.pass==true' >/dev/null 2>&1 \
     && pass "spec-review --fixup — 통과 뒤 오타를 리뷰 없이 받아들임 · 그 뒤 --snapshot 도 원장을 안 건드림" || fail "spec-review --fixup — 불일치: $(echo "$FX" | jq -c .result) $(sy --status --json | jq -c '.result|{pass,fixup}')"
+mv "$SY/.review-snapshot" "$SY/.snapshot-away"     # 옛 원장에서 올라와 본문 사본이 없을 때
+printf 'no-copy\n' >> "$SY/spec.md"
+sy --fixup --json | jq -e '.status=="ok" and .result.changed_lines==null and .result.files==[]' >/dev/null 2>&1 \
+    && pass "spec-review --fixup — 본문 사본이 없으면 changed_lines 를 0 이 아니라 null 로 (모르는 걸 0 으로 말하지 않음)" || fail "spec-review --fixup — 사본 없을 때 0줄로 단정: $(sy --fixup --json | jq -c '.result|{changed_lines,files}')"
+mv "$SY/.snapshot-away" "$SY/.review-snapshot"
+sy_review "진행" "진행"; sy --snapshot --json >/dev/null 2>&1; sy_review "진행" "진행"
 sy_review "진행" "보강 필요"     # fixup 은 통과한 뒤에만
 printf 'x\n' >> "$SY/spec.md"
 sy --fixup --json >/dev/null 2>&1; [ $? -eq 1 ] \

@@ -87,7 +87,10 @@ SHA=$(printf '%s\n' "$SNAP" | jq -r '.result.sha')
 A_FILE=$(printf '%s\n' "$SNAP" | jq -r '.result.architect_file')
 E_FILE=$(printf '%s\n' "$SNAP" | jq -r '.result.evaluator_file')
 printf '%s\n' "$SNAP" | jq -r '.result.note // empty, .warnings[]?'          # 라운드 재사용·교체 안내 · 상한 경고
-DELTA=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --delta --json | jq -r '.result.delta_file // empty')   # 재리뷰면 바뀐 곳
+# 재리뷰일 때만 delta 를 브리프에 붙여요 — base 가 reviewed 이고 바뀐 줄이 있을 때예요.
+# 1 라운드(base=snapshot)나 0줄이면 빈 diff 를 주게 돼서, 리뷰어가 "볼 게 없다" 로 읽어요.
+DELTA=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --delta --json \
+        | jq -r 'if .result.base=="reviewed" and .result.changed_lines>0 then .result.delta_file else empty end')
 ```
 
 `--snapshot` 은 부를 때마다 라운드를 올리지 않아요 — 같은 sha 면 그대로고, 직전 스냅샷을 아무도
