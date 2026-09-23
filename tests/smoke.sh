@@ -2832,6 +2832,15 @@ FILLEOF
     csc >/dev/null 2>&1
     [ $? -eq 1 ] && csc | jq -e '.result.placeholders == 1 and (.result.placeholder_lines|length)==1 and (.result.placeholder_lines[0]|test("^[0-9]+: 담당: <이름>$"))' >/dev/null 2>&1 \
         && pass "check-spec-clarity — placeholder 1개면 exit 1 + placeholder_lines 에 '줄번호: 본문'" || fail "check-spec-clarity — placeholder 를 못 잡거나 줄을 안 보여줌: $(csc | jq -c '.result|{placeholders,placeholder_lines}')"
+    # 긴 한글 placeholder 줄 — 바이트로 자르면 한글이 반으로 갈려 JSON 이 깨지고 호출부의 jq 가 통째로 죽어요.
+    # GNU cut -c 는 C·C.UTF-8 둘 다 바이트 단위라 리눅스에서만 터져요 (실측). 공용 clip() 은 낱말 경계라 안 깨져요.
+    cp "$TPL/filled.base" "$FILLED"
+    { printf '\n담당자와 승인 절차는'; for _i in $(seq 25); do printf ' 아직 정하지 않았어요'; done; printf ' <이름>\n'; } >> "$FILLED"
+    CSC_OUT=$(csc)
+    printf '%s' "$CSC_OUT" | jq -e '.result.placeholders == 1 and (.result.placeholder_lines[0] | length > 20)' >/dev/null 2>&1 \
+        && printf '%s' "$CSC_OUT" | jq -r '.result.placeholder_lines[0]' | iconv -f utf-8 -t utf-8 >/dev/null 2>&1 \
+        && pass "check-spec-clarity — 긴 한글 placeholder 줄도 JSON 이 안 깨짐 (바이트 절단 금지 · clip 낱말 경계)" \
+        || fail "check-spec-clarity — 긴 한글 줄에서 JSON/UTF-8 깨짐: $(printf '%s' "$CSC_OUT" | head -c 160)"
     # 인라인 코드 `…` 안의 <패턴> 은 코드 인용이지 placeholder 가 아니에요 — 이 오탐 하나가 리뷰 라운드를 태웠어요
     cp "$TPL/filled.base" "$FILLED"; printf '\n- [ ] **AC3** `grep -E "<a|b>"` 가 0건이고 `<패턴>` 도 안 남아요\n' >> "$FILLED"
     csc >/dev/null 2>&1

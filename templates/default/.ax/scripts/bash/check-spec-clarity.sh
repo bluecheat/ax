@@ -123,16 +123,22 @@ if [ -z "$PLACEHOLDER_LINES" ]; then
 else
     PLACEHOLDER_COUNT=$(printf '%s\n' "$PLACEHOLDER_LINES" | wc -l | tr -d ' ')
 fi
-# 걸린 줄을 "줄번호: 본문" 으로 — 앞뒤 공백을 떼고 120자에서 잘라요 (JSON 에 통째로 싣기엔 길어요)
+# 걸린 줄을 "줄번호: 본문" 으로 — 앞뒤 공백을 떼고 길면 낱말 경계에서 잘라요 (JSON 에 통째로 싣기엔 길어요).
+# 자르는 건 `cut -c` 가 아니라 공용 clip() 이에요 — GNU cut 의 -c 는 바이트라 한글을 반으로 가르고,
+# 깨진 바이트가 이 JSON 문자열에 들어가면 호출부의 jq 가 통째로 죽어요 (실측: ubuntu C·C.UTF-8 둘 다 BROKEN).
 PLACEHOLDER_SHOWN=()
 if [ "$PLACEHOLDER_COUNT" -gt 0 ]; then
     while IFS= read -r line; do
         [ -n "$line" ] || continue
-        ln="${line%%:*}"; body="${line#*:}"
-        body=$(printf '%s' "$body" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | cut -c1-120)
-        PLACEHOLDER_SHOWN+=("${ln}: ${body}")
+        PLACEHOLDER_SHOWN+=("$line")
     done <<EOF
-$PLACEHOLDER_LINES
+$(printf '%s\n' "$PLACEHOLDER_LINES" | awk "$GOAX_AWK_CLIP"'
+    {
+        ln = $0;   sub(/:.*/, "", ln)
+        body = $0; sub(/^[0-9]+:/, "", body)
+        gsub(/^[ \t]+/, "", body); gsub(/[ \t]+$/, "", body)
+        print ln ": " clip(body, 120)
+    }')
 EOF
 fi
 
