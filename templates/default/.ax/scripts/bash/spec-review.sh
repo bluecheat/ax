@@ -62,6 +62,8 @@
 #                 "evaluator":{…},"pass":false,"reason":"…"},…}
 #   --delta     {"status":"ok","result":{"base":"reviewed|snapshot|none","files":[{"file":"spec.md","changed_lines":4}],
 #                 "delta_file":"…/.review-snapshot/delta.diff","diff":"…"}}
+#                base=reviewed 는 리뷰어가 본 본문 대비, base=snapshot 은 아직 아무도 안 본 스냅샷 대비예요
+#                (재리뷰 브리프에 붙일 것은 reviewed 쪽이에요 — snapshot 대비는 "리뷰 전에 더 고쳤다" 는 뜻)
 #   --fixup     {"status":"ok","result":{"reviewed_sha":"…","accepted_sha":"…","changed_lines":3,…}}
 #
 # Exit: 0 ok (pass 여부와 무관 — 판단은 caller) · 1 error (spec.md 없음 · --spec 모호 · --fixup 조건 미달) · 2 skipped (jq 없음)
@@ -215,7 +217,7 @@ passed_at() { [ -n "$1" ] && [ "$A_P" = true ] && [ "$E_P" = true ] && [ "$A_S" 
 # 두 본문 세트(디렉토리 vs 워킹 카피)의 diff → DIFF · CHANGED_LINES · CHANGED_JSON 을 채워요
 # (stdout 으로 내보내면 $(…) 가 서브셸이라 줄 수가 caller 에 안 남아요)
 diff_against() {
-    local base="$1" f b c n
+    local base="$1" label="${2:-reviewed}" f b c n
     CHANGED_LINES=0; CHANGED_JSON='[]'; DIFF=""
     for f in spec.md tasks.md; do
         n=0
@@ -226,7 +228,7 @@ diff_against() {
             n=$(diff "$b" "$c" 2>/dev/null | grep -cE '^[<>]' || true)
             n=${n:-0}
             if [ "$n" -gt 0 ]; then
-                DIFF="${DIFF}$(diff -u -L "reviewed/$f" -L "current/$f" "$b" "$c" 2>/dev/null || true)
+                DIFF="${DIFF}$(diff -u -L "$label/$f" -L "current/$f" "$b" "$c" 2>/dev/null || true)
 "
             fi
         fi
@@ -307,13 +309,15 @@ case "$MODE" in
     fi
     ;;
   delta)
-    BASE="none"; DIFF=""
-    if [ -d "$SNAP_DIR/reviewed" ]; then BASE="reviewed"
-    elif [ -d "$SNAP_DIR/current" ]; then BASE="snapshot"
+    # base 는 이름표고 디렉토리는 따로예요 — 이름표를 경로로 쓰면 없는 디렉토리와 비교해서
+    # "전부 바뀜" 이 나와요 (reviewed/ 가 아직 없는 1 라운드에서 실제로 그랬어요)
+    BASE="none"; BASE_DIR=""; DIFF=""
+    if [ -d "$SNAP_DIR/reviewed" ]; then BASE="reviewed"; BASE_DIR="$SNAP_DIR/reviewed"
+    elif [ -d "$SNAP_DIR/current" ]; then BASE="snapshot"; BASE_DIR="$SNAP_DIR/current"
     fi
     CHANGED_LINES=0; CHANGED_JSON='[]'
     if [ "$BASE" != none ]; then
-        diff_against "$SNAP_DIR/$BASE"
+        diff_against "$BASE_DIR" "$BASE"
         [ "$DRY_RUN" = true ] || printf '%s' "$DIFF" > "$DELTA_FILE"
     fi
     if [ "$JSON_MODE" = true ]; then
@@ -339,20 +343,23 @@ case "$MODE" in
         fail "통과한 리뷰가 없어요 (architect '${A_V:-없음}' sha ${A_S:-없음} · evaluator '${E_V:-없음}' sha ${E_S:-없음} · 스냅샷 ${SNAP_SHA}) — fixup 은 둘 다 진행인 뒤에만이에요"
     fi
     if [ "$SHA" = "$SNAP_SHA" ]; then fail "본문이 리뷰된 그대로예요 (sha ${SHA}) — fixup 할 게 없어요"; fi
-    CHANGED_LINES=0; CHANGED_JSON='[]'; DIFF=""
-    [ ! -d "$SNAP_DIR/current" ] || diff_against "$SNAP_DIR/current"
+    CHANGED_LINES=0; CHANGED_JSON='[]'; DIFF=""; HAVE_COPY=true
+    if [ -d "$SNAP_DIR/current" ]; then diff_against "$SNAP_DIR/current" "reviewed"; else HAVE_COPY=false; fi
     if [ "$DRY_RUN" != true ]; then
         printf '%s|%s|%s|%s|%s|%s|%s\n' "$ROUND" "$SNAP_SHA" "$(date -u +%Y-%m-%dT%H:%MZ)" "$SNAP_SPEC_SHA" "$SNAP_TASKS_SHA" "$STAGE" "$SHA" > "$ROUND_FILE"
     fi
-    NEXT="리뷰된 ${SNAP_SHA} 와 지금 ${SHA} 를 같은 것으로 적었어요 (${CHANGED_LINES}줄) — --status 가 pass 예요. 설계가 바뀐 거면 --snapshot 으로 새 라운드를 여세요"
+    if [ "$HAVE_COPY" = true ]; then FX_N="${CHANGED_LINES}줄"; else FX_N="바뀐 줄 수는 몰라요 — 스냅샷 본문 사본이 없어요"; fi
+    NEXT="리뷰된 ${SNAP_SHA} 와 지금 ${SHA} 를 같은 것으로 적었어요 (${FX_N}) — --status 가 pass 예요. 설계가 바뀐 거면 --snapshot 으로 새 라운드를 여세요"
     if [ "$JSON_MODE" = true ]; then
         RESULT=$(jq -nc --arg spec "$SPEC" --arg rs "$SNAP_SHA" --arg as "$SHA" --argjson round "$ROUND" --arg stage "$STAGE" \
             --argjson n "$CHANGED_LINES" --argjson files "$CHANGED_JSON" --argjson dry "$DRY_RUN" --arg diff "$DIFF" \
+            --argjson have "$HAVE_COPY" \
             '{spec:$spec, reviewed_sha:$rs, accepted_sha:$as, round:$round, stage:$stage,
-              changed_lines:$n, files:$files, diff:$diff, dry_run:$dry}')
+              changed_lines:(if $have then $n else null end), files:(if $have then $files else [] end),
+              diff:$diff, dry_run:$dry}')
         json_output "ok" "$RESULT" "$NEXT"
     else
-        printf 'spec %s — fixup: 리뷰된 %s → 지금 %s (%s줄)\n' "$SPEC" "$SNAP_SHA" "$SHA" "$CHANGED_LINES"
+        printf 'spec %s — fixup: 리뷰된 %s → 지금 %s (%s)\n' "$SPEC" "$SNAP_SHA" "$SHA" "$FX_N"
         [ -n "$DIFF" ] && printf '%s\n' "$DIFF"
         [ "$DRY_RUN" = true ] && printf '  (dry-run — .review-round 는 그대로예요)\n'
     fi
