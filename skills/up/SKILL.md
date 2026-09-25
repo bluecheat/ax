@@ -243,6 +243,18 @@ diff 후 누락된 META / 4계층 인덱스 / 시그널 의미 섹션만 머지 
 
 자동: 출고본으로 교체 (drift 방지). 별도 안내 없음.
 
+### settings.json.suggested — 훅 등록
+
+기존 `.claude/settings.json` 은 덮지 않아요. 새 훅이 생긴 판이면 goax 훅만 템플릿대로 맞추는 스크립트를 제안해요:
+
+```bash
+bash .ax/scripts/bash/ade-settings.sh --check --plugin-dir "$PLUGIN_ROOT" --json   # 누락·잔재만 보여줘요
+bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" --json   # 사용자 [a] 뒤에만
+rm -f .ax/settings.json.suggested
+```
+사용자 자신의 훅·permissions·statusLine 은 그대로예요. `jq -s '.[0] * .[1]'` 로 합치지 않아요 — `*` 는 배열을 통째로 바꿔서
+사용자 PreToolUse 훅이 사라져요.
+
 ## 절대 금지
 
 - 사용자 동의 없이 설치하지 않아요. 동의 받기 전엔 변경 0.

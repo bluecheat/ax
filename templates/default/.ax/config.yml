@@ -44,6 +44,14 @@ commands:
   test: ""              # 예: pnpm test, ./gradlew test, cargo test
   lint: ""              # 예: pnpm lint, ./gradlew ktlintCheck, ruff check
   typecheck: ""         # 예: pnpm typecheck, ./gradlew compileKotlin
+  # 편집한 파일 하나만 검사하는 명령 — "<글롭> => <명령>" 목록. {file} 은 편집한 파일 경로로 바뀌어요.
+  # post-edit/lint-changed 가 첫 번째로 맞는 줄만 돌리고, 실패하면 출력을 모델에게 넘겨요 (막지는 않아요).
+  # 비어 있으면 아무것도 안 해요 — 스택을 추측하지 않아요. 후보: bash .ax/scripts/bash/detect-stack.sh
+  lint_file: []
+  # lint_file:
+  #   - "**/*.kt => ktlint {file}"
+  #   - "**/*.py => ruff check {file}"
+  #   - "apps/web/**/*.ts => pnpm --dir apps/web exec eslint --quiet {file}"
 
 # ───────────────────────────────────────────────────────────
 # Sensors — hooks 강도
@@ -64,6 +72,9 @@ sensors:
   # 기본값(node_modules · build · target · dist · .gradle · .next · __pycache__ · .venv · Pods · .terraform …)만 두고
   # 나머지는 프로젝트가 선언해요. 예: ["generated/**", "**/.nx/cache", "tmp/**"]
   regenerable_paths: []
+  # quality-config-gate 가 "고치기 전에 이유를 적게" 할 품질 설정 글롭 — 기본값(.eslintrc* · .editorconfig · detekt*.yml ·
+  # ruff.toml · .golangci.yml · tsconfig*.json · .husky/ …) 밖에서 프로젝트가 쓰는 것. 새 파일 생성은 안 막아요.
+  quality_configs: []      # 예: ["config/lint/**", "build-logic/**/quality*.gradle.kts"]
   # 사용자가 직접 편집하면 안 되는 파일/디렉토리. onboarding과 일상 작업이 합법적으로
   # 쓰는 경로(.ax/modules/, .ax/docs/, .ax/spirit/rules/, .ax/adoption-plan.md, .ax/mistakes/)는
   # 의도적으로 제외 — 통째 .ax/ prefix는 자기충돌(mistake 누적) 유발.

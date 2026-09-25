@@ -27,6 +27,7 @@
 #
 # Output (--json):
 #   {"status":"ok|warning","result":{"migration":{…},"hooks":{…},"doc_actual":{…},"reach":[{source,file,via,reached,reason,count}],
+#     "budget":{"files":[{file,bytes}],"bytes":N,"est_tokens":N,"warn_at":32768,"over":false},
 #     "findings":N},…}
 # Exit: 0 ok/warning · 1 error · 2 skipped (jq 없음)
 
@@ -256,6 +257,38 @@ if [ "${MOD_N:-0}" -gt 0 ]; then
     else add_reach module ".ax/modules/" "module-rules-inject.sh" false "모듈 룰 ${MOD_N}개인데 module-rules-inject.sh 가 미설치/미등록 — 편집 시점 자동 주입이 안 돼요 (triage 키워드 매칭만 남아요)" "$MOD_N"; fi
 fi
 
+# ── budget — 매 세션 시작에 무조건 실리는 글의 양 ─────────────────────────
+# CLAUDE.md(+CLAUDE.local.md) 에서 `@경로` import 를 따라가며(최대 5단계, 포함한 파일 기준 상대경로) 바이트를 더해요.
+# 룰을 @import 로 올리면 도달은 확실해지지만 매 세션 그만큼 컨텍스트를 먹어요 — path-scoped 주입(paths:)으로 옮길
+# 후보를 보려는 숫자예요. 토큰은 바이트/3 어림(한글 UTF-8 3바이트·영문 4자≈1토큰의 중간) — 정확한 값이 아니에요.
+# 경고 선: GOAX_BUDGET_WARN 바이트(기본 32768 ≈ 1만 토큰). 넘으면 finding 1건.
+BUDGET_WARN="${GOAX_BUDGET_WARN:-32768}"; case "$BUDGET_WARN" in ''|*[!0-9]*) BUDGET_WARN=32768 ;; esac
+BUD_FILES="[]"; BUD_BYTES=0; BUD_SEEN=""
+bud_walk() {   # bud_walk <rel-file> <depth>
+    local f="$1" d="$2" dir inc
+    [ -f "$f" ] || return 0
+    case "
+$BUD_SEEN" in *"
+$f
+"*) return 0 ;; esac
+    BUD_SEEN="${BUD_SEEN}${f}
+"
+    local n; n=$(wc -c < "$f" | tr -d ' ')
+    BUD_BYTES=$((BUD_BYTES + n))
+    BUD_FILES=$(printf '%s' "$BUD_FILES" | jq -c --arg f "$f" --argjson n "$n" '. + [{file:$f, bytes:$n}]')
+    [ "$d" -ge 5 ] && return 0
+    dir=$(dirname "$f")
+    while IFS= read -r inc; do
+        [ -n "$inc" ] || continue
+        case "$inc" in /*|~*) continue ;; esac               # 프로젝트 밖 import 는 세지 않아요
+        if [ "$dir" = "." ]; then bud_walk "$inc" $((d + 1)); else bud_walk "$dir/$inc" $((d + 1)); fi
+    done < <(sed -nE 's#^@(\./)?([^[:space:]]+)[[:space:]]*$#\2#p' "$f" 2>/dev/null)
+}
+for c in CLAUDE.md CLAUDE.local.md; do bud_walk "$c" 0; done
+BUD_OVER=false; [ "$BUD_BYTES" -gt "$BUDGET_WARN" ] && { BUD_OVER=true; FINDINGS=$((FINDINGS + 1)); }
+BUDGET=$(jq -nc --argjson f "$BUD_FILES" --argjson b "$BUD_BYTES" --argjson w "$BUDGET_WARN" --argjson o "$BUD_OVER" \
+    '{files:($f | sort_by(-.bytes)), bytes:$b, est_tokens:($b / 3 | floor), warn_at:$w, over:$o}')
+
 # ── handoff — 인계 노트의 기한 (`- [ ] YYYY-MM-DD …`) — I3 와 같은 규칙: ≤7일 임박 · 초과 ──
 # zero 의 "1순위 가정 검증" 과 "룰 ablation 재검토" 가 여기 살아요. 날짜가 문서 안에만 있으면 아무도 안 봐요.
 # 인계 노트는 current-task.json 의 handoff 객체예요 — 네 절(now·next·open·renamed)을 전부 훑어요.
@@ -280,8 +313,9 @@ FINDINGS=$((FINDINGS + DL_IMM + DL_OVER))
 HANDOFF=$(jq -nc --argjson p "$NOTE_PRESENT" --argjson d "$DL_JSON" --arg i "$DL_IMM" --arg o "$DL_OVER" \
     '{present:$p,deadlines:$d,imminent:($i|tonumber),overdue:($o|tonumber)}')
 
-RESULT=$(jq -nc --argjson m "$MIG" --argjson h "$HOOKS" --argjson d "$DOC" --argjson r "$REACH" --argjson ho "$HANDOFF" --arg n "$FINDINGS" \
-    '{migration:$m,hooks:$h,doc_actual:$d,reach:$r,handoff:$ho,findings:($n|tonumber)}')
+RESULT=$(jq -nc --argjson m "$MIG" --argjson h "$HOOKS" --argjson d "$DOC" --argjson r "$REACH" --argjson ho "$HANDOFF" \
+    --argjson bu "$BUDGET" --arg n "$FINDINGS" \
+    '{migration:$m,hooks:$h,doc_actual:$d,reach:$r,handoff:$ho,budget:$bu,findings:($n|tonumber)}')
 if [ "$JSON_MODE" = true ]; then
     if [ "$FINDINGS" -eq 0 ]; then json_output "ok" "$RESULT" "잔재·미등록·불일치·도달 결손 없음"
     else json_output "warning" "$RESULT" "finding ${FINDINGS}건 — doctor 가 옵션으로 제시해요 (자동 수정 안 함)"; fi
@@ -309,5 +343,7 @@ printf '\n📑 문서 ↔ 실제 — %s건\n' "$MM_N"
 printf '%s' "$MM" | sed '/^$/d; s/^/   ⚠ /'
 printf '\n🗺  도달 지도\n'
 printf '%s' "$REACH" | jq -r '.[] | "   \(if .reached then "✓" else "✗" end) \(.source) (\(.count)) — \(.via)\(if .reached then "" else "\n      " + .reason end)"'
+printf '\n상시 로드 — %s바이트 (≈%s토큰, 경고 선 %s)\n' "$BUD_BYTES" "$((BUD_BYTES / 3))" "$BUDGET_WARN"
+printf '%s' "$BUDGET" | jq -r '.files[:6][] | "   \(.bytes)\t\(.file)"'
 printf '\n→ finding %s건\n' "$FINDINGS"
 exit "$EXIT_OK"

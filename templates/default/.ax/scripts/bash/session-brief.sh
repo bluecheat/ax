@@ -9,10 +9,17 @@
 #   audit    미처리 mistakes(status: open 또는 status 없음)가 있고 마지막 audit 이
 #            mistake_loop.audit_cadence_days(기본 7) 보다 오래됐으면 알려요.
 #            마지막 audit: .ax/mistakes/.last-audit(epoch) → 없으면 state.json .cross_cut.mistakes.last_audit
+#            미처리 중 같은 category 가 2건 이상이면 주기와 상관없이 "재발" 을 알려요 (audit.recurring).
 #
 # 왜: 실측(commerce, 2026-09-25) — 설치본 0.5.13 이 플러그인 0.6.3 에 두 달 넘게 머물러 0.6.0 의 룰 집행이
 #     안 닿았고, mistakes 는 22건 쌓였는데 audit 은 2026-05-09 뒤로 한 번도 안 돌았어요. HUD 한 칸은 안 보여요.
 #     SessionStart 훅(session-start/session-brief.sh)이 이 스크립트의 lines 를 그대로 컨텍스트에 넣어요.
+#
+# compaction 스냅샷 (PreCompact 훅 → SessionStart source=compact 훅):
+#   --snapshot --session <sid>       압축 직전 **사실**을 .ax/.session/<sid>/precompact.txt 에 적어요 — 브랜치·HEAD ·
+#                                    작업 트리의 바뀐 파일(최대 10) · 진행 중 spec 과 tasks 진행률. LLM 요약이 아니에요.
+#                                    요약은 Claude Code 가 하고, 요약이 흘린 "어디까지 했나" 를 파일이 붙잡아요.
+#   --after-compact --session <sid>  브리핑 맨 앞에 그 스냅샷을 붙여요 (파일은 읽고 지워요 — 한 번만 말해요).
 #
 # Usage:
 #   bash session-brief.sh            # 사람용 텍스트 (lines 만)
@@ -33,10 +40,14 @@ source "$SCRIPT_DIR/common.sh"
 
 JSON_MODE=false; DRY_RUN=false; SHOW_HELP=false
 MAX_CHARS="${GOAX_SESSION_BRIEF_MAX:-1200}"
+MODE=brief; SESSION=""
 while [ $# -gt 0 ]; do
     if parse_common_opts "$1"; then shift; continue; fi
     case "$1" in
         --max-chars) MAX_CHARS="${2:-}"; shift 2 ;;
+        --snapshot) MODE=snapshot; shift ;;
+        --after-compact) MODE=after-compact; shift ;;
+        --session) SESSION="${2:-}"; shift 2 ;;
         *) goax_error "알 수 없는 옵션: $1"; exit "$EXIT_ERROR" ;;
     esac
 done
@@ -45,8 +56,61 @@ case "$MAX_CHARS" in ''|*[!0-9]*) MAX_CHARS=1200 ;; esac
 
 command -v jq >/dev/null 2>&1 || { [ "$JSON_MODE" = true ] && json_skip "jq 없음"; exit "$EXIT_SKIPPED"; }
 ROOT=$(find_project_root) || exit "$EXIT_ERROR"
+if [ "$MODE" != brief ] && [ -z "$SESSION" ]; then
+    [ "$JSON_MODE" = true ] && json_error "--snapshot · --after-compact 는 --session <sid> 가 필요해요"
+    goax_error "--session <sid> 가 필요해요"; exit "$EXIT_ERROR"
+fi
+
+# ── compaction 스냅샷 쓰기 ──────────────────────────────────────────
+if [ "$MODE" = snapshot ]; then
+    SNAP=()
+    if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        BR=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+        HD=$(git -C "$ROOT" log -1 --format='%h %s' 2>/dev/null | cut -c1-100 || true)
+        [ -n "$BR" ] && SNAP+=("브랜치 $BR · HEAD $HD")
+        CH=$(git -C "$ROOT" status --porcelain --untracked-files=all -- . 2>/dev/null | grep -v ' \.ax/' || true)
+        CHN=$(printf '%s' "$CH" | grep -c . || true)
+        if [ "${CHN:-0}" -gt 0 ]; then
+            FILES=$(printf '%s\n' "$CH" | head -10 | awk '{ $1=""; sub(/^ /, ""); print }' | paste -sd ',' - | sed 's/,/, /g')
+            MORE=""; [ "$CHN" -gt 10 ] && MORE=" 외 $((CHN - 10))개"
+            SNAP+=("커밋 안 된 변경 ${CHN}개: ${FILES}${MORE}")
+        fi
+    fi
+    TF="$ROOT/.ax/current-task.json"
+    if [ -f "$TF" ] && jq -e . "$TF" >/dev/null 2>&1; then
+        SD=$(jq -r 'if (.phase // "idle") != "idle" then (.spec_dir // empty) else empty end' "$TF" 2>/dev/null || true)
+        if [ -n "$SD" ] && [ -f "$ROOT/$SD/tasks.md" ]; then
+            PROG=$(awk '/^[[:space:]]*```/{f=!f; next} f{next}
+                        /^[[:space:]]*- \[[xX]\]/{d++} /^[[:space:]]*- \[ \]/{o++; if (!first) first=$0}
+                        END{ sub(/^[[:space:]]*- \[ \][[:space:]]*/, "", first); printf "%d/%d\t%s", d, d+o, substr(first,1,90) }' "$ROOT/$SD/tasks.md")
+            SNAP+=("spec $SD — tasks ${PROG%%$'\t'*} · 다음: ${PROG#*$'\t'}")
+        elif [ -n "$SD" ]; then
+            SNAP+=("spec $SD (tasks.md 없음)")
+        fi
+    fi
+    SD_DIR=$(goax_session_dir "$SESSION")
+    OUTF="$SD_DIR/precompact.txt"
+    if [ "$DRY_RUN" != true ] && [ "${#SNAP[@]}" -gt 0 ]; then
+        mkdir -p "$SD_DIR" && printf '%s\n' "${SNAP[@]}" > "$OUTF"
+    fi
+    if [ "$JSON_MODE" = true ]; then
+        SL=$(printf '%s\n' ${SNAP[@]+"${SNAP[@]}"} | jq -R . | jq -sc 'map(select(. != ""))')
+        json_output ok "$(jq -nc --argjson l "$SL" --arg p "${OUTF#"$ROOT"/}" --argjson w "$( [ "$DRY_RUN" != true ] && [ "${#SNAP[@]}" -gt 0 ] && echo true || echo false)" '{lines:$l, path:$p, written:$w}')" ""
+    else
+        printf '%s\n' ${SNAP[@]+"${SNAP[@]}"}
+    fi
+    exit "$EXIT_OK"
+fi
 
 LINES=()
+# ── compaction 직후 — 직전 스냅샷을 맨 앞에 ──────────────────────────
+if [ "$MODE" = after-compact ]; then
+    PF="$(goax_session_dir "$SESSION")/precompact.txt"
+    if [ -f "$PF" ]; then
+        while IFS= read -r l; do [ -n "$l" ] && LINES+=("압축 직전: $l"); done < "$PF"
+        [ "$DRY_RUN" = true ] || rm -f "$PF"
+    fi
+fi
 
 # ── 진행 중 task · handoff ─────────────────────────────────────────
 TASK_FILE="$ROOT/.ax/current-task.json"
@@ -88,13 +152,17 @@ fi
 [ "$BEHIND" = true ] && LINES+=("goax 설치본 $INSTALLED · 플러그인 $PLUGIN — \`/up\` 으로 올리세요 (새 룰 집행·훅이 이 프로젝트엔 아직 없어요)")
 
 # ── audit ─────────────────────────────────────────────────────────
-UNRESOLVED=0
+UNRESOLVED=0; CATS=""
 if [ -d "$ROOT/.ax/mistakes" ]; then
     for f in "$ROOT"/.ax/mistakes/*.md; do
         [ -f "$f" ] || continue
         case "$(basename "$f")" in README.md) continue ;; esac
         st=$(goax_frontmatter_scalar "$f" status 2>/dev/null || true)
-        case "$st" in ''|open) UNRESOLVED=$((UNRESOLVED + 1)) ;; esac
+        case "$st" in ''|open)
+            UNRESOLVED=$((UNRESOLVED + 1))
+            cat_=$(goax_frontmatter_scalar "$f" category 2>/dev/null || true)
+            [ -n "$cat_" ] && CATS="${CATS}${cat_}"$'\n' ;;
+        esac
     done
 fi
 CADENCE=$(grep -E '^[[:space:]]*audit_cadence_days:' "$ROOT/.ax/config.yml" 2>/dev/null | head -1 \
@@ -130,6 +198,11 @@ if [ "$OVERDUE" = true ]; then
     fi
 fi
 
+# 재발 — 미처리 mistakes 중 같은 category 가 2건 이상이면 audit 주기와 상관없이 알려요.
+#   주기는 "밀렸나" 를 보고, 이건 "같은 실수를 또 하고 있나" 를 봐요 (룰 승격 후보).
+RECUR=$(printf '%s' "$CATS" | grep -v '^$' | sort | uniq -c | sort -rn | awk '$1 >= 2 {printf "%s%s ×%d", (n++ ? " · " : ""), $2, $1}' || true)
+[ -n "$RECUR" ] && LINES+=("같은 종류 실수 재발: ${RECUR} — \`audit\` 으로 룰 승격을 검토하세요")
+
 # ── 상한 — 세션 첫머리에 들어가는 글이라 짧게 ─────────────────────────
 OUT=(); TOTAL=0; CUT=false
 for l in ${LINES[@]+"${LINES[@]}"}; do
@@ -144,11 +217,11 @@ if [ "$JSON_MODE" = true ]; then
     RESULT=$(jq -nc --argjson lines "$LINES_JSON" \
         --arg inst "$INSTALLED" --arg plug "$PLUGIN" --argjson behind "$BEHIND" \
         --argjson unres "$UNRESOLVED" --argjson last "$LAST_ISO" --argjson days "$DAYS" \
-        --argjson cad "$CADENCE" --argjson over "$OVERDUE" \
+        --argjson cad "$CADENCE" --argjson over "$OVERDUE" --arg rec "$RECUR" \
         --argjson task "$TASK_JSON" --argjson handoff "$HANDOFF_JSON" \
         '{lines: $lines,
           version: {installed: (if $inst == "" then null else $inst end), plugin: (if $plug == "" then null else $plug end), behind: $behind},
-          audit: {unresolved: $unres, last_audit: $last, days_since: $days, cadence: $cad, overdue: $over},
+          audit: {unresolved: $unres, last_audit: $last, days_since: $days, cadence: $cad, overdue: $over, recurring: $rec},
           task: $task, handoff: $handoff}')
     json_output ok "$RESULT" ""
 else

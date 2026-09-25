@@ -212,6 +212,10 @@ bash .ax/scripts/bash/update-task.sh --start --phase triaged \
 # config.yml 의 confirmation.mode 대신 이 값을 읽어요 (L3 는 여전히 override).
 # 말하지 않았으면 적지 않아요 — 기본값을 여기서 정하면 사용자가 config 를 바꿔도 안 먹어요.
 [ -n "${FRICTION:-}" ] && bash .ax/scripts/bash/update-task.sh --set "friction=$FRICTION" --json
+
+# 계획은 어디서 세워도 돼요 (OMC plan · 다른 plan 도구 · 사람이 쓴 문서). 이 작업의 계획 문서가 있으면 경로를 적어요 —
+# spec 이 "원 계획" 으로 링크하고, spec 부터는 goax 가 관리해요. M 이상은 계획 문서가 있어도 spec 디렉토리를 만들어요.
+[ -n "${PLAN_DOC:-}" ] && bash .ax/scripts/bash/update-task.sh --set "plan_doc=$PLAN_DOC" --json
 ```
 
 이후 spec 이 `.ax/scripts/bash/tier-from-state.sh --json`로 tier 자동 결정.

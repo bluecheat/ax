@@ -4,11 +4,12 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 
 | 위치 | 시점 | 역할 |
 |---|---|---|
-| session-start/ | 세션 시작·재개·compact 직후 | `session-brief.sh` — 인계 노트 · 설치본 버전 지연 · 밀린 audit 을 짧게 (말할 게 없으면 침묵) |
+| session-start/ | 세션 시작·재개·compact 직후 | `session-brief.sh` — 인계 노트 · 설치본 버전 지연 · 밀린 audit · 같은 종류 실수 재발을 짧게 (말할 게 없으면 침묵). compact 직후엔 압축 직전 스냅샷을 맨 앞에 |
+| pre-compact/ | 컨텍스트 압축 직전 | `snapshot.sh` — 브랜치·HEAD · 커밋 안 된 파일 · 진행 중 spec 의 tasks 진행률을 `.ax/.session/<sid>/precompact.txt` 에 (LLM 요약 아님, 압축을 막지 않음) |
 | user-prompt/ | 사용자 메시지 도착 직후 | Triage 미실행(phase=idle) + 구현 의도 감지 시 reminder 주입 |
 | pre-bash/ | bash 도구 호출 직전 | 파괴적 명령 차단 · git 훅 우회(`--no-verify` 등) 차단 · 프로젝트 안 되돌리기 어려운 명령은 사실 확인 · `git commit` 감지 시 pre-commit 체인 위임 |
-| pre-edit/ | Edit/Write 직전 | 보호 경로 변경 확인 + spirit 룰 점검 · 룰 경로 주입 · 이 파일에 걸린 룰을 안 읽었으면 편집 차단(`rule-read-gate`) |
-| post-edit/ | Edit/Write 직후 | 변경 파일 lint (경고만) |
+| pre-edit/ | Edit/Write 직전 | 보호 경로 변경 확인 + spirit 룰 점검 · 룰 경로 주입 · 이 파일에 걸린 룰을 안 읽었으면 편집 차단(`rule-read-gate`) · 품질 설정 수정은 이유 먼저(`quality-config-gate`) |
+| post-edit/ | Edit/Write 직후 | `commands.lint_file` 로 편집한 파일 하나를 검사, 실패하면 출력을 모델에게 (막지 않음 · 비어 있으면 아무것도 안 함) |
 | pre-commit/ | git commit 직전 | CRITICAL 룰 정적 검출 (위반 시 차단/경고만 — 자동 캡처는 폐기, §"Mistake 캡처" 참고) |
 | subagent-start/ | 서브에이전트가 뜨는 순간 | Constitution·Spirit·현재 spec·인계 노트 **경로**를 additionalContext 로 — 하네스가 메인 세션 밖으로 닿게 (goax 자기 에이전트는 제외) |
 | stop/ | 턴이 끝나려는 순간 | 활성 spec(implementing·review)이 완료 게이트 미통과면 **한 번** 붙잡아 "마저 하기 · 보류 표기 · 인계 노트" 셋 중 하나를 시켜요 |
@@ -24,8 +25,8 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 
 ## 사실을 요구하는 게이트 — "정말요?" 대신
 
-"확실해요?" 라고 물으면 모델은 늘 "네" 라고 해요. 그래서 두 게이트는 **사실**을 요구하고, 사실이 채워지면 통과시켜요
-(ECC GateGuard 의 fact-forcing 방식). 둘 다 `sensors.mode` 가 `warning` 이어도 막아요 — 통과 조건이 싸서예요.
+"확실해요?" 라고 물으면 모델은 늘 "네" 라고 해요. 그래서 이 게이트들은 **사실**을 요구하고, 사실이 채워지면 통과시켜요
+(ECC GateGuard 의 fact-forcing 방식). 모두 `sensors.mode` 가 `warning` 이어도 막아요 — 통과 조건이 싸서예요.
 
 - `pre-edit/rule-read-gate.sh` — 편집 대상에 걸린 룰 파일(spirit `paths:` · module `paths:`+`applies_to: code`)을 이번 세션에
   **Read 도구로** 읽었는지 `.ax/.session/<sid>/rules-read.log` 로 확인해요 (compaction 이 일어나면 SessionStart 훅이 이 기록을 지워서 다시 읽게 해요). 안 읽었으면 목록을 주고 막아요. CLAUDE.md·AGENTS.md 가
@@ -38,8 +39,13 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
   .next·__pycache__·Pods·.terraform …)와 프로젝트 밖 경로(`git -C <다른 리포>` 포함)는 안 봐요. 스택을 가정하지 않으려고 그 밖의 경로는
   프로젝트가 `sensors.regenerable_paths` 글롭으로 선언해요.
   실측(commerce): 되돌리려고 `rm -rf` 로 디렉토리째 지웠다가 추적 안 되던 운영 파일까지 사라졌어요.
-- 둘 다 세션당 3번까지 전체 안내, 그 뒤는 한 줄이에요 — 같은 긴 문구가 컨텍스트에 쌓이면 반복 루프를 부른다는 ECC 실측(#2142)을 따라요.
-  세션 id 가 없으면(수동 실행) 추적할 수 없어서 rule-read-gate 는 통과, destructive-facts 는 경고로 강등해요.
+- `pre-edit/quality-config-gate.sh` — **이미 있는** lint·format·타입 검사·커버리지·git 훅 설정 파일(`.eslintrc*` · `.editorconfig` ·
+  `tsconfig*.json` · `detekt*.yml` · `ruff.toml` · `.golangci.yml` · `.rubocop.yml` · `.husky/` · `.pre-commit-config.yaml` … 생태계 공통 이름)을
+  세션에서 처음 고칠 때 한 번 막고 "완화인지 강화인지 · 사용자 지시 원문" 을 요구해요. 같은 파일을 다시 고치면 통과, 새로 만드는 건 안 막아요.
+  다른 설정이 섞인 파일(`package.json` · `pyproject.toml` · `build.gradle`)은 기본값이 아니에요 — 필요하면 `sensors.quality_configs` 글롭으로.
+  검사가 실패할 때 코드 대신 규칙을 끄는 쪽으로 가는 걸 막으려고요 (ECC config-protection).
+- 모두 세션당 3번까지 전체 안내, 그 뒤는 한 줄이에요 — 같은 긴 문구가 컨텍스트에 쌓이면 반복 루프를 부른다는 ECC 실측(#2142)을 따라요.
+  세션 id 가 없으면(수동 실행) 추적할 수 없어서 rule-read-gate 는 통과, destructive-facts · quality-config-gate 는 경고로 강등해요.
 - 명령 판정은 `goax_shell_scan`(python3 shlex — 따옴표·주석·heredoc·here-string 을 셸처럼)이 해요. python3 가 없거나 **있는데 실패하면**
   (macOS xcrun shim 등 — `goax_py_ok` 가 실제 import 로 확인) 두 Bash 게이트는 따옴표를 벗긴 문자열로 간이 판정해요. 판정 못 했다고 통과시키지 않아요.
 
@@ -152,7 +158,7 @@ jq 가 PATH 에 없으면 인자를 못 뽑아 그냥 통과(fail-open)하는데
 
 ## 프로젝트별 커스터마이즈
 
-- `post-edit/lint-changed.sh` — 자기 스택의 lint 명령으로 교체
+- `post-edit/lint-changed.sh` — 훅을 고치지 말고 `.ax/config.yml` `commands.lint_file` 에 `"<글롭> => <명령 {file}>"` 를 적어요 (후보: `detect-stack.sh`, 쓰기: `config-set.sh --add commands.lint_file …`)
 - `pre-commit/critical-rule-grep.sh` — 자기 CRITICAL 룰의 grep 패턴 추가 (또는 룰별 sensor 신설)
 - `user-prompt/triage-nudge.sh` — intent regex가 자기 프로젝트 어휘에 맞지 않으면 조정
 - 새 hook 추가 시 위 settings.json 형식 그대로

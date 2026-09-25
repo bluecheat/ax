@@ -146,6 +146,9 @@ bash .ax/scripts/bash/update-task.sh --phase spec \
  --set "spec_id=$SPEC_ID" --set "spec_dir=$SPEC_DIR" --set "spec_tier=$TIER" --json
 ```
 
+`current-task.json` 의 `plan_doc` 이 있으면 spec.md §0 메타의 `원 계획` 칸에 그 경로를 적어요 (없으면 `없음`).
+외부 계획은 입력이지 SSOT 가 아니에요 — 요구·AC 는 spec.md 로 옮겨 적고, 계획 문서를 고쳐도 spec 이 이겨요.
+
 ## 4. ✅ 메시지
 
 ```

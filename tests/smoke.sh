@@ -273,7 +273,7 @@ fi
 section "4.1 settings.json.template ↔ .ax/hooks/ 양방향 cross-check"
 # ───────────────────────────────────────────────────────────
 # 정방향: settings.json.template 이 참조하는 .ax/... 경로가 실제로 존재하는지.
-# 역방향: .ax/hooks/{session-start,user-prompt,pre-bash,pre-edit,post-edit,subagent-start,stop}/*.sh 가 모두 등록됐는지
+# 역방향: .ax/hooks/{session-start,pre-compact,user-prompt,pre-bash,pre-edit,post-edit,subagent-start,stop}/*.sh 가 모두 등록됐는지
 #         (pre-commit/ 은 grep-on-commit.sh + install-git-hooks.sh 체이닝으로 별도 등록되므로 예외).
 # 실제 구조는 hooks[phase][n]['hooks'][m]['command'] 깊이이고 command 는
 # `bash "${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-bash/block-destructive.sh"` 형태라 .ax/ 부분만 추출.
@@ -295,7 +295,7 @@ lines = []
 for path in sorted(registered):
     full = os.path.join(tpl, path)
     lines.append("FWD|%s|%d" % (path, 1 if os.path.isfile(full) else 0))
-for phase in ["session-start", "user-prompt", "pre-bash", "pre-edit", "post-edit", "subagent-start", "stop"]:
+for phase in ["session-start", "pre-compact", "user-prompt", "pre-bash", "pre-edit", "post-edit", "subagent-start", "stop"]:
     for f in sorted(glob.glob(os.path.join(tpl, ".ax/hooks", phase, "*.sh"))):
         rel = os.path.relpath(f, tpl)
         lines.append("REV|%s|%d" % (rel, 1 if rel in registered else 0))
@@ -4393,7 +4393,7 @@ section "53. 훅 프로필 · 끄기 — 모든 등록 훅이 goax_hook_enabled 
 # 게이트를 켜는 순간 탈출구가 필요해요. 훅마다 ID(파일 이름) 로 끌 수 있어야 하고,
 # minimal 프로필은 안전망만 남겨요. CATASTROPHIC 은 이 스위치 앞에서 끝나야 해요.
 HP_MISS=0
-for h in "$REPO"/templates/default/.ax/hooks/{session-start,user-prompt,pre-bash,pre-edit,post-edit,subagent-start,stop}/*.sh; do
+for h in "$REPO"/templates/default/.ax/hooks/{session-start,pre-compact,user-prompt,pre-bash,pre-edit,post-edit,subagent-start,stop}/*.sh; do
     [ -f "$h" ] || continue
     id=$(basename "$h" .sh)
     grep -qE "goax_hook_enabled $id (minimal|standard)" "$h" || { fail "$(basename "$(dirname "$h")")/$id.sh — goax_hook_enabled $id 가 없어요"; HP_MISS=1; }
@@ -4596,8 +4596,31 @@ ADJ
         || fail "ade-settings — 프로젝트 둘 공존 실패"
     SG=$(mktemp -d); mkdir -p "$SG/.ax/scripts/bash"; git -C "$SG" init -q 2>/dev/null
     cp "$REPO/templates/default/.ax/scripts/bash/"{common,ade-settings}.sh "$SG/.ax/scripts/bash/"
-    (cd "$SG" && bash .ax/scripts/bash/ade-settings.sh --check --plugin-dir "$REPO" --json >/dev/null 2>&1); SGRC=$?
-    [ "$SGRC" = 2 ] && pass "ade-settings — 단일 저장소는 skip (exit 2 — up 이 관리)" || fail "ade-settings 단일 저장소 rc=$SGRC"
+    # 단일 저장소 — `jq -s '.[0] * .[1]'` 머지는 배열을 통째로 바꿔 사용자 훅을 지웠어요. 손으로 쓴 옛 형태
+    # ("$CLAUDE_PROJECT_DIR"/.ax/hooks/…, 맨 .ax/hooks/…)도 goax 몫으로 알아보고 바꿔요. 백업 파일은 안 만들어요.
+    mkdir -p "$SG/.claude"
+    cat > "$SG/.claude/settings.json" <<'SGJ'
+{"permissions":{"allow":["Bash(ls:*)"]},"statusLine":{"type":"command","command":"echo hud"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[
+ {"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR\"/.ax/hooks/pre-bash/block-destructive.sh"},
+ {"type":"command","command":"bash .ax/hooks/pre-bash/old-removed.sh"},
+ {"type":"command","command":"echo user-own"}]}]}}
+SGJ
+    sg() { (cd "$SG" && bash .ax/scripts/bash/ade-settings.sh --plugin-dir "$REPO" --json "$@" 2>/dev/null); }
+    SGC=$(sg --check)
+    [ "$(echo "$SGC" | jq -r '.result.project_rel')" = "" ] && [ "$(echo "$SGC" | jq -r '.result.stale[0]')" = "PreToolUse .ax/hooks/pre-bash/old-removed.sh" ] \
+        && [ "$(echo "$SGC" | jq -r '.result.missing | length')" = "$((TPL_N - 1))" ] \
+        && pass "ade-settings 단일 저장소 --check — 손으로 쓴 옛 형태도 goax 몫으로 읽어요 (누락 $((TPL_N - 1)) · 잔재 1)" \
+        || fail "ade-settings 단일 저장소 --check: $SGC"
+    sg --apply >/dev/null
+    SS="$SG/.claude/settings.json"
+    [ "$(sg --check | jq -r .status)" = ok ] && [ "$(sg --apply | jq -r .result.changed)" = false ] \
+        && [ "$(jq -r '.permissions.allow[0]' "$SS")" = 'Bash(ls:*)' ] && [ "$(jq -r '.statusLine.command' "$SS")" = 'echo hud' ] \
+        && [ "$(jq -r '[.hooks[][].hooks[].command | select(. == "echo user-own")] | length' "$SS")" = 1 ] \
+        && [ "$(jq -r '[.hooks[][].hooks[].command | select(test("old-removed"))] | length' "$SS")" = 0 ] \
+        && jq -r '.hooks.SessionStart[].hooks[].command' "$SS" | grep -qF 'bash "${CLAUDE_PROJECT_DIR}/.ax/hooks/session-start/session-brief.sh"' \
+        && [ "$(ls -A "$SG/.claude" | grep -c .)" = 1 ] \
+        && pass "ade-settings 단일 저장소 --apply — 사용자 훅·permissions·statusLine 보존, 템플릿 명령 그대로, 멱등, 백업 파일 없음" \
+        || fail "ade-settings 단일 저장소 --apply 결과가 이상해요: $(ls -A "$SG/.claude") $(jq -c . "$SS" | cut -c1-300)"
     rm -rf "$AD" "$SG"
 else
     pass "§56 — jq/git 없음, skip"
@@ -4636,6 +4659,91 @@ $(echo "$EMO_OUT" | grep -v '^COUNT=')"
 fi
 grep -q 'symbols.md' "$REPO/templates/default/.ax/spirit/tone.md" \
     && pass "tone.md 가 표시 기호 SSOT(symbols.md)를 가리켜요" || fail "tone.md 에 symbols.md 포인터가 없어요"
+
+# ───────────────────────────────────────────────────────────
+section "58. 품질 설정 게이트 · 압축 스냅샷 · lint_file · detect-stack · config-set · plan_doc · 상시 로드 예산"
+# ───────────────────────────────────────────────────────────
+if command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
+    S58="$REPO/templates/default/.ax"
+    Q=$(mktemp -d); mkdir -p "$Q/.ax/scripts/bash" "$Q/.ax/hooks" "$Q/src" "$Q/.husky" "$Q/config/lint" "$Q/.ax/docs/spec/2026-09-25-ab12-x" "$Q/.ax/mistakes"
+    cp "$S58/scripts/bash/"*.sh "$Q/.ax/scripts/bash/"; cp -R "$S58/hooks/"* "$Q/.ax/hooks/"
+    cp "$S58/config.yml" "$Q/.ax/config.yml"; cp "$S58/current-task.json.template" "$Q/.ax/current-task.json"
+    git -C "$Q" init -q; git -C "$Q" -c user.email=a@b -c user.name=a commit -q --allow-empty -m init
+    echo '{}' > "$Q/.eslintrc.json"; touch "$Q/src/a.ts" "$Q/.husky/pre-commit" "$Q/config/lint/x.xml"
+
+    # 품질 설정 게이트 — 기존 파일 첫 편집만 막고, 같은 파일 재편집·새 파일·일반 파일은 통과
+    qg() { printf '{"tool_name":"%s","tool_input":{"file_path":"%s"},"session_id":"%s"}' "$1" "$2" "${3-q1}" \
+        | CLAUDE_PROJECT_DIR="$Q" bash "$Q/.ax/hooks/pre-edit/quality-config-gate.sh" 2>/dev/null; echo $?; }
+    (cd "$Q" && bash .ax/scripts/bash/config-set.sh --add sensors.quality_configs 'config/lint/**' >/dev/null)
+    R1=$(qg Edit "$Q/.eslintrc.json"); R2=$(qg Edit "$Q/.eslintrc.json"); R3=$(qg Edit "$Q/src/a.ts"); R4=$(qg Write "$Q/biome.json")
+    R5=$(qg Edit "$Q/.husky/pre-commit"); R6=$(qg Edit "$Q/config/lint/x.xml"); R7=$(qg Edit "$Q/.eslintrc.json" "")
+    [ "$R1$R2$R3$R4$R5$R6$R7" = "2000220" ] \
+        && pass "quality-config-gate — 기존 품질 설정 첫 편집만 막고 재편집·새 파일·일반 파일 통과, .husky/·quality_configs 글롭 적용, 세션 없으면 경고만" \
+        || fail "quality-config-gate 판정: $R1$R2$R3$R4$R5$R6$R7 (기대 2000220)"
+
+    # 압축 스냅샷 — PreCompact 가 사실을 적고, compact 직후 SessionStart 가 한 번만 앞에 붙여요
+    printf -- '- [x] T001 a\n- [ ] T002 환불 API\n' > "$Q/.ax/docs/spec/2026-09-25-ab12-x/tasks.md"
+    (cd "$Q" && bash .ax/scripts/bash/update-task.sh --phase implementing --set spec_dir=.ax/docs/spec/2026-09-25-ab12-x --set plan_doc=.omc/plans/p.md >/dev/null)
+    printf '{"session_id":"C1","trigger":"auto"}' | CLAUDE_PROJECT_DIR="$Q" bash "$Q/.ax/hooks/pre-compact/snapshot.sh"
+    SB1=$(printf '{"session_id":"C1","source":"compact"}' | CLAUDE_PROJECT_DIR="$Q" bash "$Q/.ax/hooks/session-start/session-brief.sh" | jq -r '.hookSpecificOutput.additionalContext')
+    SB2=$(printf '{"session_id":"C1","source":"compact"}' | CLAUDE_PROJECT_DIR="$Q" bash "$Q/.ax/hooks/session-start/session-brief.sh" | jq -r '.hookSpecificOutput.additionalContext // ""')
+    echo "$SB1" | grep -q '압축 직전: spec .ax/docs/spec/2026-09-25-ab12-x — tasks 1/2 · 다음: T002 환불 API' \
+        && echo "$SB1" | grep -q '압축 직전: 커밋 안 된 변경' && ! echo "$SB2" | grep -q '압축 직전' \
+        && pass "PreCompact 스냅샷 — tasks 진행률·바뀐 파일을 적고 compact 직후 한 번만 브리핑 앞에" \
+        || fail "압축 스냅샷: $SB1 / 두 번째: $SB2"
+    [ "$(jq -r .plan_doc "$Q/.ax/current-task.json")" = ".omc/plans/p.md" ] \
+        && pass "update-task.sh --set plan_doc — 외부 계획 문서 경로를 정식 필드로" || fail "plan_doc 이 안 적혔어요"
+
+    # 재발 — 미처리 mistakes 중 같은 category 2건 이상
+    for i in 1 2 3; do printf -- '---\ncategory: process\nstatus: open\n---\n' > "$Q/.ax/mistakes/2026-09-2$i-x.md"; done
+    printf -- '---\ncategory: api\nstatus: open\n---\n' > "$Q/.ax/mistakes/2026-09-24-y.md"
+    (cd "$Q" && bash .ax/scripts/bash/session-brief.sh --json) | jq -r '.result.lines[]' | grep -q '같은 종류 실수 재발: process ×3 —' \
+        && pass "session-brief — 같은 category 재발(≥2)만 알려요" || fail "session-brief 재발 줄이 없어요"
+
+    # lint_file — 첫 매칭 글롭만, 실패하면 additionalContext, 비면 아무것도 안 함
+    lf() { printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$1" | CLAUDE_PROJECT_DIR="$Q" bash "$Q/.ax/hooks/post-edit/lint-changed.sh"; }
+    [ -z "$(lf "$Q/src/a.ts")" ] || fail "lint_file 비었는데 lint-changed 가 뭔가 했어요"
+    (cd "$Q" && bash .ax/scripts/bash/config-set.sh --add commands.lint_file '**/*.ts => grep -q ok {file}' >/dev/null)
+    LO=$(lf "$Q/src/a.ts"); echo ok > "$Q/src/a.ts"; LO2=$(lf "$Q/src/a.ts")
+    [ "$(echo "$LO" | jq -r .hookSpecificOutput.hookEventName)" = PostToolUse ] \
+        && echo "$LO" | jq -r .hookSpecificOutput.additionalContext | grep -q 'lint 실패 — src/a.ts' && [ -z "$LO2" ] \
+        && pass "lint-changed — commands.lint_file 로만 돌고 실패는 additionalContext 로 모델에게 (스택 추측 없음)" \
+        || fail "lint-changed: $LO / $LO2"
+
+    # config-set — 없는 키 거부 · 스칼라 · 리스트 add/clear 왕복
+    cp "$S58/config.yml" "$Q/.ax/config.yml"
+    (cd "$Q" && bash .ax/scripts/bash/config-set.sh commands.nope x >/dev/null 2>&1); CSR=$?
+    (cd "$Q" && bash .ax/scripts/bash/config-set.sh commands.test "pnpm test" >/dev/null \
+        && bash .ax/scripts/bash/config-set.sh --add commands.lint_file 'a => 1' >/dev/null \
+        && bash .ax/scripts/bash/config-set.sh --add commands.lint_file 'b => 2' >/dev/null \
+        && bash .ax/scripts/bash/config-set.sh --add commands.lint_file 'a => 1' >/dev/null)
+    CSL=$( (cd "$Q" && source .ax/scripts/bash/common.sh && goax_yaml_list .ax/config.yml lint_file) | paste -sd '|' -)
+    (cd "$Q" && bash .ax/scripts/bash/config-set.sh --clear commands.lint_file >/dev/null && bash .ax/scripts/bash/config-set.sh commands.test "" >/dev/null)
+    [ "$CSR" = 1 ] && [ "$CSL" = "a => 1|b => 2" ] && diff <(sed 's/^  test: .*/  test:/' "$S58/config.yml") <(sed 's/^  test: .*/  test:/' "$Q/.ax/config.yml") >/dev/null \
+        && pass "config-set — 없는 키 거부, 리스트 add(중복 무시)·clear, 원래 파일로 왕복" \
+        || fail "config-set: rc=$CSR list=$CSL $(diff "$S58/config.yml" "$Q/.ax/config.yml" | head -5)"
+
+    # detect-stack — 선언된 것에서만
+    printf '{"scripts":{"build":"x","test":"y"},"devDependencies":{"eslint":"9"}}' > "$Q/package.json"; touch "$Q/pnpm-lock.yaml"
+    printf 'lint:\n\techo\n' > "$Q/Makefile"
+    DS=$( (cd "$Q" && bash .ax/scripts/bash/detect-stack.sh --json) )
+    [ "$(echo "$DS" | jq -r '.result.candidates.build[0]')" = "pnpm build" ] && [ "$(echo "$DS" | jq -r '.result.candidates.lint[0]')" = "make lint" ] \
+        && [ "$(echo "$DS" | jq -r '.result.candidates.typecheck | length')" = 0 ] \
+        && echo "$DS" | jq -r '.result.candidates.lint_file[]' | grep -qx '\*\*/\*.ts => pnpm exec eslint --quiet {file}' \
+        && pass "detect-stack — package.json scripts·lockfile·Makefile 타깃·선언된 도구에서만 후보 (없는 typecheck 는 안 지어요)" \
+        || fail "detect-stack: $(echo "$DS" | jq -c .result.candidates)"
+
+    # doctor-scan 상시 로드 예산 — CLAUDE.md 의 @import 를 따라가요
+    printf '@AGENTS.md\n' > "$Q/CLAUDE.md"; head -c 40000 /dev/zero | tr '\0' 'x' > "$Q/AGENTS.md"; printf '\n@.ax/spirit/big.md\n' >> "$Q/AGENTS.md"
+    mkdir -p "$Q/.ax/spirit"; head -c 1000 /dev/zero | tr '\0' 'y' > "$Q/.ax/spirit/big.md"
+    BU=$( (cd "$Q" && bash .ax/scripts/bash/doctor-scan.sh --json 2>/dev/null) | jq -c '.result.budget')
+    [ "$(echo "$BU" | jq -r '.files | length')" = 3 ] && [ "$(echo "$BU" | jq -r .over)" = true ] \
+        && pass "doctor-scan budget — CLAUDE.md → @AGENTS.md → @import 를 따라 바이트 합산, 경고 선 초과 표시" \
+        || fail "doctor-scan budget: $BU"
+    rm -rf "$Q"
+else
+    pass "§58 — jq/git 없음, skip"
+fi
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"

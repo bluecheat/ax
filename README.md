@@ -71,7 +71,7 @@
        │ → shared attitude across sub-agents   │ → /audit review → promote to rule
        │                                       │   (grep rules carry a `검출 패턴:` marker the pre-commit hook enforces)
 
-Sensors (deterministic):  .ax/hooks/{session-start, user-prompt, pre-bash, pre-edit, post-edit, pre-commit, subagent-start, stop}/*.sh
+Sensors (deterministic):  .ax/hooks/{session-start, pre-compact, user-prompt, pre-bash, pre-edit, post-edit, pre-commit, subagent-start, stop}/*.sh
 Scripts (deterministic):  .ax/scripts/bash/*.sh — --json standard
 ```
 
@@ -184,7 +184,7 @@ your-project/
 │   ├── modules/                           # Layer 2 — per-module domain rules (instances only)
 │   │   ├── README.md
 │   │   └── <module-name>/rules.md         # onboarding Q5 stubs only L2/L3 domains
-│   ├── hooks/                             # Sensors (deterministic) — 8 dirs, 17 files
+│   ├── hooks/                             # Sensors (deterministic) — 9 dirs, 19 files
 │   │   ├── session-start/session-brief.sh # handoff · version lag · overdue audit, at session start
 │   │   ├── user-prompt/triage-nudge.sh    # idle-phase reminder (Claude Code only)
 │   │   ├── pre-bash/{block-destructive,block-hook-bypass,destructive-facts,grep-on-commit}.sh

@@ -59,6 +59,7 @@ Spirit 카테고리 수를 `spirit-lint.sh` 로, mistake 카테고리 집계를 
 | **번호 무결성** | spec/ADR 중복 번호 | `next-spec-num.sh --check-duplicates` (§3.11) |
 | **동봉본** | vendored skills 신선도 | `vendor-skills.sh --check` (§3.12) |
 | **모노레포 훅 배선** | ADE 루트(저장소 루트) settings 에 이 프로젝트의 goax 훅이 템플릿대로 있나 | `ade-settings.sh --check` (§3.14) |
+| **상시 로드 예산** | CLAUDE.md 가 @import 로 매 세션 싣는 글의 양 | `doctor-scan.sh budget` (§3.15) |
 | **인계 노트** | current-task.json `handoff` 기한(`- [ ] YYYY-MM-DD`) 임박·초과 — zero 의 가정 검증 · ablation 재검토 | `doctor-scan.sh handoff` (§3.6~) |
 
 각 항목 ✅ / ❗ / ❌. 규칙은 §4.
@@ -153,9 +154,9 @@ D_BAD=$(echo "$SCAN" | jq -r '.result.handoff.deadlines[] | select(.status!="ok"
    ❗  template hook <H_REG>/<H_TOT> 등록 — 미등록: <H_MISS 한 줄씩>
    ❌ 초기 설치 미완 — .ax/hooks/ 안에 없는 항목: <H_MF 한 줄씩>   ← 비었으면 생략. /up 재실행으로만 복원
    ❗  이벤트 키 미등록: <E_MISS>   ← settings.json 에 그 이벤트가 아예 없어요. Stop·SubagentStart 는 나중 판에 생긴 hook —
-       파일은 /up 이 깔았는데 키가 없으면 안 돌아요. .ax/settings.json.suggested 머지 또는 template 을 읽어 jq 로 append
+       파일은 /up 이 깔았는데 키가 없으면 안 돌아요. ade-settings.sh --apply 가 goax 훅만 템플릿대로 맞춰요
 ```
-다음 단계 `[s] ✅ template hook 등록 — 1순위 bash .ax/scripts/bash/register-spirit-hook.sh (path-scoped inject, idempotent) → 나머지는 .ax/settings.json.suggested 머지 또는 template 을 읽어 jq 로 append (백업 후, 사용자 키 보존). 파일 자체가 없으면 /up`. hook 셋은 template 이 정해요 — doctor 는 이름을 hardcode 하지 않아요.
+다음 단계 `[s] ✅ template hook 등록 — 1순위 bash .ax/scripts/bash/register-spirit-hook.sh (path-scoped inject, idempotent) → 나머지는 bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" (goax 훅 명령만 빼고 다시 넣어요 — 사용자 훅·permissions 보존) 후 .ax/settings.json.suggested 삭제. 파일 자체가 없으면 /up`. `jq -s '.[0] * .[1]'` 로 합치지 않아요 — `*` 가 PreToolUse 배열을 통째로 바꿔 사용자 훅이 사라져요. hook 셋은 template 이 정해요 — doctor 는 이름을 hardcode 하지 않아요.
 
 **3.8 문서 ↔ 실제** (`D_MM` 비었으면 생략):
 ```
@@ -282,9 +283,16 @@ RI=$(bash "$ROOT/.ax/scripts/bash/rules-index.sh" --json 2>/dev/null); RI_C=$(ec
 ADE=$(bash "$ROOT/.ax/scripts/bash/ade-settings.sh" --check --plugin-dir "$PLUGIN_ROOT" --json 2>/dev/null); ADE_RC=$?
 ADE_MISS=$(echo "$ADE" | jq -r '.result.missing // [] | length'); ADE_STALE=$(echo "$ADE" | jq -r '.result.stale // [] | length')
 ```
-`ADE_RC=2`(단일 저장소 — ADE 루트 = 프로젝트 루트)면 생략. 세션을 저장소 루트에서 열면 훅은 **루트의** `.claude/settings.json` 에서만
+`ADE_RC=2`(jq·템플릿 없음) 또는 `.result.project_rel == ""`(단일 저장소 — §3.7 이 이미 봐요)면 생략. 세션을 저장소 루트에서 열면 훅은 **루트의** `.claude/settings.json` 에서만
 등록돼요 — 여기서 빠진 훅은 프로젝트 settings 에 있어도 발화하지 않아요. `◆ 모노레포 훅 — ✅ 템플릿과 일치 · ❗ 누락 N · 잔재 M:
 ade-settings.sh --apply (다른 훅·permissions 는 보존)`. 누락 목록은 `.result.missing` 그대로 보여줘요. 자동 적용은 안 해요 — 사용자 [a] 뒤에만.
+
+### 3.15 상시 로드 예산 — `doctor-scan.sh` `.result.budget`
+
+`over=false` 면 본 표에 `✅ 상시 로드 <bytes>바이트 (≈<est_tokens>토큰)` 한 줄만. `over=true` 면
+`◆ 상시 로드 — ❗ <bytes>바이트 (≈<est_tokens>토큰, 경고 선 <warn_at>)` + 큰 파일 3개(`.files[:3]`)를 보여주고,
+`paths:` 가 있을 수 있는 룰(특정 디렉토리에만 해당)을 @import 에서 빼 path-scoped 주입으로 옮기는 걸 제안해요.
+토큰은 바이트/3 어림이에요 — 정확한 값처럼 말하지 않아요. 자동 수정 X.
 
 ## 4. 출력
 

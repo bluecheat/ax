@@ -395,14 +395,15 @@ universal 룰(secrets·파괴 명령·보호 경로)은 이미 hook 이 있어 �
 ├─ 옵션 ────────────────────────────────────────────────
 │
 │  ●  [a]  머지 — 기존 settings.json + suggested            ✅ 권장
-│      📂 .claude/settings.json · suggested 삭제
+│      📂 .claude/settings.json (goax 훅만 템플릿대로) · suggested 삭제
+│      ✅ 사용자 자신의 훅·permissions·statusLine 은 그대로
 │
 │  ○  [b]  보류 — 사용자가 나중에 수동 머지
 │      ❗ 머지 전엔 hooks 등록 안 됨 — sensors 작동 X
 │
 └  ▸  답해주세요   [a] / [b]
 ```
-→ [a] 시 `jq -s '.[0] * .[1]' .claude/settings.json .ax/settings.json.suggested` 로 합치고 `rm -f .ax/settings.json.suggested`. [b] 시 suggested 그대로 + 다음 단계 안내.
+→ [a] 시 `bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" --json` 후 `rm -f .ax/settings.json.suggested`. `jq -s '.[0] * .[1]'` 는 쓰지 않아요 — 배열을 통째로 바꿔 사용자 훅이 사라져요. [b] 시 suggested 그대로 + 다음 단계 안내.
 
 ## 완료 안내 (§5)
 

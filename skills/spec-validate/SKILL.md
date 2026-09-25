@@ -131,6 +131,8 @@ printf '%s\n' "$REVIEW" | jq -r '"architect \(.result.architect.verdict // "없�
 bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --merge --json >/dev/null
 ```
 
+   합의가 통과하면 보고 끝에 한 줄: `👉 phase 경계라 지금 `/compact` 하기 좋아요 — 인계 노트와 PreCompact 스냅샷이 위치를 붙잡아요`. 리뷰 두 벌이 컨텍스트에 쌓인 뒤라서요 — 한 번만, 강요하지 않아요.
+
 ### 통과 뒤의 오타·문구 — `--fixup`
 
 통과한 뒤 spec.md 의 오타·문구·링크를 고치면 sha 가 어긋나 `pass=false` 로 돌아가요. 그걸로 리뷰어를

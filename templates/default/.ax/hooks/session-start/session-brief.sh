@@ -4,7 +4,7 @@
 # 무엇을 말할지는 `.ax/scripts/bash/session-brief.sh --json` 이 정해요 (결정론 경계 — 이 훅은 전달만).
 # 말할 게 없으면 아무것도 안 내요. 길이 상한은 GOAX_SESSION_BRIEF_MAX(기본 1200자).
 # startup · resume · clear · compact 모두 돌아요 — compaction 뒤에 인계 노트가 다시 보여야 해서요.
-# compact 일 땐 브리핑 전에 세션의 룰 Read 기록·주입 기록도 지워요 (아래).
+# compact 일 땐 브리핑 전에 세션의 룰 Read 기록·주입 기록도 지우고, PreCompact 스냅샷을 브리핑 맨 앞에 붙여요.
 #
 # 입력: stdin JSON {session_id, source, …}
 # 출력: stdout {hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:"…"}}
@@ -35,7 +35,9 @@ fi
 
 goax_hook_enabled session-brief standard || exit 0
 
-LINES=$(GOAX_PROJECT_DIR="$PROJECT_ROOT" bash "$BRIEF" --json 2>/dev/null \
+MODE_ARGS=()
+[ "$SRC" = "compact" ] && [ -n "$SID" ] && MODE_ARGS=(--after-compact --session "$SID")   # 압축 직전 스냅샷(pre-compact/snapshot.sh)을 맨 앞에
+LINES=$(GOAX_PROJECT_DIR="$PROJECT_ROOT" bash "$BRIEF" --json ${MODE_ARGS[@]+"${MODE_ARGS[@]}"} 2>/dev/null \
         | jq -r '.result.lines // [] | .[]' 2>/dev/null || true)
 [ -z "$LINES" ] && exit 0
 

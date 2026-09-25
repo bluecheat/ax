@@ -389,6 +389,7 @@ fi
  ▸ evaluator 필수 (L × L2) → goax:evaluator 기동 (새 컨텍스트 · spec + ADR 2 + diff)
  ✅ review.md — verdict: 진행 (발견 0건 · 검토 범위 9 파일)
  ✅ spec 014 구현 완료 · current-task.json → idle
+ 👉 phase 경계라 지금 `/compact` 하기 좋아요 — 인계 노트와 PreCompact 스냅샷이 위치를 붙잡아요
 ```
 
 ## 절대 금지

@@ -95,7 +95,7 @@ echo "$RESULT" | jq -r '.result | "\(.count)개 동봉 (v\(.version)), 포인터
 ADE 루트 ≠ 프로젝트 루트(모노레포)면 훅 배선도 같이 맞춰요 — 스킬만 동봉하고 훅을 안 걸면 루트에서 연 세션엔 게이트가 하나도 안 돌아요:
 
 ```bash
-bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" --json   # 단일 저장소면 exit 2 (skip)
+bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" --json   # 단일 저장소면 프로젝트 settings 를 맞춰요
 ```
 루트 `.claude/settings.json` 의 **이 프로젝트 몫 goax 훅만** 템플릿대로 다시 써요 (`env CLAUDE_PROJECT_DIR=…/<프로젝트> bash …`).
 다른 훅·permissions·다른 goax 프로젝트 몫은 그대로예요. 손으로 쓰지 않아요 — 손으로 쓴 파일은 새 훅이 생겨도 안 따라와요.
