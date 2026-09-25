@@ -2,12 +2,12 @@
 # .ax/scripts/bash/spec-review.sh — spec 합의 리뷰 원장. 스냅샷 sha 고정 · 리뷰어별 verdict 집계 · 합본
 #
 # Usage:
-#   bash spec-review.sh [--spec <NNN-slug>] --snapshot [--stage spec|tasks] [--dry-run] [--json]
+#   bash spec-review.sh [--spec <id-slug>] --snapshot [--stage spec|tasks] [--dry-run] [--json]
 #                                                                   # sha 고정 (+ 필요할 때만 라운드 +1), 리뷰어 파일 경로 안내
-#   bash spec-review.sh [--spec <NNN-slug>] --status            [--json]   # 두 리뷰 파일의 verdict·sha 를 집계 → pass 여부
-#   bash spec-review.sh [--spec <NNN-slug>] --delta             [--json]   # 리뷰어가 본 본문 → 지금 본문 diff (재리뷰 브리프용)
-#   bash spec-review.sh [--spec <NNN-slug>] --fixup   [--dry-run] [--json] # 통과 뒤의 오타·문구 수정을 리뷰 없이 받아들여요
-#   bash spec-review.sh [--spec <NNN-slug>] --merge   [--dry-run] [--json] # review-spec.md 합본 생성 (사람이 읽는 용)
+#   bash spec-review.sh [--spec <id-slug>] --status            [--json]   # 두 리뷰 파일의 verdict·sha 를 집계 → pass 여부
+#   bash spec-review.sh [--spec <id-slug>] --delta             [--json]   # 리뷰어가 본 본문 → 지금 본문 diff (재리뷰 브리프용)
+#   bash spec-review.sh [--spec <id-slug>] --fixup   [--dry-run] [--json] # 통과 뒤의 오타·문구 수정을 리뷰 없이 받아들여요
+#   bash spec-review.sh [--spec <id-slug>] --merge   [--dry-run] [--json] # review-spec.md 합본 생성 (사람이 읽는 용)
 #
 # 왜 필요한가 — 계획의 품질은 diff 시점이 아니라 계획 시점에 리뷰해야 올라가요. 그런데 리뷰어
 # 둘(architect · evaluator)이 한 파일에 쓰면 (a) 첫 줄 verdict 하나로 "둘 다 진행" 을 표현할 수

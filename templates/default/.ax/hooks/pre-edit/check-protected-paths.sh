@@ -41,6 +41,8 @@ if [ -f "$COMMON" ]; then
     # shellcheck source=../../scripts/bash/common.sh
     source "$COMMON"
 fi
+# 훅 끄기·프로필 — sensors.disabled_hooks · sensors.hook_profile
+type goax_hook_enabled >/dev/null 2>&1 && { goax_hook_enabled check-protected-paths minimal || exit 0; }
 type goax_normalize_path >/dev/null 2>&1 || goax_normalize_path() { printf '%s' "${1:-}"; }
 type goax_path_under     >/dev/null 2>&1 || goax_path_under() { case "${1:-}" in "${2:-}"|"${2:-}"/*) return 0 ;; esac; return 1; }
 type goax_yaml_list      >/dev/null 2>&1 || goax_yaml_list() {

@@ -2,7 +2,7 @@
 # .ax/scripts/bash/lanes-hotfiles.sh — tasks.md 에서 핫 파일을 뽑아요
 #
 # Usage:
-#   bash lanes-hotfiles.sh [--spec <NNN-slug>] [--min <N>] [--json] [--help]
+#   bash lanes-hotfiles.sh [--spec <id-slug>] [--min <N>] [--json] [--help]
 #
 # 핫 파일 = **미완료 task 여러 개가 같은 파일을 쓴다**. 레인을 파일 소유권으로
 # 가를 때, 이 목록의 파일은 반드시 한 레인이 독점해야 해요. 두 레인이 같은 파일을

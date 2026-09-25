@@ -36,7 +36,7 @@ Size·Risk 등급 정의는 [`reference/triage-matrix.md`](reference/triage-matr
 "spec 만들어줘 payment-refund — 풀패키지"
  → spec.md + tasks.md + research.md + data-model.md
   + contracts/{api,events} + quickstart.md (6 파일)
-  + ADR (.ax/docs/adr/NNNN-*.md) — 별도 작성
+  + ADR (.ax/docs/adr/<id>-*.md) — 별도 작성
 ```
 
 ### 점진 길 — 단계별 (standard 부터 시작, 필요시 추가)

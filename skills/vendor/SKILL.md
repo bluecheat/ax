@@ -92,6 +92,14 @@ RESULT=$(bash .ax/scripts/bash/vendor-skills.sh --plugin-dir "$PLUGIN_ROOT" --js
 echo "$RESULT" | jq -r '.result | "\(.count)개 동봉 (v\(.version)), 포인터=\(.pointer_written)"'
 ```
 
+ADE 루트 ≠ 프로젝트 루트(모노레포)면 훅 배선도 같이 맞춰요 — 스킬만 동봉하고 훅을 안 걸면 루트에서 연 세션엔 게이트가 하나도 안 돌아요:
+
+```bash
+bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" --json   # 단일 저장소면 exit 2 (skip)
+```
+루트 `.claude/settings.json` 의 **이 프로젝트 몫 goax 훅만** 템플릿대로 다시 써요 (`env CLAUDE_PROJECT_DIR=…/<프로젝트> bash …`).
+다른 훅·permissions·다른 goax 프로젝트 몫은 그대로예요. 손으로 쓰지 않아요 — 손으로 쓴 파일은 새 훅이 생겨도 안 따라와요.
+
 완료 후 안내:
 
 ```
@@ -99,7 +107,7 @@ echo "$RESULT" | jq -r '.result | "\(.count)개 동봉 (v\(.version)), 포인터
 
 다음 단계
  1. 커밋해요 — .claude/ 와 .goax-root 가 저장소에 들어가야 팀원에게 닿아요
-      git add .claude .goax-root && git commit -m "chore: goax 0.4.0 동봉"
+      git add .claude .goax-root && git commit -m "chore(goax): 0.4.0 동봉"
  2. 팀원은 clone 후 바로 사용 — plugin 설치 불필요
  3. plugin 갱신 시 /vendor 재실행 → 커밋 (doctor 가 stale 을 알려줘요)
 ```
@@ -109,7 +117,7 @@ echo "$RESULT" | jq -r '.result | "\(.count)개 동봉 (v\(.version)), 포인터
 동봉본은 **저장소에 고정된 사본**이라 plugin 을 올려도 자동으로 안 따라와요.
 `doctor` 가 `.claude/.goax-vendored` 와 plugin VERSION 을 비교해 알려줘요.
 
-낡았으면 §3 을 그대로 다시 돌리면 돼요 (idempotent).
+낡았으면 §3 을 그대로 다시 돌리면 돼요 (idempotent). 모노레포면 `ade-settings.sh --apply` 도 같이 — 새 버전이 훅을 늘렸을 수 있어요.
 
 > 실제로 이게 방치되면 어떻게 되는지 사례가 있어요 — 어떤 프로젝트는 3개월 전
 > 버전의 복사본으로 돌고 있었어요. 그동안의 버그 수정이 하나도 닿지 않았고요.

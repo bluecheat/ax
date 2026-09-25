@@ -37,6 +37,8 @@ GATE="$PROJECT_ROOT/.ax/scripts/bash/tasks-gate.sh"
 [ -f "$COMMON" ] && [ -f "$GATE" ] || exit 0
 # shellcheck source=../../scripts/bash/common.sh
 source "$COMMON"
+# 훅 끄기·프로필 — sensors.disabled_hooks · sensors.hook_profile
+type goax_hook_enabled >/dev/null 2>&1 && { goax_hook_enabled spec-gate standard || exit 0; }
 MODE=$(goax_mode 2>/dev/null || echo warning)
 [ "$MODE" = "off" ] && exit 0
 

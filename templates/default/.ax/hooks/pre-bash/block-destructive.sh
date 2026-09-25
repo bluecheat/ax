@@ -117,6 +117,9 @@ if [ -n "$CATASTROPHIC_HIT" ]; then
     exit 2
 fi
 
+# 훅 끄기·프로필 — CATASTROPHIC 은 위에서 이미 끝났어요 (끌 수 있는 안전망이 아니에요). 여기부터만 꺼져요.
+type goax_hook_enabled >/dev/null 2>&1 && { goax_hook_enabled block-destructive minimal || exit 0; }
+
 [ "$SENSOR_MODE" = "off" ] && exit 0
 
 # ─── 2) RECOVERABLE — mode-aware ────────────────────────────────────

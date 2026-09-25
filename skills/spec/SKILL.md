@@ -1,6 +1,6 @@
 ---
 name: spec
-description: "새 spec 디렉토리 생성 — 'spec 만들어줘', 'goax spec new <slug>', '스펙 작성 시작'. .ax/docs/spec/NNN-<slug>/ 에 size×risk에 맞는 tier(standard/full)만큼만 SDD 산출물 생성. plan.md 폐기 — 설계 결정은 ADR 로. tier override: '--tier standard|full' 또는 자연어 '간단/풀패키지'. 결정론은 .ax/scripts/bash/ 위임. 슬래시로도 호출 가능: '/spec'."
+description: "새 spec 디렉토리 생성 — 'spec 만들어줘', 'goax spec new <slug>', '스펙 작성 시작'. `.ax/docs/spec/<id>-<slug>/`(id = YYYY-MM-DD-<4hex>) 에 size×risk에 맞는 tier(standard/full)만큼만 SDD 산출물 생성. plan.md 폐기 — 설계 결정은 ADR 로. tier override: '--tier standard|full' 또는 자연어 '간단/풀패키지'. 결정론은 .ax/scripts/bash/ 위임. 슬래시로도 호출 가능: '/spec'."
 ---
 
 # goax spec — 새 SDD 디렉토리 (tier-aware, script-backed)
@@ -18,7 +18,7 @@ description: "새 spec 디렉토리 생성 — 'spec 만들어줘', 'goax spec n
 ## 핵심 원칙 — tier-aware + script-backed
 
 > 처음부터 spec / tasks / research / data-model / contracts / quickstart / checklists 다 만들지 않아요.
-> triage의 size×risk 결과로 **딱 필요한 만큼**만 만들고, 결정론적 부분(번호·디렉토리·cp)은 `.ax/scripts/bash/`에 위임.
+> triage의 size×risk 결과로 **딱 필요한 만큼**만 만들고, 결정론적 부분(ID·디렉토리·cp)은 `.ax/scripts/bash/`에 위임.
 
 ### Tier 매트릭스 (2 단계)
 
@@ -27,14 +27,14 @@ description: "새 spec 디렉토리 생성 — 'spec 만들어줘', 'goax spec n
 | **standard** | `spec.md` + `tasks.md` (2) | S/M/L × L0~L2 및 M×L3 |
 | **full** | + `research.md` + `data-model.md` + `quickstart.md` + `contracts/` + ADR | L × L3 / XL × * |
 
-> `plan.md` 폐기 — 설계 결정·아키텍처·트레이드오프는 ADR (`.ax/docs/adr/NNNN-*.md`) 로 기록.
+> `plan.md` 폐기 — 설계 결정·아키텍처·트레이드오프는 ADR (`.ax/docs/adr/<id>-*.md`) 로 기록.
 > spec.md §7.5 Technical Context (스택·영향 모듈·적용 룰·진입 ADR) 가 *기술 컨텍스트* 자리예요.
 > `basic` tier 폐기 — standard 가 최소 단위.
 
 **Lazy 생성** — tier 와 무관, 필요 시 명시 추가:
 ```bash
-add-spec-files.sh --spec <NNN-slug> --add checklists      # checklists/requirements.md
-add-spec-files.sh --spec <NNN-slug> --add contracts       # contracts/{api.yaml, events.md}
+add-spec-files.sh --spec <id-slug> --add checklists      # checklists/requirements.md
+add-spec-files.sh --spec <id-slug> --add contracts       # contracts/{api.yaml, events.md}
 ```
 
 자연어 매핑:
@@ -69,14 +69,12 @@ echo "$SEARCH" | jq -r '.result.adrs[]  | "adr  \(.score)\t\(.path)"'
 직접 `grep` 하지 마세요 — 슬러그엔 없고 본문에만 있는 spec 을 놓쳐요.
 `snippets` 로 연관성을 먼저 판단하고, 정말 관련 있는 것만 본문을 Read 하세요.
 
-발견 시 사용자에게 알림: "기존 spec 003-payment-coupon-stack 과 관련 있어 보여요. 새 spec 으로 갈까요, 003 에 추가 (`/spec-tasks 003` 또는 ADR 신규) 할까요?"
+발견 시 사용자에게 알림: "기존 spec 2026-09-02-7c1e-payment-coupon-stack 과 관련 있어 보여요. 새 spec 으로 갈까요, 거기에 추가 (`/spec-tasks payment-coupon-stack` 또는 ADR 신규) 할까요?" — `--spec` 은 ID 앞부분·난수·slug 어느 쪽으로도 찾아요.
 
-### 1.3 다음 번호 계산 — `next-spec-num.sh`
+### 1.3 ID — 미리 계산하지 않아요
 
-```bash
-NEXT=$(bash .ax/scripts/bash/next-spec-num.sh --json | jq -r '.result.next')
-# 또는 텍스트만: NEXT=$(bash .ax/scripts/bash/next-spec-num.sh)
-```
+spec ID 는 날짜+난수(`YYYY-MM-DD-<4hex>`)라 §3 의 `init-spec-dir.sh` 가 예약하면서 뽑아요. 순번이 아니라서
+다른 브랜치·PR 스택의 spec 과 겹치지 않아요. 옛 순번(`NNN-slug/`) spec 은 그대로 읽어요.
 
 ### 1.4 Tier 결정 — `tier-from-state.sh`
 
@@ -98,16 +96,16 @@ TIER_RESULT=$(bash .ax/scripts/bash/tier-from-state.sh --json --size L --risk L3
 
  📍 발견
   slug   payment-refund-policy-change
-  번호   005 (이전 가장 큰 번호: 004)
+  ID     생성 시 발급 (YYYY-MM-DD-<4hex>)
   도메인 매칭 payment → L3 (config.yml)
   tier 권장 full (이유: L × L3 — full SDD + ADR)
 
- 🎯 목표 .ax/docs/spec/005-payment-refund-policy-change/
+ 🎯 목표 .ax/docs/spec/<id>-payment-refund-policy-change/
 
  ─ 옵션 ──────────────────────────────────────────
 
  [a] ✓ tier=full (권장 — L×L3)     [권장]
-  산출물 5 파일 + ADR — spec/tasks/research/data-model/quickstart + docs/adr/NNNN-*.md
+  산출물 5 파일 + ADR — spec/tasks/research/data-model/quickstart + docs/adr/<id>-*.md
 
  [b] tier=standard (2 파일 — spec/tasks)
   설계 결정은 별도 ADR 로 기록. 나중에 research/data-model 등은 add-spec-files.sh 로 점진 추가.
@@ -151,8 +149,8 @@ bash .ax/scripts/bash/update-task.sh --phase spec \
 ## 4. ✓ 메시지
 
 ```
-✓ spec 005-payment-refund-policy-change 생성 (tier=full, 5 파일 + ADR 권장)
-✓ current-task.json 갱신: phase=spec, spec_id=005
+✓ spec 2026-09-25-a3f1-payment-refund-policy-change 생성 (tier=full, 5 파일 + ADR 권장)
+✓ current-task.json 갱신: phase=spec, spec_id=2026-09-25-a3f1
 
 📍 다음 단계
  1. spec.md 작성 — 문제 정의 + NEEDS CLARIFICATION 명시 + §7.5 Technical Context
@@ -171,7 +169,7 @@ bash .ax/scripts/bash/update-task.sh --phase spec \
 → 명시적 명령 `/spec-tasks` 사용 권장 (단계별 가이드 제공).
 또는 직접 `add-spec-files.sh`:
 ```bash
-bash .ax/scripts/bash/add-spec-files.sh --json --spec 005-payment-refund --add tasks
+bash .ax/scripts/bash/add-spec-files.sh --json --spec payment-refund --add tasks
 ```
 
 > `--add plan` 은 폐기됐어요 — 설계 결정은 `/adr` 로.
@@ -181,7 +179,7 @@ bash .ax/scripts/bash/add-spec-files.sh --json --spec 005-payment-refund --add t
 - 사용자 동의 없이 기존 spec 디렉토리 덮어쓰지 않아요.
 - spec.md 본문을 자동 채우지 않아요. 사용자가 도메인을 알아요.
 - 처음부터 5 파일 다 깔지 않아요 — 항상 tier-aware
-- 결정론 부분(번호·sha·cp)을 LLM이 직접 처리 X — 스크립트 위임
+- 결정론 부분(ID·sha·cp)을 LLM이 직접 처리 X — 스크립트 위임
 - slug 추출이 모호하면 `[c]` 옵션으로 사용자에게 명시 요청.
 - `tier=basic` 사용자가 명시해도 거부 — 폐기된 tier. standard 권유.
 - `plan.md` 작성 가이드 X — 설계 결정은 ADR 로 위임.

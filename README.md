@@ -71,7 +71,7 @@
        │ → shared attitude across sub-agents   │ → /audit review → promote to rule
        │                                       │   (grep rules carry a `검출 패턴:` marker the pre-commit hook enforces)
 
-Sensors (deterministic):  .ax/hooks/{user-prompt, pre-bash, pre-edit, post-edit, pre-commit, subagent-start, stop}/*.sh
+Sensors (deterministic):  .ax/hooks/{session-start, user-prompt, pre-bash, pre-edit, post-edit, pre-commit, subagent-start, stop}/*.sh
 Scripts (deterministic):  .ax/scripts/bash/*.sh — --json standard
 ```
 
@@ -123,10 +123,10 @@ The `spec` skill doesn't generate every artifact upfront. The triage result deci
                                   tasks carry lane assignments (lanes-dispatch.sh ledger)
                                   → completion gate G1–G6 (+ fresh-context evaluator for L / M×L3)
 "split into lanes"              → lane — first asks whether the work can be split at all
-# Design decisions go to ADR (.ax/docs/adr/NNNN-*.md)
+# Design decisions go to ADR (.ax/docs/adr/<id>-*.md)
 ```
 
-Natural-language tier overrides: `"simple"` / `"spec + tasks"` → standard · `"full package"` → full. Design decisions live in ADR (`.ax/docs/adr/NNNN-*.md`), not a separate plan file.
+Natural-language tier overrides: `"simple"` / `"spec + tasks"` → standard · `"full package"` → full. Design decisions live in ADR (`.ax/docs/adr/<id>-*.md`), not a separate plan file.
 
 ---
 
@@ -184,10 +184,11 @@ your-project/
 │   ├── modules/                           # Layer 2 — per-module domain rules (instances only)
 │   │   ├── README.md
 │   │   └── <module-name>/rules.md         # onboarding Q5 stubs only L2/L3 domains
-│   ├── hooks/                             # Sensors (deterministic) — 7 dirs, 13 files
+│   ├── hooks/                             # Sensors (deterministic) — 8 dirs, 17 files
+│   │   ├── session-start/session-brief.sh # handoff · version lag · overdue audit, at session start
 │   │   ├── user-prompt/triage-nudge.sh    # idle-phase reminder (Claude Code only)
-│   │   ├── pre-bash/{block-destructive,grep-on-commit}.sh
-│   │   ├── pre-edit/{check-protected-paths,module-rules-inject,spirit-check,spirit-rules-inject}.sh
+│   │   ├── pre-bash/{block-destructive,block-hook-bypass,destructive-facts,grep-on-commit}.sh
+│   │   ├── pre-edit/{check-protected-paths,module-rules-inject,rule-read-gate,spirit-check,spirit-rules-inject}.sh
 │   │   ├── post-edit/lint-changed.sh
 │   │   ├── pre-commit/{critical-rule-grep,check-mistake-secrets,spec-completion-gate}.sh
 │   │   ├── subagent-start/harness-pointer.sh   # hands Constitution/Spirit/spec paths to sub-agents
@@ -198,15 +199,15 @@ your-project/
 │   │   ├── adr/0000-template.md
 │   │   └── spec/{spec, tasks, ...}.md  + .origin (drift sha)
 │   ├── current-task.json                  # task-context SSOT
-│   ├── config.yml                         # domain risk + sensors.mode
+│   ├── config.yml                         # domain risk + sensors.{mode, hook_profile, disabled_hooks}
 │   ├── mistakes/                          # Cross-cut Mistake Loop
 │   ├── version
 │   └── docs/
-│       ├── adr/                           # Real ADRs (onboarding auto-generates 0001-goax-adoption.md)
-│       ├── spec/                          # Real spec directory (NNN-<slug>/)
+│       ├── adr/                           # Real ADRs — <id>-<slug>.md, id = YYYY-MM-DD-<4hex> (never collides across branches)
+│       ├── spec/                          # Real spec directory (<id>-<slug>/)
 │       └── reference/                     # 7 read-only reference docs (copied from plugin docs/reference/)
 └── .claude/
-    └── settings.json                      # Hook registration (Claude Code only — UserPromptSubmit + PreToolUse + PostToolUse)
+    └── settings.json                      # Hook registration (Claude Code only — SessionStart + UserPromptSubmit + PreToolUse + PostToolUse + SubagentStart + Stop)
 ```
 
 **That's everything added to your project tree.** Skills · commands · agents are auto-loaded by the plugin (Claude Code) or `opencode.json` `instructions:` (OpenCode).
@@ -296,6 +297,8 @@ goax installs **shell scripts into your repository** and registers them as Claud
 **1. Hooks are a safety net, not a security boundary.**
 
 The hooks (`block-destructive.sh`, `check-protected-paths.sh`, the pre-commit chain) are bash pattern matching. They are designed to catch *accidents* — an agent or a person doing something destructive by mistake. They are **not** designed to stop someone who is trying to get around them, and they cannot be: a shell command string can express the same action in unlimited ways, and any hook can be sidestepped by using a tool path it does not watch (`sed -i` instead of `Edit`, `git commit --no-verify`, editing in an IDE).
+
+Three hooks are *fact-forcing gates* rather than pattern blocks: an edit is denied until the rule files that apply to that path have actually been Read this session (`rule-read-gate`), an in-project destructive command (`rm -r`, `git reset --hard`, `git clean -f` …) is denied once until the agent lists what it will delete and how to undo it (`destructive-facts`), and the agent's `--no-verify` / `core.hooksPath` / `HUSKY=0` is denied outright (`block-hook-bypass`). Asking "are you sure?" always gets a yes; asking for facts surfaces what the agent had not looked at. Every hook can be switched off by id (`sensors.disabled_hooks`) or dropped to the safety-net set with `sensors.hook_profile: minimal`.
 
 So read 🔴 CRITICAL as *"you will not pass this by accident"*, not *"this cannot be bypassed"*. If you need a real trust boundary — running untrusted code, isolating credentials — use a sandbox, permission separation, or a CI gate. goax does not replace those. See [`docs/reference/rule-enforcement.md`](docs/reference/rule-enforcement.md) for the full contract.
 

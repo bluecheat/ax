@@ -1,6 +1,6 @@
 ---
 name: goax-release
-description: "goax 플러그인 **이 저장소(goax repo)** 를 새 버전으로 배포하는 메인테이너 자동화 — 버전 3중(4곳) 동기화 bump → changelog → smoke 게이트 → commit → PR → squash 머지 → vX.Y.Z 태그 → GitHub Release 를 한 번에. 사용자가 'goax 릴리즈', 'plugin 릴리즈', '버전 올려/bump', '패치/마이너/메이저 올려', '다음 버전 릴리즈', '0.2.3 릴리즈해줘', '이번 변경 배포해줘', '/goax-release' 처럼 **goax 자체의 버전업·배포**를 요청하면 반드시 이 스킬을 써요. 단 goax repo 루트에서만 — 사용자 프로젝트 릴리즈나 oh-my-claudecode 릴리즈는 대상 아님."
+description: "goax 플러그인 **이 저장소(goax repo)** 를 새 버전으로 배포하는 메인테이너 자동화 — 버전 3중(4곳) 동기화 bump → changelog → smoke 게이트 → Conventional Commits 형식(feat(scope): …) commit·브랜치 → PR → squash 머지 → vX.Y.Z 태그 → GitHub Release 를 한 번에. 사용자가 'goax 릴리즈', 'plugin 릴리즈', '버전 올려/bump', '패치/마이너/메이저 올려', '다음 버전 릴리즈', '0.2.3 릴리즈해줘', '이번 변경 배포해줘', '/goax-release' 처럼 **goax 자체의 버전업·배포**를 요청하면 반드시 이 스킬을 써요. 단 goax repo 루트에서만 — 사용자 프로젝트 릴리즈나 oh-my-claudecode 릴리즈는 대상 아님."
 ---
 
 # goax-release — 플러그인 릴리즈 자동화
@@ -50,30 +50,47 @@ bash tests/smoke.sh
 ```
 버전 4곳 일치 + 구조 계약을 강제해요. **실패 시 즉시 halt + 보고** (커밋·PR 진행 금지).
 
-### 4. commit
+### 4. commit — Conventional Commits 형식
 
-main 이면 브랜치 먼저 — `release/<VERSION>` (순수 릴리즈) 또는 직전 작업 브랜치(기능+릴리즈 번들, `#17`/`#18` 패턴).
+브랜치·커밋·PR 제목은 **`<type>(<scope>): <한글 요약>`** 템플릿을 따라요. squash 머지하면 PR 제목이 main 의 커밋 제목이 되니, main 히스토리가 곧 이 형식이에요.
+
+**type** — 이번 릴리즈의 *주된* 변경으로 하나만 골라요:
+
+| type | 언제 |
+|---|---|
+| `feat` | 사용자 프로젝트에 새 동작이 생김 (훅·스크립트·스킬·게이트 추가) |
+| `fix` | 잘못 동작하던 걸 고침 (오탐·누락·크래시·포터빌리티) |
+| `refactor` | 동작 그대로, 구조만 |
+| `docs` | 문서·changelog 만 |
+| `test` | smoke·evals 만 |
+| `chore` | 그 밖 — 순수 버전 bump 는 `chore(release)` |
+
+**scope** — 가장 많이 바뀐 영역 하나, kebab-case: `hooks` · `spec` · `adr` · `triage` · `doctor` · `lane` · `scripts` · `templates` · `evals` · `release` 등. 여럿이면 사용자 체감이 큰 쪽.
+
+**브랜치** — 괄호는 셸 인용이 번거로워서 브랜치 이름은 `<type>/<scope>-<짧은-slug>` 로 써요 (예: `feat/hooks-fact-gates`, `chore/release-0.7.0`). 이미 작업 브랜치 위에 있으면(기능+릴리즈 번들) 그 브랜치를 그대로 써요. main 이면 먼저 만들어요.
 
 ```bash
-git checkout -b release/<VERSION>   # main 일 때만
+git checkout -b <type>/<scope>-<slug>   # main 일 때만
 git add VERSION .claude-plugin/plugin.json .claude-plugin/marketplace.json changelog/<VERSION>.md [+ 변경 파일]
 git commit -F - <<'EOF'
-release: <VERSION> — <한 줄 요약>
+<type>(<scope>): <한글 요약> (v<VERSION>)
 
-<본문: 무엇을 바꿨는지 한글로>
+<본문: 무엇이 좋아졌는지 → 무엇을 바꿨는지, 한글로>
 
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+<세션이 알려준 Co-Authored-By · Claude-Session 줄 — 모델 이름을 손으로 박지 않아요>
 EOF
 ```
-커밋 메시지는 **한글**.
+
+예: `feat(hooks): 룰을 읽기 전엔 편집을 막고 파괴 명령은 사실부터 적게 해요 (v0.7.0)` · `fix(spec): --delta 가 1 라운드에서 전부 바뀜이라던 것 (v0.6.3)` · `chore(release): v0.7.1`.
+요약은 **한글**, 끝의 `(vX.Y.Z)` 로 main 로그에서 릴리즈 커밋을 찾아요. 작업 중 커밋이 여러 개면 각자 `<type>(<scope>): …` 로 쌓아도 돼요 — squash 가 PR 제목 하나로 합쳐요.
 
 ### 5. PR
 
 ```bash
 git push -u origin <branch>
-gh pr create --base main --title "release: <VERSION> — <요약>" --body "<...>"
+gh pr create --base main --title "<type>(<scope>): <한글 요약> (v<VERSION>)" --body "<...>"
 ```
-PR 본문 끝에 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+PR 제목 = 4단계 커밋 제목과 같은 템플릿. PR 본문 끝에 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 
 ### 6. squash 머지
 
@@ -86,7 +103,7 @@ gh pr merge <PR#> --squash --delete-branch
 
 ```bash
 git checkout main && git pull origin main
-git tag -a v<VERSION> -m "release: <VERSION> — <요약>"
+git tag -a v<VERSION> -m "v<VERSION> — <요약>"
 git push origin v<VERSION>
 ```
 컨벤션: `vX.Y.Z` (예: `v0.2.2`).
@@ -104,6 +121,6 @@ gh release create v<VERSION> --title "v<VERSION> — <요약>" --notes-file chan
 ## 주의 (왜 중요한지)
 - **버전은 항상 4곳 동시** — `tests/smoke.sh` 가 VERSION·plugin.json·marketplace.json(top+plugins[0]) 이 모두 같은지 강제해요. 한 곳만 손으로 고치면 smoke 가 바로 깨지니, `bump-version.sh` 로만 만지고 `--check` 로 의심될 때 검증해요.
 - **changelog 는 실제 변경 내용만** — 사용자가 보는 릴리즈 노트라, 검토 과정·기각한 대안 같은 deliberation 을 넣으면 무엇이 바뀌었는지가 묻혀요 (0.2.1 에서 직접 겪은 교훈).
-- **커밋·PR·태그·릴리즈 제목은 한글** — 이 repo 의 기존 릴리즈 히스토리 톤을 따라요.
+- **커밋·PR 제목은 `<type>(<scope>): <한글 요약> (vX.Y.Z)`** — Conventional Commits 템플릿, 요약은 한글. 태그·Release 제목은 `vX.Y.Z — <요약>`. 0.6.3 까지의 `release: …` 형식은 더 쓰지 않아요.
 - **버전 마커(`(NEW 0.x+)`) 금지** — 금방 낡아서 re-read 를 깨요 (repo CLAUDE.md 룰).
 - **smoke 실패 = 릴리즈 중단** — 버전 불일치나 구조 계약 위반을 안고 배포하면 사용자 설치가 깨져요. 고치고 다시.

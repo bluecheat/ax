@@ -36,6 +36,8 @@ bash 휴리스틱이 아니라 **Claude가 코드를 직접 읽어** 다음을 �
 ### 1.1 형태
 - 모노레포인가 싱글인가
  - `pnpm-workspace.yaml`, `package.json#workspaces` → pnpm/npm 모노레포
+ - 설치 위치가 git 최상위보다 아래면(ADE 루트 ≠ 프로젝트 루트) 설치 뒤 `ade-settings.sh --check` 를 돌려요. 누락이 있으면
+   "저장소 루트에서 연 세션엔 훅이 안 돌아요 — `ade-settings.sh --apply` 로 루트 settings 에 배선할까요?" 를 옵션으로 물어요
  - `settings.gradle.kts` 의 `include(...)` → Gradle multi-module
  - `apps/`, `packages/`, `projects/` 디렉토리 → 디렉토리 기반
 - 모듈 목록 (실제 build 단위)

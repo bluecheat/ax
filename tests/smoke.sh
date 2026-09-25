@@ -273,7 +273,7 @@ fi
 section "4.1 settings.json.template ↔ .ax/hooks/ 양방향 cross-check"
 # ───────────────────────────────────────────────────────────
 # 정방향: settings.json.template 이 참조하는 .ax/... 경로가 실제로 존재하는지.
-# 역방향: .ax/hooks/{user-prompt,pre-bash,pre-edit,post-edit,subagent-start,stop}/*.sh 가 모두 등록됐는지
+# 역방향: .ax/hooks/{session-start,user-prompt,pre-bash,pre-edit,post-edit,subagent-start,stop}/*.sh 가 모두 등록됐는지
 #         (pre-commit/ 은 grep-on-commit.sh + install-git-hooks.sh 체이닝으로 별도 등록되므로 예외).
 # 실제 구조는 hooks[phase][n]['hooks'][m]['command'] 깊이이고 command 는
 # `bash "${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-bash/block-destructive.sh"` 형태라 .ax/ 부분만 추출.
@@ -295,7 +295,7 @@ lines = []
 for path in sorted(registered):
     full = os.path.join(tpl, path)
     lines.append("FWD|%s|%d" % (path, 1 if os.path.isfile(full) else 0))
-for phase in ["user-prompt", "pre-bash", "pre-edit", "post-edit", "subagent-start", "stop"]:
+for phase in ["session-start", "user-prompt", "pre-bash", "pre-edit", "post-edit", "subagent-start", "stop"]:
     for f in sorted(glob.glob(os.path.join(tpl, ".ax/hooks", phase, "*.sh"))):
         rel = os.path.relpath(f, tpl)
         lines.append("REV|%s|%d" % (rel, 1 if rel in registered else 0))
@@ -1225,38 +1225,35 @@ echo "$ERR_OUT" | python3 -c "import sys,json; json.load(sys.stdin)" >/dev/null 
 
 rm -rf "$COM_FX"
 
-# 15.3 next-spec-num — 999 overflow
+# 15.3 next-spec-num — 날짜+난수 ID (순번은 브랜치마다 같은 번호를 받아요 — commerce 실측 spec 8·ADR 12 중복)
+ID_RE='^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0123456789abcdef][0123456789abcdef][0123456789abcdef][0123456789abcdef]$'
 NS_FX=$(mktemp -d)
-mkdir -p "$NS_FX/.ax/scripts/bash" "$NS_FX/.ax/docs/spec/999-existing"
+mkdir -p "$NS_FX/.ax/scripts/bash" "$NS_FX/.ax/docs/spec/998-legacy"
 cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_FX/.ax/scripts/bash/"
-
+NEXT=$(CLAUDE_PROJECT_DIR=$NS_FX bash "$NS_FX/.ax/scripts/bash/next-spec-num.sh" 2>&1)
+printf '%s' "$NEXT" | grep -qE "$ID_RE" \
+    && pass "next-spec-num — 새 ID 는 YYYY-MM-DD-<4hex> (옛 998 이 있어도 999 가 아니에요): $NEXT" \
+    || fail "next-spec-num — ID 형식이 아니에요: $NEXT"
 OUT=$(CLAUDE_PROJECT_DIR=$NS_FX bash "$NS_FX/.ax/scripts/bash/next-spec-num.sh" --json 2>&1)
-EXIT=$?
-if [ "$EXIT" -eq 1 ] && echo "$OUT" | jq -e '.status == "error"' >/dev/null 2>&1; then
-    pass "next-spec-num — 999 overflow → JSON error + exit 1"
-else
-    fail "next-spec-num — overflow 처리 부정확 (exit=$EXIT, out=$OUT)"
-fi
+echo "$OUT" | jq -e '.result.reserved == false and .result.previous == "998-legacy" and .result.existing_count == 1' >/dev/null 2>&1 \
+    && [ "$(ls "$NS_FX/.ax/docs/spec" | grep -c .)" = 1 ] \
+    && pass "next-spec-num — 미리보기는 아무것도 안 만들고, previous 는 가장 최근 항목" \
+    || fail "next-spec-num 미리보기: $OUT"
+OUT=$(CLAUDE_PROJECT_DIR=$NS_FX bash "$NS_FX/.ax/scripts/bash/next-spec-num.sh" --reserve --slug feat --json 2>&1)
+RID=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
+printf '%s' "$RID" | grep -qE "$ID_RE" && [ -d "$NS_FX/.ax/docs/spec/${RID}-feat" ] \
+    && [ "$(echo "$OUT" | jq -r '.result.path')" = ".ax/docs/spec/${RID}-feat" ] \
+    && pass "next-spec-num --reserve — spec 디렉토리 <id>-<slug>/ 생성 + path 반환" \
+    || fail "next-spec-num --reserve spec: $OUT"
+OUT=$(CLAUDE_PROJECT_DIR=$NS_FX bash "$NS_FX/.ax/scripts/bash/next-spec-num.sh" --json 2>&1)
+[ "$(echo "$OUT" | jq -r '.result.previous')" = "${RID}-feat" ] \
+    && pass "next-spec-num — 새 ID 가 옛 순번보다 최근으로 정렬돼요" \
+    || fail "next-spec-num previous 정렬: $OUT"
+[ ! -d "$NS_FX/.ax/docs/spec/.numbers" ] \
+    && pass "next-spec-num --reserve — 옛 번호 원장(.numbers/)을 더 만들지 않아요" \
+    || fail "next-spec-num — 아직 .numbers 원장을 써요"
 
-# 원장 semantics — 한 번 쓴 번호는 실물을 지워도 회수되지 않아요
-# (ADR 템플릿 "폐기된 ADR 도 ID 재사용 안 함" 과 같은 규약).
-rm -rf "$NS_FX/.ax/docs/spec/999-existing"
-OUT=$(CLAUDE_PROJECT_DIR=$NS_FX bash "$NS_FX/.ax/scripts/bash/next-spec-num.sh" --json 2>&1) || true
-if echo "$OUT" | jq -e '.status == "error"' >/dev/null 2>&1; then
-    pass "next-spec-num — 실물 삭제해도 번호 회수 안 됨 (영구 원장)"
-else
-    fail "next-spec-num — 삭제된 999 를 재사용함: $OUT"
-fi
-
-# 정상 케이스 — 998이면 999 반환 (원장이 없는 새 fixture)
-NS_FX2=$(mktemp -d)
-mkdir -p "$NS_FX2/.ax/scripts/bash" "$NS_FX2/.ax/docs/spec/998-existing"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_FX2/.ax/scripts/bash/"
-NEXT=$(CLAUDE_PROJECT_DIR=$NS_FX2 bash "$NS_FX2/.ax/scripts/bash/next-spec-num.sh" 2>&1)
-[ "$NEXT" = "999" ] && pass "next-spec-num — 998 → 999 정상" \
-                    || fail "next-spec-num — 998 다음이 999 아님: $NEXT"
-
-# 동시 예약 경합 — 같은 번호가 두 번 나오면 안 돼요 (실사용 ADR 7 쌍 충돌의 회귀 테스트)
+# 동시 예약 — 같은 ID 가 두 번 나오면 안 돼요 (예전 실사용 ADR 7 쌍 충돌의 회귀 테스트)
 NS_RACE=$(mktemp -d)
 mkdir -p "$NS_RACE/.ax/scripts/bash" "$NS_RACE/.ax/docs/spec"
 cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_RACE/.ax/scripts/bash/"
@@ -1266,9 +1263,9 @@ for i in 1 2 3 4 5 6 7 8; do
 done
 wait
 RACE_TOT=$(ls "$NS_RACE/.ax/docs/spec" 2>/dev/null | grep -cE '^[0-9]' || true)
-RACE_UNIQ=$(ls "$NS_RACE/.ax/docs/spec" 2>/dev/null | grep -E '^[0-9]' | sed -E 's/^([0-9]+).*/\1/' | sort -u | grep -c . || true)
+RACE_UNIQ=$(ls "$NS_RACE/.ax/docs/spec" 2>/dev/null | grep -E '^[0-9]' | cut -c1-15 | sort -u | grep -c . || true)
 if [ "${RACE_TOT:-0}" -eq 8 ] && [ "${RACE_TOT:-0}" = "${RACE_UNIQ:-0}" ]; then
-    pass "next-spec-num --reserve — 8개 동시 예약에서 번호 충돌 0"
+    pass "next-spec-num --reserve — 8개 동시 예약에서 ID 충돌 0"
 else
     fail "next-spec-num --reserve — 동시 예약 충돌 (생성 ${RACE_TOT}, 고유 ${RACE_UNIQ})"
 fi
@@ -1284,36 +1281,56 @@ CLAUDE_PROJECT_DIR=$NS_DR bash "$NS_DR/.ax/scripts/bash/next-spec-num.sh" --kind
     || fail "next-spec-num --dry-run 이 파일을 생성함"
 CLAUDE_PROJECT_DIR=$NS_DR bash "$NS_DR/.ax/scripts/bash/next-spec-num.sh" --kind adr \
     --reserve --slug real --json >/dev/null 2>&1
-[ -f "$NS_DR/.ax/docs/adr/0001-real.md" ] \
-    && pass "next-spec-num --reserve — ADR 실물 생성" \
-    || fail "next-spec-num --reserve — ADR 실물 미생성"
+ls "$NS_DR/.ax/docs/adr/" 2>/dev/null | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0123456789abcdef]{4}-real\.md$' \
+    && pass "next-spec-num --reserve — ADR 실물 <id>-<slug>.md 생성" \
+    || fail "next-spec-num --reserve — ADR 실물 미생성: $(ls "$NS_DR/.ax/docs/adr/")"
 
 # --reserve 는 --slug 없이 거부돼야
 CLAUDE_PROJECT_DIR=$NS_DR bash "$NS_DR/.ax/scripts/bash/next-spec-num.sh" --reserve --json >/dev/null 2>&1
 [ $? -ne 0 ] && pass "next-spec-num --reserve — --slug 누락 시 error" \
              || fail "next-spec-num --reserve — --slug 없이 통과됨"
 
-# --check-duplicates — 예약 도입 이전 충돌을 진단으로 노출 (자동 수정 안 함)
+# --check-duplicates — 옛 순번 중복을 진단 (자동 수정 안 함). 새 ID 가 "2026" 으로 뭉쳐 오탐하면 안 돼요 —
+# 옛 ADR `0008-x` 와 새 ID `2026-09-25-…` 는 둘 다 "숫자 4개 + 하이픈" 으로 시작해요.
 NS_DUP=$(mktemp -d)
 mkdir -p "$NS_DUP/.ax/scripts/bash" "$NS_DUP/.ax/docs/adr"
 cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_DUP/.ax/scripts/bash/"
 : > "$NS_DUP/.ax/docs/adr/0001-a.md"; : > "$NS_DUP/.ax/docs/adr/0001-b.md"; : > "$NS_DUP/.ax/docs/adr/0003-c.md"
+: > "$NS_DUP/.ax/docs/adr/2026-09-25-aaaa-x.md"; : > "$NS_DUP/.ax/docs/adr/2026-09-25-bbbb-y.md"
 DUP_OUT=$(CLAUDE_PROJECT_DIR=$NS_DUP bash "$NS_DUP/.ax/scripts/bash/next-spec-num.sh" \
     --kind adr --check-duplicates --json 2>/dev/null)
 if echo "$DUP_OUT" | jq -e '.result.duplicate_count == 1 and (.result.duplicates | index("0001"))' >/dev/null 2>&1; then
-    pass "next-spec-num --check-duplicates — 중복 번호 검출"
+    pass "next-spec-num --check-duplicates — 옛 순번 중복만 검출 (같은 날 새 ID 두 개는 중복 아님)"
 else
-    fail "next-spec-num --check-duplicates — 검출 실패: $DUP_OUT"
+    fail "next-spec-num --check-duplicates — 검출 틀림: $DUP_OUT"
 fi
-# 진단·dry-run 은 읽기 전용이어야 해요 (사용자 리포에 원장을 몰래 만들면 안 됨)
 CLAUDE_PROJECT_DIR=$NS_DUP bash "$NS_DUP/.ax/scripts/bash/next-spec-num.sh" \
     --kind adr --reserve --slug ghost --dry-run --json >/dev/null 2>&1
-[ ! -d "$NS_DUP/.ax/docs/adr/.numbers" ] \
-    && pass "next-spec-num — --check-duplicates/--dry-run 은 원장을 쓰지 않음" \
-    || fail "next-spec-num — 읽기 전용 모드가 .numbers 를 생성함"
+[ ! -d "$NS_DUP/.ax/docs/adr/.numbers" ] && [ "$(ls "$NS_DUP/.ax/docs/adr" | grep -c .)" = 5 ] \
+    && pass "next-spec-num — --check-duplicates/--dry-run 은 읽기 전용" \
+    || fail "next-spec-num — 읽기 전용 모드가 뭔가를 만들었어요"
+
+# goax_resolve_spec — 새 ID 는 날짜로 시작해서 앞부분 축약이 안 먹어요. 난수·slug 로도 찾아야 해요.
+mkdir -p "$NS_DUP/.ax/docs/spec/2026-09-25-a3f1-refund-flow" "$NS_DUP/.ax/docs/spec/012-legacy"
+RS=$(bash -c "source '$NS_DUP/.ax/scripts/bash/common.sh'; for w in a3f1 refund-flow 2026-09-25-a3f1 012; do goax_resolve_spec \"\$w\" '$NS_DUP/.ax/docs/spec'; echo; done")
+[ "$RS" = "$(printf '2026-09-25-a3f1-refund-flow\n2026-09-25-a3f1-refund-flow\n2026-09-25-a3f1-refund-flow\n012-legacy')" ] \
+    && pass "goax_resolve_spec — 난수 · slug · ID 앞부분 · 옛 번호 모두로 찾아요" \
+    || fail "goax_resolve_spec 새 ID 해석: $RS"
 rm -rf "$NS_DUP"
 
-rm -rf "$NS_FX2" "$NS_RACE" "$NS_DR"
+# build-memory 최신순 — `sub(/-.*/)` 로 번호를 뽑으면 새 ID 는 전부 "2026" 이 돼서 순서가 사라져요
+NS_BM=$(mktemp -d)
+mkdir -p "$NS_BM/.ax/docs/adr" "$NS_BM/.ax/scripts/bash"
+cp "$REPO/templates/default/.ax/scripts/bash/"*.sh "$NS_BM/.ax/scripts/bash/"
+for n in 0001-old 0042-bigger 2026-09-20-aaaa-new 2026-09-25-bbbb-newest; do printf '# ADR %s\n' "$n" > "$NS_BM/.ax/docs/adr/$n.md"; done
+BM_ORDER=$(GOAX_PROJECT_DIR="$NS_BM" bash "$NS_BM/.ax/scripts/bash/build-memory.sh" --dry-run --full 2>/dev/null \
+    | sed -n '/최근 ADR/,/^$/p' | grep -oE 'adr/[^ ]+\.md' | sed 's|adr/||; s|\.md||' | tr '\n' ' ')
+[ "$BM_ORDER" = "2026-09-25-bbbb-newest 2026-09-20-aaaa-new 0042-bigger 0001-old " ] \
+    && pass "build-memory — 새 ID(날짜순) → 옛 순번(번호순) 으로 최신순 정렬" \
+    || fail "build-memory 최신순이 틀려요: $BM_ORDER"
+rm -rf "$NS_BM"
+
+rm -rf "$NS_RACE" "$NS_DR"
 
 rm -rf "$NS_FX"
 
@@ -1348,10 +1365,10 @@ done
 wait
 ISR_DIRS=$(ls "$ISR_FX/.ax/docs/spec" 2>/dev/null | grep -E '^[0-9]' || true)
 ISR_TOT=$(printf '%s\n' "$ISR_DIRS" | grep -c . || true)
-ISR_UNIQ=$(printf '%s\n' "$ISR_DIRS" | sed -E 's/^([0-9]+).*/\1/' | sort -u | grep -c . || true)
+ISR_UNIQ=$(printf '%s\n' "$ISR_DIRS" | cut -c1-15 | sort -u | grep -c . || true)
 ISR_SPEC=$(find "$ISR_FX/.ax/docs/spec" -name spec.md 2>/dev/null | grep -c . || true)
 if [ "${ISR_TOT:-0}" -eq 6 ] && [ "${ISR_TOT:-0}" = "${ISR_UNIQ:-0}" ] && [ "${ISR_SPEC:-0}" -eq 6 ]; then
-    pass "init-spec-dir — 6개 동시 생성: 번호 충돌 0 + spec.md 전부 생성"
+    pass "init-spec-dir — 6개 동시 생성: ID 충돌 0 + spec.md 전부 생성"
 else
     fail "init-spec-dir 동시 실행 (dir=${ISR_TOT} 고유=${ISR_UNIQ} spec.md=${ISR_SPEC}, 기대 6/6/6)"
 fi
@@ -1438,38 +1455,25 @@ grep -q '.ax/hooks/pre-commit' "$IGH_FX/.git/hooks/pre-commit" \
 rm -rf "$IGH_FX"
 
 # ───────────────────────────────────────────────────────────
-section "17. next-spec-num.sh --kind adr|spec — 번호 계산 회귀"
+section "17. next-spec-num.sh --kind adr|spec — ID 형식 회귀"
 # ───────────────────────────────────────────────────────────
 NS2_FX=$(mktemp -d)
 mkdir -p "$NS2_FX/.ax/scripts/bash" "$NS2_FX/.ax/docs/adr" "$NS2_FX/.ax/docs/spec"
 cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS2_FX/.ax/scripts/bash/"
-
-# (1) --kind adr, 빈 adr/ → 0001
-OUT=$(CLAUDE_PROJECT_DIR=$NS2_FX bash "$NS2_FX/.ax/scripts/bash/next-spec-num.sh" --kind adr --json 2>&1)
-NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
-[ "$NEXT" = "0001" ] && pass "next-spec-num --kind adr — 빈 adr/ → 0001" \
-                     || fail "next-spec-num --kind adr — 빈 adr/ 결과: $NEXT ($OUT)"
-
-# (2) --kind adr, 0003-x.md 존재 → 0004
+ID_RE='^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0123456789abcdef][0123456789abcdef][0123456789abcdef][0123456789abcdef]$'
 : > "$NS2_FX/.ax/docs/adr/0003-x.md"
-OUT=$(CLAUDE_PROJECT_DIR=$NS2_FX bash "$NS2_FX/.ax/scripts/bash/next-spec-num.sh" --kind adr --json 2>&1)
-NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
-[ "$NEXT" = "0004" ] && pass "next-spec-num --kind adr — 0003-x.md → 0004 (4자리 zero-pad)" \
-                     || fail "next-spec-num --kind adr — 0003 다음 결과: $NEXT ($OUT)"
-
-# (3) --kind spec (기본) — 기존 3자리 동작 그대로 (adr/ 존재해도 영향 없음)
-OUT=$(CLAUDE_PROJECT_DIR=$NS2_FX bash "$NS2_FX/.ax/scripts/bash/next-spec-num.sh" --kind spec --json 2>&1)
-NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
-[ "$NEXT" = "001" ] && pass "next-spec-num --kind spec — 빈 spec/ → 001 (3자리, 기존 동작 유지)" \
-                    || fail "next-spec-num --kind spec 결과: $NEXT ($OUT)"
-
-# (4) --kind 생략 시 기본값 spec — 동일 결과
-OUT=$(CLAUDE_PROJECT_DIR=$NS2_FX bash "$NS2_FX/.ax/scripts/bash/next-spec-num.sh" --json 2>&1)
-NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
-[ "$NEXT" = "001" ] && pass "next-spec-num — --kind 생략 시 기본값 spec 유지" \
-                    || fail "next-spec-num --kind 생략 결과: $NEXT ($OUT)"
-
+for k in adr spec ""; do
+    OUT=$(CLAUDE_PROJECT_DIR=$NS2_FX bash "$NS2_FX/.ax/scripts/bash/next-spec-num.sh" ${k:+--kind "$k"} --json 2>&1)
+    NEXT=$(echo "$OUT" | jq -r '.result.next' 2>/dev/null)
+    printf '%s' "$NEXT" | grep -qE "$ID_RE" \
+        && pass "next-spec-num ${k:+--kind $k}${k:-(--kind 생략 = spec)} — ID 형식 ($NEXT)" \
+        || fail "next-spec-num ${k:-(기본)} 결과: $NEXT ($OUT)"
+done
+TODAY=$(date +%Y-%m-%d)
+[ "$(CLAUDE_PROJECT_DIR=$NS2_FX bash "$NS2_FX/.ax/scripts/bash/next-spec-num.sh" | cut -c1-10)" = "$TODAY" ] \
+    && pass "next-spec-num — ID 의 날짜는 오늘" || fail "next-spec-num — ID 날짜가 오늘이 아니에요"
 rm -rf "$NS2_FX"
+
 
 # ───────────────────────────────────────────────────────────
 section "26. repo CLAUDE.md 의 개수 서술 ↔ 실제 일치"
@@ -2980,9 +2984,9 @@ else
     jq -e '.task_seal["020-a"] == 2' "$SRV/.ax/state.json" >/dev/null 2>&1 \
         && pass "tasks-gate — 일반 실행은 봉인값 기록 (dry-run 과 구분)" || fail "tasks-gate — 일반 실행도 기록 안 함"
 
-    # init-spec-dir --dry-run 은 번호를 예약하지 않아요.
-    # --reserve 는 원장 선점 + 디렉토리 생성까지 하는 쓰기라, 호출부가 --dry-run 을
-    # 안 넘기면 "안 만든다" 고 보고해놓고 번호를 영구 점유해요 (원장 규약상 재사용 없음).
+    # init-spec-dir --dry-run 은 예약하지 않아요.
+    # --reserve 는 디렉토리 생성까지 하는 쓰기라, 호출부가 --dry-run 을 안 넘기면
+    # "안 만든다" 고 보고해놓고 빈 spec 디렉토리를 남겨요.
     # next-spec-num 쪽 가드는 §15.x 가 이미 보는데, 그걸 부르는 이 호출부가 사각지대였어요.
     ISD=$(mktemp -d)
     mkdir -p "$ISD/.ax/scripts/bash" "$ISD/.ax/_templates/spec" "$ISD/.ax/docs/spec"
@@ -2995,17 +2999,17 @@ else
     { [ "$isd_dirs" = "0" ] && [ ! -d "$ISD/.ax/docs/spec/.numbers" ]; } \
         && pass "init-spec-dir --dry-run — 디렉토리·번호 원장 둘 다 안 만듦" \
         || fail "init-spec-dir --dry-run — 예약이 샘 (dirs=$isd_dirs, ledger=$([ -d "$ISD/.ax/docs/spec/.numbers" ] && echo yes || echo no))"
-    # 연속 dry-run 이 같은 번호를 줘야 정상 — 다르면 번호가 타고 있다는 뜻
+    # dry-run 이 보고하는 ID 는 새 형식이어야 하고, 아무것도 안 남겨야 해요 (날짜+난수라 소모될 번호 자체가 없어요)
     isd_a=$(CLAUDE_PROJECT_DIR="$ISD" bash "$ISD/.ax/scripts/bash/init-spec-dir.sh" --slug ghost --tier standard --dry-run --json 2>/dev/null | jq -r '.result.spec_id')
-    isd_b=$(CLAUDE_PROJECT_DIR="$ISD" bash "$ISD/.ax/scripts/bash/init-spec-dir.sh" --slug ghost --tier standard --dry-run --json 2>/dev/null | jq -r '.result.spec_id')
-    [ -n "$isd_a" ] && [ "$isd_a" = "$isd_b" ] \
-        && pass "init-spec-dir --dry-run — 연속 호출이 같은 번호 ($isd_a)" \
-        || fail "init-spec-dir --dry-run — 번호가 증가함 ($isd_a → $isd_b)"
+    printf '%s' "$isd_a" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0123456789abcdef]{4}$' \
+        && [ "$(ls -d "$ISD"/.ax/docs/spec/[0-9]* 2>/dev/null | wc -l | tr -d ' ')" = 0 ] \
+        && pass "init-spec-dir --dry-run — 새 ID 형식으로 보고하고 아무것도 안 만듦 ($isd_a)" \
+        || fail "init-spec-dir --dry-run — ID 형식/부작용 이상 ($isd_a)"
     # 일반 실행은 여전히 만들어야 해요 (dry-run 가드가 본 기능을 끄면 안 돼요)
     CLAUDE_PROJECT_DIR="$ISD" bash "$ISD/.ax/scripts/bash/init-spec-dir.sh" \
         --slug real-one --tier standard --json >/dev/null 2>&1
-    [ -f "$ISD/.ax/docs/spec/${isd_a}-real-one/spec.md" ] \
-        && pass "init-spec-dir — 일반 실행은 생성 (dry-run 과 구분)" \
+    ls "$ISD"/.ax/docs/spec/*-real-one/spec.md >/dev/null 2>&1 \
+        && pass "init-spec-dir — 일반 실행은 <id>-<slug>/spec.md 생성 (dry-run 과 구분)" \
         || fail "init-spec-dir — 일반 실행이 생성 안 함"
     rm -rf "$ISD"
     rm -rf "$SRV"
@@ -4230,6 +4234,373 @@ if command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
     rm -rf "$GT"
 else
     pass "§49 실행 검사 — jq/git 없음, skip"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "50. goax_shell_scan · block-hook-bypass — 에이전트가 git 훅을 끄는 형태만 막아요"
+# ───────────────────────────────────────────────────────────
+# 정규식 한 줄로 보면 `git commit -m "fix -n handling"` 의 -n 을 플래그로 읽어요 — 토큰 단위 판정을 고정해요.
+if command -v jq >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+    HB=$(mktemp -d)
+    mkdir -p "$HB/.ax/scripts/bash" "$HB/.ax/hooks/pre-bash"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$HB/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/hooks/pre-bash/block-hook-bypass.sh" "$HB/.ax/hooks/pre-bash/"
+    hb_rc() { jq -nc --arg c "$1" --arg d "$HB" '{tool_input:{command:$c},session_id:"s",cwd:$d}' \
+        | CLAUDE_PROJECT_DIR="$HB" bash "$HB/.ax/hooks/pre-bash/block-hook-bypass.sh" >/dev/null 2>&1; echo $?; }
+    HB_MISS=0
+    for c in 'git commit --no-verify -m x' 'git commit -nm wip' 'git push --no-verify' 'git -C sub merge --no-verify x' \
+             'git -c core.hooksPath=/dev/null commit -m x' 'git config core.hooksPath .none' 'HUSKY=0 git commit -m x' \
+             'bash -lc "git commit --no-verify -m x"' 'cd a && git commit --no-verify'; do
+        [ "$(hb_rc "$c")" = 2 ] || { fail "block-hook-bypass 미차단: $c"; HB_MISS=1; }
+    done
+    [ "$HB_MISS" -eq 0 ] && pass "block-hook-bypass — 우회 9형태 차단 (--no-verify · commit -n · -c/config core.hooksPath · HUSKY=0 · sh -c 안쪽)"
+    HB_FP=0
+    for c in 'git commit -m "fix -n handling"' 'git commit -am x' 'git commit -mn' 'git push -n origin main' \
+             'git config core.hooksPath' 'echo "--no-verify" && git status' "$(printf 'git commit -F - <<EOF\nuse --no-verify\nEOF')" 'ls -la'; do
+        [ "$(hb_rc "$c")" = 0 ] || { fail "block-hook-bypass 오탐: $c"; HB_FP=1; }
+    done
+    [ "$HB_FP" -eq 0 ] && pass "block-hook-bypass — 메시지 속 -n·--no-verify · push -n(dry-run) · heredoc 본문 · 읽기 전용 config 는 통과 (오탐 0)"
+    printf 'sensors:\n  mode: warning\n' > "$HB/.ax/config.yml"
+    [ "$(hb_rc 'git push --no-verify')" = 2 ] && pass "block-hook-bypass — sensors.mode=warning 에서도 막아요" \
+        || fail "block-hook-bypass — warning 모드에서 통과해요"
+    printf 'sensors:\n  hook_profile: minimal\n' > "$HB/.ax/config.yml"
+    [ "$(hb_rc 'git push --no-verify')" = 2 ] && pass "block-hook-bypass — minimal 프로필에서도 돌아요 (안전망)" \
+        || fail "block-hook-bypass — minimal 프로필에서 꺼져요"
+    printf 'sensors:\n  disabled_hooks: [block-hook-bypass]\n' > "$HB/.ax/config.yml"
+    [ "$(hb_rc 'git push --no-verify')" = 0 ] && pass "block-hook-bypass — disabled_hooks 로 끌 수 있어요" \
+        || fail "block-hook-bypass — disabled_hooks 가 안 먹어요"
+    rm -rf "$HB"
+else
+    pass "§50 — jq/python3 없음, skip"
+fi
+grep -q 'block-hook-bypass' "$REPO/templates/default/.ax/hooks/pre-commit/spec-completion-gate.sh" \
+    && ! grep -q '사용자 승인 후 --no-verify' "$REPO/templates/default/.ax/hooks/pre-commit/spec-completion-gate.sh" \
+    && pass "spec-completion-gate — 에이전트에게 --no-verify 를 권하지 않아요" \
+    || fail "spec-completion-gate 가 아직 --no-verify 를 권해요"
+
+# ───────────────────────────────────────────────────────────
+section "51. destructive-facts — 프로젝트 안 되돌리기 어려운 명령은 한 번 막고 사실을 요구해요"
+# ───────────────────────────────────────────────────────────
+# 실측(commerce): 내가 만든 파일을 되돌리려 rm -rf 로 디렉토리째 지웠다가 추적 안 되던 운영 파일이 같이 사라졌어요.
+if command -v jq >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+    DF=$(mktemp -d)
+    mkdir -p "$DF/.ax/scripts/bash" "$DF/.ax/hooks/pre-bash" "$DF/src"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$DF/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/hooks/pre-bash/destructive-facts.sh" "$DF/.ax/hooks/pre-bash/"
+    df_rc() { jq -nc --arg c "$1" --arg s "${2:-s1}" --arg d "$DF" '{tool_input:{command:$c},session_id:$s,cwd:$d}' \
+        | CLAUDE_PROJECT_DIR="$DF" bash "$DF/.ax/hooks/pre-bash/destructive-facts.sh" >/dev/null 2>&1; echo $?; }
+    DF_MISS=0; k=0
+    for c in 'rm -rf src' 'rm -rf .' 'cd src && rm -rf ../src' 'sh -c "rm -rf src"' 'ls | xargs rm -rf' \
+             'find src -name "*.orig" -delete' 'git clean -fd' 'git checkout -- src/a.kt' 'git checkout .' \
+             'git restore src/a.kt' 'git reset --hard' 'git stash drop' 'git branch -D feat'; do
+        k=$((k+1))
+        [ "$(df_rc "$c" "m$k")" = 2 ] || { fail "destructive-facts 미차단: $c"; DF_MISS=1; }
+    done
+    [ "$DF_MISS" -eq 0 ] && pass "destructive-facts — 13형태 첫 시도 차단 (재귀 rm · cd 추적 · sh -c · xargs · find -delete · git clean/checkout/restore/reset/stash/branch)"
+    DF_FP=0
+    for c in 'rm -rf build' 'rm -rf app/build dist node_modules' 'rm -rf /tmp/x' 'rm src/a.kt' 'rm -rf "$TMP"' \
+             'git clean -nfd' 'git checkout main' 'git restore --staged src/a.kt' 'git reset --soft HEAD~1' \
+             'git stash pop' 'git branch -d feat' 'find /tmp -delete' 'echo "rm -rf src"'; do
+        [ "$(df_rc "$c" fp)" = 0 ] || { fail "destructive-facts 오탐: $c"; DF_FP=1; }
+    done
+    [ "$DF_FP" -eq 0 ] && pass "destructive-facts — 재생성 디렉토리 · 프로젝트 밖 · 변수 경로 · 비재귀 rm · 안전한 git 은 통과 (오탐 0)"
+    [ "$(df_rc 'git reset --hard' r1)" = 2 ] && [ "$(df_rc 'git reset --hard' r1)" = 0 ] \
+        && pass "destructive-facts — 같은 명령 재시도는 통과 (사실을 적고 다시 온 것)" \
+        || fail "destructive-facts — 재시도가 통과하지 않아요"
+    DF_ERR=$(jq -nc --arg d "$DF" '{tool_input:{command:"git reset --hard"},cwd:$d}' \
+        | CLAUDE_PROJECT_DIR="$DF" bash "$DF/.ax/hooks/pre-bash/destructive-facts.sh" 2>&1 >/dev/null); DF_RC=$?
+    [ "$DF_RC" -eq 0 ] && printf '%s' "$DF_ERR" | grep -q '추적 불가' \
+        && pass "destructive-facts — 세션 id 가 없으면 막지 않고 경고로 강등" \
+        || fail "destructive-facts — 세션 id 없음 처리 (rc=$DF_RC): $DF_ERR"
+    for k in 1 2 3; do df_rc "git stash clear $k" damp >/dev/null; done
+    DF_4=$(jq -nc --arg d "$DF" '{tool_input:{command:"git stash clear 4"},session_id:"damp",cwd:$d}' \
+        | CLAUDE_PROJECT_DIR="$DF" bash "$DF/.ax/hooks/pre-bash/destructive-facts.sh" 2>&1 >/dev/null)
+    [ "$(printf '%s\n' "$DF_4" | wc -l | tr -d ' ')" = 1 ] && printf '%s' "$DF_4" | grep -q '(#4)' \
+        && pass "destructive-facts — 4번째부터 한 줄 안내 (반복 루프 방지)" \
+        || fail "destructive-facts — 4번째 차단 문구가 한 줄이 아니에요: $DF_4"
+    printf 'sensors:\n  hook_profile: minimal\n' > "$DF/.ax/config.yml"
+    [ "$(df_rc 'git reset --hard' p1)" = 0 ] && pass "destructive-facts — minimal 프로필에선 꺼져요" \
+        || fail "destructive-facts — minimal 프로필에서도 돌아요"
+    rm -rf "$DF"
+else
+    pass "§51 — jq/python3 없음, skip"
+fi
+
+# ───────────────────────────────────────────────────────────
+section "52. rule-read-gate — 이 파일에 걸린 룰을 이번 세션에 Read 안 했으면 편집을 막아요"
+# ───────────────────────────────────────────────────────────
+# 실측(commerce): "hook 이 읽으라 지시한 commerce-application.md 를 건너뛰고" 금지된 suffix 를 썼어요.
+# 경로 안내(B-pointer)는 건너뛸 수 있어서, 읽었다는 사실(Read 마커)로 판정해요.
+if command -v jq >/dev/null 2>&1; then
+    RG=$(mktemp -d)
+    mkdir -p "$RG/.ax/scripts/bash" "$RG/.ax/hooks/pre-edit" "$RG/.ax/spirit/rules" "$RG/.ax/modules/pay" "$RG/.ax/modules/rev" "$RG/src/pay"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$RG/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/hooks/pre-edit/rule-read-gate.sh" "$RG/.ax/hooks/pre-edit/"
+    printf -- '---\npaths:\n  - "src/**/*.kt"\n---\n## SP-APP-001: x\n' > "$RG/.ax/spirit/rules/app.md"
+    printf -- '---\npaths: ["**/*.kt"]\n---\n## SP-UNI-001: x\n' > "$RG/.ax/spirit/rules/universal.md"
+    printf -- '---\npaths:\n  - "src/pay/**"\napplies_to: [code]\n---\n## SP-PAY-001: y\n' > "$RG/.ax/modules/pay/rules.md"
+    printf -- '---\npaths:\n  - "src/pay/**"\napplies_to: [pr]\n---\n## SP-REV-001: z\n' > "$RG/.ax/modules/rev/rules.md"
+    printf '@.ax/spirit/rules/universal.md\n' > "$RG/AGENTS.md"
+    rg_run() { printf '{"tool_name":"%s","tool_input":{"file_path":"%s"},"session_id":"%s"}' "$1" "$2" "${3:-s1}" \
+        | CLAUDE_PROJECT_DIR="$RG" bash "$RG/.ax/hooks/pre-edit/rule-read-gate.sh"; }
+    RG_ERR=$(rg_run Edit "$RG/src/pay/A.kt" 2>&1 >/dev/null); RG_RC=$?
+    { [ "$RG_RC" -eq 2 ] && printf '%s' "$RG_ERR" | grep -q 'spirit/rules/app.md' && printf '%s' "$RG_ERR" | grep -q 'modules/pay/rules.md'; } \
+        && pass "rule-read-gate — 안 읽은 spirit·module 룰을 나열하고 막아요" \
+        || fail "rule-read-gate — 첫 편집 판정 (rc=$RG_RC): $RG_ERR"
+    printf '%s' "$RG_ERR" | grep -q 'universal.md' \
+        && fail "rule-read-gate — @import 된 룰까지 읽으라고 해요 (이미 컨텍스트에 있어요)" \
+        || pass "rule-read-gate — CLAUDE.md/AGENTS.md 가 @import 한 룰은 빼요"
+    printf '%s' "$RG_ERR" | grep -q 'modules/rev' \
+        && fail "rule-read-gate — applies_to 에 code 가 없는 모듈 룰까지 요구해요" \
+        || pass "rule-read-gate — applies_to: [pr] 모듈 룰은 편집 게이트 대상이 아니에요"
+    rg_run Read "$RG/.ax/spirit/rules/app.md" >/dev/null 2>&1
+    rg_run Read "$RG/.ax/modules/pay/rules.md" >/dev/null 2>&1
+    rg_run Edit "$RG/src/pay/A.kt" >/dev/null 2>&1 && pass "rule-read-gate — 둘 다 Read 하면 통과" \
+        || fail "rule-read-gate — Read 한 뒤에도 막아요"
+    rg_run Edit "$RG/src/pay/A.kt" other >/dev/null 2>&1 \
+        && fail "rule-read-gate — 다른 세션의 Read 가 새어 들어와요" \
+        || pass "rule-read-gate — Read 기록은 세션 단위"
+    rg_run Write "$RG/README.md" s9 >/dev/null 2>&1 && rg_run Edit "$RG/.ax/spirit/rules/app.md" s9 >/dev/null 2>&1 \
+        && printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$RG/src/pay/A.kt" \
+           | CLAUDE_PROJECT_DIR="$RG" bash "$RG/.ax/hooks/pre-edit/rule-read-gate.sh" >/dev/null 2>&1 \
+        && pass "rule-read-gate — 매칭 룰 없는 파일 · .ax/ 편집 · 세션 id 없음은 통과" \
+        || fail "rule-read-gate — 통과해야 할 경우를 막아요"
+    printf 'sensors:\n  rule_gate_exempt: ["src/pay/**"]\n' > "$RG/.ax/config.yml"
+    rg_run Edit "$RG/src/pay/A.kt" s8 >/dev/null 2>&1 && pass "rule-read-gate — sensors.rule_gate_exempt 글롭은 건너뛰어요" \
+        || fail "rule-read-gate — rule_gate_exempt 가 안 먹어요"
+    printf 'sensors:\n  hook_profile: minimal\n' > "$RG/.ax/config.yml"
+    rg_run Edit "$RG/src/pay/A.kt" s8 >/dev/null 2>&1 && pass "rule-read-gate — minimal 프로필에선 꺼져요" \
+        || fail "rule-read-gate — minimal 프로필에서도 돌아요"
+    rm -f "$RG/.ax/config.yml"
+    printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"},"session_id":"s7"}' "$RG/src/pay/A.kt" \
+        | GOAX_DISABLED_HOOKS=x,rule-read-gate CLAUDE_PROJECT_DIR="$RG" bash "$RG/.ax/hooks/pre-edit/rule-read-gate.sh" >/dev/null 2>&1 \
+        && pass "rule-read-gate — GOAX_DISABLED_HOOKS 로 세션 한정 끄기" \
+        || fail "rule-read-gate — GOAX_DISABLED_HOOKS 가 안 먹어요"
+    rm -rf "$RG"
+else
+    pass "§52 — jq 없음, skip"
+fi
+# 주입 훅과 게이트가 같은 매처를 써야 "주입은 했는데 게이트는 안 거는" 룰이 안 생겨요
+grep -q 'goax_module_rules_matching' "$REPO/templates/default/.ax/hooks/pre-edit/module-rules-inject.sh" \
+    && grep -q 'goax_module_rules_matching' "$REPO/templates/default/.ax/hooks/pre-edit/rule-read-gate.sh" \
+    && ! grep -q 'goax_yaml_list "$rules" paths' "$REPO/templates/default/.ax/hooks/pre-edit/module-rules-inject.sh" \
+    && pass "module 룰 매칭 — 주입 훅과 게이트가 같은 common.sh 함수" \
+    || fail "module 룰 매칭이 주입 훅과 게이트에서 갈라졌어요"
+
+# ───────────────────────────────────────────────────────────
+section "53. 훅 프로필 · 끄기 — 모든 등록 훅이 goax_hook_enabled 를 거쳐요"
+# ───────────────────────────────────────────────────────────
+# 게이트를 켜는 순간 탈출구가 필요해요. 훅마다 ID(파일 이름) 로 끌 수 있어야 하고,
+# minimal 프로필은 안전망만 남겨요. CATASTROPHIC 은 이 스위치 앞에서 끝나야 해요.
+HP_MISS=0
+for h in "$REPO"/templates/default/.ax/hooks/{session-start,user-prompt,pre-bash,pre-edit,post-edit,subagent-start,stop}/*.sh; do
+    [ -f "$h" ] || continue
+    id=$(basename "$h" .sh)
+    grep -qE "goax_hook_enabled $id (minimal|standard)" "$h" || { fail "$(basename "$(dirname "$h")")/$id.sh — goax_hook_enabled $id 가 없어요"; HP_MISS=1; }
+done
+[ "$HP_MISS" -eq 0 ] && pass "등록 훅 전부 goax_hook_enabled <자기 ID> 를 거쳐요"
+BD="$REPO/templates/default/.ax/hooks/pre-bash/block-destructive.sh"
+CAT_LINE=$(grep -n 'CATASTROPHIC 명령 차단' "$BD" | head -1 | cut -d: -f1)
+EN_LINE=$(grep -n 'goax_hook_enabled block-destructive' "$BD" | head -1 | cut -d: -f1)
+[ -n "$CAT_LINE" ] && [ -n "$EN_LINE" ] && [ "$CAT_LINE" -lt "$EN_LINE" ] \
+    && pass "block-destructive — CATASTROPHIC 차단이 끄기 스위치보다 앞 (끌 수 없는 안전망)" \
+    || fail "block-destructive — CATASTROPHIC 이 끄기 스위치 뒤에 있어요 (cat=$CAT_LINE enable=$EN_LINE)"
+grep -qE '^[[:space:]]+hook_profile:' "$REPO/templates/default/.ax/config.yml" \
+    && grep -qE '^[[:space:]]+disabled_hooks:' "$REPO/templates/default/.ax/config.yml" \
+    && grep -qE '^[[:space:]]+rule_gate_exempt:' "$REPO/templates/default/.ax/config.yml" \
+    && pass "config.yml — sensors.hook_profile · disabled_hooks · rule_gate_exempt 출고" \
+    || fail "config.yml 에 훅 프로필 키가 없어요"
+
+# ───────────────────────────────────────────────────────────
+section "54. session-brief — 세션 첫머리 알림은 스크립트가 정하고 훅은 전달만"
+# ───────────────────────────────────────────────────────────
+# 실측(commerce): 설치본 0.5.13 이 플러그인 0.6.3 에 머물고, mistakes 22건에 audit 은 139일 전.
+if command -v jq >/dev/null 2>&1; then
+    SB=$(mktemp -d)
+    mkdir -p "$SB/.ax/scripts/bash" "$SB/.ax/hooks/session-start" "$SB/.ax/mistakes" "$SB/home/plugins"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$REPO/templates/default/.ax/scripts/bash/session-brief.sh" "$SB/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/hooks/session-start/session-brief.sh" "$SB/.ax/hooks/session-start/"
+    cp "$REPO/templates/default/.ax/current-task.json.template" "$SB/.ax/current-task.json"
+    sb_brief() { CLAUDE_CONFIG_DIR="$SB/home" GOAX_PROJECT_DIR="$SB" bash "$SB/.ax/scripts/bash/session-brief.sh" "$@"; }
+    sb_hook() { printf '{"session_id":"s","source":"startup"}' | CLAUDE_CONFIG_DIR="$SB/home" CLAUDE_PROJECT_DIR="$SB" bash "$SB/.ax/hooks/session-start/session-brief.sh"; }
+    [ -z "$(sb_hook)" ] && pass "session-brief — 말할 게 없으면 아무것도 안 내요" || fail "session-brief — 빈 프로젝트에서 뭔가 출력해요: $(sb_hook)"
+    printf 'goax: 0.5.13\n' > "$SB/.ax/version"
+    printf '{"plugins":{"goax@goax":[{"version":"0.6.3"}]}}' > "$SB/home/plugins/installed_plugins.json"
+    printf -- '---\nstatus: open\n---\n' > "$SB/.ax/mistakes/2026-07-01-1-a.md"
+    printf -- '---\ncategory: x\n---\n' > "$SB/.ax/mistakes/2026-07-02-1-b.md"
+    printf -- '---\nstatus: promoted\n---\n' > "$SB/.ax/mistakes/2026-07-03-1-c.md"
+    printf '{"cross_cut":{"mistakes":{"last_audit":"2026-05-09"}}}' > "$SB/.ax/state.json"
+    jq '.phase="implementing" | .task_id="t1" | .description="d" | .handoff.next=["n1","n2","n3","n4"]' \
+        "$SB/.ax/current-task.json" > "$SB/ct" && mv "$SB/ct" "$SB/.ax/current-task.json"
+    SBJ=$(sb_brief --json)
+    [ "$(printf '%s' "$SBJ" | jq -r '.result.version.behind')" = true ] \
+        && pass "session-brief — installed_plugins.json 기준 버전 지연 감지 (0.5.13 < 0.6.3)" \
+        || fail "session-brief — 버전 지연을 못 봐요: $(printf '%s' "$SBJ" | jq -c .result.version)"
+    [ "$(printf '%s' "$SBJ" | jq -r '.result.audit.unresolved')" = 2 ] && [ "$(printf '%s' "$SBJ" | jq -r '.result.audit.overdue')" = true ] \
+        && pass "session-brief — 미처리 mistakes(open·status 없음) 2건 + 날짜만 적힌 last_audit 로 audit 지연 판정" \
+        || fail "session-brief — audit 판정: $(printf '%s' "$SBJ" | jq -c .result.audit)"
+    [ "$(printf '%s' "$SBJ" | jq -r '.result.handoff.next | length')" = 3 ] \
+        && pass "session-brief — handoff next 는 앞 3개만" || fail "session-brief — handoff 자르기가 안 돼요"
+    SBH=$(sb_hook)
+    [ "$(printf '%s' "$SBH" | jq -r '.hookSpecificOutput.hookEventName')" = SessionStart ] \
+        && printf '%s' "$SBH" | jq -r '.hookSpecificOutput.additionalContext' | grep -q '/up' \
+        && pass "session-brief 훅 — SessionStart additionalContext 로 전달" \
+        || fail "session-brief 훅 출력이 이상해요: $SBH"
+    [ "$(sb_brief --max-chars 40 | tail -1 | grep -c '상한 40자')" = 1 ] \
+        && pass "session-brief — 글자 상한을 넘으면 뒤를 잘라요" || fail "session-brief — 상한이 안 먹어요"
+    printf 'sensors:\n  disabled_hooks: [session-brief]\n' > "$SB/.ax/config.yml"
+    [ -z "$(sb_hook)" ] && pass "session-brief — disabled_hooks 로 끌 수 있어요" || fail "session-brief — disabled_hooks 가 안 먹어요"
+    rm -rf "$SB"
+else
+    pass "§54 — jq 없음, skip"
+fi
+jq -e '.hooks.SessionStart' "$REPO/templates/default/.claude/settings.json.template" >/dev/null 2>&1 \
+    && pass "settings.json.template — SessionStart 이벤트 등록" || fail "settings.json.template 에 SessionStart 가 없어요"
+
+# ───────────────────────────────────────────────────────────
+section "55. 게이트 리뷰 회귀 — 주석 · here-string · 깨진 python · 한글 룰 이름 · 심링크 · compaction · spec 모호성"
+# ───────────────────────────────────────────────────────────
+# 새 컨텍스트 리뷰가 실행으로 재현한 결함들이에요. 하나라도 되살아나면 게이트가 조용히 빠지거나 엉뚱한 걸 막아요.
+if command -v jq >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1 && python3 -c 'import shlex' >/dev/null 2>&1; then
+    RV=$(mktemp -d)
+    mkdir -p "$RV/.ax/scripts/bash" "$RV/.ax/hooks/pre-bash" "$RV/.ax/hooks/pre-edit" "$RV/.ax/hooks/session-start" \
+             "$RV/.ax/spirit/rules" "$RV/src/pay" "$RV/fakebin"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,session-brief}.sh "$RV/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/hooks/pre-bash/"{block-hook-bypass,destructive-facts}.sh "$RV/.ax/hooks/pre-bash/"
+    cp "$REPO/templates/default/.ax/hooks/pre-edit/rule-read-gate.sh" "$RV/.ax/hooks/pre-edit/"
+    cp "$REPO/templates/default/.ax/hooks/session-start/session-brief.sh" "$RV/.ax/hooks/session-start/"
+    : > "$RV/src/pay/a.kt"
+    rv_bash() { jq -nc --arg c "$2" --arg s "${3:-s1}" --arg d "$RV" '{tool_input:{command:$c},session_id:$s,cwd:$d}' \
+        | CLAUDE_PROJECT_DIR="$RV" bash "$RV/.ax/hooks/pre-bash/$1.sh" >/dev/null 2>&1; echo $?; }
+    RV_MISS=0; k=0
+    for c in "$(printf '# commit\ngit commit --no-verify -m x')" 'n=${#a}; git push --no-verify' \
+             'git log --format=%H#%s && git commit --no-verify' "$(printf 'jq . <<< foo\ngit commit --no-verify -m x')" \
+             'export HUSKY=0 && git commit -m x' 'SKIP=eslint git commit -m x' 'LEFTHOOK_EXCLUDE=lint git push'; do
+        [ "$(rv_bash block-hook-bypass "$c")" = 2 ] || { fail "block-hook-bypass 미차단 (리뷰 회귀): $c"; RV_MISS=1; }
+    done
+    for c in 'git status # --no-verify' 'git commit -m "#123 fix"' 'SKIP=1 ./gradlew test'; do
+        [ "$(rv_bash block-hook-bypass "$c")" = 0 ] || { fail "block-hook-bypass 오탐 (리뷰 회귀): $c"; RV_MISS=1; }
+    done
+    [ "$RV_MISS" -eq 0 ] && pass "block-hook-bypass — 주석 · \${#a} · here-string · export/SKIP/LEFTHOOK_EXCLUDE 우회 차단, 주석·메시지 속 # 는 오탐 0"
+    RV_MISS=0
+    for c in "$(printf '# clean\nrm -rf src')" 'rm -rf src 2>&1' 'git checkout src/pay/a.kt' 'git switch -f main' \
+             'git worktree remove --force ../wt' 'git -C src reset --hard'; do
+        k=$((k+1)); [ "$(rv_bash destructive-facts "$c" "d$k")" = 2 ] || { fail "destructive-facts 미차단 (리뷰 회귀): $c"; RV_MISS=1; }
+    done
+    for c in 'git -C /tmp reset --hard' 'git checkout main' 'rm -rf build > /dev/null 2>&1' \
+             'rm -rf node_modules .next .svelte-kit storybook-static Pods .dart_tool .terraform cmake-build-debug x.egg-info'; do
+        [ "$(rv_bash destructive-facts "$c" fp)" = 0 ] || { fail "destructive-facts 오탐 (리뷰 회귀): $c"; RV_MISS=1; }
+    done
+    [ "$RV_MISS" -eq 0 ] && pass "destructive-facts — 주석 뒤 · 리다이렉션 · checkout <파일> · switch -f · worktree --force 차단, 다른 리포(-C 밖)·여러 생태계 재생성 디렉토리는 통과"
+    [ "$(rv_bash destructive-facts 'rm -rf generated/api' g1)" = 2 ] \
+        && printf 'sensors:\n  regenerable_paths: ["generated/**"]\n' > "$RV/.ax/config.yml" \
+        && [ "$(rv_bash destructive-facts 'rm -rf generated/api' g2)" = 0 ] \
+        && pass "destructive-facts — sensors.regenerable_paths 로 프로젝트가 재생성 경로를 선언해요 (스택 목록을 늘리지 않고)" \
+        || fail "destructive-facts — regenerable_paths 가 안 먹어요"
+    rm -f "$RV/.ax/config.yml"
+
+    # 깨진 python3 (있는데 실패 — macOS xcrun shim) → 판정 못 했다고 통과시키면 안 돼요
+    printf '#!/bin/sh\necho "xcrun: error" >&2; exit 1\n' > "$RV/fakebin/python3"; chmod +x "$RV/fakebin/python3"
+    rv_broken() { jq -nc --arg c "$2" --arg s "${3:-b1}" --arg d "$RV" '{tool_input:{command:$c},session_id:$s,cwd:$d}' \
+        | PATH="$RV/fakebin:$PATH" CLAUDE_PROJECT_DIR="$RV" bash "$RV/.ax/hooks/pre-bash/$1.sh" >/dev/null 2>&1; echo $?; }
+    [ "$(rv_broken block-hook-bypass 'git commit --no-verify -m x')" = 2 ] && [ "$(rv_broken destructive-facts 'rm -rf src' b2)" = 2 ] \
+        && pass "깨진 python3 — bypass · destructive 둘 다 간이 판정으로 막아요 (조용한 통과 0)" \
+        || fail "깨진 python3 에서 게이트가 통과해요"
+
+    # 한글 룰 파일 이름 — 하나만 읽고 다른 하나까지 읽은 걸로 치면 안 돼요
+    printf -- '---\npaths:\n  - "src/pay/**"\n---\n## SP-PAY-001: x\n' > "$RV/.ax/spirit/rules/결제.md"
+    printf -- '---\npaths:\n  - "src/pay/**"\n---\n## SP-DLV-001: y\n' > "$RV/.ax/spirit/rules/배송.md"
+    rv_edit() { printf '{"tool_name":"%s","tool_input":{"file_path":"%s"},"session_id":"%s"}' "$1" "$2" "$3" \
+        | CLAUDE_PROJECT_DIR="${4:-$RV}" bash "$RV/.ax/hooks/pre-edit/rule-read-gate.sh" 2>&1 >/dev/null; }
+    rv_edit Read "$RV/.ax/spirit/rules/결제.md" k1 >/dev/null
+    RVE=$(rv_edit Edit "$RV/src/pay/a.kt" k1)
+    printf '%s' "$RVE" | grep -q '배송.md' && ! printf '%s' "$RVE" | grep -q '결제.md' \
+        && pass "rule-read-gate — 한글 룰 이름끼리 Read 기록이 섞이지 않아요 (결제 읽음 → 배송만 요구)" \
+        || fail "rule-read-gate 한글 이름 기록이 섞여요: $RVE"
+
+    # 심링크 — 루트가 다른 이름(/tmp ↔ /private/tmp)으로 와도 게이트가 빠지면 안 돼요
+    ln -s "$RV" "$RV.lnk" 2>/dev/null
+    RVE=$(rv_edit Edit "$RV/src/pay/a.kt" k2 "$RV.lnk")
+    printf '%s' "$RVE" | grep -q '결제.md' \
+        && pass "rule-read-gate — 프로젝트 루트가 심링크 이름으로 와도 판정해요" \
+        || fail "rule-read-gate — 심링크 루트에서 빠져요: $RVE"
+    rm -f "$RV.lnk"
+
+    # compaction — 룰 본문이 컨텍스트에서 빠지면 다시 읽게
+    rv_edit Read "$RV/.ax/spirit/rules/결제.md" k3 >/dev/null; rv_edit Read "$RV/.ax/spirit/rules/배송.md" k3 >/dev/null
+    RVE1=$(rv_edit Edit "$RV/src/pay/a.kt" k3)
+    printf '{"session_id":"k3","source":"compact"}' | CLAUDE_PROJECT_DIR="$RV" bash "$RV/.ax/hooks/session-start/session-brief.sh" >/dev/null 2>&1
+    RVE2=$(rv_edit Edit "$RV/src/pay/a.kt" k3)
+    [ -z "$RVE1" ] && printf '%s' "$RVE2" | grep -q '결제.md' \
+        && pass "rule-read-gate — SessionStart(source=compact) 뒤엔 Read 기록이 지워져 다시 읽게 해요" \
+        || fail "compaction 초기화가 안 돼요 (before='$RVE1' after='$RVE2')"
+    rm -rf "$RV"
+else
+    pass "§55 — jq/python3 없음, skip"
+fi
+# spec 모호성 — 새 ID 는 날짜로 시작해서 `--spec 2026-09-25` 가 같은 날 spec 여럿에 걸려요. 첫 번째를 고르면 안 돼요.
+SA=$(mktemp -d)
+mkdir -p "$SA/.ax/scripts/bash" "$SA/.ax/docs/spec/2026-09-25-aaaa-one" "$SA/.ax/docs/spec/2026-09-25-bbbb-two"
+cp -R "$REPO/templates/default/.ax/_templates" "$SA/.ax/_templates"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,add-spec-files,check-spec-clarity}.sh "$SA/.ax/scripts/bash/"
+: > "$SA/.ax/docs/spec/2026-09-25-aaaa-one/spec.md"; : > "$SA/.ax/docs/spec/2026-09-25-bbbb-two/spec.md"
+CLAUDE_PROJECT_DIR="$SA" bash "$SA/.ax/scripts/bash/add-spec-files.sh" --spec 2026-09-25 --add research --json >/dev/null 2>&1; SA1=$?
+CLAUDE_PROJECT_DIR="$SA" bash "$SA/.ax/scripts/bash/check-spec-clarity.sh" --spec 2026-09-25 --json >/dev/null 2>&1; SA2=$?
+CLAUDE_PROJECT_DIR="$SA" bash "$SA/.ax/scripts/bash/add-spec-files.sh" --spec bbbb --add research --json >/dev/null 2>&1; SA3=$?
+[ "$SA1" -ne 0 ] && [ "$SA2" -ne 0 ] && [ "$SA3" -eq 0 ] && [ -f "$SA/.ax/docs/spec/2026-09-25-bbbb-two/research.md" ] \
+    && [ ! -f "$SA/.ax/docs/spec/2026-09-25-aaaa-one/research.md" ] \
+    && pass "add-spec-files · check-spec-clarity — 모호한 --spec 은 멈추고, 난수로 정확히 찾아요" \
+    || fail "spec 모호성 처리 (add=$SA1 clarity=$SA2 bbbb=$SA3)"
+rm -rf "$SA"
+
+# ───────────────────────────────────────────────────────────
+section "56. ade-settings — 모노레포 루트 settings 의 goax 훅은 템플릿에서 생성해요"
+# ───────────────────────────────────────────────────────────
+# 실측(commerce-monorepo): 루트 settings 를 손으로 써서 env CLAUDE_PROJECT_DIR 로 감쌌는데, 템플릿에 훅이 늘어도
+# 안 따라와 4개가 빠져 있었어요. 루트에서 연 세션은 루트 settings 의 훅만 돌아요.
+if command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
+    AD=$(mktemp -d)
+    mkdir -p "$AD/.claude" "$AD/projects/app/.ax/scripts/bash" "$AD/projects/web/.ax/scripts/bash"
+    git -C "$AD" init -q 2>/dev/null
+    for p in app web; do cp "$REPO/templates/default/.ax/scripts/bash/"{common,ade-settings}.sh "$AD/projects/$p/.ax/scripts/bash/"; done
+    # 손으로 쓴 옛 배선 (훅 1개) + 사용자 자체 훅 + permissions
+    cat > "$AD/.claude/settings.json" <<'ADJ'
+{"permissions":{"allow":["Bash(ls:*)"]},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[
+ {"type":"command","command":"env CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR}/projects/app\" bash \"${CLAUDE_PROJECT_DIR}/projects/app/.ax/hooks/pre-bash/block-destructive.sh\""},
+ {"type":"command","command":"echo user-own"}]}]}}
+ADJ
+    ad() { (cd "$AD/projects/${P:-app}" && bash .ax/scripts/bash/ade-settings.sh --plugin-dir "$REPO" --json "$@" 2>/dev/null); }
+    TPL_N=$(jq -r '[.hooks[][].hooks[].command | select(test("\\.ax/hooks/"))] | length' "$REPO/templates/default/.claude/settings.json.template")
+    ADC=$(ad --check)
+    [ "$(echo "$ADC" | jq -r .status)" = warning ] && [ "$(echo "$ADC" | jq -r '.result.missing | length')" = "$((TPL_N - 1))" ] \
+        && pass "ade-settings --check — 손으로 쓴 루트 settings 의 누락을 템플릿 기준으로 셈 ($((TPL_N - 1))개)" \
+        || fail "ade-settings --check: $ADC"
+    ad --apply --dry-run >/dev/null; [ "$(ls "$AD/.claude" | grep -c .)" = 1 ] \
+        && pass "ade-settings --apply --dry-run — 아무것도 안 써요" || fail "ade-settings dry-run 이 썼어요"
+    ad --apply >/dev/null
+    AS="$AD/.claude/settings.json"
+    [ "$(ad --check | jq -r .status)" = ok ] \
+        && [ "$(jq -r '.permissions.allow[0]' "$AS")" = 'Bash(ls:*)' ] \
+        && [ "$(jq -r '[.hooks[][].hooks[].command | select(. == "echo user-own")] | length' "$AS")" = 1 ] \
+        && jq -r '.hooks.SessionStart[].hooks[].command' "$AS" | grep -qF 'env CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR}/projects/app" bash "${CLAUDE_PROJECT_DIR}/projects/app/.ax/hooks/session-start/session-brief.sh"' \
+        && pass "ade-settings --apply — 템플릿대로 배선, permissions · 사용자 훅 보존, env CLAUDE_PROJECT_DIR 형식" \
+        || fail "ade-settings --apply 결과가 이상해요: $(jq -c . "$AS" | cut -c1-300)"
+    [ "$(jq -r '[.hooks[][].hooks[].command | select(contains("/projects/app/.ax/hooks/pre-bash/block-destructive"))] | length' "$AS")" = 1 ] \
+        && [ "$(ad --apply | jq -r .result.changed)" = false ] \
+        && pass "ade-settings --apply — 멱등 (옛 수동 항목은 교체, 두 번째 적용은 변화 없음)" \
+        || fail "ade-settings --apply 가 중복을 남기거나 멱등이 아니에요"
+    P=web ad --apply >/dev/null
+    [ "$(ad --check | jq -r .status)" = ok ] && [ "$(P=web ad --check | jq -r .status)" = ok ] \
+        && [ "$(jq -r '[.hooks[][].hooks[].command | select(test("/\\.ax/hooks/"))] | length' "$AS")" = "$((TPL_N * 2))" ] \
+        && pass "ade-settings — 한 저장소의 goax 프로젝트 둘이 각자 자기 몫만 (서로 안 지워요)" \
+        || fail "ade-settings — 프로젝트 둘 공존 실패"
+    SG=$(mktemp -d); mkdir -p "$SG/.ax/scripts/bash"; git -C "$SG" init -q 2>/dev/null
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,ade-settings}.sh "$SG/.ax/scripts/bash/"
+    (cd "$SG" && bash .ax/scripts/bash/ade-settings.sh --check --plugin-dir "$REPO" --json >/dev/null 2>&1); SGRC=$?
+    [ "$SGRC" = 2 ] && pass "ade-settings — 단일 저장소는 skip (exit 2 — up 이 관리)" || fail "ade-settings 단일 저장소 rc=$SGRC"
+    rm -rf "$AD" "$SG"
+else
+    pass "§56 — jq/git 없음, skip"
 fi
 
 # ───────────────────────────────────────────────────────────

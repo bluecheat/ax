@@ -15,6 +15,14 @@
 set -uo pipefail
 
 [ -d "${CLAUDE_PROJECT_DIR:-$(pwd)}/.ax/hooks" ] || exit 0
+
+# 훅 끄기·프로필 — .ax/config.yml sensors.disabled_hooks · sensors.hook_profile (common.sh goax_hook_enabled)
+_GOAX_C="${CLAUDE_PROJECT_DIR:-$(pwd)}/.ax/scripts/bash/common.sh"
+if [ -f "$_GOAX_C" ]; then
+    # shellcheck source=../../scripts/bash/common.sh
+    source "$_GOAX_C"
+    goax_hook_enabled harness-pointer standard || exit 0
+fi
 command -v jq >/dev/null 2>&1 || exit 0
 
 INPUT="$(cat 2>/dev/null || true)"

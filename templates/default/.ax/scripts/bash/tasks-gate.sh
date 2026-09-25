@@ -2,7 +2,7 @@
 # .ax/scripts/bash/tasks-gate.sh — spec 완료 게이트 + [P] 검증
 #
 # Usage:
-#   bash tasks-gate.sh [--spec <NNN-slug>] [--json] [--strict] [--dry-run] [--help]
+#   bash tasks-gate.sh [--spec <id-slug>] [--json] [--strict] [--dry-run] [--help]
 #   bash tasks-gate.sh --all [--json] [--strict]      # 모든 spec 훑기
 #
 # 왜 필요한가 — 완료 판정이 "빈 체크박스 0개" 뿐이었어요. 그래서 (a) 수용 기준은
@@ -224,7 +224,7 @@ fi
 # 검사할 게 없으면 "검사 못 함" — 통과가 아니에요. README 공통 계약대로 exit 2.
 if [ -z "$TARGETS" ]; then
     if [ "$JSON_MODE" = true ]; then
-        json_skip "검사할 spec 이 없어요 — --spec <NNN-slug> 또는 --all (지정: '${SPEC:-<없음>}')"
+        json_skip "검사할 spec 이 없어요 — --spec <id-slug> 또는 --all (지정: '${SPEC:-<없음>}')"
     fi
     goax_log "검사할 spec 없음 (지정: '${SPEC:-<없음>}')"
     exit "$EXIT_SKIPPED"

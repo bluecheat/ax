@@ -1,17 +1,17 @@
-# ADR NNNN: <한 줄 결정>
+# ADR <id>: <한 줄 결정>
 
-> 이 파일은 템플릿. 실제 ADR 작성 시 `0001-<slug>.md`처럼 새 번호로 복사해서 사용.
-> ADR ID는 sequential — 폐기된 ADR도 ID 재사용 안 함.
+> 이 파일은 템플릿. 실제 ADR 은 `next-spec-num.sh --kind adr --reserve --slug <slug>` 가 만든
+> `<id>-<slug>.md` 에 복사해서 써요. `<id>` = `YYYY-MM-DD-<4hex>` — 브랜치끼리 겹치지 않아요 (옛 `NNNN` 순번 ADR 도 그대로 유효).
 
 ## 메타
 
 | 필드 | 값 |
 |---|---|
-| ADR ID | NNNN |
+| ADR ID | <id> |
 | 작성일 | YYYY-MM-DD |
 | 작성자 | <이름> |
-| 상태 | 제안 / 승인 / 폐기 / 대체됨(superseded by NNNN) |
-| 관련 spec | docs/spec/feature/NNN-*/spec.md (있으면) |
+| 상태 | 제안 / 승인 / 폐기 / 대체됨(superseded by <id>) |
+| 관련 spec | .ax/docs/spec/<spec-id>-*/spec.md (있으면) |
 
 ---
 
@@ -86,8 +86,8 @@
 ## 5. 참고 (References)
 
 - 관련 PR / 이슈: <링크>
-- 선·후행 ADR: <ADR-NNNN>
-- 관련 spec: docs/spec/feature/NNN-*/spec.md
+- 선·후행 ADR: <ADR id>
+- 관련 spec: .ax/docs/spec/<spec-id>-*/spec.md
 - 외부 자료 (선택): <필요시만>
 
 ---

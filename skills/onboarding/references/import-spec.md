@@ -7,10 +7,10 @@
 
 | 원본 | 변환 후 | 변환 방식 |
 |---|---|---|
-| `<src>/specs/<name>.md` | `.ax/docs/spec/NNN-<name>/spec.md` | 원본을 spec.md template `## Specification` 섹션 본문으로. frontmatter (status, source) 추가 |
-| `<src>/policies/<name>.md` | `.ax/docs/spec/NNN-<name>/policy.md` 또는 spec.md `## Policy` 섹션 | 정책 카테고리로 wrap |
-| `<src>/adr/<name>.md` | `.ax/docs/adr/NNNN-<name>.md` | ADR 다음 번호로 재할당 (`next-spec-num.sh --kind adr --reserve`). `imported_from:` frontmatter |
-| `<src>/docs/<name>.md` | `.ax/docs/spec/NNN-<name>/research.md` | 배경 문서로 |
+| `<src>/specs/<name>.md` | `.ax/docs/spec/<id>-<name>/spec.md` | 원본을 spec.md template `## Specification` 섹션 본문으로. frontmatter (status, source) 추가 |
+| `<src>/policies/<name>.md` | `.ax/docs/spec/<id>-<name>/policy.md` 또는 spec.md `## Policy` 섹션 | 정책 카테고리로 wrap |
+| `<src>/adr/<name>.md` | `.ax/docs/adr/<id>-<name>.md` | ADR 다음 번호로 재할당 (`next-spec-num.sh --kind adr --reserve`). `imported_from:` frontmatter |
+| `<src>/docs/<name>.md` | `.ax/docs/spec/<id>-<name>/research.md` | 배경 문서로 |
 | 원본 전체 | `.ax/docs/spec/imported/<name>/` snapshot | re-sync 용 보관 |
 
 번호는 손으로 정하지 않아요 — `next-spec-num.sh --kind spec|adr --reserve --slug <slug>` 가 원자적으로 선점해요.

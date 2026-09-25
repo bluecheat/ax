@@ -154,7 +154,7 @@ bash .ax/scripts/bash/zero-domain-risk.sh --show --json    # result.before.keys 
    ---
    ```
 5. **Layer 2 stub** — Q2 의 **L2/L3 도메인이면서 모듈로 식별된 것만** `.ax/modules/<name>/rules.md` (`_templates/module/rules.md` cp, `keywords:` frontmatter만 채움 — 도메인명 + 한글 동의어, 본문은 빈 템플릿). L0/L1 은 stub X. 보고: "L3/L2 도메인 N개에 stub. keywords 만 채웠으니 triage 매칭은 되고 본문은 필요할 때."
-6. **Layer 3 첫 ADR** — `cp .ax/_templates/adr/0000-template.md .ax/docs/adr/0001-goax-adoption.md`. 메타(0001 · 오늘 · 승인) · 컨텍스트(도입 이유) · 대안(A 도입 안 함 / B PRD-first / C 4-Layer 채택) · 결정(hooks=Q3 · domain_risk=Q2 · 외부 spec=Q4) · 결과(단기 spirit 주입·triage 게이팅 / 장기 mistakes 루프 / 후속 1주 doctor+audit / 측정 mistakes 주 5건↓ · 1개월 검토).
+6. **Layer 3 첫 ADR** — `DEST=$(bash .ax/scripts/bash/next-spec-num.sh --kind adr --reserve --slug goax-adoption --json | jq -r '.result.path')` 로 ID 를 받아 `cp .ax/_templates/adr/0000-template.md "$DEST"` (파일 이름을 손으로 `0001-…` 로 정하면 기존 ADR 번호와 겹쳐요 — 실측 commerce 에 `0001` 이 둘). 메타(받은 ID · 오늘 · 승인) · 컨텍스트(도입 이유) · 대안(A 도입 안 함 / B PRD-first / C 4-Layer 채택) · 결정(hooks=Q3 · domain_risk=Q2 · 외부 spec=Q4) · 결과(단기 spirit 주입·triage 게이팅 / 장기 mistakes 루프 / 후속 1주 doctor+audit / 측정 mistakes 주 5건↓ · 1개월 검토).
 7. **정리** — `rm -f .ax/CLAUDE.md.suggested .ax/adoption-plan.md .ax/.onboarding-pending`
 8. **State** — `bash .ax/scripts/bash/update-state.sh` 후 `doctor` 한 번 (canonical 갱신 + 도달 지도 확인).
 9. **인계 노트** — 다음 세션이 처음 읽을 것을 적어요:
@@ -174,7 +174,7 @@ bash .ax/scripts/bash/zero-domain-risk.sh --show --json    # result.before.keys 
 ✓ Q2 — .ax/config.yml domain_risk 30 keys + default L1
 ✓ Q3 — .ax/config.yml sensors.mode = warning
 ✓ Q4 — .ax/docs/spec/ 4개 SDD 변환 + adr/ 3개 재번호 + imported/<name>/ snapshot
-✓ Q5 — Layer 1 시그널화 (룰 8개, spirit/rules 4 카테고리) · Layer 2 stub N개 · Layer 3 ADR 0001 · 정리
+✓ Q5 — Layer 1 시그널화 (룰 8개, spirit/rules 4 카테고리) · Layer 2 stub N개 · Layer 3 goax 도입 ADR · 정리
 ```
 
 **보고하는 숫자는 raw grep 이 아니라 의미 단위예요**:
@@ -188,7 +188,7 @@ bash .ax/scripts/bash/zero-domain-risk.sh --show --json    # result.before.keys 
 rm -f .ax/.onboarding-pending
 ```
 
-plugin skill 은 plugin 디렉토리에 있어 자가 삭제가 안 돼요 — 마커로만 완료를 표시해 다음 세션에서 재발동을 막아요. 완료 안내는 `boxes.md` §완료 안내. `_templates/spec/` 을 "프로젝트 SSOT" 라 부르지 마세요 — 작업 spec SSOT 는 `.ax/docs/spec/NNN-<slug>/spec.md` 고 `_templates/` 는 템플릿이에요.
+plugin skill 은 plugin 디렉토리에 있어 자가 삭제가 안 돼요 — 마커로만 완료를 표시해 다음 세션에서 재발동을 막아요. 완료 안내는 `boxes.md` §완료 안내. `_templates/spec/` 을 "프로젝트 SSOT" 라 부르지 마세요 — 작업 spec SSOT 는 `.ax/docs/spec/<id>-<slug>/spec.md` 고 `_templates/` 는 템플릿이에요.
 
 ## 절대 금지
 

@@ -9,9 +9,9 @@
 #   - 현재 작업       .ax/current-task.json (task_id/size/risk/domain/phase/spec_id)
 #   - 🔴/🟡 룰        CLAUDE.md (또는 AGENTS.md) 시그널 라인
 #   - 모듈            .ax/modules/<name>/rules.md (name + keywords)
-#   - 최근 ADR        .ax/docs/adr/NNNN-*.md (제목)
+#   - 최근 ADR        .ax/docs/adr/<id>-*.md (제목 — id 는 YYYY-MM-DD-<4hex> 또는 옛 NNNN)
 #   - 열린 mistakes   .ax/mistakes/*.md (카테고리별 수)
-#   - spec            .ax/docs/spec/NNN-*/spec.md
+#   - spec            .ax/docs/spec/<id>-*/spec.md
 #
 # 사용:
 #   bash build-memory.sh             # .ax/MEMORY.md 재생성 (기본)
@@ -142,7 +142,7 @@ emit_ranked() {
         files=$(find "$dir" -mindepth 2 -name 'spec.md' 2>/dev/null | sort)
     fi
     [ -n "$files" ] || return 0
-    printf '%s\n' "$files" | awk -v mode="$mode" -v domains="$TASK_DOMAINS" -v max="$max" -v dir="$dir" "$GOAX_AWK_CLIP"'
+    printf '%s\n' "$files" | awk -v mode="$mode" -v domains="$TASK_DOMAINS" -v max="$max" -v dir="$dir" -v idre="$GOAX_DOC_ID_ERE" "$GOAX_AWK_CLIP"'
     BEGIN { nd = split(domains, D, " ") }
     {
         p = $0; n++; pth[n] = p
@@ -160,7 +160,10 @@ emit_ranked() {
             slug = p; sub(/\/spec\.md$/, "", slug); sub(/.*\//, "", slug)
             disp[n] = slug
         }
-        num = slug; sub(/-.*/, "", num); numk[n] = num + 0
+        # 최신순 키 — 새 ID(날짜+난수)는 YYYYMMDD 로, 옛 순번은 번호로. 새 ID 가 늘 옛 순번보다 뒤예요.
+        # `sub(/-.*/)` 로만 자르면 새 ID 는 전부 "2026" 이 돼서 순서가 사라져요.
+        if (slug ~ idre) numk[n] = 100000000 + substr(slug, 1, 4) * 10000 + substr(slug, 6, 2) * 100 + substr(slug, 9, 2)
+        else { num = slug; sub(/-.*/, "", num); numk[n] = num + 0 }
         rel = 0; ls = tolower(slug)
         for (j = 1; j <= nd; j++) {
             if (D[j] == "" || D[j] == "—") continue

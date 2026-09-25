@@ -3,7 +3,10 @@
 #
 # Usage:
 #   bash init-spec-dir.sh --slug <kebab> --tier standard|full \
-#                         [--num NNN] [--json] [--dry-run] [--help]
+#                         [--num <id>] [--json] [--dry-run] [--help]
+#
+# ID: 새 spec 은 `YYYY-MM-DD-<4hex>` (next-spec-num.sh 가 발급 — 브랜치끼리 안 겹쳐요).
+#     `--num` 으로 직접 줄 땐 새 ID 형식 또는 옛 순번(3자리 이상 숫자) 둘 다 받아요.
 #
 # Tier 산출물:
 #   standard  spec.md + tasks.md                                          (2)
@@ -16,7 +19,7 @@
 # 설계 결정 (아키텍처·트레이드오프) 은 ADR 로 기록. plan.md 는 0.1.16 폐기.
 #
 # Output (--json):
-#   {"status":"ok","result":{"spec_dir":"...","spec_id":"005","tier":"full","files":[...]}}
+#   {"status":"ok","result":{"spec_dir":"...","spec_id":"2026-09-25-a3f1","tier":"full","files":[...]}}
 
 set -euo pipefail
 
@@ -73,14 +76,8 @@ if [ ! -d "$TEMPLATE_DIR" ]; then
 fi
 
 # NUM 자동 결정 — 계산이 아니라 *예약*이에요.
-# 계산만 하면 여기서 mkdir 까지 사이에 다른 세션이 같은 번호를 가져가요
-# (실사용 리포에서 spec 2 쌍·ADR 7 쌍이 이렇게 겹쳤어요).
-# --reserve 는 번호 원장에 원자적으로 선점하고 디렉토리까지 만들어 줘요.
-# --dry-run 이면 예약하지 않아요. --reserve 는 번호 원장 선점 + 디렉토리 생성까지
-# 하는 *쓰기* 라, 그대로 부르면 "안 만든다" 고 보고해놓고 번호를 영구 점유해요
-# (원장 규약: 한 번 쓰인 번호는 재사용 안 함). 계산 fallback 도 같은 이유로 넘겨요 —
-# --reserve 없이도 sync_ledger 가 .numbers/ 를 만들거든요.
-# next-spec-num.sh 자체는 두 경로 다 가드가 있어요. 안 넘긴 건 이 호출부뿐이었어요.
+# --reserve 는 새 ID(날짜+난수)를 뽑아 디렉토리까지 O_EXCL 로 만들어 줘요 — 다른 세션·브랜치와 안 겹쳐요.
+# --dry-run 이면 예약하지 않아요 (디렉토리 생성은 쓰기라, "안 만든다" 고 보고해놓고 만들면 안 돼요).
 RESERVED_BY_US=false
 if [ -z "$NUM" ]; then
     if command -v jq >/dev/null 2>&1; then
@@ -97,16 +94,16 @@ if [ -z "$NUM" ]; then
     # jq 없거나 예약 실패 — 계산 fallback (경합 방어는 못 하지만 동작은 함)
     if [ -z "$NUM" ]; then
         if [ "$DRY_RUN" = true ]; then
-            NUM=$(bash "$SCRIPT_DIR/next-spec-num.sh" --dry-run 2>/dev/null || echo "001")
+            NUM=$(bash "$SCRIPT_DIR/next-spec-num.sh" --dry-run 2>/dev/null || goax_doc_id)
         else
-            NUM=$(bash "$SCRIPT_DIR/next-spec-num.sh" 2>/dev/null || echo "001")
+            NUM=$(bash "$SCRIPT_DIR/next-spec-num.sh" 2>/dev/null || goax_doc_id)
         fi
     fi
 fi
 
 # 형식 검증
-if ! [[ "$NUM" =~ ^[0-9]{3,}$ ]]; then
-    goax_error "--num must be 3+ digit number: '$NUM'"
+if ! [[ "$NUM" =~ ^[0-9]{3,}$ ]] && ! printf '%s' "$NUM" | grep -qE "${GOAX_DOC_ID_ERE}\$"; then
+    goax_error "--num must be an id (YYYY-MM-DD-<4hex>) or a legacy 3+ digit number: '$NUM'"
     exit "$EXIT_ERROR"
 fi
 

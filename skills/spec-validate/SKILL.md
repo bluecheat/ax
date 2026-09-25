@@ -30,7 +30,7 @@ spec.md 가 single source of truth.
 ## 1. spec 디렉토리 식별
 
 - 사용자가 번호/slug 명시: `goax spec check 005`
-- 미명시: 가장 최근 수정된 `.ax/docs/spec/NNN-*/` 자동 선택, 사용자에게 "이 spec 맞아요?" 한 번 확인
+- 미명시: 가장 최근 수정된 `.ax/docs/spec/<id>-*/` 자동 선택, 사용자에게 "이 spec 맞아요?" 한 번 확인
 
 ## 2. 검사 — `check-spec-clarity.sh` 위임
 

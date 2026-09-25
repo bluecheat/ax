@@ -51,6 +51,19 @@ commands:
 sensors:
   mode: warning         # warning | fail
   block_destructive: true
+  # 훅 프로필 — minimal 은 안전망만 돌려요 (block-destructive · block-hook-bypass · check-protected-paths ·
+  # grep-on-commit). 주입(spirit/module rules · triage-nudge · harness-pointer · session-brief)과
+  # 게이트(rule-read-gate · destructive-facts · spec-gate)는 standard 에서만. 루트 삭제 같은 CATASTROPHIC 은 늘 막아요.
+  hook_profile: standard   # minimal | standard
+  # 끌 훅 ID — 훅 파일 이름에서 .sh 를 뺀 것. 예: [rule-read-gate, destructive-facts]
+  # 한 세션만 끄려면 환경 변수 GOAX_DISABLED_HOOKS=rule-read-gate 도 돼요.
+  disabled_hooks: []
+  # rule-read-gate 가 건너뛸 경로 글롭 — 룰을 읽을 의미가 없는 경로 (생성물·스크래치 등)
+  rule_gate_exempt: []     # 예: ["**/generated/**", "docs/**"]
+  # destructive-facts 가 "지워도 도구가 다시 만드는" 경로로 보고 건너뛸 글롭 — 스택을 가정하지 않으려고
+  # 기본값(node_modules · build · target · dist · .gradle · .next · __pycache__ · .venv · Pods · .terraform …)만 두고
+  # 나머지는 프로젝트가 선언해요. 예: ["generated/**", "**/.nx/cache", "tmp/**"]
+  regenerable_paths: []
   # 사용자가 직접 편집하면 안 되는 파일/디렉토리. onboarding과 일상 작업이 합법적으로
   # 쓰는 경로(.ax/modules/, .ax/docs/, .ax/spirit/rules/, .ax/adoption-plan.md, .ax/mistakes/)는
   # 의도적으로 제외 — 통째 .ax/ prefix는 자기충돌(mistake 누적) 유발.

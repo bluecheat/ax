@@ -4,13 +4,51 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 
 | 위치 | 시점 | 역할 |
 |---|---|---|
+| session-start/ | 세션 시작·재개·compact 직후 | `session-brief.sh` — 인계 노트 · 설치본 버전 지연 · 밀린 audit 을 짧게 (말할 게 없으면 침묵) |
 | user-prompt/ | 사용자 메시지 도착 직후 | Triage 미실행(phase=idle) + 구현 의도 감지 시 reminder 주입 |
-| pre-bash/ | bash 도구 호출 직전 | 파괴적 명령 차단 + `git commit` 감지 시 critical-rule-grep 위임 |
-| pre-edit/ | Edit/Write 직전 | 보호 경로 변경 확인 + spirit 룰 점검 |
+| pre-bash/ | bash 도구 호출 직전 | 파괴적 명령 차단 · git 훅 우회(`--no-verify` 등) 차단 · 프로젝트 안 되돌리기 어려운 명령은 사실 확인 · `git commit` 감지 시 pre-commit 체인 위임 |
+| pre-edit/ | Edit/Write 직전 | 보호 경로 변경 확인 + spirit 룰 점검 · 룰 경로 주입 · 이 파일에 걸린 룰을 안 읽었으면 편집 차단(`rule-read-gate`) |
 | post-edit/ | Edit/Write 직후 | 변경 파일 lint (경고만) |
 | pre-commit/ | git commit 직전 | CRITICAL 룰 정적 검출 (위반 시 차단/경고만 — 자동 캡처는 폐기, §"Mistake 캡처" 참고) |
 | subagent-start/ | 서브에이전트가 뜨는 순간 | Constitution·Spirit·현재 spec·인계 노트 **경로**를 additionalContext 로 — 하네스가 메인 세션 밖으로 닿게 (goax 자기 에이전트는 제외) |
 | stop/ | 턴이 끝나려는 순간 | 활성 spec(implementing·review)이 완료 게이트 미통과면 **한 번** 붙잡아 "마저 하기 · 보류 표기 · 인계 노트" 셋 중 하나를 시켜요 |
+
+## 끄기 · 프로필 — 게이트마다 탈출구
+
+모든 등록 훅은 `common.sh` 의 `goax_hook_enabled <훅 ID> <minimal|standard>` 를 거쳐요. 훅 ID 는 파일 이름에서 `.sh` 를 뺀 것.
+
+- `.ax/config.yml` `sensors.disabled_hooks: [rule-read-gate]` — 그 훅만 꺼요. 한 세션만이면 `GOAX_DISABLED_HOOKS=rule-read-gate`.
+- `sensors.hook_profile: minimal` — 안전망만 남겨요 (`block-destructive` · `block-hook-bypass` · `check-protected-paths` · `grep-on-commit`). 주입·게이트는 `standard`(기본)에서만.
+- `block-destructive.sh` 의 CATASTROPHIC(루트·시스템 경로 삭제 등)은 이 스위치 **앞**에서 끝나요 — 끌 수 있는 안전망이 아니에요.
+- `sensors.mode: off` 는 예전처럼 전체 침묵이에요.
+
+## 사실을 요구하는 게이트 — "정말요?" 대신
+
+"확실해요?" 라고 물으면 모델은 늘 "네" 라고 해요. 그래서 두 게이트는 **사실**을 요구하고, 사실이 채워지면 통과시켜요
+(ECC GateGuard 의 fact-forcing 방식). 둘 다 `sensors.mode` 가 `warning` 이어도 막아요 — 통과 조건이 싸서예요.
+
+- `pre-edit/rule-read-gate.sh` — 편집 대상에 걸린 룰 파일(spirit `paths:` · module `paths:`+`applies_to: code`)을 이번 세션에
+  **Read 도구로** 읽었는지 `.ax/.session/<sid>/rules-read.log` 로 확인해요 (compaction 이 일어나면 SessionStart 훅이 이 기록을 지워서 다시 읽게 해요). 안 읽었으면 목록을 주고 막아요. CLAUDE.md·AGENTS.md 가
+  `@` 로 import 한 룰은 이미 컨텍스트에 있어서 빼요. 경로 예외는 `sensors.rule_gate_exempt`. 매칭 함수는 주입 훅과 같아요
+  (`goax_rules_matching` · `goax_module_rules_matching`) — 갈라지면 "주입은 했는데 게이트는 안 거는" 룰이 생겨요.
+  실측(commerce): mistakes 22건 중 20건을 사용자가 잡았고 절반이 "고치기 전에 조사 안 함" — 그중 하나는 "hook 이 읽으라 지시한 룰 파일을 건너뛰고".
+- `pre-bash/destructive-facts.sh` — 프로젝트 안 재귀 rm · `git clean -f` · `git checkout -- <경로>` · `git restore` · `git reset --hard` ·
+  `git stash drop|clear` · `git branch -D` · `find -delete` 를 세션에서 처음 볼 때 한 번 막고 "지워질 파일 목록 · 되돌리는 절차 ·
+  사용자 지시 원문" 을 요구해요. 같은 명령을 다시 실행하면 통과. 재생성 디렉토리(여러 생태계의 흔한 이름을 기본값으로 — build·target·node_modules·
+  .next·__pycache__·Pods·.terraform …)와 프로젝트 밖 경로(`git -C <다른 리포>` 포함)는 안 봐요. 스택을 가정하지 않으려고 그 밖의 경로는
+  프로젝트가 `sensors.regenerable_paths` 글롭으로 선언해요.
+  실측(commerce): 되돌리려고 `rm -rf` 로 디렉토리째 지웠다가 추적 안 되던 운영 파일까지 사라졌어요.
+- 둘 다 세션당 3번까지 전체 안내, 그 뒤는 한 줄이에요 — 같은 긴 문구가 컨텍스트에 쌓이면 반복 루프를 부른다는 ECC 실측(#2142)을 따라요.
+  세션 id 가 없으면(수동 실행) 추적할 수 없어서 rule-read-gate 는 통과, destructive-facts 는 경고로 강등해요.
+- 명령 판정은 `goax_shell_scan`(python3 shlex — 따옴표·주석·heredoc·here-string 을 셸처럼)이 해요. python3 가 없거나 **있는데 실패하면**
+  (macOS xcrun shim 등 — `goax_py_ok` 가 실제 import 로 확인) 두 Bash 게이트는 따옴표를 벗긴 문자열로 간이 판정해요. 판정 못 했다고 통과시키지 않아요.
+
+## git 훅 우회 — `pre-bash/block-hook-bypass.sh`
+
+에이전트가 `--no-verify` · `git commit -n` · `git -c core.hooksPath=…` · `git config core.hooksPath <값>` · `HUSKY=0`/`LEFTHOOK=0` 로
+프로젝트의 git 훅을 끄는 걸 막아요 (`sensors.mode` 가 warning 이어도). goax 자체의 pre-commit 체인은 `grep-on-commit.sh` 가 PreToolUse 에서
+먼저 돌려서 이 플래그로 안 빠지지만, 프로젝트 훅(`external:*` — husky·lefthook·commit-msg·pre-push)은 사라져요. 판정은 `goax_shell_scan` 이
+따옴표·heredoc 을 셸처럼 읽어서 해요 — `git commit -m "fix -n handling"` 의 `-n` 은 안 걸려요. 사람은 `! git commit --no-verify …` 로 직접 할 수 있어요.
 
 ## 세션 내 중복 주입 — 같은 포인터는 한 번만
 

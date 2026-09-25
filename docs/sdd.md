@@ -13,7 +13,7 @@ AI 에이전트한테 "결제 환불 정책을 7일에서 14일로 바꿔줘" �
 - 엣지 케이스(환불 진행 중인 주문은? 정산 영향은?)를 *작업 시작 후*에 발견
 - 결정 근거가 없어서 다음 사람이 똑같이 고민
 
-→ **spec.md를 먼저 채우면** 작업 시작 *전*에 모호함을 다 잡아요. 그리고 그 spec 이 tasks.md / 구현 단계의 *유일한 입력*이 돼요. 설계 결정의 *근거* 는 별도 ADR (`.ax/docs/adr/NNNN-*.md`) 가 담당해요.
+→ **spec.md를 먼저 채우면** 작업 시작 *전*에 모호함을 다 잡아요. 그리고 그 spec 이 tasks.md / 구현 단계의 *유일한 입력*이 돼요. 설계 결정의 *근거* 는 별도 ADR (`.ax/docs/adr/<id>-*.md`) 가 담당해요.
 
 ---
 
@@ -92,7 +92,7 @@ full tier 면 추가:
 - `data-model.md` — 데이터 스키마
 - `contracts/api.yaml` / `contracts/events.md` — API/이벤트 spec
 - `quickstart.md` — 사용 가이드
-- ADR `.ax/docs/adr/NNNN-*.md` — 설계 결정 정규 기록 (full tier 권장)
+- ADR `.ax/docs/adr/<id>-*.md` — 설계 결정 정규 기록 (full tier 권장)
 
 lazy 추가:
 - `checklists/requirements.md` — `add-spec-files.sh --add checklists`
@@ -128,7 +128,7 @@ goax spec check
 ### 5. tasks.md → 구현 (+ ADR 별도)
 
 spec 이 통과되면:
-- 설계 결정 — ADR `.ax/docs/adr/NNNN-*.md` 1 건 이상 (full tier / L≥L2 도메인 의무)
+- 설계 결정 — ADR `.ax/docs/adr/<id>-*.md` 1 건 이상 (full tier / L≥L2 도메인 의무)
 - `tasks.md` — 1\~3 파일 단위 task 분해, acceptance criteria 와 1:1 매핑
 - 구현 — task 별 PR (또는 묶음 PR)
 

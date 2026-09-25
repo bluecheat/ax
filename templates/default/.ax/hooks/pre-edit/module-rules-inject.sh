@@ -30,6 +30,8 @@ COMMON="$PROJECT_ROOT/.ax/scripts/bash/common.sh"
 [ -f "$COMMON" ] || exit 0
 # shellcheck source=../../scripts/bash/common.sh
 source "$COMMON"
+# 훅 끄기·프로필 — sensors.disabled_hooks · sensors.hook_profile
+type goax_hook_enabled >/dev/null 2>&1 && { goax_hook_enabled module-rules-inject standard || exit 0; }
 
 TARGET_ABS=$(goax_normalize_path "$TARGET_PATH" "$PROJECT_ROOT")
 ROOT_ABS=$(goax_normalize_path "$PROJECT_ROOT" "$PROJECT_ROOT")
@@ -43,43 +45,23 @@ LINES=""
 
 # ── Layer 2 — module rules (path-scoped) ─────────────────────────
 # 모듈 룰은 `.ax/modules/<name>/rules.md` 로 중첩돼 있어 flat glob 이 안 통해요.
-MOD_DIR="$PROJECT_ROOT/.ax/modules"
-if [ -d "$MOD_DIR" ]; then
-    for rules in "$MOD_DIR"/*/rules.md; do
-        [ -f "$rules" ] || continue
-        mod=$(basename "$(dirname "$rules")")
+# 매칭(paths + applies_to: code)은 common.sh goax_module_rules_matching — rule-read-gate.sh 와 같은 함수예요.
+while IFS= read -r mod; do
+    [ -z "$mod" ] && continue
+    rules="$PROJECT_ROOT/.ax/modules/$mod/rules.md"
+    # 같은 세션에서 이미 준 모듈 포인터는 다시 안 줘요 (서브에이전트 하나가 168회 받은 실측)
+    goax_inject_fresh "$SID" "module:$mod" || continue
 
-        # applies_to 에 `code` 가 없으면 편집 시점 주입 대상이 아니에요.
-        # (pr/commit/review 전용 룰은 편집 중에 나오면 노이즈)
-        # 필드가 아예 없으면 하위호환으로 주입 — 기존 프로젝트를 깨지 않으려고요.
-        APPLIES=$(goax_yaml_list "$rules" applies_to)
-        if [ -n "$APPLIES" ] && ! printf '%s\n' "$APPLIES" | grep -qx 'code'; then
-            continue
-        fi
+    LINES="${LINES}  Layer 2 · ${mod}  →  .ax/modules/${mod}/rules.md"$'\n'
 
-        matched=false
-        while IFS= read -r glob; do
-            [ -z "$glob" ] && continue
-            if goax_glob_match "$glob" "$TARGET_REL"; then
-                matched=true
-                break
-            fi
-        done < <(goax_yaml_list "$rules" paths)
-        [ "$matched" = true ] || continue
-        # 같은 세션에서 이미 준 모듈 포인터는 다시 안 줘요 (서브에이전트 하나가 168회 받은 실측)
-        goax_inject_fresh "$SID" "module:$mod" || continue
-
-        LINES="${LINES}  Layer 2 · ${mod}  →  .ax/modules/${mod}/rules.md"$'\n'
-
-        # 모듈이 자기 결정 근거 ADR 을 선언했으면 같이 가리켜요.
-        # 룰만 보면 "왜 이런 룰인지" 를 몰라서 다시 제안하는 일이 생겨요 (컨텍스트 drift).
-        while IFS= read -r adrp; do
-            [ -z "$adrp" ] && continue
-            case "$adrp" in *"<slug>"*|*NNNN*) continue ;; esac   # 템플릿 placeholder 무시
-            [ -f "$PROJECT_ROOT/$adrp" ] && LINES="${LINES}  Layer 2 · ${mod} ADR  →  ${adrp}"$'\n'
-        done < <(goax_yaml_list "$rules" adr)
-    done
-fi
+    # 모듈이 자기 결정 근거 ADR 을 선언했으면 같이 가리켜요.
+    # 룰만 보면 "왜 이런 룰인지" 를 몰라서 다시 제안하는 일이 생겨요 (컨텍스트 drift).
+    while IFS= read -r adrp; do
+        [ -z "$adrp" ] && continue
+        case "$adrp" in *"<slug>"*|*"<id>"*|*NNNN*) continue ;; esac   # 템플릿 placeholder 무시
+        [ -f "$PROJECT_ROOT/$adrp" ] && LINES="${LINES}  Layer 2 · ${mod} ADR  →  ${adrp}"$'\n'
+    done < <(goax_yaml_list "$rules" adr)
+done < <(goax_module_rules_matching "$PROJECT_ROOT" "$TARGET_REL")
 
 # ── Layer 3 — 진행 중인 spec / 관련 ADR ──────────────────────────
 # 파일 경로가 아니라 *작업* 에 걸린 컨텍스트라 current-task.json 을 봐요.

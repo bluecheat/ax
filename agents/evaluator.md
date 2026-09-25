@@ -53,8 +53,8 @@ Generator/Evaluator 모델 — Generator의 self-praise bias 제거.
 ## 입력
 
 - 변경 파일 + diff (브리프가 지목한 범위 — `git diff <base>...HEAD` 또는 spec 시작 이후)
-- 관련 `.ax/docs/adr/*.md`, `.ax/docs/spec/<NNN-slug>/spec.md`
-- 산출물 경로 — `.ax/docs/spec/<NNN-slug>/review.md`
+- 관련 `.ax/docs/adr/*.md`, `.ax/docs/spec/<id-slug>/spec.md`
+- 산출물 경로 — `.ax/docs/spec/<id-slug>/review.md`
 - (선택) PR description
 
 여기 없는 것 — 특히 구현 세션의 대화 맥락 — 은 받지 않아요 (§성립 조건 1).

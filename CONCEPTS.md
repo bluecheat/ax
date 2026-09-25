@@ -143,7 +143,9 @@ Harness를 더 분해하면:
 - ADR이 없으면 *거부된 대안*이 사라져서 미래의 AI나 새 팀원이 그 대안을 다시 제안해요. 같은 토론을 반복해요.
 - Spec이 없으면 "X는 무엇인가"를 코드에서 역공학해야 해요. 사람도 AI도 비효율.
 
-**구현**: `.ax/docs/adr/NNNN-*.md` (결정) + `.ax/docs/spec/NNN-<name>/` (SDD 워크플로우 디렉토리). `NEEDS CLARIFICATION` 마커로 게이팅.
+**구현**: `.ax/docs/adr/<id>-*.md` (결정) + `.ax/docs/spec/<id>-<name>/` (SDD 워크플로우 디렉토리). `NEEDS CLARIFICATION` 마커로 게이팅.
+
+**ID**: `<id>` 는 `YYYY-MM-DD-<4hex>` 예요. 예전엔 순번(`NNN`·`NNNN`)이었는데, 순번은 "지금 디렉토리의 최댓값 + 1" 이라 PR 스택·병렬 브랜치가 서로를 못 보고 같은 번호를 받아요. 실측(commerce 모노레포): spec 번호 중복 8개, ADR 번호 중복 12개 — `ADR 0008` 이 세 개라 "ADR 0008" 이라는 말이 아무것도 가리키지 않았어요. 작업 트리 안의 경합은 원장 + O_EXCL 로 막을 수 있지만 브랜치 사이는 못 막아요. 날짜+난수는 서로를 볼 필요가 없어서 원천적으로 안 겹쳐요. 옛 순번 문서는 링크가 깨지니 이름을 안 바꾸고, 둘 다 읽어요.
 
 ### 3.6 왜 4개인가 (3개나 5개로는 왜 안 되는가)
 
@@ -272,7 +274,7 @@ OMC ralplan 의 구조에 파일 verdict 와 결정적 사전 게이트를 얹�
 - `spec.md` — What/Why + 수용 기준 + Technical Context (§7.5 — 스택·영향 모듈·적용 룰·진입 ADR). NEEDS CLARIFICATION 마커로 모호함 표시.
 - `tasks.md` — dependency-ordered 체크리스트 (`[P]` 병렬 마커). spec 의 acceptance 와 1:1 매핑.
 - `research/data-model/quickstart/contracts` — full tier 부가 산출물.
-- ADR (`.ax/docs/adr/NNNN-*.md`) — 설계 결정·트레이드오프·거부된 대안 기록 (full tier 정규).
+- ADR (`.ax/docs/adr/<id>-*.md`) — 설계 결정·트레이드오프·거부된 대안 기록 (full tier 정규).
 
 **SSOT 원칙**: spec.md 가 단일 진실. tasks 가 spec 을 *입력*으로 받음. 설계 결정의 *근거* 는 ADR 이 단독 소유 (plan.md 는 폐기됐어요).
 **게이팅**: NEEDS CLARIFICATION · placeholder `<...>` · 빈 필수 섹션 어느 하나라도 남으면 다음 단계 차단 (`check-spec-clarity.sh`).
@@ -303,8 +305,8 @@ OMC ralplan 의 구조에 파일 verdict 와 결정적 사전 게이트를 얹�
 NEXT=$(ls .ax/docs/spec/[0-9][0-9][0-9]-* | sed 's|.*/||' | awk -F- '{print $1}' | sort -n | tail -1)
 NEXT=$(printf "%03d" $((10#${NEXT:-0} + 1)))
 
-# 지금: 스크립트 위임 (결정론 보장)
-NEXT=$(bash .ax/scripts/bash/next-spec-num.sh --json | jq -r '.result.next')
+# 지금: 스크립트 위임 (결정론 보장) — ID(날짜+난수) 발급과 디렉토리 생성을 한 번에, O_EXCL 로
+RES=$(bash .ax/scripts/bash/next-spec-num.sh --reserve --slug "$SLUG" --json)
 ```
 
 스크립트 표준:
@@ -313,6 +315,20 @@ NEXT=$(bash .ax/scripts/bash/next-spec-num.sh --json | jq -r '.result.next')
 - exit code: 0 ok, 1 error, 2 skipped (graceful degradation)
 
 이 분리는 spec-kit의 디자인 패턴에서 영감을 받았어요. **결정론은 스크립트가, 판단은 LLM이.**
+
+### 5.6.1 사실을 요구하는 게이트 — "정말요?" 는 늘 "네"
+
+훅이 할 수 있는 개입은 두 가지였어요 — 막거나(exit 2), 알려주거나(경고·경로 주입). 알려주는 건 건너뛸 수 있어요.
+실측(commerce, mistakes 22건): 20건을 사람이 잡았고, 절반이 "고치기 전에 조사 안 함" 이었어요. 그중 하나는 원문 그대로
+"hook 이 읽으라 지시한 commerce-application.md 를 건너뛰고" 였어요. 경로 주입은 제 할 일을 했는데 효과가 없었던 거예요.
+
+그렇다고 "확실해요?" 로 막으면 모델은 늘 "네" 라고 해요. 그래서 세 번째 방식을 들여왔어요 (ECC 의 GateGuard) —
+**사실을 요구하고, 사실이 채워지면 통과**. goax 는 여기서 한 걸음 더 결정론 쪽으로 가요: "읽었어요" 라는 말이 아니라
+Read 도구 기록을 봐요 (`rule-read-gate`). 파괴 명령은 "지워질 파일 · 되돌리는 절차 · 사용자 지시 원문" 을 적게 한 뒤
+같은 명령의 재시도를 통과시켜요 (`destructive-facts`) — 적는 과정에서 모르던 파일이 보여요.
+
+게이트를 켜면 탈출구가 같이 있어야 해요. 모든 훅이 ID 로 꺼지고(`sensors.disabled_hooks`), `hook_profile: minimal` 은
+안전망만 남겨요. 같은 긴 차단 문구가 컨텍스트에 쌓이면 반복 루프를 부른다는 ECC 의 실측을 따라 세 번째 뒤로는 한 줄로 줄여요.
 
 ### 5.7 Confirmation Friction Policy — 사람 확인은 데이터로 결정
 
