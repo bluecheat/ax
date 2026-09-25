@@ -2,7 +2,7 @@
 
 CLAUDE.md 와 `.ax/spirit/rules/`, `.ax/modules/*/rules.md` 의 룰은 **시그널 라벨(🔴/🟡/🔵) + enforce 메커니즘 선언**의 한 쌍이에요. 이 spec 은 두 쌍이 깨지지 않게 — *"CRITICAL 이라고 박았는데 자동 차단 안 되는 거짓 약속"* 같은 anti-pattern 을 schema 와 invariant 로 차단해요.
 
-> ⚠ **이 spec 의 동기**: 🔴 CRITICAL 라벨이 자동 차단을 *보장* 한다는 약속인데, hook 미작성 + `enforced_by: TODO` 로 박힌 채로 추적 메커니즘이 없으면 deadline 이 흘러도 아무도 모름. 라벨이 실제 enforce 와 어긋나 있으면 다른 세션이 "이 룰은 자동 차단됨" 으로 오인 → 진짜 위반이 살아있어도 안전한 줄. 이 spec 의 invariant 가 그 거짓 약속을 영구 차단.
+> ❗ **이 spec 의 동기**: 🔴 CRITICAL 라벨이 자동 차단을 *보장* 한다는 약속인데, hook 미작성 + `enforced_by: TODO` 로 박힌 채로 추적 메커니즘이 없으면 deadline 이 흘러도 아무도 모름. 라벨이 실제 enforce 와 어긋나 있으면 다른 세션이 "이 룰은 자동 차단됨" 으로 오인 → 진짜 위반이 살아있어도 안전한 줄. 이 spec 의 invariant 가 그 거짓 약속을 영구 차단.
 
 ## 시그널 라벨 ↔ enforce 메커니즘 계약
 
@@ -134,7 +134,7 @@ secrets 스캐너는 건너뛰어요 (진짜 토큰 모양을 쓰면 룰 파일 
 - **I2. TODO 는 deadline 필수** — `enforced_by: TODO` (deadline 없음) 는 형식 위반. `TODO:YYYY-MM-DD` 또는 `TODO:+Nw` (즉시 절대화).
 - **I3. doctor 매 호출 추적** — `enforced_by: TODO:*` 를 grep 해서 deadline 과 오늘 비교. 임박(≤7일) / 초과(<오늘) 시 별도 보고 섹션 + 옵션 제시.
 - **I4. deadline 초과는 강등 권장** — 자동 강등 X (UX 안전: 사용자 confirm 필요). 단 doctor 는 강등 명령을 옵션 [r] 로 강조.
-- **I5. hook 경로는 실제 존재 + 배선됨** — `enforced_by: hook:.ax/hooks/...sh` 면 (a) 파일 실제 존재 (b) 배선됨. 둘 다 OK 여야 enforce 보장. 한 쪽만이면 ⚠ "활성화 안 됨". **배선의 판정은 hook 이 어디 사는지에 달렸음** — `.ax/hooks/pre-commit/*.sh` 는 `.claude/settings.json` 에 개별 등록하지 **않는** 게 정상이라 basename 으로 찾으면 안 됨. 디스패처 둘이 디렉토리째 glob 하므로 그 존재로 판정: settings.json 에 등록된 `pre-bash/grep-on-commit.sh`(에이전트 커밋) 또는 `.git/hooks/pre-commit` 의 goax chain wrapper(사람 터미널 커밋). 둘 다 없으면 위반 — 오탐을 피하려다 통과시키면 "선언한 hook 이 실제로 돈다" 는 I5 의 값어치가 사라짐. 그 밖의 hook 은 settings.json 등록을 요구.
+- **I5. hook 경로는 실제 존재 + 배선됨** — `enforced_by: hook:.ax/hooks/...sh` 면 (a) 파일 실제 존재 (b) 배선됨. 둘 다 OK 여야 enforce 보장. 한 쪽만이면 ❗ "활성화 안 됨". **배선의 판정은 hook 이 어디 사는지에 달렸음** — `.ax/hooks/pre-commit/*.sh` 는 `.claude/settings.json` 에 개별 등록하지 **않는** 게 정상이라 basename 으로 찾으면 안 됨. 디스패처 둘이 디렉토리째 glob 하므로 그 존재로 판정: settings.json 에 등록된 `pre-bash/grep-on-commit.sh`(에이전트 커밋) 또는 `.git/hooks/pre-commit` 의 goax chain wrapper(사람 터미널 커밋). 둘 다 없으면 위반 — 오탐을 피하려다 통과시키면 "선언한 hook 이 실제로 돈다" 는 I5 의 값어치가 사라짐. 그 밖의 hook 은 settings.json 등록을 요구.
 - **I6. external 은 자동 트리거 실재 필수** — `enforced_by: external:*` 면 그 도구를 자동으로 실행하는 표면(CI workflow[GitHub/GitLab/Circle/Jenkins/Azure/Buildkite] / `.git/hooks/pre-commit` / husky / pre-commit-framework / lefthook)이 리포에 1개 이상 있어야 함. 도구 **내용**까지는 검증하지 않지만(도구별이라 비목표 유지), **무엇이 그걸 돌리는가** 는 도구 무관하게 검증 가능. 트리거 0 이면 I1 을 통과해도 "누군가 손으로 돌릴 때만" 도는 라벨뿐인 룰. **goax wrapper 만 있는 pre-commit 은 트리거로 안 침** — up 이 전 환경 기본 설치하는 wrapper 는 `.ax/hooks/pre-commit/*.sh` 를 chain 할 뿐 external 도구를 직접 실행하지 않아서, 그걸 인정하면 I6 가 항상 통과하는 자기 무력화가 됨. 출고 훅 이외의 프로젝트 전용 chain 훅이 있을 때만 `git:pre-commit-chain` 으로 인정.
 - **I7. grep 류 룰은 패턴이 있어야 함** — 파일이 `enforced_kind: grep` 이거나 `enforced_by` 가 `critical-rule-grep.sh` 를 가리키면 그 파일의 **모든** `## SP-` 룰에 `<!-- 검출 패턴: -->` 이 있어야 해요 (`i7_grep_without_pattern`). 반대로 패턴이 있는데 `paths:` 가 비면 훅이 안 돌아요 (`i7_pattern_without_paths`). 둘 다 "적혀 있지만 아무것도 막지 않는" 상태 — I1 의 거짓 약속과 같은 종류라 `--strict` 에서 exit 1 이에요. 대응: 마커를 채우거나, grep 으로 못 잡는 룰이면 `enforced_kind` 를 `human` 으로 바꾸고 별도 파일로 옮겨요.
 
@@ -192,10 +192,10 @@ RULES_HOOK_MISSING=()  # enforced_by: hook:<path> 인데 파일/등록 어느 �
  ❌ I1 위반 — CRITICAL 인데 자동 차단 메커니즘 없음 (거짓 약속):
    - <SCOPE>:CRITICAL:001 — enforced_by: TODO:<date> (hook 부재)
    - <SCOPE>:CRITICAL:002 — 동상
- ⚠ TODO deadline 임박 (≤7일) N건 / 초과 K건:
+ ❗ TODO deadline 임박 (≤7일) N건 / 초과 K건:
    - <SCOPE>:MANDATORY:002 — TODO:<date> (D-3)
    - <SCOPE>:MANDATORY:005 — TODO:<date> (15일 초과 — 강등 권장)
- ⚠ I5 위반 — hook 경로 부재 또는 미등록:
+ ❗ I5 위반 — hook 경로 부재 또는 미등록:
    - hook:.ax/hooks/pre-commit/<rule-name>.sh — 파일 부재
    - hook:.ax/hooks/pre-commit/<rule-name>.sh — 파일 존재, settings.json 미등록
 ```
@@ -203,15 +203,15 @@ RULES_HOOK_MISSING=()  # enforced_by: hook:<path> 인데 파일/등록 어느 �
 `다음 단계` 옵션:
 
 ```
- [r] ✓ 라벨 강등 — CRITICAL → MANDATORY (I1 위반 N건)         [최우선 추천]
+ [r] ✅ 라벨 강등 — CRITICAL → MANDATORY (I1 위반 N건)         [최우선 추천]
    명령  CLAUDE.md 의 🔴 → 🟡 일괄 변환 (사용자 confirm 후 LLM 적용)
    이유  CRITICAL 라벨이 거짓 약속 — 라벨과 실제가 일치해야 다른 세션이 오인 안 함
 
- [w] ✓ hook 작성 — enforced_by 가 가리키는 hook 파일 신규 작성   [장기 — 룰 진짜 enforce]
+ [w] ✅ hook 작성 — enforced_by 가 가리키는 hook 파일 신규 작성   [장기 — 룰 진짜 enforce]
    명령  .ax/hooks/<sub>/<basename>.sh 직접 작성. template 없음 (룰 의미 의존).
    이유  CRITICAL 유지하면서 약속을 진짜로 지킴
 
- [d] ✓ deadline 갱신 — 임박/초과 TODO 에 새 absolute date 부여     [강등 거부 시]
+ [d] ✅ deadline 갱신 — 임박/초과 TODO 에 새 absolute date 부여     [강등 거부 시]
    명령  enforced_by: TODO:<new-date> 로 갱신 (사용자 입력)
    이유  ADR 검토 시점 연기 — 단 단순 연기 반복은 anti-pattern (3회 이상 연기 시 강등 권장)
 ```
@@ -241,12 +241,12 @@ RULES_HOOK_MISSING=()  # enforced_by: hook:<path> 인데 파일/등록 어느 �
 |---|---|---|
 | 1 | 🔴 + `hook:.ax/hooks/.../foo.sh` + 파일 존재 + settings.json 등록 | ✅ pass, 보고 생략 |
 | 2 | 🔴 + `hook:.../foo.sh` + 파일 부재 | ❌ I5 위반 — "거짓 약속" |
-| 3 | 🔴 + `hook:.../foo.sh` + 파일 존재 + 미등록 | ⚠ I5 위반 — "활성화 안 됨" |
+| 3 | 🔴 + `hook:.../foo.sh` + 파일 존재 + 미등록 | ❗ I5 위반 — "활성화 안 됨" |
 | 4 | 🔴 + `TODO:2026-06-01` | ❌ I1 위반 — "CRITICAL ≠ TODO" |
 | 5 | 🔴 + `human:pr-review` | ❌ I1 위반 — "CRITICAL ≠ human-only" |
 | 6 | 🟡 + `TODO:2026-06-01` (오늘 2026-05-05, D-27) | · "deadline 27일 남음" (참고만) |
-| 7 | 🟡 + `TODO:2026-05-10` (D-5) | ⚠ "deadline 5일 남음 — 임박" |
-| 8 | 🟡 + `TODO:2026-04-01` (15일 초과) | ⚠ "deadline 15일 초과 — 강등 권장" |
+| 7 | 🟡 + `TODO:2026-05-10` (D-5) | ❗ "deadline 5일 남음 — 임박" |
+| 8 | 🟡 + `TODO:2026-04-01` (15일 초과) | ❗ "deadline 15일 초과 — 강등 권장" |
 | 9 | 🟡 + `TODO` (deadline 없음) | ❌ I2 위반 — "deadline 필수" |
 | 10 | 🔵 + `enforced_by` 생략 | ✅ pass |
 | 11 | 🔴 + `external:archunit` + CI 또는 non-goax pre-commit 또는 프로젝트 전용 chain 훅 | ✅ pass (도구 내용 검증은 비목표 유지) |

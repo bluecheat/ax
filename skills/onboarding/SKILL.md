@@ -15,7 +15,7 @@ description: "/up (install or update) 직후 또는 사용자가 'goax 분석/�
 
 ## 시작 전 필수
 
-`.ax/spirit/values.md`, `tone.md` 따라요. 출력은 clack 스타일 (◆/│/├/└ + ●/○ + 시맨틱 이모지).
+`.ax/spirit/values.md`, `tone.md` 따라요. 출력은 clack 스타일 (◆/│/├/└ + ●/○) + `.ax/docs/reference/symbols.md` 의 이모지 어휘만.
 
 이 문서는 **흐름과 결정**만 담아요. 그 Q 를 출력하기 직전에 필요한 절만 읽어요:
 
@@ -94,10 +94,10 @@ Q1 박스 `📍 발견` 첫 줄에 `CLI 환경: <결과>`. OpenCode 면 Q5 [a] �
 
 ## 3. 다섯 결정 — 한 번에 하나씩, 디폴트는 권장값
 
-박스 표준·답 처리 3단계(재확인 → 작업 → ✓ 확정)는 `boxes.md` §0. 필수 규칙: 권장 `●` + `✓ 권장`, 위험 옵션엔 `⚠`, 옵션 사이 빈 줄, Q2 부터 헤더 우측에 이전 답 요약, "수정 없음" 이면 `📂` 생략.
+박스 표준·답 처리 3단계(재확인 → 작업 → ✅ 확정)는 `boxes.md` §0. 필수 규칙: 권장 `●` + `✅ 권장`, 위험 옵션엔 `❗`, 옵션 사이 빈 줄, Q2 부터 헤더 우측에 이전 답 요약, "수정 없음" 이면 `📂` 생략.
 
 ### Q1. Constitution — `boxes.md` §Q1
-- [a] 자동 분류 → `.ax/adoption-plan.md` 작성 (라벨 제안 + 카테고리 매핑). Constitution 은 그대로. ✓ 권장
+- [a] 자동 분류 → `.ax/adoption-plan.md` 작성 (라벨 제안 + 카테고리 매핑). Constitution 은 그대로. ✅ 권장
 - [b] 가이드만 (채팅에 분류표) · [c] 보류 → Q2
 
 AGENTS.md 가 SSOT, CLAUDE.md 는 `@AGENTS.md` alias. 라벨링·prepend 는 AGENTS.md 본문에.
@@ -112,26 +112,26 @@ bash .ax/scripts/bash/zero-domain-risk.sh --show --json    # result.before.keys 
 
 "30 keys" 같은 추정을 박고 사후 정정하는 흐름은 금지 — 보고 숫자의 신뢰를 깎아요. 작성 규칙: 도메인 ≤ 15 → 모두 매핑, > 15 → 핵심 5~10 + `default: L1`. 근거 메모는 경계선 케이스(settlement·coupon)만. 키는 영문 kebab-case, 한글은 주석으로만.
 
-- [a] 제안대로 기록 ✓ 권장 · [b] 사용자 수정 후 [a] · [c] 비워두기
+- [a] 제안대로 기록 ✅ 권장 · [b] 사용자 수정 후 [a] · [c] 비워두기
 
 ### Q3. hooks 강도 — `boxes.md` §Q3
-- [a] `warning` (메시지만) ✓ 권장 · [b] `fail` (CRITICAL 위반 시 차단) · [c] 비활성 → `.ax/config.yml sensors.mode`
+- [a] `warning` (메시지만) ✅ 권장 · [b] `fail` (CRITICAL 위반 시 차단) · [c] 비활성 → `.ax/config.yml sensors.mode`
 
 ### Q4. 외부 spec — 있을 때만, `boxes.md` §Q4
-- [a] 링크만 (`.ax/docs/external-specs.md`) ✓ 권장 · [b] SDD 변환 흡수 (규칙: `references/import-spec.md`) · [c] snapshot 만 · [d] 무시
+- [a] 링크만 (`.ax/docs/external-specs.md`) ✅ 권장 · [b] SDD 변환 흡수 (규칙: `references/import-spec.md`) · [c] snapshot 만 · [d] 무시
 
 ### Q5. 4계층 활성화 — `boxes.md` §Q5
 
 > Q1~Q4 는 자산을 *준비*했고, Q5 가 *활성화*해요. "도구가 깔린 것" 과 "4계층이 작동하는 것" 은 달라요.
 
-- [a] Layer 1 + 2 + 3 활성화 ✓ 권장 · [b] Layer 1 만 · [c] 보류
+- [a] Layer 1 + 2 + 3 활성화 ✅ 권장 · [b] Layer 1 만 · [c] 보류
 
 **[a] 적용 순서**
 
 1. **Layer 1 블록 작성** — adoption-plan 의 `Layer 1 (root)` 룰로 임시 파일(예: `.ax/.constitution-block.md`)에 다섯 블록을 써요:
    (a) `# <PROJECT> — Constitution` 헤더 + 룰 토큰 컨벤션 한 줄 · (b) `## META — 핵심 가드레일` (**AGENTS.md.template 의 문구 그대로** — Triage First + lean 원칙) · (c) `## 시그널 의미` (템플릿 문구 그대로) · (d) `## CRITICAL` / `## MANDATORY` 룰 본문 (`🔴 **\`<scope>:CRITICAL:NNN\`** … — <hook 경로>`) · (e) `## CONVENTION`.
    - (d) 의 **사용자 정의 CRITICAL 은 룰마다 hook 등록 시점을 물어요** — `boxes.md` §(d.1), 후속은 `signal-guide.md` §hook 등록 시점. universal(secrets·파괴 명령·보호 경로)은 이미 hook 이 있어 안 물어요.
-   - (e) 는 `boxes.md` §(e) 로 물어요 — [a] `@.ax/spirit/rules/<cat>.md` import ✓ 권장 · [b] 인라인 ID 3~5개 · [c] 링크만.
+   - (e) 는 `boxes.md` §(e) 로 물어요 — [a] `@.ax/spirit/rules/<cat>.md` import ✅ 권장 · [b] 인라인 ID 3~5개 · [c] 링크만.
 2. **적용은 스크립트로** — 기존 본문은 `---` 아래 보존돼요:
    ```bash
    BLOCK=.ax/.constitution-block.md
@@ -170,11 +170,11 @@ bash .ax/scripts/bash/zero-domain-risk.sh --show --json    # result.before.keys 
 ## 4. 적용 보고
 
 ```
-✓ Q1 — .ax/adoption-plan.md 생성 (96줄). Constitution 은 그대로.
-✓ Q2 — .ax/config.yml domain_risk 30 keys + default L1
-✓ Q3 — .ax/config.yml sensors.mode = warning
-✓ Q4 — .ax/docs/spec/ 4개 SDD 변환 + adr/ 3개 재번호 + imported/<name>/ snapshot
-✓ Q5 — Layer 1 시그널화 (룰 8개, spirit/rules 4 카테고리) · Layer 2 stub N개 · Layer 3 goax 도입 ADR · 정리
+✅ Q1 — .ax/adoption-plan.md 생성 (96줄). Constitution 은 그대로.
+✅ Q2 — .ax/config.yml domain_risk 30 keys + default L1
+✅ Q3 — .ax/config.yml sensors.mode = warning
+✅ Q4 — .ax/docs/spec/ 4개 SDD 변환 + adr/ 3개 재번호 + imported/<name>/ snapshot
+✅ Q5 — Layer 1 시그널화 (룰 8개, spirit/rules 4 카테고리) · Layer 2 stub N개 · Layer 3 goax 도입 ADR · 정리
 ```
 
 **보고하는 숫자는 raw grep 이 아니라 의미 단위예요**:

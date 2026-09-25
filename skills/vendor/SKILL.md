@@ -66,7 +66,7 @@ bash .ax/scripts/bash/vendor-skills.sh --plugin-dir "$PLUGIN_ROOT" --dry-run --j
 출력 형태:
 
 ```
-📦 goax 동봉 (v0.4.0)
+◆  goax 동봉 (v0.4.0)
 
  📍 루트
   ADE 루트      commerce-monorepo/            (.claude/ 가 여기)
@@ -78,7 +78,7 @@ bash .ax/scripts/bash/vendor-skills.sh --plugin-dir "$PLUGIN_ROOT" --dry-run --j
   .claude/commands/   1개  (goax)
   .claude/agents/     4개  (architect, evaluator, lane-scout, lane-worker)
 
- ⚠ 기존 파일
+ ❗ 기존 파일
   같은 이름의 goax 자산만 덮어써요. 직접 만드신 스킬은 건드리지 않아요.
 
  ▸ 진행할까요? [y/n]
@@ -103,7 +103,7 @@ bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" --json
 완료 후 안내:
 
 ```
-✓ 동봉 완료 — v0.4.0, 20개
+✅ 동봉 완료 — v0.4.0, 20개
 
 다음 단계
  1. 커밋해요 — .claude/ 와 .goax-root 가 저장소에 들어가야 팀원에게 닿아요

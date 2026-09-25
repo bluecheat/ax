@@ -4604,6 +4604,40 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────
+section "57. 표시 기호 — 사용자에게 보이는 문서는 symbols.md 어휘만"
+# ───────────────────────────────────────────────────────────
+# 섹션마다 다른 그림 이모지가 붙어 정작 ❌·❗ 가 안 보였어요 (doctor 한 파일에 서로 다른 이모지 20종).
+# VS16(⚠️ ℹ️ ⚙️)은 터미널마다 폭이 갈려 박스 줄이 어긋나고, ✓ ✗ ⚠ 는 너무 작아요.
+# 예외: HUD 체인 줄(›) · triage 의 MEMORY.md ★ 표지 설명 · 어휘 SSOT(symbols.md) 자체.
+EMO_OUT=$(cd "$REPO" && python3 - skills/*/SKILL.md skills/*/references/*.md agents/*.md commands/*.md \
+    docs/reference/*.md templates/default/*.template <<'PYE' 2>&1
+import re, sys
+allow = set("✅❗❌⛔📍🎯📂👉🔴🟡🔵")
+rx = re.compile("[☀-➿⬀-⯿\U0001F000-\U0001FAFF]|️")
+bad = []
+for f in sys.argv[1:]:
+    if f.endswith("docs/reference/symbols.md"):
+        continue
+    for n, line in enumerate(open(f, encoding="utf-8"), 1):
+        if "›" in line or "★ 표시" in line:
+            continue
+        hit = sorted({m for m in rx.findall(line) if m not in allow})
+        if hit:
+            bad.append("%s:%d %s" % (f, n, " ".join("U+FE0F" if h == "️" else h for h in hit)))
+print("\n".join(bad[:15]))
+print("COUNT=%d" % len(bad))
+PYE
+)
+if echo "$EMO_OUT" | grep -q '^COUNT=0$'; then
+    pass "사용자 대면 문서 — 어휘 밖 이모지 · VS16 · 폭 1칸 상태 기호 0건"
+else
+    fail "어휘 밖 이모지 ($(echo "$EMO_OUT" | grep '^COUNT=' | cut -d= -f2)줄) — docs/reference/symbols.md 참고:
+$(echo "$EMO_OUT" | grep -v '^COUNT=')"
+fi
+grep -q 'symbols.md' "$REPO/templates/default/.ax/spirit/tone.md" \
+    && pass "tone.md 가 표시 기호 SSOT(symbols.md)를 가리켜요" || fail "tone.md 에 symbols.md 포인터가 없어요"
+
+# ───────────────────────────────────────────────────────────
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────
 if [ "$fail_count" -eq 0 ]; then

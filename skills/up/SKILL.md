@@ -68,7 +68,7 @@ bash 휴리스틱이 아니라 **Claude가 코드를 직접 읽어** 다음을 �
 분석 결과를 다음 형식으로:
 
 ```
-🔍 Discover
+◆  Discover
  레포 형태 : 모노레포 (Gradle multi-module)
  모듈 :  N개 — <module-1>, <module-2>, ...
  CLAUDE.md : X줄, 룰 ~Y개 추정 (또는 없음)
@@ -77,7 +77,7 @@ bash 휴리스틱이 아니라 **Claude가 코드를 직접 읽어** 다음을 �
  Stack :  Kotlin/Gradle
  도메인 후보 : payment, order, catalog, ...
 
-📐 Plan — 4계층 + Cross-cut으로 깔릴 자산
+◆  Plan — 4계층 + Cross-cut으로 깔릴 자산
  Target CLI :  <claude | opencode | both | unknown> (자동 감지)
  Layer 0 — Triage:  plugin이 이미 제공 (skills/triage/)
  Layer 1 — Constitution: AGENTS.md (multi-CLI SSOT) + CLAUDE.md (@AGENTS.md alias)
@@ -128,8 +128,8 @@ fi
 
 RESULT=$(bash "$PLUGIN_ROOT/scripts/provision.sh" --json)
 
-echo "$RESULT" | jq -r '"✓ 복사 \(.result.copied)건 · seed 유지 \(.result.seeded_kept)건 · reference \(.result.reference_files)개 · git hook \(.result.git_hooks)"'
-echo "$RESULT" | jq -r '.warnings[]? | "⚠ \(.)"'
+echo "$RESULT" | jq -r '"✅ 복사 \(.result.copied)건 · seed 유지 \(.result.seeded_kept)건 · reference \(.result.reference_files)개 · git hook \(.result.git_hooks)"'
+echo "$RESULT" | jq -r '.warnings[]? | "❗ \(.)"'
 echo "$RESULT" | jq -r '.result.suggested[]? | "  · \(.) — 기존 파일 보존, plugin 최신본은 .suggested 로 옆에"'
 echo "$RESULT" | jq -r '.result.preserved[]? | "  · _templates/\(.) 수정본 보존"'
 ```
@@ -160,7 +160,7 @@ echo "$RESULT" | jq -r '.result.preserved[]? | "  · _templates/\(.) 수정본 �
 external spec 중 하나라도) `.ax/.onboarding-pending` 마커를 작성하고 onboarding skill로 자연스럽게 이어가요:
 
 ```
-✓ 골격 설치 완료.
+✅ 골격 설치 완료.
 이제 onboarding으로 이어갈게요. 도메인과 룰을 함께 정리해요...
 ```
 
@@ -176,14 +176,14 @@ external spec 중 하나라도) `.ax/.onboarding-pending` 마커를 작성하고
 그래서 아래 안내를 낸 뒤 **`zero` skill 로 넘겨요.**
 
 ```
-🥳 goax 도입 완료.
+✅ goax 도입 완료.
 
 📂 .ax/ runtime — .gitignore 자동 처리됨
  .ax/state.json, .ax/current-task.json — 매 호출마다 변경되는 상태 (per-machine)
  .ax/*.suggested — install/onboarding 머지 임시본
  → PR diff 노이즈 방지 위해 .gitignore에 자동 추가 (또는 기존 .gitignore에 누락 줄 append)
 
-📋 Mistake Loop — 주기적 audit 권장
+◆  Mistake Loop — 주기적 audit 권장
  실수는 "실수 기록해줘" 로 캡처해요 (사용자 의도적 capture, race-free + redact 보호)
  audit_cadence_days=7 (.ax/config.yml) — 주 1회 회고 권장
  실행: "goax audit" 또는 "실수 회고" — 카테고리 N회 누적 시 CRITICAL/MANDATORY 룰 승격 후보 제시
@@ -210,7 +210,7 @@ external spec 중 하나라도) `.ax/.onboarding-pending` 마커를 작성하고
 ### Case A — 기존 CLAUDE.md 본문이 customize 됐을 때
 
 ```
-📝 Constitution 마이그레이션 가이드 (CLAUDE.md → AGENTS.md SSOT)
+◆  Constitution 마이그레이션 가이드 (CLAUDE.md → AGENTS.md SSOT)
 
 기존 CLAUDE.md 는 customize 본문이라 손대지 않았어요. 제안본:
  .ax/CLAUDE.md.suggested  — 1줄 @AGENTS.md alias + Claude Code 안내
@@ -233,7 +233,7 @@ Claude Code 사용자: CLAUDE.md → @AGENTS.md import 체인. 차이 없이 동
 ### Case B — 기존 AGENTS.md 가 customize 됐을 때
 
 ```
-📝 AGENTS.md 가 이미 customize 됐어요. 제안본 (출고본) 만 보존:
+◆  AGENTS.md 가 이미 customize 됐어요. 제안본 (출고본) 만 보존:
  .ax/AGENTS.md.suggested
 
 diff 후 누락된 META / 4계층 인덱스 / 시그널 의미 섹션만 머지 권장.

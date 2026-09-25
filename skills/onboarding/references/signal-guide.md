@@ -166,7 +166,7 @@ while IFS= read -r f; do
     if [[ "$f" == *.kt ]] && [[ "$f" == *src/test/* ]]; then
         # Guard 3: import static 옵션 modifier 처리
         if grep -qE '^import[[:space:]]+(static[[:space:]]+)?org\.junit\.jupiter\.' "$f" 2>/dev/null; then
-            echo "  ⚠ $f: JUnit5 import 금지 — Kotest DescribeSpec 사용" >&2
+            echo "  ❗ $f: JUnit5 import 금지 — Kotest DescribeSpec 사용" >&2
             VIOLATIONS=$((VIOLATIONS + 1))
         fi
     fi
@@ -174,7 +174,7 @@ done <<< "$STAGED"
 
 if [ "$VIOLATIONS" -gt 0 ]; then
     [ "$SENSOR_MODE" = "fail" ] && exit 2
-    echo "[goax] ⚠ $VIOLATIONS 위반 — 경고만 (mode=$SENSOR_MODE)" >&2
+    echo "[goax] ❗ $VIOLATIONS 위반 — 경고만 (mode=$SENSOR_MODE)" >&2
 fi
 exit 0
 ```

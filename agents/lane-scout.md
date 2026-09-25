@@ -60,7 +60,7 @@ disallowedTools: Write, Edit, NotebookEdit
 ## 출력 형식
 
 ```
-🔎 lane-scout — <이 레인의 질문>
+◆  lane-scout — <이 레인의 질문>
 
 ▸ 결론
  <한 문단. 질문에 대한 답부터>

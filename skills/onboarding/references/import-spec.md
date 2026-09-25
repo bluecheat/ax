@@ -37,7 +37,7 @@ status: imported # draft / accepted / superseded 로 사용자가 갱신
 ## 보고
 
 ```
-✓ Q4 — .ax/docs/spec/ N개 SDD 변환 + adr/ K개 재번호 + imported/<name>/ snapshot (.snapshot-meta M 파일)
+✅ Q4 — .ax/docs/spec/ N개 SDD 변환 + adr/ K개 재번호 + imported/<name>/ snapshot (.snapshot-meta M 파일)
 ```
 
 `triage-search.sh` 가 `imported/` 를 별도 카테고리로 검색해요 — specs 와 섞이지 않아요.

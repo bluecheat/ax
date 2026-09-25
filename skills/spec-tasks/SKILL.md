@@ -143,10 +143,10 @@ bash .ax/scripts/bash/update-task.sh --phase tasks --json
 ## 5. 출력
 
 ```
-📐 spec-tasks (spec 005-payment-refund-policy-change)
+◆  spec-tasks (spec 005-payment-refund-policy-change)
 
- ✓ tasks.md 추가 (tier: standard 유지)
- ✓ phase 갱신: spec_checked → tasks
+ ✅ tasks.md 추가 (tier: standard 유지)
+ ✅ phase 갱신: spec_checked → tasks
 
  📍 다음
   1. tasks.md 를 spec.md §3 acceptance + §7.5 Technical Context + ADR 기반으로 분해

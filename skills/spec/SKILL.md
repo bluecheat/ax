@@ -92,7 +92,7 @@ TIER_RESULT=$(bash .ax/scripts/bash/tier-from-state.sh --json --size L --risk L3
 ## 2. 출력 (옵션 제시)
 
 ```
-📐 spec (생성 대상)
+◆  spec (생성 대상)
 
  📍 발견
   slug   payment-refund-policy-change
@@ -104,7 +104,7 @@ TIER_RESULT=$(bash .ax/scripts/bash/tier-from-state.sh --json --size L --risk L3
 
  ─ 옵션 ──────────────────────────────────────────
 
- [a] ✓ tier=full (권장 — L×L3)     [권장]
+ [a] ✅ tier=full (권장 — L×L3)     [권장]
   산출물 5 파일 + ADR — spec/tasks/research/data-model/quickstart + docs/adr/<id>-*.md
 
  [b] tier=standard (2 파일 — spec/tasks)
@@ -146,11 +146,11 @@ bash .ax/scripts/bash/update-task.sh --phase spec \
  --set "spec_id=$SPEC_ID" --set "spec_dir=$SPEC_DIR" --set "spec_tier=$TIER" --json
 ```
 
-## 4. ✓ 메시지
+## 4. ✅ 메시지
 
 ```
-✓ spec 2026-09-25-a3f1-payment-refund-policy-change 생성 (tier=full, 5 파일 + ADR 권장)
-✓ current-task.json 갱신: phase=spec, spec_id=2026-09-25-a3f1
+✅ spec 2026-09-25-a3f1-payment-refund-policy-change 생성 (tier=full, 5 파일 + ADR 권장)
+✅ current-task.json 갱신: phase=spec, spec_id=2026-09-25-a3f1
 
 📍 다음 단계
  1. spec.md 작성 — 문제 정의 + NEEDS CLARIFICATION 명시 + §7.5 Technical Context

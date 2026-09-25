@@ -74,7 +74,7 @@ description: "작업을 레인으로 가르고 게이트로 검증 — '/lane', 
 레인 표를 그리지 말고 그렇게 답하고 끝내요.
 
 ```
-🚦 lane — 단일 레인 권장
+◆  lane — 단일 레인 권장
 
  ▸ 사유  cross-cutting (검증 규칙을 4개 레이어에 동시 주입) — 사전 분할 불가
  ▸ 근거  경계가 파일이 아니라 한 덩어리 결정이에요. 나누면 레인마다 다른 규칙을 만들어요
@@ -211,7 +211,7 @@ bash .ax/scripts/bash/tasks-plan.sh --spec "$SPEC" --json
 **사람이 눈으로 못 본 것을 스크립트가 잡았어요** — 그래서 이 게이트는 형식이 아니라
 실효가 있어요.
 
-⚠ 이 게이트는 **§2 의 탐색이 끝난 뒤에만** 의미가 있어요. `files:` 가 비어 있으면
+❗ 이 게이트는 **§2 의 탐색이 끝난 뒤에만** 의미가 있어요. `files:` 가 비어 있으면
 빈 데이터를 검사하고 통과시켜요.
 
 ## 8. 실행 순서 — 레인 간 의존
@@ -350,7 +350,7 @@ bash .ax/scripts/bash/status-note.sh --show --json | jq -r '.result.sections.ren
 ## 출력
 
 ```
-🚦 lane (spec 014-surface)
+◆  lane (spec 014-surface)
 
  ▸ 분할 가능  예 — cross-cutting 아님, 순차 의존 국소적
  ▸ 국면  실행 — 파일 소유권으로 가름 (탐색 완료, files: 채워짐)

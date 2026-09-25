@@ -97,14 +97,14 @@ bash .ax/scripts/bash/status-note.sh --show --json | jq -r '.result.sections.ren
 ## 출력 패턴
 
 ```
-📐 spec-implement (spec 014, 레인 모드)
+◆  spec-implement (spec 014, 레인 모드)
 
  ▸ 게이트  violations 0 · 소유 충돌 0
  ▸ ready   T010 T011 T020   ·  레인 A {T010,T011}  B {T020}  ·  직접 T009
- ▸ 디스패치 A, B — 원장 기록 ✓ → lane-worker 2개 동시 기동
+ ▸ 디스패치 A, B — 원장 기록 ✅ → lane-worker 2개 동시 기동
 
  (보고 수신)
- ✓ 보고 A — 원장 기록 · $ pnpm test Card (exit 0) · T010 T011 마킹 [x]
+ ✅ 보고 A — 원장 기록 · $ pnpm test Card (exit 0) · T010 T011 마킹 [x]
  ▸ 인계   renamed +1 (Pill.tone → variant)
  → T021 의존 해소 → 레인 A 재디스패치 (B 는 아직 진행 중)
 
