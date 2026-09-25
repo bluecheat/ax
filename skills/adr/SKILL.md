@@ -51,7 +51,7 @@ grep -lE "^\| 상태 \|.*폐기|superseded" .ax/docs/adr/*.md 2>/dev/null
 ## 2. 출력
 
 ```
-📝 ADR Write (slug: payment-refund-strategy)
+◆  ADR Write (slug: payment-refund-strategy)
 
  📍 발견
   기존 관련 ADR 0002-pg-multi-provider.md
@@ -63,7 +63,7 @@ grep -lE "^\| 상태 \|.*폐기|superseded" .ax/docs/adr/*.md 2>/dev/null
 
  ─ 옵션 ──────────────────────────────────────────
 
- [a] ✓ 새 ADR 작성                [권장]
+ [a] ✅ 새 ADR 작성                [권장]
   생성 .ax/docs/adr/<id>-payment-refund-strategy.md
     (0000-template.md 복사 + 메타 채움)
   다음 사용자가 컨텍스트·검토된 대안·결정 본문 작성
@@ -100,9 +100,9 @@ sed \
  "$DEST" > "$DEST.tmp" && mv "$DEST.tmp" "$DEST"
 ```
 
-✓ 메시지:
+✅ 메시지:
 ```
-✓ ADR 2026-09-25-a3f1 — .ax/docs/adr/2026-09-25-a3f1-payment-refund-strategy.md (template 복사, 메타 채움)
+✅ ADR 2026-09-25-a3f1 — .ax/docs/adr/2026-09-25-a3f1-payment-refund-strategy.md (template 복사, 메타 채움)
 
 다음 단계
  1. 컨텍스트 작성 — 현재 상태 / 트리거 / 제약

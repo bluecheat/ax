@@ -120,13 +120,13 @@ per-task [y/n] 이 사라진 자리, Phase 경계 게이트는 *형식적 [y/n] 
 ```
 ◆  Phase 2 → Phase 3 전환
 
-│  ✓ 완료 — Phase 2 (T007~T012, 6 task)
+│  ✅ 완료 — Phase 2 (T007~T012, 6 task)
 │   └─ commerce-data 4 파일, port + service + adapter
 │
 │  📍 다음 — Phase 3 (T013~T015, 3 task)
 │   └─ commerce-batch — HandlerRegistry / R-P-W / cron
 │
-│  📐 적용될 룰 (Phase 2 와 차이)
+│  ◆  적용될 룰 (Phase 2 와 차이)
 │   + SP-OPS-002 — chunk size 명시 (Phase 3 신규)
 │   + SP-DATA-007 → 그대로 유지
 │

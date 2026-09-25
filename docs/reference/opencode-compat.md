@@ -14,14 +14,14 @@
 | `.ax/hooks/pre-bash/*.sh` | ✅ PreToolUse:Bash matcher | ❌ bash subprocess hook 미지원 | OpenCode 는 `@opencode-ai/plugin` TypeScript in-process 만 |
 | `.ax/hooks/pre-edit/*.sh` | ✅ PreToolUse:Edit/Write/MultiEdit | ❌ 동일 | path-scoped rule inject 도 Claude Code 전용 |
 | `.ax/hooks/post-edit/*.sh` | ✅ PostToolUse:Edit/Write/MultiEdit | ❌ 동일 | lint-changed 등 후처리 |
-| `.ax/hooks/pre-commit/*.sh` | ✅ `grep-on-commit.sh` chain | ⚠️ git pre-commit 으로 보전 | `install-git-hooks.sh` 안내 |
+| `.ax/hooks/pre-commit/*.sh` | ✅ `grep-on-commit.sh` chain | ❗ git pre-commit 으로 보전 | `install-git-hooks.sh` 안내 |
 | `.ax/hooks/user-prompt/*.sh` | ✅ UserPromptSubmit | ❌ 미지원 | triage-nudge 등 — OpenCode 는 system prompt 정적 주입만 |
 | `.ax/scripts/bash/*.sh` (결정론) | ✅ Claude Code 가 호출 | ✅ `GOAX_PROJECT_DIR=$pwd` 로 standalone 호출 가능 (fallback) | `--json --dry-run --help` 인터페이스 CLI 무관 |
 | `.ax/spirit/{values,tone,rules}` 마크다운 | ✅ `@import` | ✅ `instructions:` 또는 수동 `@import` | OpenCode 는 path-scoped 자동 inject 안 됨 → 수동 |
 | `.ax/_templates/{spec,adr,module}/` | ✅ skill 안에서 cp | ✅ 동일 | 마크다운 자산, CLI 무관 |
 | Mistake auto-capture (hook) | ✅ Claude Code 자동 | ❌ 사용자 명시 호출만 | `/mistake` 또는 "실수 기록해줘" |
 | Mistake secrets 재검증 (pre-commit) | ✅ Claude Code mode | ✅ git pre-commit (install-git-hooks 후) | `check-mistake-secrets.sh` |
-| HUD statusline | ✅ Claude Code statusline | ⚠️ OpenCode statusline schema 다름 | 추후 어댑터 — 현재는 Claude Code 전용 |
+| HUD statusline | ✅ Claude Code statusline | ❗ OpenCode statusline schema 다름 | 추후 어댑터 — 현재는 Claude Code 전용 |
 
 ## 2. OpenCode 환경에서 hook 시스템 보전
 
@@ -34,12 +34,12 @@ OpenCode 는 `PreToolUse` 같은 도구 호출 전후 차단 hook 이 없어요.
 bash .ax/scripts/bash/install-git-hooks.sh
 
 # 출력 (정상):
-# ✓ installed → .git/hooks/pre-commit
+# ✅ installed → .git/hooks/pre-commit
 #   .ax/hooks/pre-commit/*.sh 가 git commit 시 자동 chain 됩니다.
 
 # 재실행 (idempotent — 이미 등록됐으면 skipped)
 bash .ax/scripts/bash/install-git-hooks.sh
-# ✓ 이미 goax wrapper 등록됨: .git/hooks/pre-commit (재설치는 --force)
+# ✅ 이미 goax wrapper 등록됨: .git/hooks/pre-commit (재설치는 --force)
 ```
 
 ### 동작
@@ -56,7 +56,7 @@ bash .ax/scripts/bash/install-git-hooks.sh
 
 ```bash
 bash .ax/scripts/bash/install-git-hooks.sh --force
-# ✓ replaced → .git/hooks/pre-commit (백업: .git/hooks/pre-commit.bak.20260527-153012)
+# ✅ replaced → .git/hooks/pre-commit (백업: .git/hooks/pre-commit.bak.20260527-153012)
 ```
 
 `pre-commit-framework` 같은 도구와 함께 쓰려면 `.pre-commit-config.yaml` 의 `repos:` 에 goax hook 을 local 로 추가하는 방식이 더 깔끔해요 — 현재 자동화는 안 되어 있으니 수동 통합 필요.

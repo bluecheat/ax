@@ -134,13 +134,13 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 ### 3.1 Silent 진행 (autopilot / phase_gate 의 phase 내부)
 
 ```
-📐 T013 진행 — payment/RefundService.kt
+◆  T013 진행 — payment/RefundService.kt
    매칭 룰  AX:CRITICAL:003, SP-SEC-002
 
 (코드 변경 + 테스트)
 
-✓ T013 — payment/RefundService.kt 구현, 단위 테스트 통과
-✓ tasks.md 마킹: - [ ] → - [x]
+✅ T013 — payment/RefundService.kt 구현, 단위 테스트 통과
+✅ tasks.md 마킹: - [ ] → - [x]
 ```
 
 사용자 [y/n] X — Spirit + hooks + Mistake Loop 가 안전망 역할.
@@ -158,11 +158,11 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 
 출력:
 ```
-🛑 T020 — payment/RefundService.kt (strict 게이트)
+⛔ T020 — payment/RefundService.kt (strict 게이트)
    원인  L3 도메인 + SP-SEC-002 매칭 (C5 적용)
    매칭 룰  AX:CRITICAL:003, SP-SEC-002
 
-   📐 적용할 룰
+   ◆  적용할 룰
     AX:CRITICAL:003 — 시크릿 hardcode 금지 (hook:.ax/hooks/pre-commit/critical-rule-grep.sh)
     SP-SEC-002 — 멱등성 키 필수
 
@@ -190,13 +190,13 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 ```
 ◆  Phase 2 → Phase 3 전환
 
-│  ✓ 완료 — Phase 2 (T007~T012, 6 task, 12분 소요)
+│  ✅ 완료 — Phase 2 (T007~T012, 6 task, 12분 소요)
 │   └─ commerce-data 4 파일 — port + service + adapter 통합
 │
 │  📍 다음 — Phase 3 (T013~T015, 3 task)
 │   └─ commerce-batch — HandlerRegistry / R-P-W / cron 등록
 │
-│  📐 적용될 룰 (Phase 2 와의 차이)
+│  ◆  적용될 룰 (Phase 2 와의 차이)
 │   + SP-OPS-002 — chunk size 명시 (Phase 3 신규)
 │   + SP-DATA-007 → 그대로 유지
 │
@@ -205,7 +205,7 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 │   commerce-batch/.../DispatchJobConfig.kt (신규)
 │   .deploy/commerce/values.yml (cron 추가)
 │
-│  ⚠ 주의
+│  ❗ 주의
 │   T013 의 HandlerRegistry 가 Phase 2 의 ScheduledNotificationHandler 인터페이스에 의존.
 │   Phase 2 결과물 검토 권장.
 │
@@ -234,7 +234,7 @@ sed -E "/^- \[ \] .*${TASK_ID}([^0-9A-Za-z]|\$)/ s/^- \[ \]/- [x]/" \
 
 각 task 완료 후 1줄 보고 (대화 [y/n] X):
 ```
-✓ T020 — payment/RefundService.kt 구현, 단위 테스트 통과
+✅ T020 — payment/RefundService.kt 구현, 단위 테스트 통과
 ```
 
 레인 모드에선 **코디네이터만** 켜요 — 원장에 `보고:` 가 적힌 뒤, 검증 명령을 직접 돌린 뒤에요.
@@ -244,7 +244,7 @@ sed -E "/^- \[ \] .*${TASK_ID}([^0-9A-Za-z]|\$)/ s/^- \[ \]/- [x]/" \
 
 테스트 실패·빌드 실패·룰 위반 시:
 ```
-✗ T020 실패
+❌ T020 실패
  원인: RefundService.kt:42 — AX:CRITICAL:003 위반 (PG 키 평문)
  조치: secrets-vault 사용으로 수정 후 재시도
 
@@ -274,7 +274,7 @@ bash .ax/scripts/bash/status-note.sh --add open "<사용자 결정이 필요한 
 - `.ax/config.yml` 의 `protected_paths` 매칭
 
 ```
-🛑 범위 이탈 감지
+⛔ 범위 이탈 감지
  task: T020 (payment/RefundService.kt 만 명시)
  시도: payment/PaymentGateway.kt 수정 (tasks.md 외)
 
@@ -345,10 +345,10 @@ evaluator 가 파일을 직접 써요. 코디네이터는 결과를 받아 적�
 
 ```bash
 if [ "$COMPLETE" = "true" ]; then
- echo "🥳 spec $SPEC 구현 완료."
- [ -f "$SPEC_DIR/review.md" ] && echo "  ✓ evaluator verdict: $(head -1 "$SPEC_DIR/review.md")"
+ echo "✅ spec $SPEC 구현 완료."
+ [ -f "$SPEC_DIR/review.md" ] && echo "  ✅ evaluator verdict: $(head -1 "$SPEC_DIR/review.md")"
  bash .ax/scripts/bash/reset-task.sh >/dev/null 2>&1 || true
- echo "  ✓ current-task.json reset → phase=idle"
+ echo "  ✅ current-task.json reset → phase=idle"
  bash .ax/scripts/bash/status-note.sh --set now "" --json >/dev/null 2>&1 || true    # 끝난 항목은 지워요 — SSOT 는 git log · ADR
  bash .ax/scripts/bash/status-note.sh --add next "spec $SPEC 완료 — 다음 작업은 triage 부터" --json >/dev/null 2>&1 || true
  echo "  → 다음 작업 메시지에 triage가 다시 발동돼요."
@@ -361,15 +361,15 @@ fi
 
 ### autopilot / phase_gate 의 phase 내부 (대부분의 task)
 ```
-📐 spec-implement (spec 005, T013 진행)
+◆  spec-implement (spec 005, T013 진행)
 
  📍 task T013 — HandlerRegistry 구현
- 📁 file commerce-batch/.../ScheduledNotificationHandlerRegistry.kt
- 📋 rules SP-APP-002
+ ◆  file commerce-batch/.../ScheduledNotificationHandlerRegistry.kt
+ ◆  rules SP-APP-002
 
  (코드 작성 → 테스트 → 마킹)
 
- ✓ T013 완료 — 마킹 [x]
+ ✅ T013 완료 — 마킹 [x]
  → 다음 task: T014 — DispatchJobConfig
 ```
 
@@ -384,11 +384,11 @@ fi
 
 ### 완료 시 (§8)
 ```
-🏁 spec 014 — task 12/12 · AC 3/3 · 원장 정합
+◆  spec 014 — task 12/12 · AC 3/3 · 원장 정합
 
  ▸ evaluator 필수 (L × L2) → goax:evaluator 기동 (새 컨텍스트 · spec + ADR 2 + diff)
- ✓ review.md — verdict: 진행 (발견 0건 · 검토 범위 9 파일)
- 🥳 spec 014 구현 완료 · current-task.json → idle
+ ✅ review.md — verdict: 진행 (발견 0건 · 검토 범위 9 파일)
+ ✅ spec 014 구현 완료 · current-task.json → idle
 ```
 
 ## 절대 금지

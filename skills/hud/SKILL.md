@@ -46,7 +46,7 @@ full      focused
 
 ## subcommand
 
-### `/hud setup` — 활성화 (★ 충돌 안전)
+### `/hud setup` — 활성화 (충돌 안전)
 
 1. `.claude/settings.json` 존재 확인
 2. **기존 statusLine 검사** — 있으면 절대 자동 덮어쓰지 않아요. 단 command 가 *부재 파일*을 가리키는
@@ -63,18 +63,18 @@ full      focused
 
  ─ 옵션 ──────────────────────────────────────────
 
- [a] ✓ 신규 등록         [기존 statusLine 없을 때만 권장]
+ [a] ✅ 신규 등록         [기존 statusLine 없을 때만 권장]
   수정 .claude/settings.json
     "statusLine": { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hud/statusline.sh\"" }
 
- [b] ⚠ 기존 statusLine 교체
+ [b] ❗ 기존 statusLine 교체
   경고 omc HUD 등이 사라져요. 되돌리려면 사용자가 직접 settings.json 수정.
 
  [c] 합치기 — goax 한 줄 + 기존 HUD          [기존 statusLine 있을 때 권장]
   생성 .ax/hud/statusline-combined.sh (런타임 생성물 — template 에 없음, .gitignore 대상)
   수정 .claude/settings.json command 만 → bash "${CLAUDE_PROJECT_DIR}/.ax/hud/statusline-combined.sh"
 
- [a-fix] ⚡ 깨진 statusLine 1줄 복구   [부재 파일 참조 감지 시에만]
+ [a-fix] ❗ 깨진 statusLine 1줄 복구   [부재 파일 참조 감지 시에만]
 
  [d] 취소
 
@@ -127,7 +127,7 @@ printf '{"workspace":{"current_dir":"%s"}}' "$PWD" | COLUMNS="${COLUMNS:-120}" b
 ```
 
 ```
-🪝 goax HUD
+◆  goax HUD
 
  렌더  [goax#0.5.1] | M×L2 · payment | spec ✓ › tasks ✓ › impl ● [######----]7/12 › review ○ | mistakes:3
  프리셋  focused (.ax/config.yml hud.preset)

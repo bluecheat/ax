@@ -21,7 +21,7 @@ description: "goax 설치 상태 진단 — 'goax doctor', 'goax 진단', '하�
 ## 1. PROJECT_ROOT 감지
 
 `.ax/` 가 있는 가장 가까운 디렉토리: 자기 + 조상 → 자식(2~4단) → 없으면 `먼저 'goax 도입해줘'라고 말해주세요`.
-다른 디렉토리에서 발동되면 알려요: `⚠ 현재 디렉토리에 .ax/가 없어요. <root> 의 설치를 진단해요.`
+다른 디렉토리에서 발동되면 알려요: `❗ 현재 디렉토리에 .ax/가 없어요. <root> 의 설치를 진단해요.`
 
 ```bash
 if [ -n "${CLAUDE_SKILL_DIR:-}" ]; then PLUGIN_ROOT="$(cd "${CLAUDE_SKILL_DIR}/../.." && pwd)"
@@ -61,7 +61,7 @@ Spirit 카테고리 수를 `spirit-lint.sh` 로, mistake 카테고리 집계를 
 | **모노레포 훅 배선** | ADE 루트(저장소 루트) settings 에 이 프로젝트의 goax 훅이 템플릿대로 있나 | `ade-settings.sh --check` (§3.14) |
 | **인계 노트** | current-task.json `handoff` 기한(`- [ ] YYYY-MM-DD`) 임박·초과 — zero 의 가정 검증 · ablation 재검토 | `doctor-scan.sh handoff` (§3.6~) |
 
-각 항목 ✅ / ⚠️ / ❌. 규칙은 §4.
+각 항목 ✅ / ❗ / ❌. 규칙은 §4.
 
 ### 3.5 Plugin update 반영 — version + 출고 자산 신선도
 
@@ -100,11 +100,11 @@ fi
 
 > drift 감지 범위: `check-templates-drift.sh` 는 `_templates/spec/` sha 비교. 나머지 MANIFEST 출고분(`hooks/`, `scripts/bash/`, `modules/`, `docs/`)은 `check-manifest-install.sh` 가 파일 단위. `.ax/spirit/{values,tone,README}.md` · `spirit/rules/` 는 사용자 영역이라 검증 대상 아님.
 
-보고: `NEEDS_REINSTALL=false && USER_MOD=false` → 생략. `USER_MOD` 만 → `ℹ️  _templates 사용자 수정 감지 (정상): $DRIFT_FILES`. `MI_STATUS=skipped` → `ℹ️  plugin shipped 검증 skip — plugin 컨텍스트에서 실행 권장`. `NEEDS_REINSTALL=true` →
+보고: `NEEDS_REINSTALL=false && USER_MOD=false` → 생략. `USER_MOD` 만 → `_templates 사용자 수정 감지 (정상): $DRIFT_FILES`. `MI_STATUS=skipped` → `plugin shipped 검증 skip — plugin 컨텍스트에서 실행 권장`. `NEEDS_REINSTALL=true` →
 
 ```
-🔄  Plugin update 반영
-   ⚠️  신규 버전 출고 미반영 — installed $INSTALLED_V → plugin $PLUGIN_V
+◆  Plugin update 반영
+   ❗  신규 버전 출고 미반영 — installed $INSTALLED_V → plugin $PLUGIN_V
    변경 내역 (changelog 발췌, 8개 cap):  <CHANGELOG_LINES>
    감지된 drift:  version 3-way · MANIFEST 누락 N (5개 cap) · MANIFEST drift N · _templates 갱신 $DRIFT_FILES
 
@@ -138,46 +138,46 @@ D_BAD=$(echo "$SCAN" | jq -r '.result.handoff.deadlines[] | select(.status!="ok"
 
 **3.6 마이그레이션 잔재** (0건이면 생략):
 ```
-🧹  마이그레이션 잔재
-   ⚠️ .gitignore 누락 엔트리 — <S_GI>
-   ⚠️ .ax/spirit/rules/output-style.md — plugin meta 로 분류되어 출고에서 제거됨
-   ⚠️ .ax/docs/STATUS.md — 인계 노트가 current-task.json 으로 옮겨져 남은 잔재        ← S_SM == true 일 때만
-   ⚠️ 미처리 .suggested — <S_SG> (머지 후 rm)
-   ⚠️ spec README.md 잔재 <S_SR>건 · 빈 checklists/contracts <S_SE>건 (slim 정책 — rm/rmdir 권장)
+◆  마이그레이션 잔재
+   ❗ .gitignore 누락 엔트리 — <S_GI>
+   ❗ .ax/spirit/rules/output-style.md — plugin meta 로 분류되어 출고에서 제거됨
+   ❗ .ax/docs/STATUS.md — 인계 노트가 current-task.json 으로 옮겨져 남은 잔재        ← S_SM == true 일 때만
+   ❗ 미처리 .suggested — <S_SG> (머지 후 rm)
+   ❗ spec README.md 잔재 <S_SR>건 · 빈 checklists/contracts <S_SE>건 (slim 정책 — rm/rmdir 권장)
 ```
 다음 단계 `[m] ✅ 마이그레이션 잔재 처리 — .gitignore 보강 + 잔재 제거 (STATUS.md 는 남길 줄을 status-note.sh --add 로 옮긴 뒤 rm · 사용자 동의 후, git 영향)`.
 
 **3.7 hook 등록** (`H_CHK=false` 면 통째로 skip — plugin 경로 미도출. `H_MISS` 비었으면 본 표의 ✅ 만):
 ```
-🪝  Sensors — settings.json hook 등록
-   ⚠️  template hook <H_REG>/<H_TOT> 등록 — 미등록: <H_MISS 한 줄씩>
+◆  Sensors — settings.json hook 등록
+   ❗  template hook <H_REG>/<H_TOT> 등록 — 미등록: <H_MISS 한 줄씩>
    ❌ 초기 설치 미완 — .ax/hooks/ 안에 없는 항목: <H_MF 한 줄씩>   ← 비었으면 생략. /up 재실행으로만 복원
-   ⚠️  이벤트 키 미등록: <E_MISS>   ← settings.json 에 그 이벤트가 아예 없어요. Stop·SubagentStart 는 나중 판에 생긴 hook —
+   ❗  이벤트 키 미등록: <E_MISS>   ← settings.json 에 그 이벤트가 아예 없어요. Stop·SubagentStart 는 나중 판에 생긴 hook —
        파일은 /up 이 깔았는데 키가 없으면 안 돌아요. .ax/settings.json.suggested 머지 또는 template 을 읽어 jq 로 append
 ```
 다음 단계 `[s] ✅ template hook 등록 — 1순위 bash .ax/scripts/bash/register-spirit-hook.sh (path-scoped inject, idempotent) → 나머지는 .ax/settings.json.suggested 머지 또는 template 을 읽어 jq 로 append (백업 후, 사용자 키 보존). 파일 자체가 없으면 /up`. hook 셋은 template 이 정해요 — doctor 는 이름을 hardcode 하지 않아요.
 
 **3.8 문서 ↔ 실제** (`D_MM` 비었으면 생략):
 ```
-📑  문서 ↔ 실제 일치
-   ⚠️  <D_MM 한 줄씩 — 예: Constitution 은 shim 메커니즘을 명시 — 폐기됨>
+◆  문서 ↔ 실제 일치
+   ❗  <D_MM 한 줄씩 — 예: Constitution 은 shim 메커니즘을 명시 — 폐기됨>
 ```
 다음 단계 `[d] ✅ Constitution 의 path-scoped 설명 갱신 — 현재 활성 메커니즘(PreToolUse hook, spirit-rules-inject.sh)으로 (사용자 + LLM 이 함께)`. 왜: 세션마다 컨텍스트가 달라 한 세션이 옛 설계 언어로 문서를 되돌릴 수 있어요. 실제 hook 은 도는데 문서가 다른 메커니즘을 가리키면 신뢰가 깎여요.
 
 **도달 지도** (`R_BAD` 비었으면 본 표의 ✅ 만):
 ```
-🗺   도달 지도 — 룰이 실제로 세션에 닿는가
-   ✗ constitution (12) — CLAUDE.md 가 없어요. Claude Code 는 AGENTS.md 를 읽지 않아서 Constitution 이 어디에도 안 가요
-   ✗ spirit-scoped (3) — paths: 있는 룰인데 spirit-rules-inject.sh 미등록 — 편집 시점에 안 닿아요
-   ✗ module (2) — module-rules-inject.sh 미등록 — triage 키워드 매칭만 남아요
+◆  도달 지도 — 룰이 실제로 세션에 닿는가
+   ❌ constitution (12) — CLAUDE.md 가 없어요. Claude Code 는 AGENTS.md 를 읽지 않아서 Constitution 이 어디에도 안 가요
+   ❌ spirit-scoped (3) — paths: 있는 룰인데 spirit-rules-inject.sh 미등록 — 편집 시점에 안 닿아요
+   ❌ module (2) — module-rules-inject.sh 미등록 — triage 키워드 매칭만 남아요
 ```
 다음 단계 `[reach] ✅ 배관 잇기 — constitution: CLAUDE.md 에 '@AGENTS.md' 한 줄 / spirit-universal: Constitution CONVENTION 절에 @import / scoped·module: [s] hook 등록`. **라벨이 완벽해도 배관이 끊기면 룰은 0개예요** — 이 표가 doctor 에서 가장 먼저 봐야 할 줄이에요.
 
 **인계 노트 기한** (`D_BAD` 비었으면 생략) — `.ax/current-task.json` 의 `handoff` 에 있는 `- [ ] YYYY-MM-DD …` 를 I3 와 같은 규칙(≤7일 임박 · 초과)으로 봐요. zero 의 "1순위 가정 검증" 과 "룰 ablation 재검토" 가 여기 살아요 — 날짜가 문서 안에만 있으면 아무도 안 봐요.
 ```
-📅  인계 노트 기한
-   ⚠️  overdue 2026-03-01 (-12일) — 룰 ablation 재검토 (.ax/_templates/zero/ablation.md)
-   ⚠️  imminent 2026-09-10 (4일) — 1순위 위험 가정 "…" 을 …으로 검증
+◆  인계 노트 기한
+   ❗  overdue 2026-03-01 (-12일) — 룰 ablation 재검토 (.ax/_templates/zero/ablation.md)
+   ❗  imminent 2026-09-10 (4일) — 1순위 위험 가정 "…" 을 …으로 검증
 ```
 다음 단계 `[k] ✅ 기한 처리 — 하거나(ablation 이면 zero-ablation.sh --off → 실제 작업 5회 → --on, 이게 다음 기한을 다시 적어요) 날짜를 옮기거나(status-note.sh --done next "…" · --add next "- [ ] <새 날짜> …"). 세 번 넘게 미루면 그 항목은 할 생각이 없는 거예요 — 지우세요`.
 
@@ -193,13 +193,13 @@ SL_MISS=$(echo "$SL" | jq -r '.result.missing_files + .result.missing_frontmatte
 SL_PH=$(echo "$SL" | jq -r '.result.placeholders[] | "\(.file):\(.line)"')
 ```
 
-헤더 형식 `## SP-<CAT>-<NNN>: 제목` 의 SSOT 는 `.ax/docs/reference/rules-tokens.md`. 0건이면 본 표 `🧠 Spirit` 의 ✅ 만:
+헤더 형식 `## SP-<CAT>-<NNN>: 제목` 의 SSOT 는 `.ax/docs/reference/rules-tokens.md`. 0건이면 본 표 `◆ Cross-cut — Spirit` 줄의 ✅ 만:
 ```
-🧪  Spirit lint — <SL_RC> 카테고리 · SP 토큰 <SL_TK>개
-   ✗ 필수 파일/frontmatter — <SL_MISS>
-   ⚠️ 비표준 헤더 — <SL_BAD 한 줄씩>
-   ✗ 중복 토큰 — <SL_DUP 한 줄씩>
-   ⚠️ placeholder 잔재 — <SL_PH 한 줄씩>
+◆  Spirit lint — <SL_RC> 카테고리 · SP 토큰 <SL_TK>개
+   ❌ 필수 파일/frontmatter — <SL_MISS>
+   ❗ 비표준 헤더 — <SL_BAD 한 줄씩>
+   ❌ 중복 토큰 — <SL_DUP 한 줄씩>
+   ❗ placeholder 잔재 — <SL_PH 한 줄씩>
 ```
 다음 단계 `[n] ✅ spirit lint 정리 — 비표준 헤더 수정 + 중복 토큰 해소 (사용자와 함께, 자동 수정 X)`. "spirit 점검" 으로 불렸으면 이 절만 보고하고 끝내요. `--strict` 면 placeholder 도 fail.
 
@@ -218,11 +218,11 @@ RE_I7P=$(echo "$RESULT" | jq -r '.result.i7_grep_without_pattern | length'); RE_
 
 위반 0 이면 ✅ 만, 1+ 이면:
 ```
-⚖️  Rule Enforcement
+◆  Rule Enforcement
    ❌ I1 위반 — CRITICAL 인데 자동 차단 없음 (거짓 약속) N건: <rule_id (enforced_by, enforced_kind)>
    ❌ I2 위반 — TODO 인데 deadline 없음 N건
-   ⚠️  I3 임박 N건 / 초과 N건 (deadline + days)
-   ⚠️  I5 위반 — hook 파일 부재 N건 / 미등록 N건
+   ❗  I3 임박 N건 / 초과 N건 (deadline + days)
+   ❗  I5 위반 — hook 파일 부재 N건 / 미등록 N건
    ❌ I6 위반 — external 인데 자동 트리거 없음 N건
    ❌ I7 위반 — grep 류 룰인데 검출 패턴 없음 N건: <token (file)> / 패턴은 있는데 paths 비어 안 돎 N건
 ```
@@ -238,12 +238,12 @@ L_SCAFFOLD=$(echo "$RESULT_L" | jq -r '.result.grep_scaffold_unfilled'); L_PATTE
 L_BZ=$(echo "$RESULT_L" | jq -r '.result.blocking_zero'); L_RM=$(echo "$RESULT_L" | jq -r '.result.session_root_mismatch'); L_ROOT=$(echo "$RESULT_L" | jq -r '.result.project_root')
 ```
 ```
-🫀 Sensors — Liveness
-   ⚠️  C1 프로젝트 grep 패턴 0건 — 룰 파일에 `<!-- 검출 패턴: <ERE> -->` 를 채우세요 (스캐폴드 case 문은 패턴으로 못 쓰는 경우만) / 구버전 데모 잔존이면 /up 재실행
+◆  Sensors — Liveness
+   ❗  C1 프로젝트 grep 패턴 0건 — 룰 파일에 `<!-- 검출 패턴: <ERE> -->` 를 채우세요 (스캐폴드 case 문은 패턴으로 못 쓰는 경우만) / 구버전 데모 잔존이면 /up 재실행
    ·   검출 패턴 룰 <L_PATTERNS>건 (0 이 아니면 C1 은 finding 이 아니에요)
-   ⚠️  C2 git pre-commit 미설치 — bash .ax/scripts/bash/install-git-hooks.sh (사람 터미널 커밋은 PreToolUse 를 우회해요)
+   ❗  C2 git pre-commit 미설치 — bash .ax/scripts/bash/install-git-hooks.sh (사람 터미널 커밋은 PreToolUse 를 우회해요)
    ❌ C3 차단 능력 0 — mode=<sensors_mode> (+ git hook 부재). 지금 어떤 위반도 자동 차단되지 않아요
-   ⚠️  C4 세션 루트 이탈 — 세션을 <L_ROOT> 에서 시작하세요
+   ❗  C4 세션 루트 이탈 — 세션을 <L_ROOT> 에서 시작하세요
 ```
 
 ### 3.11 번호 무결성 — `next-spec-num.sh --check-duplicates`
@@ -252,7 +252,7 @@ L_BZ=$(echo "$RESULT_L" | jq -r '.result.blocking_zero'); L_RM=$(echo "$RESULT_L
 N_SPEC=$(bash "$ROOT/.ax/scripts/bash/next-spec-num.sh" --kind spec --check-duplicates --json 2>/dev/null | jq -r '.result.duplicate_count // 0')
 N_ADR=$(bash "$ROOT/.ax/scripts/bash/next-spec-num.sh" --kind adr --check-duplicates --json 2>/dev/null | jq -r '.result.duplicate_count // 0')
 ```
-읽기 전용 · 자동 수정 X — 재번호는 기존 링크를 깨뜨려서 사람이 결정해요. 새 항목은 날짜+난수 ID(`YYYY-MM-DD-<4hex>`)라 더 겹치지 않아요 — 이 검사는 옛 순번이 브랜치끼리 겹친 흔적을 보여줘요. 0 이면 생략: `🔢 번호 무결성 — ⚠️ ADR 중복 N건 / spec 중복 N건 (옛 순번)`.
+읽기 전용 · 자동 수정 X — 재번호는 기존 링크를 깨뜨려서 사람이 결정해요. 새 항목은 날짜+난수 ID(`YYYY-MM-DD-<4hex>`)라 더 겹치지 않아요 — 이 검사는 옛 순번이 브랜치끼리 겹친 흔적을 보여줘요. 0 이면 생략: `◆ 번호 무결성 — ❗ ADR 중복 N건 / spec 중복 N건 (옛 순번)`.
 
 ### 3.12 동봉본 신선도 — `vendor-skills.sh --check`
 
@@ -260,7 +260,7 @@ N_ADR=$(bash "$ROOT/.ax/scripts/bash/next-spec-num.sh" --kind adr --check-duplic
 VEN=$(bash "$ROOT/.ax/scripts/bash/vendor-skills.sh" --check --plugin-dir "$PLUGIN_ROOT" --json 2>/dev/null)
 V_ON=$(echo "$VEN" | jq -r '.result.vendored // false'); V_STALE=$(echo "$VEN" | jq -r '.result.stale // false'); V_SPLIT=$(echo "$VEN" | jq -r '.result.split // false')
 ```
-`vendored=false` 면 생략. `📦 동봉본 — ⚠️ 동봉 v<X> ↔ plugin v<Y>: /vendor 재실행 후 커밋 · ❌ ADE 루트 ≠ 프로젝트 루트인데 .goax-root 없음`.
+`vendored=false` 면 생략. `◆ 동봉본 — ❗ 동봉 v<X> ↔ plugin v<Y>: /vendor 재실행 후 커밋 · ❌ ADE 루트 ≠ 프로젝트 루트인데 .goax-root 없음`.
 
 ### 3.13 룰 인덱스 — `rules-index.sh`
 
@@ -274,7 +274,7 @@ bash "$ROOT/.ax/scripts/bash/rules-index.sh" --find AX:CRITICAL:001     # 토큰
 RI=$(bash "$ROOT/.ax/scripts/bash/rules-index.sh" --json 2>/dev/null); RI_C=$(echo "$RI" | jq -r '.result.counts.critical'); RI_M=$(echo "$RI" | jq -r '.result.counts.mandatory'); RI_V=$(echo "$RI" | jq -r '.result.counts.convention')
 ```
 
-전체 진단에선 `🏛️ Layer 1` 줄에 카운트만 써요: `✅ AGENTS.md (시그널 🔴×$RI_C / 🟡×$RI_M / 🔵×$RI_V, 4계층 인덱스 ✓)`. 룰은 외워서 적용하지 않아요 — 매번 이 스크립트로 다시 읽어요.
+전체 진단에선 `◆ Layer 1` 줄에 카운트만 써요: `✅ AGENTS.md (시그널 🔴×$RI_C / 🟡×$RI_M / 🔵×$RI_V, 4계층 인덱스 ✅)`. 룰은 외워서 적용하지 않아요 — 매번 이 스크립트로 다시 읽어요.
 
 ### 3.14 모노레포 훅 배선 — `ade-settings.sh --check`
 
@@ -283,46 +283,46 @@ ADE=$(bash "$ROOT/.ax/scripts/bash/ade-settings.sh" --check --plugin-dir "$PLUGI
 ADE_MISS=$(echo "$ADE" | jq -r '.result.missing // [] | length'); ADE_STALE=$(echo "$ADE" | jq -r '.result.stale // [] | length')
 ```
 `ADE_RC=2`(단일 저장소 — ADE 루트 = 프로젝트 루트)면 생략. 세션을 저장소 루트에서 열면 훅은 **루트의** `.claude/settings.json` 에서만
-등록돼요 — 여기서 빠진 훅은 프로젝트 settings 에 있어도 발화하지 않아요. `🧭 모노레포 훅 — ✅ 템플릿과 일치 · ⚠️ 누락 N · 잔재 M:
+등록돼요 — 여기서 빠진 훅은 프로젝트 settings 에 있어도 발화하지 않아요. `◆ 모노레포 훅 — ✅ 템플릿과 일치 · ❗ 누락 N · 잔재 M:
 ade-settings.sh --apply (다른 훅·permissions 는 보존)`. 누락 목록은 `.result.missing` 그대로 보여줘요. 자동 적용은 안 해요 — 사용자 [a] 뒤에만.
 
 ## 4. 출력
 
 ```
-🩺 goax doctor — /path/to/your-project
+◆  goax doctor — /path/to/your-project
     goax <installed> · preset=default · installed 2026-05-02
 
-🏛️  Layer 1 — Constitution
-   ✅ AGENTS.md (62줄, 시그널 🔴×3 / 🟡×9 / 🔵×1, 4계층 인덱스 ✓) · CLAUDE.md @AGENTS.md ✓
-⚙️  Layer 0 — Triage / 설정
+◆  Layer 1 — Constitution
+   ✅ AGENTS.md (62줄, 시그널 🔴×3 / 🟡×9 / 🔵×1, 4계층 인덱스 ✅) · CLAUDE.md @AGENTS.md ✅
+◆  Layer 0 — Triage / 설정
    ✅ config.yml (domain_risk 30 keys, default L1) · version
-🧠  Cross-cut — Spirit
-   ✅ values.md (사용자 정의됨) · ⚠️ tone.md placeholder · ✅ rules/ 4 카테고리 · lint ✓
-🪤  Cross-cut — Mistake Loop
+◆  Cross-cut — Spirit
+   ✅ values.md (사용자 정의됨) · ❗ tone.md placeholder · ✅ rules/ 4 카테고리 · lint ✅
+◆  Cross-cut — Mistake Loop
    ✅ mistakes/ (3건 누적)
-🥕  Layer 3 — Spec / ADR
-   ✅ docs/adr/ (1건) · ✅ _templates/spec/ · ⚠️ spec 0건 (첫 spec 권장)
-📦  Layer 2 — Module Rules
-   ✅ modules/ 5/13 (L2/L3 만) · 도달 ✓
-🪝  Sensors — Hooks
+◆  Layer 3 — Spec / ADR
+   ✅ docs/adr/ (1건) · ✅ _templates/spec/ · ❗ spec 0건 (첫 spec 권장)
+◆  Layer 2 — Module Rules
+   ✅ modules/ 5/13 (L2/L3 만) · 도달 ✅
+◆  Sensors — Hooks
    ✅ 디렉토리 4종 · settings.json · template hook 8/8 등록
-🗺   도달 지도   ✅ constitution · spirit-universal · spirit-scoped · module
+◆  도달 지도   ✅ constitution · spirit-universal · spirit-scoped · module
 
-🎯  점수
+◆  점수
    90%   (9 / 11)
    ▲ +7%p vs 직전 호출 (83% → 90%)        ← state.json 에 직전 점수 있을 때만
    ✅ 해소: version drift · scripts backfill
 
-🚦  다음 단계
+◆  다음 단계
    [a] ✅ tone.md 우리 팀 말투로 수정    [추천]
        파일 .ax/spirit/tone.md · 이유 placeholder 그대로 — 모든 sub-agent 가 default 톤
-   [b] 📝 첫 spec 작성 — "새 spec 만들어줘 — <slug>"
+   [b] 첫 spec 작성 — "새 spec 만들어줘 — <slug>"
    ▸ 답해주세요 [a] / [b] / 또는 그냥 보고만
 ```
 
 **규칙**
-- 상태 emoji: ✅ pass · ⚠️ placeholder/주의/drift · ❌ 누락/실패 · ℹ️ 정보. 🟡 는 doctor 상태로 쓰지 않아요 — CLAUDE.md 시그널 전용.
-- 섹션 emoji: 🏛️ Constitution · ⚙️ 설정 · 🧠 Spirit · 🪤 Mistake · ⚖️ Rule Enforcement · 🥕 Spec/ADR · 📦 Module · 🪝 Sensors · 🗺 도달 지도 · 🔄 Plugin update · 🧪 Spirit lint · 📑 문서↔실제 · 🧹 잔재 · 📜 룰 인덱스 · 🎯 점수 · 🚦 다음 단계
+- 상태 emoji: ✅ pass · ❗ placeholder/주의/drift · ❌ 누락/실패 · ⛔ 막혀서 진행 불가. 정보는 기호 없이 글로. 🟡 는 doctor 상태로 쓰지 않아요 — 룰 시그널 전용. 어휘 SSOT 는 `.ax/spirit/tone.md` §표시 기호.
+- 섹션 제목은 `◆  <제목>` — 이모지를 쓰지 않아요. 섹션마다 다른 그림이 붙으면 정작 ❌·❗ 가 묻혀요.
 - 다음 단계는 결손이 큰 것부터. 도달 결손 > I1/C3 > 등록 > placeholder 순.
 - 점수는 백분율 큰 글자 + 분수. 직전 점수(`state.json:cross_cut.doctor.last_score`)가 있으면 `▲ +Np` 한 줄, 해소 항목은 `✅ 해소:` 한 줄.
 - audit 안내는 doctor 가 하지 않아요 — `audit` 전담. 본문 안 emoji 남발 X.
@@ -333,7 +333,7 @@ placeholder 를 통과로 안 봐요. "엄격하게 진단해줘", "strict mode"
 
 ## 절대 금지
 
-- 결손에 ✗ 만 찍지 말고 **구체적 다음 명령** 제시
+- 결손에 ❌ 만 찍지 말고 **구체적 다음 명령** 제시
 - "전부 OK!" 자가 칭찬 금지 · placeholder 를 통과로 위장 X
 - 스크립트가 세는 것을 산문 bash 로 다시 세기 X — 결과가 갈리면 어느 쪽도 못 믿어요
 - 자동 수정 X — [m]·[s]·[d]·[n]·[r]·[reach] 전부 사용자 답 뒤에

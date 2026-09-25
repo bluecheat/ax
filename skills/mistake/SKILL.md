@@ -33,10 +33,10 @@ description: "실수·결함을 사용자 의도대로 **1건 캡처** 하는 sk
 
 | 항목 | 값 enum / 형식 | LLM 추론 가능? |
 |---|---|---|
-| `ONE_LINE` | 한 줄 요약 (10~80자) | ✓ 사용자 메시지에서 추출 |
-| `category` | dependency-direction · hydration · n+1 · secrets-in-code · testing · pr · error-handling · concurrency · observability · architecture · naming · data · ... | ✓ 메시지 내용 보고 매핑 |
+| `ONE_LINE` | 한 줄 요약 (10~80자) | ✅ 사용자 메시지에서 추출 |
+| `category` | dependency-direction · hydration · n+1 · secrets-in-code · testing · pr · error-handling · concurrency · observability · architecture · naming · data · ... | ✅ 메시지 내용 보고 매핑 |
 | `severity` | `low` · `medium` · `high` | △ 영향 범위 보고 추론, 모호하면 묻기 |
-| `detected_by` | `claude` · `reviewer` · `ci` · `self` · `user` | ✓ 컨텍스트 보고 (사용자가 발견하면 user, claude 가 발견하면 claude) |
+| `detected_by` | `claude` · `reviewer` · `ci` · `self` · `user` | ✅ 컨텍스트 보고 (사용자가 발견하면 user, claude 가 발견하면 claude) |
 | `context_link` | PR URL 또는 commit SHA (선택) | △ 알면 박고 모르면 빈 채로 |
 
 **기본값 정책**:
@@ -104,14 +104,14 @@ frontmatter + `# 무엇이 일어났나` 는 이미 채워진 상태. **나머�
 ## 4. 결과 보고 — 사용자 confirm
 
 ```
-✓ mistake 캡처 — .ax/mistakes/<filename>.md (action: created)
+✅ mistake 캡처 — .ax/mistakes/<filename>.md (action: created)
 
 📍 frontmatter
    category=secrets / severity=high / detected_by=reviewer / source=skill
 
-📋 본문 채워진 섹션
-   ✓ 무엇이 일어났나 ✓ 어디서 ✓ 왜 발생 (5 Whys) ✓ 어떻게 막을 수 있나
-   ✓ 영향 (Cost) ✓ audit 액션 제안
+◆  본문 채워진 섹션
+   ✅ 무엇이 일어났나 ✅ 어디서 ✅ 왜 발생 (5 Whys) ✅ 어떻게 막을 수 있나
+   ✅ 영향 (Cost) ✅ audit 액션 제안
 
 📍 다음 단계
    1. 본문 검토 후 추가/수정 — `<filename>` 직접 편집

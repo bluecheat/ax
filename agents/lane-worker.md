@@ -76,7 +76,7 @@ $ pnpm --filter mobile exec tsc --noEmit
 ## 출력 형식
 
 ```
-🛠 lane-worker — 레인 <이름> (T0NN, T0MM)
+◆  lane-worker — 레인 <이름> (T0NN, T0MM)
 
 ▸ task 결과
  T0NN — 완료

@@ -167,11 +167,11 @@ task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비�
 ### 통과 + tasks/AC 모두 0 (clean state)
 
 ```
-✓ spec-validate 005-payment-refund-policy-change 통과
+✅ spec-validate 005-payment-refund-policy-change 통과
 
  📍 발견  NEEDS=0  placeholder=0  빈 섹션=0
- 🧭 합의   L — architect 진행 · evaluator 진행 (round 1, sha 3f1a…)   ← required/optional 일 때만
- 📊 진행률  tasks 0/0  AC 0/0 (미시작)
+ ◆  합의   L — architect 진행 · evaluator 진행 (round 1, sha 3f1a…)   ← required/optional 일 때만
+ ◆  진행률  tasks 0/0  AC 0/0 (미시작)
  🎯 결과  tasks 진행 가능
 
  다음 단계
@@ -184,13 +184,13 @@ task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비�
 게이팅은 통과하지만 tasks/AC 미체크가 남아있는 상태. spec-implement 우회로 직접 commit 한 경우 또는 phase 가 끝나지 않은 정상 진행 중 상태.
 
 ```
-✓ spec-validate 008-review-summary-safe-sync 통과 (with warnings)
+✅ spec-validate 008-review-summary-safe-sync 통과 (with warnings)
 
  📍 발견  NEEDS=0  placeholder=0  빈 섹션=0
- 📊 진행률  tasks 6/11 (미체크 5건)  AC 5/10 (미체크 5건)
+ ◆  진행률  tasks 6/11 (미체크 5건)  AC 5/10 (미체크 5건)
  🎯 결과  명료성 통과 — 진행률 미동기화 항목 검토
 
- ⚠ 점검
+ ❗ 점검
   spec-implement 우회로 코드 commit 했다면 체크박스 동기화 누락이에요.
   최근 commit 의 변경 파일이 spec dir 외부인지 git log 로 확인 권장.
 
@@ -202,7 +202,7 @@ task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비�
 ### 실패 (1건 이상)
 
 ```
-✗ spec-validate 005-payment-refund-policy-change 보류
+❌ spec-validate 005-payment-refund-policy-change 보류
 
  📍 발견
   NEEDS CLARIFICATION    3 건 — spec.md
@@ -213,14 +213,14 @@ task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비�
 
  ─ 다음 단계 ──────────────────────────────────────
 
- [a] ✓ 한 항목씩 같이 해결      [권장]
+ [a] ✅ 한 항목씩 같이 해결      [권장]
   제가 각 항목을 보여드리고 사용자 결정·도메인 전문가 확인 받아요.
   결정 후 spec/contracts 본문 자동 갱신 (NEEDS CLARIFICATION 제거).
 
  [b] 사용자가 직접 편집 후 다시 [check]
   파일 위치만 알려드릴게요. 직접 수정 후 "goax spec check 005" 재실행.
 
- [c] ⚠ 보류 — 일단 다른 작업으로
+ [c] ❗ 보류 — 일단 다른 작업으로
   경고: L3 도메인이라 게이팅 통과 없인 plan/tasks 진행 시 후폭풍 큼.
 
  ▸ 답해주세요 [a] / [b] / [c]
@@ -233,7 +233,7 @@ task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비�
 ## 절대 금지
 
 - NEEDS CLARIFICATION을 임의로 "해결"로 처리 X — 사용자만 결정.
-- 통과를 가짜로 만들지 않아요. 실패는 명확히 ✗.
+- 통과를 가짜로 만들지 않아요. 실패는 명확히 ❌.
 
 ## state.json 갱신
 

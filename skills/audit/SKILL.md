@@ -53,7 +53,7 @@ find .ax/mistakes -name "*.md" -mtime -7 2>/dev/null | sort # 최근 7일
 ## 3. 출력 — 발견 + 승격 후보
 
 ```
-🔍 Audit (.ax/mistakes/ — N건 누적, 기간: <시작> ~ <끝>)
+◆  Audit (.ax/mistakes/ — N건 누적, 기간: <시작> ~ <끝>)
 
  📍 발견 카테고리별 분포
   security  N건
@@ -74,7 +74,7 @@ find .ax/mistakes -name "*.md" -mtime -7 2>/dev/null | sort # 최근 7일
 
  ─ 승격 후보 ──────────────────────────────────────
 
- [a] ✓ security → 🔴 CRITICAL     [권장 — 3회+]
+ [a] ✅ security → 🔴 CRITICAL     [권장 — 3회+]
   패턴 PG 키 평문 노출 2회 + DB 비번 로그 1회
   사다리 ③ grep — `(password|secret|api[_-]?key|token)[[:space:]]*[=:][[:space:]]*["'][^"']{6,}` (①·② 해당 없음)
   제안 SP-SEC-NNN — 시크릿 hardcode 절대 금지 (frontmatter severity: critical, enforced_by: hook:...)
@@ -229,12 +229,12 @@ archived 파일은 maxdepth 1 scan 에서 자동 제외 — 후속 audit candida
 - `grep -l "^promoted_to: SP-SEC-001" .ax/mistakes/*.md 2>/dev/null` 결과 0줄 (root 에서 사라짐)
 - `ls .ax/mistakes/_archive/<YEAR>/<MONTH>/` 에 archived 파일 N개
 
-각 단계 ✓ 보고:
+각 단계 ✅ 보고:
 ```
-✓ mistake 3건 promoted_to=SP-SEC-001 마킹 (.ax/mistakes/)
-✓ SP-SEC-001 추가 — .ax/spirit/rules/<project>-security.md (frontmatter paths: 명시)
-✓ archive 3건 → .ax/mistakes/_archive/2026/05/ (audit candidate 검색에서 제외됨)
-✓ path-scoped hook 활성 — 매 .kt / .properties / .yaml 편집 시 SP-SEC-001 자동 inject
+✅ mistake 3건 promoted_to=SP-SEC-001 마킹 (.ax/mistakes/)
+✅ SP-SEC-001 추가 — .ax/spirit/rules/<project>-security.md (frontmatter paths: 명시)
+✅ archive 3건 → .ax/mistakes/_archive/2026/05/ (audit candidate 검색에서 제외됨)
+✅ path-scoped hook 활성 — 매 .kt / .properties / .yaml 편집 시 SP-SEC-001 자동 inject
 ```
 
 ## model 분포 — 어느 모델에서 몰리나

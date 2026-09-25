@@ -24,7 +24,7 @@ description: "아키텍처 결정·검토 sub-agent. 시스템 설계·모듈 �
 ## 출력 형식
 
 ```
-🧱 architect 검토
+◆  architect 검토
 
 ▸ 결정 후보
  Option A — ...
