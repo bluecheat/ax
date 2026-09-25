@@ -27,7 +27,8 @@ for f in spec.md tasks.md; do
 done
 
 # 다음 미완료 task 찾기 — 없으면 끝난 게 아니라 §8 완료 게이트로 가요 (게이트가 완료를 판정해요)
-NEXT_TASK=$(grep -m1 '^- \[ \]' "$SPEC_DIR/tasks.md" || true)
+# 맨 grep 은 템플릿 펜스 안의 예시(`- [ ] T001 [P] [AC2] <한 줄 설명>`)를 집어요 — mark-task.sh --next 는 펜스 밖만 봐요.
+NEXT_TASK=$(bash .ax/scripts/bash/mark-task.sh --spec "$SPEC" --next --json | jq -r '.result.task // empty')
 [ -z "$NEXT_TASK" ] && echo "미완료 task 없음 → §8 완료 게이트로"
 ```
 
@@ -223,13 +224,10 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 # 방금 끝낸 task 의 ID 를 변수로 — 예시값을 그대로 쓰면 엉뚱한 task 가 체크돼요.
 TASK_ID="$COMPLETED_TASK_ID"     # 예: T013
 
-# 체크박스만 뒤집어요. task 줄 형식이 `**T013**`·`[T013]`·`T013 [P]` 중 무엇이든
-# ID 만 찾으면 되도록 했어요 (출고 템플릿은 `- [ ] **T013** — ...` 형식).
-# ID 뒤에 영숫자가 오면 매칭 안 함 → T001 이 T0011 을 건드리지 않아요.
-# `\b` 는 GNU sed 전용이라 안 써요 (BSD/macOS 비호환).
-sed -E "/^- \[ \] .*${TASK_ID}([^0-9A-Za-z]|\$)/ s/^- \[ \]/- [x]/" \
-  "$SPEC_DIR/tasks.md" > "$SPEC_DIR/tasks.md.tmp" \
-  && mv "$SPEC_DIR/tasks.md.tmp" "$SPEC_DIR/tasks.md"
+# 체크박스는 mark-task.sh 가 켜요 — 줄 앞 ID 만 보고, 펜스 안은 건너뛰고, 락을 잡고, [x] 가 정확히 하나 늘었는지 확인해요.
+# 인라인 sed(`.*T013`)는 본문에 다른 task 를 언급한 줄("T009 가 해소")까지 켰어요.
+bash .ax/scripts/bash/mark-task.sh --spec "$SPEC" --task "$TASK_ID" --json
+# 의도적 보류는 --state '~' (사유는 task 줄에 `보류: <사유>` 로 적어요)
 ```
 
 각 task 완료 후 1줄 보고 (대화 [y/n] X):
