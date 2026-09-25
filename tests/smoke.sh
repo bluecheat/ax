@@ -4765,6 +4765,38 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────
+section "59. mark-task — 체크박스는 줄 앞 ID 만, 펜스 밖에서만, 하나만 켜요"
+# ───────────────────────────────────────────────────────────
+# 인라인 sed(`.*T013`)는 본문에 다른 task 를 언급한 줄까지 켰어요 (실측 3건). 템플릿 펜스 안 예시는 --next 가 집었어요.
+MT=$(mktemp -d); mkdir -p "$MT/.ax/scripts/bash" "$MT/.ax/docs/spec/2026-09-25-ab12-x"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,mark-task}.sh "$MT/.ax/scripts/bash/"
+MTF="$MT/.ax/docs/spec/2026-09-25-ab12-x/tasks.md"
+cat > "$MTF" <<'MTE'
+## 한 줄 형식
+```
+- [ ] T001 [P] [AC2] <한 줄 설명>
+```
+- [x] T005 결제 상수
+- [ ] T008 T005 의 상수와 맞춤
+- [ ] **T009** — 환불 API
+- [ ] T010 T009 가 셋 다 해소
+- [ ] T0091 다른 것
+MTE
+mt() { (cd "$MT" && bash .ax/scripts/bash/mark-task.sh --spec 2026-09-25-ab12-x "$@" 2>/dev/null); }
+N1=$(mt --next --json | jq -r .result.task)
+mt --task T009 --json >/dev/null; R1=$?
+mt --task T009 --json | jq -r .result.changed > "$MT/c2"
+mt --task T0091 --state '~' --json >/dev/null
+[ "$N1" = T008 ] && [ "$R1" = 0 ] && [ "$(cat "$MT/c2")" = false ] \
+    && grep -qxF -- '- [x] **T009** — 환불 API' "$MTF" && grep -qxF -- '- [ ] T010 T009 가 셋 다 해소' "$MTF" \
+    && grep -qxF -- '- [ ] T008 T005 의 상수와 맞춤' "$MTF" && grep -qxF -- '- [~] T0091 다른 것' "$MTF" \
+    && grep -qxF -- '- [ ] T001 [P] [AC2] <한 줄 설명>' "$MTF" && [ ! -e "$MTF.lock" ] \
+    && pass "mark-task — 줄 앞 ID 만 켜고 본문 언급·펜스 예시·T0091 은 그대로, 재실행은 변화 없음, --next 는 펜스 밖, 락 해제" \
+    || fail "mark-task: next=$N1 rc=$R1 $(cat "$MTF" | tr '\n' '|')"
+mt --task T404 --json >/dev/null; [ $? = 1 ] && pass "mark-task — 없는 ID 는 exit 1 (조용히 성공하지 않아요)" || fail "mark-task 없는 ID 가 성공했어요"
+rm -rf "$MT"
+
+# ───────────────────────────────────────────────────────────
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────
 if [ "$fail_count" -eq 0 ]; then

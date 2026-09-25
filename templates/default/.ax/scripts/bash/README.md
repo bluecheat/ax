@@ -39,6 +39,7 @@
 | `lanes-hotfiles.sh` | tasks.md 에서 핫 파일(여러 미완료 task 가 쓰는 파일) + `files:` 누락 task 추출 | `lane` |
 | `spec-review.sh` | spec 합의 리뷰 원장 — `--snapshot`(sha 고정·라운드) / `--status`(리뷰어별 `review-spec.{architect,evaluator}.md` 의 verdict·sha 집계 → pass) / `--merge`(합본). 필수 여부는 Size 축만 | `spec-validate` |
 | `lanes-dispatch.sh` | 레인 디스패치 원장 — `--assign / --dispatch / --report / --status`. tasks.md 의 `레인:`·`디스패치:`·`보고:` 필드를 쓰고, 파일 소유 충돌이면 dispatch 거부 | `lane`, `spec-implement` |
+| `mark-task.sh` | tasks.md 체크박스 하나를 켜요 — `--task T013 [--state x\|~]` · `--next`(펜스 밖 첫 미완료). 줄 **앞** ID 만 매칭(본문 언급 무시), 코드 펜스 건너뜀, `tasks.md.lock`, 쓰기 전후 `[x]` 개수 검증 | `spec-implement` |
 | `zero-init.sh` | 0→1 첫날 팩 설치 (룰은 라이브 `spirit/rules/`, 템플릿은 `_templates/zero/`) — 덮어쓰지 않고 SP 토큰 충돌만 경고 | `zero` |
 | `zero-domain-risk.sh` | `config.yml` 의 `domain_risk` 블록 통째 교체 (`--show/--set/--default`) — 출고 예시 키가 남으면 triage 가 영원히 default_risk 로 흘러요 | `zero` |
 | `zero-probe.sh` | 네거티브 프로브 — 일부러 위반을 만들어 차단이 실제로 도는지 확인 | `zero` |
