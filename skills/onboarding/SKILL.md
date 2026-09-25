@@ -167,6 +167,8 @@ bash .ax/scripts/bash/zero-domain-risk.sh --show --json    # result.before.keys 
 
 **Sub-Q5 settings.json.suggested 머지** (`boxes.md` §Sub-Q5) — up 이 기존 settings.json 을 보존하며 만든 `.ax/settings.json.suggested` 가 있으면 머지 여부를 물어요. 정식 step 이에요 — 임기응변 X.
 
+**Sub-Q6 검증 명령** — `.ax/config.yml` 의 `commands.*` 가 비어 있으면 `detect-stack.sh --json` 이 프로젝트에 **적힌** 진입점(package.json scripts · Makefile · 래퍼 · 매니페스트)에서 뽑은 후보를 보여주고, 사용자가 고른 것만 `config-set.sh commands.<key> "<명령>"` · `config-set.sh --add commands.lint_file "<글롭> => <명령>"` 으로 적어요. 후보가 비면 추측하지 말고 물어요. 이미 채워져 있으면 묻지 않아요.
+
 ## 4. 적용 보고
 
 ```

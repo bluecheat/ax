@@ -252,7 +252,7 @@ git log --oneline | head -5
 ```
 
 **산출물**: 스캐폴드 + "ADR 대조 결과" 한 문단 (어긋남 0건이면 0건이라고 적어요)
-**안 하면**: ADR 과 코드가 첫날부터 갈라져요.
+**안 하면**: ADR 과 코드가 첫날부터 어긋나요.
 
 ## 11. 집행 배관 + 네거티브 프로브 ❗ 건너뛸 수 없음
 
@@ -267,6 +267,9 @@ bash .ax/scripts/bash/zero-verify.sh --json    # 게이트를 파이프 없이 �
 bash .ax/scripts/bash/zero-probe.sh --json     # 차단이 살아 있는지 확인
 ```
 
+- `commands.*` 가 비어 있으면 먼저 채워요 — 스캐폴드가 만든 진입점에서 `detect-stack.sh --json` 이 후보를 뽑고,
+  사용자 확인 뒤 `config-set.sh commands.<key> "<명령>"` (파일 단위 lint 는 `--add commands.lint_file "<글롭> => <명령>"`).
+  기억으로 명령을 짓지 않아요 — 스캐폴드가 쓴 패키지 매니저·스크립트 이름이 답이에요
 - `zero-verify.sh` — `config.yml` 의 `commands.*` 를 **파이프 없이** 돌리고 exit code 를 따로
   잡아요. **안 돌린 항목도 보고**해요 (안 돌린 건 통과가 아니에요)
 - `zero-probe.sh` — `.ax/probes/*.sh` 를 돌려 "막아야 할 위반이 아직 막히는지" 확인.

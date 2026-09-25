@@ -105,8 +105,8 @@ DELTA=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --delta --json \
    - architect 에는 **출력 파일 `$A_FILE`** 만, evaluator 에는 **출력 파일 `$E_FILE`** 만. 상대 파일은
      넣지 않아요. 이 대화도 넣지 않아요.
    - **검증 예산**: spec 단계 리뷰어는 grep·read 로만 봐요. 빌드·테스트를 돌리지 않아요 — 그건 구현
-     리뷰(`tasks-gate.sh` G6)의 몫이고, 여기서 돌리면 리뷰 한 번이 구현 한 번만큼 비싸져요.
-2. 검토 범위가 달라요 — 같은 걸 두 번 지적받지 않게 각 agent 의 "하지 않는 것" 절이 갈라 놨어요:
+     리뷰(`tasks-gate.sh` G6)가 맡고, 여기서 돌리면 리뷰 한 번이 구현 한 번만큼 비싸져요.
+2. 검토 범위가 달라요 — 같은 걸 두 번 지적받지 않게 각 agent 의 "하지 않는 것" 절로 나눠 뒀어요:
    - **architect** — 반대안·트레이드오프·되돌리기 비용·ADR 후보. AC 문구·테스트 목록·grep 전수는 안 봐요
    - **evaluator** — AC 검증 가능성·코드 현실 대조·누락 엣지·배포 전제·tasks 분해. 대안 구조는 안 봐요
    - 둘 다 `## 비차단` 절을 따로 둬요 — 거기 적힌 건 verdict 에 안 세요. 이 세션은 비차단은 반영할지
@@ -130,6 +130,8 @@ printf '%s\n' "$REVIEW" | jq -r '"architect \(.result.architect.verdict // "없�
 ```bash
 bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --merge --json >/dev/null
 ```
+
+   합의가 통과하면 보고 끝에 한 줄: `👉 phase 경계라 지금 `/compact` 하기 좋아요 — 인계 노트와 PreCompact 스냅샷이 작업 위치를 남겨 둬요`. 리뷰 두 벌이 컨텍스트에 쌓인 뒤라서요 — 한 번만, 강요하지 않아요.
 
 ### 통과 뒤의 오타·문구 — `--fixup`
 

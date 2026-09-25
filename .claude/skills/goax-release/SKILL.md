@@ -15,7 +15,7 @@ description: "goax 플러그인 **이 저장소(goax repo)** 를 새 버전으�
 1. **goax repo 루트** 인지 — `VERSION`, `.claude-plugin/plugin.json`, `tests/smoke.sh` 존재 확인.
 2. **gh 인증** — `gh auth status` (PR·release 에 필요).
 3. **릴리즈 대상 변경**이 이미 있는지 — 보통 직전 작업이 워킹트리/브랜치에 있어요. 없으면 "무엇을 릴리즈하나요?" 확인.
-4. 버전 인자 파싱 — 명시 버전(`0.2.3`) 또는 증가분(`patch|minor|major`). 둘 다 없으면 사용자에게 물어요(기본 제안: patch).
+4. 버전 인자 파싱 — 명시 버전(`0.2.3`) 또는 증가분(`patch|minor|major`). 둘 다 없으면 **patch** 로 가요 — 새 훅·스크립트가 생겨도 직전 릴리즈의 후속이면 패치예요. minor·major 는 사용자가 말했을 때만 (semver 의 "새 기능 = 마이너" 를 기계적으로 적용하지 않아요).
 
 ## 흐름
 
@@ -97,7 +97,7 @@ PR 제목 = 4단계 커밋 제목과 같은 템플릿. PR 본문 끝에 `🤖 Ge
 ```bash
 gh pr merge <PR#> --squash --delete-branch
 ```
-⚠️ **CI 주의** — 이 repo 는 조직 설정상 *GitHub Actions hosted runners 가 비활성*이라 `smoke` 체크가 러너 부재로 2초만에 fail 떠요(코드 문제 아님). **branch protection 이 없어 머지엔 영향 없어요.** 게이트는 **로컬 smoke 통과**. (러너를 켜려면 조직 Settings → Actions.)
+**CI** — `smoke (ubuntu-latest)` · `smoke (macos-latest)` 가 PR 마다 돌아요 (macOS 러너는 대기가 길 수 있어요). 머지 전에 `gh pr checks <PR#>` 로 둘 다 pass 인지 봐요 — ubuntu 는 mawk·GNU 도구라 macOS 로컬에서 안 보이던 포터빌리티 결함을 잡아요. branch protection 은 없어서 머지를 막진 않으니, pending 이면 기다리고 fail 이면 고쳐요.
 
 ### 7. 태그
 
@@ -116,7 +116,7 @@ gh release create v<VERSION> --title "v<VERSION> — <요약>" --notes-file chan
 
 ## 완료 보고
 
-릴리즈 후 한눈 요약: PR# (머지됨) · main HEAD · VERSION 4곳 일치 · 태그 · Release URL. CI 가 러너 부재로 fail 이면 그 사실(코드 무관)도 명시.
+릴리즈 후 한눈 요약: PR# (머지됨) · main HEAD · VERSION 4곳 일치 · 태그 · Release URL. CI 두 OS 결과도 같이 적어요.
 
 ## 주의 (왜 중요한지)
 - **버전은 항상 4곳 동시** — `tests/smoke.sh` 가 VERSION·plugin.json·marketplace.json(top+plugins[0]) 이 모두 같은지 강제해요. 한 곳만 손으로 고치면 smoke 가 바로 깨지니, `bump-version.sh` 로만 만지고 `--check` 로 의심될 때 검증해요.

@@ -15,7 +15,7 @@ description: "goax 프로젝트 install or idempotent update — '/up', 'goax up
 - 프로젝트에 `.ax/`가 없는데 사용자가 goax 관련 작업을 요청
 - doctor 가 plugin 갱신 감지 후 재호출 안내 (`/up` 으로 idempotent backfill)
 
-**install 인지 update 인지는 `.ax/` 존재로 먼저 갈라요** (분석보다 먼저 봐요):
+**install 인지 update 인지는 `.ax/` 존재로 먼저 나눠요** (분석보다 먼저 봐요):
 
 ```bash
 [ -d .ax ] && MODE=update || MODE=install
@@ -242,6 +242,18 @@ diff 후 누락된 META / 4계층 인덱스 / 시그널 의미 섹션만 머지 
 ### Case C — 기존 CLAUDE.md 가 이미 alias 형태일 때
 
 자동: 출고본으로 교체 (drift 방지). 별도 안내 없음.
+
+### settings.json.suggested — 훅 등록
+
+기존 `.claude/settings.json` 은 덮지 않아요. 새 훅이 생긴 판이면 goax 훅만 템플릿대로 맞추는 스크립트를 제안해요:
+
+```bash
+bash .ax/scripts/bash/ade-settings.sh --check --plugin-dir "$PLUGIN_ROOT" --json   # 누락·잔재만 보여줘요
+bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" --json   # 사용자 [a] 뒤에만
+rm -f .ax/settings.json.suggested
+```
+사용자 자신의 훅·permissions·statusLine 은 그대로예요. `jq -s '.[0] * .[1]'` 로 합치지 않아요 — `*` 는 배열을 통째로 바꿔서
+사용자 PreToolUse 훅이 사라져요.
 
 ## 절대 금지
 

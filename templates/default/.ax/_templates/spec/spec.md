@@ -16,6 +16,7 @@
 | 작성일 | YYYY-MM-DD |
 | 상태 | 초안 / 검토 중 / 승인 / 폐기 |
 | 관련 ADR | .ax/docs/adr/<id>-*.md (있으면) |
+| 원 계획 | <외부 계획 문서 경로 (current-task.json 의 plan_doc) — 없으면 "없음"> |
 | Triage 결과 | size=L, risk=L2 (`goax triage` 출력 첨부) |
 
 ---

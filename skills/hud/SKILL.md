@@ -22,7 +22,7 @@ description: "goax HUD(statusline) 관리 — 'HUD 활성화', 'statusline 설�
 | `mistakes:3` | `.ax/mistakes/` 누적 수 (README·archive 제외). 5 이상 노랑, 10 이상 빨강 | `.ax/mistakes/` |
 | `(stale)` | HUD 캐시가 30분 넘게 오래됐을 때 — 거짓 초록을 안 만들려고 | `state.json.hud.cached_at` |
 
-**안 보여주는 것**: 모델·ctx%·에이전트 수·todo 는 OMC HUD 몫이에요. 레인·게이트·경보는 skill 출력과
+**안 보여주는 것**: 모델·ctx%·에이전트 수·todo 는 OMC HUD 가 보여줘요. 레인·게이트·경보는 skill 출력과
 doctor 가 물을 때 보여줘요 — 상태 표시줄엔 하네스 위치만 둬요.
 
 **왜 이렇게 바꿨나**: 이전 HUD 의 세 조각(행성 이모지 · S×R · 혜성)은 작업 중에 안 변했어요. 상태

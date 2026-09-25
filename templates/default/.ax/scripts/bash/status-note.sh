@@ -21,7 +21,7 @@
 #
 # `--set now` 은 `now_at` 에 현재 UTC 분(YYYY-MM-DDTHH:MMZ)을 적어요. Stop 게이트
 # (`.ax/hooks/stop/spec-gate.sh`) 가 "인계 노트에 적혀 있으니 의도된 halt" 로 인정하는 건
-# **24시간 안에 찍힌 노트만**이에요. `--add now` 는 시각을 건드리지 않아요 — 게이트의 침묵 창이
+# **24시간 안에 찍힌 노트만**이에요. `--add now` 는 시각을 건드리지 않아요 — 게이트가 넘어가 주는 시간 창이
 # 넓어지면 안 되니까요. `now` 가 비면 `now_at` 도 null 이에요.
 #
 # 왜 필요한가 — 결정은 ADR, 진행은 tasks.md, 단계는 current-task.json 에 있는데 "막힌 것·열린 질문·

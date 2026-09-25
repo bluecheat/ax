@@ -29,7 +29,7 @@
 사용자가 이 작업에서 얼마나 물을지를 자연어로 말하면 triage 가 의도를 읽어
 `update-task.sh --set friction=autopilot|phase_gate|per_task` 로 적어요. spec-implement 는 config 의
 `confirmation.mode`(C1) 대신 이 값을 쓰고, Phase 경계마다 파일에서 다시 읽어요. C5(L3 + SP-SEC/DATA)·C3(mistake
-재발)는 여전히 이겨요.
+재발)는 여전히 우선해요.
 
 자연어로 받되 두 가지 규율이 있어요. **확신이 없으면 적지 않아요** — 안 적으면 더 묻는 쪽(안전), 잘못 적으면 덜 묻는
 쪽(위험)이라 오판 비용이 비대칭이에요. **적으면 되묻지 않고 되비춰요** — triage 출력과 spec-implement 진입의

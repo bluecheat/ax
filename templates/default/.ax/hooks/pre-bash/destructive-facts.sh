@@ -1,27 +1,14 @@
 #!/usr/bin/env bash
 # pre-bash hook — 되돌리기 어려운 명령은 사실을 먼저 적게 해요 (fact-forcing)
 #
-# 대상: 프로젝트 안 재귀 rm(build·node_modules 같은 재생성 디렉토리와 프로젝트 밖 경로는 제외) ·
-#       find -delete · git clean -f · git checkout -- <경로>/./-f · git restore(작업 트리) ·
-#       git reset --hard · git stash drop|clear · git branch -D
-#
-# 왜: block-destructive.sh 는 시스템 경로·상위 경로(..)·원격 되돌리기만 봐요. 프로젝트 **안에서**
-#     디렉토리째 지우는 건 안 봤어요. 실측(commerce, 2026-07-27): 내가 만든 파일을 되돌리려고
-#     `rm -rf` 로 디렉토리째 지웠다가 추적 안 되던 운영 파일까지 같이 사라졌어요.
-#     "정말요?" 를 물으면 모델은 늘 "네" 라고 해요. 그래서 대신 **사실**을 요구해요 —
-#     무엇이 지워지는지 적는 과정에서 모르던 파일이 보여요. (ECC GateGuard 의 fact-forcing 방식)
-#
-# 동작: 이번 세션에 처음 보는 명령이면 exit 2 로 한 번 막고 세 가지를 요구해요 —
-#         1. 지워지거나 되돌려질 파일 목록 (추적 안 되는 파일·내가 만들지 않은 파일 특히)
-#         2. 되돌리는 절차 한 줄
-#         3. 이 작업을 지시한 사용자 메시지 원문
-#       같은 명령을 다시 실행하면 통과해요. 명령을 바꾸면 새 명령이라 다시 물어요.
-#       세션당 3번까지는 전체 안내, 그 뒤는 한 줄 — 같은 긴 문구가 쌓이면 반복 루프를 부른다는
-#       ECC 실측(#2142)을 따라요.
-#       세션 id 가 없으면(수동 실행·옛 런타임) 추적이 안 돼서 경고만 해요.
-# 모드: sensors.mode warning·fail 둘 다 같은 동작 (off 면 안 돌아요).
-# 끄기: .ax/config.yml sensors.disabled_hooks 에 destructive-facts, 또는 sensors.hook_profile: minimal
-# ⚠️ 성격: 사고 방지용 안전망이지 보안 경계가 아니에요. 값이 변수(`$X`)인 경로는 판단하지 않아요.
+# 대상: 프로젝트 안 재귀 rm · find -delete · git clean -f · git checkout -- <경로>/./-f · git restore(작업 트리) ·
+#   git reset --hard · git stash drop|clear · git branch -D. 재생성 디렉토리(기본값 + sensors.regenerable_paths)와
+#   프로젝트 밖 경로는 제외. 값이 변수(`$X`)인 경로는 판단하지 않아요 — 안전망이지 보안 경계가 아니에요.
+# 동작: 세션에서 처음 보는 명령이면 exit 2 로 막고 "지워질 파일 · 되돌리는 절차 · 사용자 지시 원문" 을 요구해요.
+#   같은 명령을 다시 실행하면 통과, 명령이 바뀌면 다시 물어요. 3번째 뒤로는 한 줄. 세션 id 가 없으면 경고만.
+#   "정말요?" 는 늘 "네" 라서 사실을 요구해요 — 적는 과정에서 모르던 파일이 보여요 (CONCEPTS §5.6.1).
+# 판정: goax_shell_scan destructive. python3 가 못 돌면 간이 판정.
+# 모드: warning·fail 둘 다 막아요 (off 면 안 돌아요). 끄기: sensors.disabled_hooks 에 destructive-facts.
 set -uo pipefail
 
 [ -d "${CLAUDE_PROJECT_DIR:-$(pwd)}/.ax/hooks" ] || exit 0

@@ -17,16 +17,9 @@ export LC_COLLATE=C
 # awk 프로그램 앞에 `awk "$GOAX_AWK_CLIP"'…'` 로 붙이면 `clip(s, n)` 을 쓸 수 있어요.
 #
 # **길이 상한은 낱말 경계로만 적용해요. substr 로 바이트를 자르면 안 돼요.**
-# macOS 기본 awk(BWK)는 length/substr 가 바이트 단위라 상한 위치가 한글 한 글자를 반으로
-# 가르고, 그 뒤 정규식이 `awk: towc: multibyte conversion failure` 로 **awk 를 통째로
-# 중단**시켜요. 실측 피해 둘 —
-#   · build-memory.sh: "🔴 CRITICAL 룰 (3)" 머리말은 grep -c 로 따로 세니 건수를 계속
-#     보고하는데 그 아래 목록만 사라져요. triage 에 룰이 0건 닿는데 아무도 모릅니다.
-#   · triage-search.sh: 스니펫이 반 글자에서 잘려 `앱<?>` 처럼 깨진 채 컨텍스트에 들어가요.
-# 공백은 1바이트이고 UTF-8 연속 바이트(0x80-0xBF)가 될 수 없어서, 공백에서만 끊으면 어느
-# awk 에서도 안 깨져요. 리눅스는 gawk 가 문자 단위, mawk(ubuntu 기본)는 바이트 단위지만 towc
-# 검사가 없어 어느 쪽도 죽지는 않아요 — 그래서 macOS 에서만 터져요. CI 는 macOS 도 돌지만
-# 180바이트를 넘는 한글 룰 픽스처가 없어서 못 잡았어요 (smoke §44 가 그 자리를 채워요).
+# macOS 기본 awk(BWK)는 바이트 단위라 한글 한 글자를 반으로 가르면 `towc: multibyte conversion failure` 로
+# awk 가 통째로 죽어요 (build-memory 의 룰 목록이 조용히 사라졌어요). 공백은 UTF-8 연속 바이트가 될 수 없어서
+# 공백에서만 끊으면 어느 awk 에서도 안 깨져요 (smoke §44).
 # 첫 낱말이 이미 상한을 넘으면 자르지 않고 그대로 내보내요 — 깨진 출력보다 긴 출력이 나아요.
 # 상한 n 은 length 의 단위를 따라가요 — BWK/mawk 는 바이트, gawk 는 문자라 같은 n 이어도 한글
 # 프리뷰 길이가 플랫폼마다 달라요. 정확한 절단이 아니라 soft cap 이에요.
@@ -160,7 +153,7 @@ goax_hook_exit() {
 
 # ─── 시크릿 패턴 SSOT ───────────────────────────────────────────────
 # 시크릿의 형태를 아는 곳은 이 표 하나예요. 검출(grep)도 마스킹(sed)도 같은 행에서 나와요.
-# 예전엔 훅이 자기 상수를, 여기가 자기 sed 를 따로 들고 있어서 여덟 축이 이미 갈라져 있었어요
+# 예전엔 훅이 자기 상수를, 여기가 자기 sed 를 따로 갖고 있어서 여덟 군데가 이미 서로 달라져 있었어요
 # (AWS·GitHub·Stripe·PEM·JWT 정량자 · Slack 웹훅은 마스킹만 · key=value 는 키 이름까지).
 #
 #   goax_secret_rules()     표 자체. 한 행 = <use> TAB <label> TAB <ERE> TAB <sed 치환문>
@@ -173,7 +166,7 @@ goax_hook_exit() {
 #   - ERE 에도 치환문에도 `#` 을 쓰지 마세요 — sed 구분자예요. 치환문의 `&` 도 금지 (전체 매치를 뜻해요)
 #   - use=detect 행의 치환문은 `-` 고정. 다른 문자열을 두면 나중에 use 를 both 로 바꾸는 순간
 #     그 문자열이 조용히 시크릿 자리에 들어가요
-#   - 행 순서 = 적용 순서. 좁은 패턴이 위 (`sk-(ant|proj)-` 가 `sk-` 보다 위여야 라벨이 안 뭉개져요)
+#   - 행 순서 = 적용 순서. 좁은 패턴이 위 (`sk-(ant|proj)-` 가 `sk-` 보다 위여야 라벨이 섞이지 않아요)
 #   - 검출과 마스킹의 폭은 같게. 다르면 `check-mistake-secrets.sh` 와 `critical-rule-grep.sh` 가
 #     같은 파일에 다른 답을 내요
 #
@@ -184,7 +177,7 @@ _GOAX_SECRET_KV_KEYS='[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|
 
 goax_secret_rules() {
     # 표는 인용 heredoc 이에요 — 행에 `\.`·`\1`·`$`·`%`·`{`·양쪽 따옴표가 다 들어가서 printf 나
-    # 비인용 heredoc 은 그중 일부를 먹어요. `@KV@` 만 위 조각으로 치환해요.
+    # 따옴표 없는 heredoc 은 그중 일부를 해석해 버려요. `@KV@` 만 위 조각으로 치환해요.
     cat <<'AXEOF' | sed "s#@KV@#${_GOAX_SECRET_KV_KEYS}#g"
 both	aws	AKIA[0-9A-Z]{16,}	[REDACTED:aws]
 both	github	gh[hoprsu]_[A-Za-z0-9]{20,}	[REDACTED:github]
@@ -228,7 +221,7 @@ redact_secrets() {
 #   주입 본문 529KB — 같은 룰 파일 경로가 편집마다 다시 들어갔어요. 서브에이전트 하나가 168회 받은 적도.
 #   마커: .ax/.session/<sid>/injected/<key>. TTL GOAX_INJECT_TTL(기본 4시간) — compaction 뒤엔 다시 줄 여지.
 #   세션 id 가 없으면(수동 실행·옛 런타임) 항상 0 — dedupe 없이 예전처럼 동작해요.
-#   하루 넘은 세션 디렉토리는 지나가며 지워요.
+#   하루 넘은 세션 디렉토리는 실행될 때 함께 지워요.
 goax_inject_fresh() {
     local sid="${1:-}" key="${2:-}" root ttl dir f now mt
     [ -n "$sid" ] && [ -n "$key" ] || return 0
@@ -254,7 +247,7 @@ goax_inject_fresh() {
 # goax_session_marked <sid> <ns> <key>   TTL(GOAX_INJECT_TTL, 기본 4시간) 안에 찍힌 마커가 있으면 0
 # goax_session_count <sid> <name>        세션 카운터를 1 올리고 새 값을 출력해요
 #   위치: .ax/.session/<sid>/<ns>/<key>. goax_inject_fresh 와 같은 디렉토리 규칙이라 하루 넘은 세션은
-#   그쪽이 지나가며 지워요. 세션 id 가 없으면 mark/count 는 아무것도 안 하고, marked 는 1(안 찍힘),
+#   그쪽이 실행될 때 함께 지워요. 세션 id 가 없으면 mark/count 는 아무것도 안 하고, marked 는 1(안 찍힘),
 #   count 는 0 을 출력해요 — 호출자가 "추적 불가" 를 판단할 수 있게요.
 # goax_session_dir <sid>  — .ax/.session/<sid> 절대 경로 (sid 는 파일 이름에 안전하게)
 goax_session_dir() {
@@ -306,11 +299,7 @@ goax_session_count() {
 # goax_hook_enabled <hook-id> <minimal|standard>
 #   0 = 이 훅을 돌려요. hook-id 는 훅 파일 이름에서 `.sh` 를 뺀 것 (예: rule-read-gate).
 #   두 번째 인자는 이 훅이 켜지는 **가장 낮은** 프로필이에요 — 안전망은 minimal, 주입·게이트는 standard.
-#   끄는 법 (위가 이겨요):
-#     GOAX_DISABLED_HOOKS=a,b          환경 변수 (세션 한정)
-#     GOAX_HOOK_PROFILE=minimal        환경 변수
-#     .ax/config.yml  sensors.disabled_hooks: [a, b]
-#     .ax/config.yml  sensors.hook_profile: minimal | standard   (기본 standard)
+#   끄는 법 (앞에 적은 것이 우선): GOAX_DISABLED_HOOKS=a,b · GOAX_HOOK_PROFILE=minimal · sensors.disabled_hooks · sensors.hook_profile.
 #   키가 없는 옛 config 는 standard + 아무것도 안 끔 — 업데이트가 동작을 몰래 바꾸지 않아요.
 #   CATASTROPHIC(루트 삭제 등)은 이 함수를 거치지 않아요 — 끌 수 있는 안전망이 아니에요.
 goax_hook_profile() {
@@ -731,7 +720,7 @@ PYSCAN
 #   적고 (stdout 에 쓰면 변수로 삼켜져요) JSON 에러 한 줄은 호출자의 goax_error 가 내요. 실측(claude plugin eval 샌드박스, $TMPDIR 쓰기 금지):
 #   check-rule-enforcement.sh 가 룰을 하나도 안 읽고 통과를 찍었어요. `-d` 는 디렉토리.
 #   폴백 디렉토리는 `.ax/.session/` 아래라 .gitignore.template 이 이미 가리고, 하루 넘은 세션
-#   디렉토리와 같이 goax_inject_fresh 가 지나가며 지워요.
+#   디렉토리와 같이 goax_inject_fresh 가 실행될 때 함께 지워요.
 goax_mktemp() {
     local dflag="" root fb out
     if [ "${1:-}" = "-d" ]; then dflag="-d"; shift; fi
@@ -799,7 +788,7 @@ goax_git_hook_path() {
         [ -n "$common" ] && [ -d "$common" ] && gitdir=$(cd "$common" 2>/dev/null && pwd) || true
     fi
     # [core] 섹션의 hooksPath 만 — 로컬 config 뿐이에요 (global 은 git 이 살아 있을 때 위 경로가 봐요).
-    # git 처럼 `#`/`;` 주석과 둘러싼 큰따옴표를 벗겨요 — 안 벗기면 C2·I6 가 훅을 못 찾아요.
+    # git 처럼 `#`/`;` 주석과 둘러싼 큰따옴표를 떼어요 — 안 떼면 C2·I6 가 훅을 못 찾아요.
     hp=$(awk '
         /^[[:space:]]*\[/ { core = (tolower($0) ~ /^[[:space:]]*\[core\]/); next }   # 섹션 이름은 대소문자 무시 (git 과 같게)
         core && /^[[:space:]]*hooksPath[[:space:]]*=/ {
@@ -893,7 +882,13 @@ goax_yaml_list() {
             if (i > keyind && t ~ /^[ \t]*-[ \t]+/) {
                 v = t; sub(/^[ \t]*-[ \t]+/, "", v)
                 sub(/[ \t]+$/, "", v)
-                gsub(/^[\042\047]+|[\042\047]+$/, "", v)
+                # 따옴표 한 쌍만 떼어요 — 끝 따옴표를 전부 지우면 `eslint --rule "x"` 가 `… "x` 로 깨져요.
+                # 따옴표 값 뒤의 ` # 주석` 은 버리고, 맨 값은 ` #` 부터가 주석이에요 (YAML 과 같아요).
+                q = substr(v, 1, 1)
+                if (q == "\042" || q == "\047") {
+                    e = length(v); while (e > 1 && substr(v, e, 1) != q) e--
+                    if (e > 1) v = substr(v, 2, e - 2)
+                } else sub(/[ \t]+#.*$/, "", v)
                 if (v != "") print v
                 next
             }
@@ -932,7 +927,13 @@ _goax_yaml_list_multi() {
             if (i > keyind && t ~ /^[ \t]*-[ \t]+/) {
                 v = t; sub(/^[ \t]*-[ \t]+/, "", v)
                 sub(/[ \t]+$/, "", v)
-                gsub(/^[\042\047]+|[\042\047]+$/, "", v)
+                # 따옴표 한 쌍만 떼어요 — 끝 따옴표를 전부 지우면 `eslint --rule "x"` 가 `… "x` 로 깨져요.
+                # 따옴표 값 뒤의 ` # 주석` 은 버리고, 맨 값은 ` #` 부터가 주석이에요 (YAML 과 같아요).
+                q = substr(v, 1, 1)
+                if (q == "\042" || q == "\047") {
+                    e = length(v); while (e > 1 && substr(v, e, 1) != q) e--
+                    if (e > 1) v = substr(v, 2, e - 2)
+                } else sub(/[ \t]+#.*$/, "", v)
                 if (v != "") print FILENAME "\t" v
                 next
             }
@@ -975,7 +976,11 @@ sys.exit(0 if re.match(glob_to_regex(pattern), path) else 1)
 PYGLOB
         return $?
     fi
-    # python3 없음 — `**/` 접두를 걷어낸 나머지로 substring 판정 (보수적)
+    # python3 없음 — 셸 case 글롭으로 먼저 봐요 (case 의 `*` 는 `/` 도 넘어서 `**/*.kt` 가 `src/a.kt` 에 맞아요).
+    # 예전엔 substring 만 봐서 `**/*.kt` 를 글자 그대로 `*.kt` 로 찾다가 lint_file · quality_configs 가 조용히 꺼졌어요 (리뷰 실측).
+    # shellcheck disable=SC2254
+    case "$path" in $pattern) return 0 ;; esac
+    # 그다음 `**/` 접두를 걷어낸 나머지로 substring 판정 (보수적)
     local tail="${pattern##*\*\*/}"
     case "$path" in *"$tail"*) return 0 ;; esac
     return 1
@@ -1216,11 +1221,8 @@ for line in sys.stdin:
 
 # ─── 파일 쓰기 락 ───────────────────────────────────────────────────
 # goax_lock <lockdir> [timeout_s]  ·  goax_unlock <lockdir>  ·  goax_unlock_all
-#   read → 변환 → tmp → mv 를 통째로 감싸요. `mv` 자체는 원자적이지만 lost-update 는 못 막아요 —
-#   두 프로세스가 같은 원본을 읽으면 나중에 mv 하는 쪽이 앞의 변경을 통째로 덮어써요.
-#   실측(레인 원장): `--report A` ‖ `--report B` 30회 중 30회 유실(보고 16줄 중 8줄만 남음),
-#   tasks-gate 의 task_seal 은 10회 중 5회 유실 — G4 "미완료를 지워서 통과" 방어가 같이 사라져요.
-#   mkdir 은 POSIX 에서 원자적이라 flock(리눅스 전용) 없이 macOS/BSD 에서도 상호배제가 돼요.
+#   read → 변환 → tmp → mv 를 통째로 감싸요. `mv` 는 원자적이어도 lost-update 는 못 막아요
+#   (실측: 레인 원장 동시 보고 30회 중 30회 유실). mkdir 은 POSIX 원자적이라 flock 없이 macOS 에서도 돼요.
 #
 #   같은 `tmp.$$` && `mv` 패턴을 쓰는 스크립트는 전부 이 헬퍼를 거쳐야 해요:
 #     lanes-dispatch · tasks-gate · status-note · update-task · tier-from-state(--reset) · register-spirit-hook ·
@@ -1318,11 +1320,8 @@ goax_unlock_all() {
     return 0
 }
 
-# ─── spec 인자 해석 ─────────────────────────────────────────────────
 # ─── spec/ADR ID — 날짜 + 난수 (브랜치끼리 서로 안 봐도 안 겹쳐요) ─────────
-# 새 ID: `YYYY-MM-DD-<4hex>` (예: 2026-09-25-a3f1). 옛 순번 `NNN`(spec)·`NNNN`(ADR) 도 계속 읽어요.
-# 순번은 "디렉토리 최댓값 + 1" 이라 PR 스택·병렬 브랜치가 같은 번호를 받아요
-# (실측 commerce: spec 번호 중복 8개, ADR 12개). 날짜+난수는 다른 브랜치를 볼 필요가 없어요.
+# 새 ID: `YYYY-MM-DD-<4hex>` (예: 2026-09-25-a3f1). 옛 순번 `NNN`(spec)·`NNNN`(ADR) 도 계속 읽어요 (next-spec-num.sh).
 # 주의: 옛 ADR `0008-x` 와 새 ID `2026-09-25-…` 는 둘 다 "숫자 4개 + 하이픈" 으로 시작해요 —
 #       형식 판별은 반드시 GOAX_DOC_ID_ERE 로 하세요 (`[0-9]+-` 로 자르면 새 ID 가 전부 "2026" 이 돼요).
 # 반복자 `{4}` 를 안 써요 — ubuntu 기본 mawk 는 구간 반복을 모르는 빌드가 있어요. `[a-f]` 범위도 안 써요 (로케일).
@@ -1362,7 +1361,7 @@ goax_resolve_spec() {
     if [ -d "$base/$want" ]; then printf '%s' "$want"; return 0; fi
     hits=$(find "$base" -mindepth 1 -maxdepth 1 -type d -name "${want}*" 2>/dev/null \
            | sed 's|.*/||' | sort)
-    # 새 ID(`2026-09-25-a3f1-slug`) 는 날짜로 시작해서 앞부분 축약이 안 먹어요 — 난수·slug 로도 찾아요
+    # 새 ID(`2026-09-25-a3f1-slug`) 는 날짜로 시작해서 앞부분 축약으로는 못 찾아요 — 난수·slug 로도 찾아요
     [ -z "$hits" ] && hits=$(find "$base" -mindepth 1 -maxdepth 1 -type d -name "*-${want}*" 2>/dev/null \
            | sed 's|.*/||' | sort)
     n=$(printf '%s\n' "$hits" | grep -c . || true); n=${n:-0}

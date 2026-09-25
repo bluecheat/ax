@@ -1,27 +1,12 @@
 #!/usr/bin/env bash
 # pre-bash hook — 에이전트가 git 훅을 끄는 걸 막아요
 #
-# 막는 형태: `--no-verify`(commit·push·merge·cherry-pick·rebase·am·pull) · `git commit -n` ·
-#            `git -c core.hooksPath=…` · `git config core.hooksPath <값>` ·
-#            훅 매니저 끄기 변수 — `HUSKY=0`·`HUSKY_SKIP_HOOKS`(husky) · `LEFTHOOK=0`·`LEFTHOOK_EXCLUDE`(lefthook) ·
-#            `SKIP=<훅id>`(pre-commit 프레임워크, git 명령 앞이나 export 일 때만) — 앞에 붙이든 export 하든
-#
-# 왜: CRITICAL 룰은 `enforced_by: hook:*` 또는 `external:*`(husky·lefthook·pre-commit 프레임워크)로만
-#     집행돼요 (I1). goax 자체의 pre-commit 체인은 grep-on-commit.sh 가 PreToolUse 에서 먼저 돌려서
-#     `--no-verify` 로도 안 빠지지만, 프로젝트의 git 훅(commit-msg·pre-push·lint-staged)은 이 플래그
-#     한 줄로 사라져요. 훅이 실패했을 때 에이전트가 고치는 대신 끄면 집행이 없는 것과 같아요.
-#
-# ⚠️ 성격: 사고 방지용 안전망이지 보안 경계가 아니에요. 사람이 직접 우회하는 건 막지 않아요 —
-#    사용자는 프롬프트에서 `! git commit --no-verify …` 로 직접 실행할 수 있어요.
-#
-# 판정: common.sh goax_shell_scan bypass — 따옴표·heredoc 을 셸처럼 읽어서
-#       `git commit -m "fix -n handling"` 의 `-n` 이나 커밋 메시지 속 `--no-verify` 는 안 걸려요.
-#       python3 가 없거나 **있는데 실패하면**(xcrun shim 등) 따옴표를 벗긴 문자열에서 `--no-verify`·`core.hooksPath`·
-#       훅 끄기 변수를 봐요 — 판정 못 했다고 통과시키지 않아요.
-# 모드: sensors.mode 가 warning 이어도 차단해요 (off 면 안 돌아요). 경고로는 이 사고를 못 막아요 —
-#       경고를 읽는 바로 그 순간에 훅은 이미 꺼져 있어요.
-# 끄기: .ax/config.yml sensors.disabled_hooks 에 block-hook-bypass (프로필 minimal 에서도 돌아요)
-# 차단은 exit 2 + stderr.
+# 막는 형태: `--no-verify`(commit·push·merge·cherry-pick·rebase·am·pull) · `git commit -n` · `git -c core.hooksPath=…` ·
+#   `git config core.hooksPath <값>` · `HUSKY=0`·`HUSKY_SKIP_HOOKS` · `LEFTHOOK=0`·`LEFTHOOK_EXCLUDE` · `SKIP=<id>`(git 앞·export)
+# 왜: goax 체인은 grep-on-commit 이 먼저 돌지만 프로젝트 훅(external:*)은 이 플래그 한 줄로 사라져요. 경고는 늦어요 —
+#   읽는 순간 훅은 이미 꺼져 있어서 sensors.mode=warning 이어도 막아요. 사람은 `! git commit --no-verify …` 로 직접 해요.
+# 판정: goax_shell_scan bypass (메시지 속 `-n`·`--no-verify` 는 안 걸려요). python3 가 못 돌면 간이 판정 — 통과시키지 않아요.
+# 끄기: sensors.disabled_hooks 에 block-hook-bypass (minimal 프로필에서도 돌아요). 차단은 exit 2 + stderr.
 set -uo pipefail
 
 [ -d "${CLAUDE_PROJECT_DIR:-$(pwd)}/.ax/hooks" ] || exit 0

@@ -325,7 +325,12 @@ RES=$(bash .ax/scripts/bash/next-spec-num.sh --reserve --slug "$SLUG" --json)
 그렇다고 "확실해요?" 로 막으면 모델은 늘 "네" 라고 해요. 그래서 세 번째 방식을 들여왔어요 (ECC 의 GateGuard) —
 **사실을 요구하고, 사실이 채워지면 통과**. goax 는 여기서 한 걸음 더 결정론 쪽으로 가요: "읽었어요" 라는 말이 아니라
 Read 도구 기록을 봐요 (`rule-read-gate`). 파괴 명령은 "지워질 파일 · 되돌리는 절차 · 사용자 지시 원문" 을 적게 한 뒤
-같은 명령의 재시도를 통과시켜요 (`destructive-facts`) — 적는 과정에서 모르던 파일이 보여요.
+같은 명령의 재시도를 통과시켜요 (`destructive-facts`) — 적는 과정에서 모르던 파일이 보여요. 품질 설정(lint·format·타입 검사·
+커버리지·git 훅 설정)을 고칠 땐 "완화인지 강화인지 · 사용자 지시 원문" 을 적게 해요 (`quality-config-gate`) — 검사가 실패하면
+코드 대신 규칙을 끄는 쪽이 가장 싼 길이라서요.
+
+압축(compaction)도 같은 태도로 다뤄요. 요약은 Claude Code 가 하고, goax 는 요약이 흘리기 쉬운 **사실**(브랜치·바뀐 파일·tasks
+진행률)만 압축 직전에 적었다가 직후에 한 번 돌려줘요 (`pre-compact/snapshot.sh`). 훅 안에서 LLM 으로 요약하지 않아요.
 
 게이트를 켜면 탈출구가 같이 있어야 해요. 모든 훅이 ID 로 꺼지고(`sensors.disabled_hooks`), `hook_profile: minimal` 은
 안전망만 남겨요. 같은 긴 차단 문구가 컨텍스트에 쌓이면 반복 루프를 부른다는 ECC 의 실측을 따라 세 번째 뒤로는 한 줄로 줄여요.
@@ -450,4 +455,4 @@ goax의 *고유 기여*는 두 가지예요:
 - [`docs/skill-routing.md`](docs/skill-routing.md) — skill 라우팅 매트릭스
 - [`docs/up.md`](docs/up.md) — Brownfield 도입 흐름
 - [`changelog/0.1.0.md`](changelog/0.1.0.md) "Design decisions" 섹션 — 결정 기록·거부된 대안 (옛 docs/adr/ 통합)
-- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 결정론 도구 37개 표준
+- [`templates/default/.ax/scripts/bash/README.md`](templates/default/.ax/scripts/bash/README.md) — 결정론 도구 41개 표준

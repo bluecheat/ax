@@ -11,7 +11,7 @@
 | `detect-model.sh` | 지금 돌고 있는 모델 식별 — override → `$GOAX_MODEL` → transcript 스캔 → unknown | (진단·로깅용) |
 | `next-spec-num.sh` | 새 spec/ADR ID 발급 — `YYYY-MM-DD-<4hex>` (`--kind spec\|adr`, `--reserve --slug` 로 실물까지 O_EXCL 생성). 순번이 아니라 브랜치끼리 안 겹쳐요. `--check-duplicates` 는 옛 순번(`NNN`/`NNNN`) 중복 진단 | `spec`, `adr`, `doctor` |
 | `tier-from-state.sh` | current-task.json + config.yml → tier 결정 + evaluator 필수 여부 + spec_review 필수 여부(Size 축만) (`--reset` 는 `reset-task.sh` 경유) | `spec`, `tasks-gate.sh`, `spec-review.sh`, `update-state.sh` |
-| `update-task.sh` | `current-task.json` 의 task 필드를 **락 안에서 in-place** 갱신 — `--phase <p>` · `--set task_id\|description\|size\|risk\|domain\|spec_id\|spec_dir\|spec_tier=<v>` · `--blocked-by '<json>'` · `--merge-intent '<json>'` · `--start`. enum(size·risk·spec_tier·phase) 검증 실패면 아무것도 안 씀. SKILL.md 의 인라인 jq 를 대체 — 인라인은 무락이라 `handoff` 를 잃어요 | `triage`, `spec`, `spec-validate`, `spec-tasks`, `spec-implement` |
+| `update-task.sh` | `current-task.json` 의 task 필드를 **락 안에서 in-place** 갱신 — `--phase <p>` · `--set task_id\|description\|size\|risk\|domain\|spec_id\|spec_dir\|spec_tier\|friction\|plan_doc=<v>` (`plan_doc` = 외부 계획 문서 경로 — spec 의 "원 계획") · `--blocked-by '<json>'` · `--merge-intent '<json>'` · `--start`. enum(size·risk·spec_tier·phase) 검증 실패면 아무것도 안 씀. SKILL.md 의 인라인 jq 를 대체 — 인라인은 무락이라 `handoff` 를 잃어요 | `triage`, `spec`, `spec-validate`, `spec-tasks`, `spec-implement` |
 | `init-spec-dir.sh` | tier별 selective spec 디렉토리 생성 | `spec` |
 | `add-spec-files.sh` | 기존 spec에 tasks/research 등 점진 추가 | `spec-tasks`, `spec --add` |
 | `slug-from-text.sh` | 영문 텍스트 → kebab-case 정규화·검증 | `spec` |
@@ -25,7 +25,7 @@
 | `install-git-hooks.sh` | `.ax/hooks/pre-commit/*.sh` chain 을 git pre-commit wrapper 로 설치 (모든 환경 기본 — 사람 터미널 커밋 커버) | `up`, `onboarding` |
 | `register-spirit-hook.sh` | `.claude/settings.json` 에 spirit-rules-inject hook idempotent 등록 | `doctor` |
 | `reset-task.sh` | 작업 완료 후 `current-task.json` → phase=idle 리셋 (`tier-from-state.sh --reset` 위임). `handoff` 는 남기고, 파일이 없으면 만들지 않고 exit 1 | `spec-implement` |
-| `session-brief.sh` | 세션 첫머리 브리핑 — 진행 중 task · 인계 노트(now·next·open 앞 3개) · 설치본 < 플러그인 버전 · 밀린 audit. 말할 게 없으면 빈 출력, 글자 상한 `--max-chars`(기본 1200) | SessionStart 훅 `session-start/session-brief.sh` |
+| `session-brief.sh` | 세션 첫머리 브리핑 — 진행 중 task · 인계 노트(now·next·open 앞 3개) · 설치본 < 플러그인 버전 · 밀린 audit · 같은 category 실수 재발. 말할 게 없으면 빈 출력, 글자 상한 `--max-chars`(기본 1200). `--snapshot --session <sid>` 는 압축 직전 사실(브랜치·HEAD·바뀐 파일·tasks 진행률)을 적고, `--after-compact` 가 한 번 앞에 붙여요 | SessionStart 훅 `session-start/session-brief.sh`, PreCompact 훅 `pre-compact/snapshot.sh` |
 | `update-state.sh` | `.ax/` 실측 → `.ax/state.json` (layers/cross_cut/sensors_mode + HUD 캐시 `hud.{plugin_version,review_required,cached_at}`) 갱신. `--skill <name>` 이 `last_skill`·`skill_calls+=1` 을, `--last-mistake <file>` 이 `last_mistake_file` 을 **같은 락·같은 쓰기** 안에서 찍어요 — SKILL.md 가 state.json 을 인라인 jq 로 쓰면 안 돼요 (smoke 가 막아요) | 모든 skill 의 마무리 (`--skill <자기 이름>`) |
 | `triage-search.sh` | KEYWORDS 로 6 군데(specs/adrs/mistakes/rules/modules/imported) 검색 + 동의어 확장 + 매칭수 랭킹 + 스니펫 + 도메인 boost | `triage` |
 | `build-memory.sh` | `.ax/` 상태 → `.ax/MEMORY.md` 한 줄 포인터 인덱스 재생성 (triage 가 먼저 read) | `triage` |
@@ -45,7 +45,9 @@
 | `zero-verify.sh` | `config.yml commands` 를 파이프 없이 실행하고 증거 블록 생성 — 안 돌린 게이트도 보고 (하나도 안 돌면 exit 2) | `zero` |
 | `zero-ablation.sh` | 산문 룰 전체를 끄고 무엇이 깨지는지 재는 ablation (`--off/--on/--status`) — `--on` 이 회차를 기록하고 다음 기한(+180일)을 인계 노트 `next` 에 체크박스로 (doctor 가 추적) | `zero`, `doctor` |
 | `zero-guard-bash.sh` | **(`.ax/hooks/pre-bash/` 에 설치 — 이 디렉터리 밖)** pre-bash 가드: `git add -A` 차단(exit 2) · 검증 명령 파이프 경고. hook 규약이라 `--json` 표준 밖이에요 | (hook) |
-| `ade-settings.sh` | 모노레포 ADE 루트(저장소 루트)의 `.claude/settings.json` 에 이 프로젝트의 goax 훅을 템플릿에서 생성 — `--check`(누락·잔재) · `--apply`(이 프로젝트 몫만 교체, 다른 훅·permissions 보존, 락·백업). 단일 저장소면 exit 2 | `doctor`, `vendor`, `up` |
+| `ade-settings.sh` | `.claude/settings.json` 의 goax 훅을 템플릿에서 생성 — 모노레포면 ADE 루트(저장소 루트)에 `env CLAUDE_PROJECT_DIR=…/<rel>` 형식으로, 단일 저장소면 프로젝트 settings 에 템플릿 그대로. `--check`(누락·잔재) · `--apply`(goax 훅 명령만 교체, 사용자 훅·permissions·statusLine 보존, 락, 백업 파일 없음). `.ax/settings.json.suggested` 머지도 이걸로 — `jq '*'` 는 배열을 통째로 바꿔요 | `doctor`, `vendor`, `up`, `onboarding` |
+| `detect-stack.sh` | 프로젝트가 **선언한** 진입점(package.json scripts·lockfile · Makefile/justfile/Taskfile 타깃 · gradlew/mvnw · 언어 매니페스트와 거기 선언된 도구)에서 `commands.*` · `commands.lint_file` 후보와 모노레포 신호를 뽑아요. 추측하지 않아요 — 모르는 생태계는 후보가 비어요 | `onboarding`, `zero` |
+| `config-set.sh` | `.ax/config.yml` 의 `<섹션>.<키>` 한 값을 락 안에서 — 스칼라 설정 · `--add`(블록 리스트에 한 줄, 중복이면 그대로) · `--clear`. 없는 키는 만들지 않아요 | `onboarding`, `zero` |
 | `vendor-skills.sh` | goax skill/command/agent 를 저장소에 동봉(`--plugin-dir` cp) — 모노레포처럼 ADE 루트 ≠ 프로젝트 루트일 때 `.goax-root` 포인터도 씀. `--check` 로 동봉본 ↔ plugin 버전 비교만 | `vendor`, `doctor` |
 
 ## 표준 (모든 스크립트 공통)
