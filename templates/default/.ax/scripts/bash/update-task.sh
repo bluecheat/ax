@@ -10,9 +10,9 @@
 #              spec_id · spec_dir · spec_tier(standard|full) · plan_doc(외부 계획 문서 경로) ·
 #              friction(autopilot|phase_gate|per_task)   — 빈 값은 안 받아요 (비우는 건 reset-task.sh)
 #   friction 은 사용자가 이 task 에 한해 미리 준 확인 강도예요 ("묻지 말고 쭉 해" → autopilot).
-#     spec-implement 가 config.yml 의 confirmation.mode 대신 이 값을 써요. L3 override(C5)는 여전히 이겨요.
+#     spec-implement 가 config.yml 의 confirmation.mode 대신 이 값을 써요. L3 override(C5)는 여전히 우선해요.
 #   --blocked-by    blocked_by 를 통째로 교체 (문자열 JSON 배열, '[]' 로 비움)
-#   --merge-intent  intent_notes 에 얕은 병합 (JSON 객체) — 같은 키는 새 값이 이겨요
+#   --merge-intent  intent_notes 에 얕은 병합 (JSON 객체) — 같은 키면 새 값이 우선해요
 #   --start         started_at 을 지금(UTC)으로 — triage 가 새 task 를 열 때만
 #   updated_at 은 매번 지금(UTC)으로 찍어요. 인자가 하나도 없으면 exit 1.
 #

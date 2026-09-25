@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 # .ax/scripts/bash/detect-stack.sh — 프로젝트가 **선언한** 빌드·테스트·lint 진입점에서 config.yml commands 후보를 뽑아요
 #
-# 왜: config.yml `commands.*` 가 비어 있으면 zero-verify 는 아무것도 안 돌리고 lint-changed 는 조용해요. 채우는 건 모델이
-#     기억으로 "보통 이 스택은 …" 하고 추측해 왔어요 — 다른 패키지 매니저, 없는 스크립트, 다른 버전의 도구가 들어가요.
-#     이 스크립트는 추측하지 않고 **프로젝트 안에 적힌 것**만 읽어요: package.json 의 scripts 와 lockfile,
-#     Makefile·justfile·Taskfile 의 타깃, 빌드 래퍼(gradlew·mvnw), 언어 매니페스트(go.mod·Cargo.toml·pyproject.toml …)
-#     와 그 안에 선언된 도구. 모르는 생태계는 manifests 에 이름만 나오고 후보는 비어요 — 그때는 사람에게 물어요.
-#     후보는 제안이에요. 적용은 사용자 확인 뒤 `config-set.sh` 로.
+# 왜: 모델이 기억으로 명령을 지으면 다른 패키지 매니저·없는 스크립트가 들어가요. 그래서 프로젝트에 적힌 것만 읽어요 —
+#   package.json scripts·lockfile · Makefile/justfile/Taskfile 타깃 · gradlew·mvnw · 언어 매니페스트와 거기 선언된 도구.
+#   모르는 생태계는 후보가 비어요 (그때는 사람에게 물어요). 후보는 제안이고, 적용은 사용자 확인 뒤 config-set.sh 로.
 #
 # Usage:
 #   bash detect-stack.sh [--json] [--help]
@@ -151,7 +148,11 @@ MONO=false
 { [ "${#SIGNALS[@]}" -gt 0 ] || [ "${#MEMBERS[@]}" -ge 2 ]; } && MONO=true
 
 arr() { if [ $# -eq 0 ]; then echo '[]'; else printf '%s\n' "$@" | awk '!seen[$0]++' | jq -R . | jq -sc .; fi; }
-cur() { grep -E "^[[:space:]]+$1:" "$ROOT/.ax/config.yml" 2>/dev/null | head -1 | sed -E 's/^[^:]*:[[:space:]]*//; s/[[:space:]]+#.*$//; s/^"(.*)"$/\1/'; }
+cur() {   # zero-verify.sh 와 같은 읽기 — 따옴표 값 안의 `#` 은 주석이 아니에요
+    grep -E "^[[:space:]]+$1:" "$ROOT/.ax/config.yml" 2>/dev/null | head -1 \
+        | sed -E "s/^[[:space:]]+$1:[[:space:]]*//" \
+        | sed -E -e 's/^"([^"]*)".*$/\1/' -e t -e "s/^'([^']*)'.*\$/\1/" -e t -e 's/^#.*$//' -e t -e 's/[[:space:]]+#.*$//' -e 's/[[:space:]]+$//'
+}
 RESULT=$(jq -nc \
     --argjson m "$(arr ${MANIFESTS[@]+"${MANIFESTS[@]}"})" --argjson s "$(arr ${SIGNALS[@]+"${SIGNALS[@]}"})" \
     --argjson mem "$(arr ${MEMBERS[@]+"${MEMBERS[@]}"})" --argjson mono "$MONO" \

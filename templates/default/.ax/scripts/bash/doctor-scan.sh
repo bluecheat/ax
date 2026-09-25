@@ -259,7 +259,7 @@ fi
 
 # ── budget — 매 세션 시작에 무조건 실리는 글의 양 ─────────────────────────
 # CLAUDE.md(+CLAUDE.local.md) 에서 `@경로` import 를 따라가며(최대 5단계, 포함한 파일 기준 상대경로) 바이트를 더해요.
-# 룰을 @import 로 올리면 도달은 확실해지지만 매 세션 그만큼 컨텍스트를 먹어요 — path-scoped 주입(paths:)으로 옮길
+# 룰을 @import 로 올리면 도달은 확실해지지만 매 세션 그만큼 컨텍스트를 차지해요 — path-scoped 주입(paths:)으로 옮길
 # 후보를 보려는 숫자예요. 토큰은 바이트/3 어림(한글 UTF-8 3바이트·영문 4자≈1토큰의 중간) — 정확한 값이 아니에요.
 # 경고 선: GOAX_BUDGET_WARN 바이트(기본 32768 ≈ 1만 토큰). 넘으면 finding 1건.
 BUDGET_WARN="${GOAX_BUDGET_WARN:-32768}"; case "$BUDGET_WARN" in ''|*[!0-9]*) BUDGET_WARN=32768 ;; esac

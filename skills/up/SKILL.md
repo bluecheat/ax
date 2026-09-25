@@ -15,7 +15,7 @@ description: "goax 프로젝트 install or idempotent update — '/up', 'goax up
 - 프로젝트에 `.ax/`가 없는데 사용자가 goax 관련 작업을 요청
 - doctor 가 plugin 갱신 감지 후 재호출 안내 (`/up` 으로 idempotent backfill)
 
-**install 인지 update 인지는 `.ax/` 존재로 먼저 갈라요** (분석보다 먼저 봐요):
+**install 인지 update 인지는 `.ax/` 존재로 먼저 나눠요** (분석보다 먼저 봐요):
 
 ```bash
 [ -d .ax ] && MODE=update || MODE=install

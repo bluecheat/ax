@@ -4602,24 +4602,26 @@ ADJ
     cat > "$SG/.claude/settings.json" <<'SGJ'
 {"permissions":{"allow":["Bash(ls:*)"]},"statusLine":{"type":"command","command":"echo hud"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[
  {"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR\"/.ax/hooks/pre-bash/block-destructive.sh"},
- {"type":"command","command":"bash .ax/hooks/pre-bash/old-removed.sh"},
+ {"type":"command","command":"bash ./.ax/hooks/pre-bash/grep-on-commit.sh"},
+ {"type":"command","command":"bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-bash/zero-guard-bash.sh\""},
  {"type":"command","command":"echo user-own"}]}]}}
 SGJ
     sg() { (cd "$SG" && bash .ax/scripts/bash/ade-settings.sh --plugin-dir "$REPO" --json "$@" 2>/dev/null); }
     SGC=$(sg --check)
-    [ "$(echo "$SGC" | jq -r '.result.project_rel')" = "" ] && [ "$(echo "$SGC" | jq -r '.result.stale[0]')" = "PreToolUse .ax/hooks/pre-bash/old-removed.sh" ] \
-        && [ "$(echo "$SGC" | jq -r '.result.missing | length')" = "$((TPL_N - 1))" ] \
-        && pass "ade-settings 단일 저장소 --check — 손으로 쓴 옛 형태도 goax 몫으로 읽어요 (누락 $((TPL_N - 1)) · 잔재 1)" \
+    [ "$(echo "$SGC" | jq -r '.result.project_rel')" = "" ] && [ "$(echo "$SGC" | jq -r '.result.stale | length')" = 0 ] \
+        && [ "$(echo "$SGC" | jq -r '.result.missing | length')" = "$((TPL_N - 2))" ] \
+        && pass "ade-settings 단일 저장소 --check — 손으로 쓴 옛 형태(\"\$CLAUDE_PROJECT_DIR\"/ · ./)도 goax 몫, 템플릿 밖 zero-guard 는 남의 몫" \
         || fail "ade-settings 단일 저장소 --check: $SGC"
     sg --apply >/dev/null
     SS="$SG/.claude/settings.json"
     [ "$(sg --check | jq -r .status)" = ok ] && [ "$(sg --apply | jq -r .result.changed)" = false ] \
         && [ "$(jq -r '.permissions.allow[0]' "$SS")" = 'Bash(ls:*)' ] && [ "$(jq -r '.statusLine.command' "$SS")" = 'echo hud' ] \
         && [ "$(jq -r '[.hooks[][].hooks[].command | select(. == "echo user-own")] | length' "$SS")" = 1 ] \
-        && [ "$(jq -r '[.hooks[][].hooks[].command | select(test("old-removed"))] | length' "$SS")" = 0 ] \
+        && [ "$(jq -r '[.hooks[][].hooks[].command | select(test("zero-guard-bash"))] | length' "$SS")" = 1 ] \
+        && [ "$(jq -r '[.hooks[][].hooks[].command | select(test("grep-on-commit"))] | length' "$SS")" = 1 ] \
         && jq -r '.hooks.SessionStart[].hooks[].command' "$SS" | grep -qF 'bash "${CLAUDE_PROJECT_DIR}/.ax/hooks/session-start/session-brief.sh"' \
         && [ "$(ls -A "$SG/.claude" | grep -c .)" = 1 ] \
-        && pass "ade-settings 단일 저장소 --apply — 사용자 훅·permissions·statusLine 보존, 템플릿 명령 그대로, 멱등, 백업 파일 없음" \
+        && pass "ade-settings 단일 저장소 --apply — 사용자 훅·zero-guard·permissions·statusLine 보존, ./ 형태는 중복 없이 교체, 멱등, 백업 파일 없음" \
         || fail "ade-settings 단일 저장소 --apply 결과가 이상해요: $(ls -A "$SG/.claude") $(jq -c . "$SS" | cut -c1-300)"
     rm -rf "$AD" "$SG"
 else
@@ -4722,6 +4724,23 @@ if command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
     [ "$CSR" = 1 ] && [ "$CSL" = "a => 1|b => 2" ] && diff <(sed 's/^  test: .*/  test:/' "$S58/config.yml") <(sed 's/^  test: .*/  test:/' "$Q/.ax/config.yml") >/dev/null \
         && pass "config-set — 없는 키 거부, 리스트 add(중복 무시)·clear, 원래 파일로 왕복" \
         || fail "config-set: rc=$CSR list=$CSL $(diff "$S58/config.yml" "$Q/.ax/config.yml" | head -5)"
+
+    # 리뷰 회귀 — 백슬래시 값 보존(awk -v 금지) · 스칼라/리스트 형태가 다르면 거부 · 따옴표로 끝나는 명령 · & 들어간 파일명
+    cp "$S58/config.yml" "$Q/.ax/config.yml"
+    (cd "$Q" && bash .ax/scripts/bash/config-set.sh commands.lint 'ruff --select E\d src\new' >/dev/null)
+    (cd "$Q" && bash .ax/scripts/bash/config-set.sh --add sensors.disabled_hooks spec-gate >/dev/null)
+    (cd "$Q" && bash .ax/scripts/bash/config-set.sh sensors.disabled_hooks x >/dev/null 2>&1); T1=$?
+    (cd "$Q" && bash .ax/scripts/bash/config-set.sh --add commands.test foo >/dev/null 2>&1); T2=$?
+    (cd "$Q" && bash .ax/scripts/bash/config-set.sh --add commands.lint_file '**/*.ts => printf "%s" {file} > lintarg; test "x" = "y"' >/dev/null)
+    grep -qxF '  lint: "ruff --select E\d src\new"' "$Q/.ax/config.yml" && [ "$T1" = 1 ] && [ "$T2" = 1 ] \
+        && [ "$( (cd "$Q" && source .ax/scripts/bash/common.sh && goax_yaml_list .ax/config.yml disabled_hooks) )" = spec-gate ] \
+        && pass "config-set — 백슬래시 보존, 리스트에 set · 스칼라에 --add 는 거부 (항목이 고아로 남지 않아요)" \
+        || fail "config-set 회귀: $(grep -n '  lint:' "$Q/.ax/config.yml") T1=$T1 T2=$T2"
+    mkdir -p "$Q/src/R&D"; : > "$Q/src/R&D/b c.ts"
+    LO3=$(lf "$Q/src/R&D/b c.ts")
+    [ "$(cat "$Q/lintarg" 2>/dev/null)" = 'src/R&D/b c.ts' ] && echo "$LO3" | grep -q 'lint 실패' \
+        && pass "lint-changed — & · 공백 든 파일명이 한 인자로 ({file} 치환, patsub_replacement), 따옴표로 끝나는 명령도 그대로" \
+        || fail "lint-changed 파일명 인용: arg=$(cat "$Q/lintarg" 2>/dev/null) out=$LO3"
 
     # detect-stack — 선언된 것에서만
     printf '{"scripts":{"build":"x","test":"y"},"devDependencies":{"eslint":"9"}}' > "$Q/package.json"; touch "$Q/pnpm-lock.yaml"

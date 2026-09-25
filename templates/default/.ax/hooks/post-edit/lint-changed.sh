@@ -1,21 +1,11 @@
 #!/usr/bin/env bash
 # post-edit hook — 편집한 파일 하나를 프로젝트가 정한 명령으로 검사하고, 실패하면 모델에게 알려요
 #
-# 명령은 .ax/config.yml `commands.lint_file` 목록이에요 — "<글롭> => <명령>" 한 줄씩, `{file}` 은 편집한 파일의
-# 프로젝트 상대 경로(셸 인용됨)로 바뀌어요. 첫 번째로 맞는 글롭 하나만 돌려요.
-#   commands:
-#     lint_file:
-#       - "**/*.kt => ktlint {file}"
-#       - "**/*.py => ruff check {file}"
-#       - "apps/web/**/*.ts => pnpm --dir apps/web exec eslint --quiet {file}"
-# 비어 있으면 아무것도 안 해요 — 확장자로 스택을 추측하지 않아요 (추측은 다른 버전·다른 설정의 도구를 돌려요).
-# 후보는 `detect-stack.sh` 가 프로젝트가 선언한 도구에서 뽑아 보여줘요.
-#
-# 결과: 통과면 조용히. 실패면 PostToolUse additionalContext 로 출력 앞부분(40줄·3000자)을 넘겨요 — 막지는 않아요.
-#   (예전 판은 stdout 에 찍기만 해서 모델에게 전혀 안 보였어요.)
-# 시간: GOAX_LINT_TIMEOUT(기본 30초). timeout/gtimeout 이 있으면 그걸로 끊어요.
-# 입력: stdin JSON ({tool_name, tool_input.file_path, ...}).
-# 끄기: .ax/config.yml sensors.disabled_hooks 에 lint-changed, 또는 sensors.hook_profile: minimal
+# 명령: .ax/config.yml `commands.lint_file` — "<글롭> => <명령>" 목록, 첫 매칭 하나만. `{file}` 은 셸 인용된 상대 경로.
+#   비어 있으면 아무것도 안 해요 — 확장자로 도구를 추측하지 않아요. 후보는 detect-stack.sh.
+# 결과: 통과면 조용히, 실패면 PostToolUse additionalContext 로 출력 앞 40줄·3000자 (막지 않아요).
+# 시간: GOAX_LINT_TIMEOUT(30초) — timeout/gtimeout 이 있을 때만 끊어요.
+# 끄기: sensors.disabled_hooks 에 lint-changed, 또는 sensors.hook_profile: minimal
 set -uo pipefail   # set -e 제거 — grep returning 1 (no match) 등이 hook 본체를 silent abort하지 않도록
 
 # Bootstrap guard — install 중간이거나 .ax/ 부분 정리 시 silent skip (UX 노이즈 방지)
@@ -53,6 +43,10 @@ done <<< "$RULES"
 [ -n "$CMD" ] || exit 0
 
 QUOTED=$(printf '%q' "$REL")
+# bash 5.2+ 의 patsub_replacement 는 치환 문자열의 `&` 를 "일치한 문자열" 로 바꿔서 %q 의 `\&` 가 깨져요 —
+# `src/R&D.kt` 에서 `D.kt` 가 명령으로 실행됐어요 (리뷰 실측, bash 5.2.21). 치환 전에 꺼요.
+# (치환 부분을 따옴표로 감싸는 방법은 bash 3.2 가 따옴표를 글자로 넣어서 못 써요.)
+shopt -u patsub_replacement 2>/dev/null || true
 RUN="${CMD//\{file\}/$QUOTED}"
 TO="${GOAX_LINT_TIMEOUT:-30}"; case "$TO" in ''|*[!0-9]*) TO=30 ;; esac
 TOOL_TO=""

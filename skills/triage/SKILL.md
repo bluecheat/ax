@@ -210,7 +210,7 @@ bash .ax/scripts/bash/update-task.sh --start --phase triaged \
 
 # 사용자가 이 작업의 확인 강도를 말했으면 같이 적어요 (아래 "friction — 자연어로 받아요"). spec-implement 가
 # config.yml 의 confirmation.mode 대신 이 값을 읽어요 (L3 는 여전히 override).
-# 말하지 않았으면 적지 않아요 — 기본값을 여기서 정하면 사용자가 config 를 바꿔도 안 먹어요.
+# 말하지 않았으면 적지 않아요 — 기본값을 여기서 정하면 사용자가 config 를 바꿔도 반영되지 않아요.
 [ -n "${FRICTION:-}" ] && bash .ax/scripts/bash/update-task.sh --set "friction=$FRICTION" --json
 
 # 계획은 어디서 세워도 돼요 (OMC plan · 다른 plan 도구 · 사람이 쓴 문서). 이 작업의 계획 문서가 있으면 경로를 적어요 —
@@ -266,7 +266,7 @@ bash .ax/scripts/bash/update-task.sh --start --phase triaged \
 ### 종료 후 — intent_notes 병합
 
 ```bash
-bash .ax/scripts/bash/update-task.sh --merge-intent "$REVERSE_INTERVIEW_JSON" --json   # 기존 키는 새 값이 이겨요
+bash .ax/scripts/bash/update-task.sh --merge-intent "$REVERSE_INTERVIEW_JSON" --json   # 같은 키면 새 값이 우선해요
 ```
 
 spec/spec-tasks 는 이 `intent_notes` 를 입력으로 받아 §3 acceptance criteria 와 §7.5 Technical Context 를 채워요 — 재질문·재추론하지 않아요.

@@ -1,29 +1,14 @@
 #!/usr/bin/env bash
-# pre-edit hook — 이 파일에 걸린 룰을 이번 세션에 안 읽었으면 편집을 막아요 (rule-read gate)
+# pre-edit hook — 이 파일에 걸린 룰을 이번 세션에 Read 하지 않았으면 편집을 막아요
 #
-# 왜: spirit-rules-inject.sh · module-rules-inject.sh 는 룰 파일 **경로**만 알려줘요 (B-pointer).
-#     읽을지는 모델이 정해요. 실측(commerce mistakes 22건, 2026-07~09): 20건을 사용자가 잡았고
-#     그중 "고치기 전에 조사 안 함" 이 절반이에요 — 원문 그대로 "hook 이 읽으라 지시한
-#     commerce-application.md 를 건너뛰고 이웃 파일 grep 만으로 추론해" 금지된 suffix 를 썼어요.
-#     안내는 건너뛸 수 있어요. 그래서 **읽었다는 사실**을 확인해요.
-#
-# 판정 (결정론 — 모델의 "확인했어요" 를 믿지 않아요):
-#   Read    대상이 `.ax/spirit/rules/*.md` 또는 `.ax/modules/*/rules.md` 면 세션 마커를 찍고 통과.
-#   Edit/Write/MultiEdit
-#           대상 경로에 매칭되는 룰 파일(spirit `paths:` · module `paths:`+`applies_to: code`) 중
-#           이번 세션에 Read 안 한 게 있으면 exit 2 로 막고 목록을 줘요. 다 읽었으면 통과.
-#           CLAUDE.md · AGENTS.md 가 `@` 로 import 한 룰은 이미 컨텍스트에 있어서 빼요.
-#           `.ax/` 자체 편집 · sensors.rule_gate_exempt 글롭은 건너뛰어요.
-#   매칭은 주입 훅과 같은 common.sh 함수예요 (goax_rules_matching · goax_module_rules_matching).
-#   Read 기록은 `.ax/.session/<sid>/rules-read.log`(`<epoch>\t<상대경로>`) 한 파일이에요 — 판정은 awk 한 번이고,
-#   경로를 파일 이름으로 바꾸지 않아서 한글 룰 파일 이름끼리 겹칠 일이 없어요.
-#   기록 TTL 은 GOAX_INJECT_TTL(기본 4시간). compaction 이 일어나면 SessionStart(source=compact) 훅이 이 기록을 지워서
-#   룰 본문이 컨텍스트에서 빠진 뒤엔 다시 읽게 해요.
-#   세션당 3번까지 전체 안내, 그 뒤는 한 줄 (같은 긴 문구 반복이 루프를 부른다는 ECC 실측 #2142).
-#   세션 id 가 없으면(수동 실행·옛 런타임) 추적할 수 없어서 통과해요.
-# 모드: sensors.mode warning·fail 둘 다 막아요 (off 면 안 돌아요) — 통과 조건이 Read 한 번이라 싸요.
-# 끄기: .ax/config.yml sensors.disabled_hooks 에 rule-read-gate, 또는 sensors.hook_profile: minimal
-# ⚠️ 성격: Bash 의 `sed -i`·`cat >` 로 고치면 이 훅은 안 걸려요. 사고 방지용이지 보안 경계가 아니에요.
+# 왜: 주입 훅은 룰 **경로**만 알려주고 읽을지는 모델이 정해요 — 건너뛸 수 있어요 (CONCEPTS §5.6.1).
+#   모델의 "확인했어요" 가 아니라 Read 도구 기록을 봐요.
+# Read     `.ax/spirit/rules/*.md` · `.ax/modules/*/rules.md` → `.ax/.session/<sid>/rules-read.log` 에 `<epoch>\t<상대경로>`.
+# Edit·Write·MultiEdit
+#          대상에 걸린 룰(spirit `paths:` · module `paths:`+`applies_to: code` — 주입 훅과 같은 매칭 함수) 중
+#          안 읽은 게 있으면 exit 2 + 목록. `@` import 된 룰 · `.ax/` · sensors.rule_gate_exempt 는 빼요.
+# 기록 TTL 은 GOAX_INJECT_TTL(4시간), compaction 뒤엔 SessionStart 가 지워요. 3번째 뒤로는 한 줄. 세션 id 없으면 통과.
+# 모드: warning·fail 둘 다 막아요. 끄기: sensors.disabled_hooks 에 rule-read-gate. Bash 의 `sed -i` 는 안 걸려요.
 set -uo pipefail
 
 [ -d "${CLAUDE_PROJECT_DIR:-$(pwd)}/.ax/hooks" ] || exit 0

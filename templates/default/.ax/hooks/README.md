@@ -4,7 +4,7 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 
 | 위치 | 시점 | 역할 |
 |---|---|---|
-| session-start/ | 세션 시작·재개·compact 직후 | `session-brief.sh` — 인계 노트 · 설치본 버전 지연 · 밀린 audit · 같은 종류 실수 재발을 짧게 (말할 게 없으면 침묵). compact 직후엔 압축 직전 스냅샷을 맨 앞에 |
+| session-start/ | 세션 시작·재개·compact 직후 | `session-brief.sh` — 인계 노트 · 설치본 버전 지연 · 밀린 audit · 같은 종류 실수 재발을 짧게 (알릴 게 없으면 출력 없음). compact 직후엔 압축 직전 스냅샷을 맨 앞에 |
 | pre-compact/ | 컨텍스트 압축 직전 | `snapshot.sh` — 브랜치·HEAD · 커밋 안 된 파일 · 진행 중 spec 의 tasks 진행률을 `.ax/.session/<sid>/precompact.txt` 에 (LLM 요약 아님, 압축을 막지 않음) |
 | user-prompt/ | 사용자 메시지 도착 직후 | Triage 미실행(phase=idle) + 구현 의도 감지 시 reminder 주입 |
 | pre-bash/ | bash 도구 호출 직전 | 파괴적 명령 차단 · git 훅 우회(`--no-verify` 등) 차단 · 프로젝트 안 되돌리기 어려운 명령은 사실 확인 · `git commit` 감지 시 pre-commit 체인 위임 |
@@ -12,7 +12,7 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 | post-edit/ | Edit/Write 직후 | `commands.lint_file` 로 편집한 파일 하나를 검사, 실패하면 출력을 모델에게 (막지 않음 · 비어 있으면 아무것도 안 함) |
 | pre-commit/ | git commit 직전 | CRITICAL 룰 정적 검출 (위반 시 차단/경고만 — 자동 캡처는 폐기, §"Mistake 캡처" 참고) |
 | subagent-start/ | 서브에이전트가 뜨는 순간 | Constitution·Spirit·현재 spec·인계 노트 **경로**를 additionalContext 로 — 하네스가 메인 세션 밖으로 닿게 (goax 자기 에이전트는 제외) |
-| stop/ | 턴이 끝나려는 순간 | 활성 spec(implementing·review)이 완료 게이트 미통과면 **한 번** 붙잡아 "마저 하기 · 보류 표기 · 인계 노트" 셋 중 하나를 시켜요 |
+| stop/ | 턴이 끝나려는 순간 | 활성 spec(implementing·review)이 완료 게이트 미통과면 **한 번** 멈춰 세우고 "마저 하기 · 보류 표기 · 인계 노트" 셋 중 하나를 시켜요 |
 
 ## 끄기 · 프로필 — 게이트마다 탈출구
 
@@ -21,17 +21,17 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 - `.ax/config.yml` `sensors.disabled_hooks: [rule-read-gate]` — 그 훅만 꺼요. 한 세션만이면 `GOAX_DISABLED_HOOKS=rule-read-gate`.
 - `sensors.hook_profile: minimal` — 안전망만 남겨요 (`block-destructive` · `block-hook-bypass` · `check-protected-paths` · `grep-on-commit`). 주입·게이트는 `standard`(기본)에서만.
 - `block-destructive.sh` 의 CATASTROPHIC(루트·시스템 경로 삭제 등)은 이 스위치 **앞**에서 끝나요 — 끌 수 있는 안전망이 아니에요.
-- `sensors.mode: off` 는 예전처럼 전체 침묵이에요.
+- `sensors.mode: off` 는 예전처럼 모든 훅이 아무것도 출력하지 않아요.
 
 ## 사실을 요구하는 게이트 — "정말요?" 대신
 
 "확실해요?" 라고 물으면 모델은 늘 "네" 라고 해요. 그래서 이 게이트들은 **사실**을 요구하고, 사실이 채워지면 통과시켜요
-(ECC GateGuard 의 fact-forcing 방식). 모두 `sensors.mode` 가 `warning` 이어도 막아요 — 통과 조건이 싸서예요.
+(ECC GateGuard 의 fact-forcing 방식). 모두 `sensors.mode` 가 `warning` 이어도 막아요 — 통과하는 데 드는 수고가 작아서예요.
 
 - `pre-edit/rule-read-gate.sh` — 편집 대상에 걸린 룰 파일(spirit `paths:` · module `paths:`+`applies_to: code`)을 이번 세션에
   **Read 도구로** 읽었는지 `.ax/.session/<sid>/rules-read.log` 로 확인해요 (compaction 이 일어나면 SessionStart 훅이 이 기록을 지워서 다시 읽게 해요). 안 읽었으면 목록을 주고 막아요. CLAUDE.md·AGENTS.md 가
   `@` 로 import 한 룰은 이미 컨텍스트에 있어서 빼요. 경로 예외는 `sensors.rule_gate_exempt`. 매칭 함수는 주입 훅과 같아요
-  (`goax_rules_matching` · `goax_module_rules_matching`) — 갈라지면 "주입은 했는데 게이트는 안 거는" 룰이 생겨요.
+  (`goax_rules_matching` · `goax_module_rules_matching`) — 둘이 어긋나면 "주입은 했는데 게이트는 안 거는" 룰이 생겨요.
   실측(commerce): mistakes 22건 중 20건을 사용자가 잡았고 절반이 "고치기 전에 조사 안 함" — 그중 하나는 "hook 이 읽으라 지시한 룰 파일을 건너뛰고".
 - `pre-bash/destructive-facts.sh` — 프로젝트 안 재귀 rm · `git clean -f` · `git checkout -- <경로>` · `git restore` · `git reset --hard` ·
   `git stash drop|clear` · `git branch -D` · `find -delete` 를 세션에서 처음 볼 때 한 번 막고 "지워질 파일 목록 · 되돌리는 절차 ·
@@ -47,7 +47,7 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 - 모두 세션당 3번까지 전체 안내, 그 뒤는 한 줄이에요 — 같은 긴 문구가 컨텍스트에 쌓이면 반복 루프를 부른다는 ECC 실측(#2142)을 따라요.
   세션 id 가 없으면(수동 실행) 추적할 수 없어서 rule-read-gate 는 통과, destructive-facts · quality-config-gate 는 경고로 강등해요.
 - 명령 판정은 `goax_shell_scan`(python3 shlex — 따옴표·주석·heredoc·here-string 을 셸처럼)이 해요. python3 가 없거나 **있는데 실패하면**
-  (macOS xcrun shim 등 — `goax_py_ok` 가 실제 import 로 확인) 두 Bash 게이트는 따옴표를 벗긴 문자열로 간이 판정해요. 판정 못 했다고 통과시키지 않아요.
+  (macOS xcrun shim 등 — `goax_py_ok` 가 실제 import 로 확인) 두 Bash 게이트는 따옴표를 뗀 문자열로 간이 판정해요. 판정 못 했다고 통과시키지 않아요.
 
 ## git 훅 우회 — `pre-bash/block-hook-bypass.sh`
 
@@ -64,7 +64,7 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 (`.ax/.session/<sid>/injected/<key>`)를 두고, 같은 포인터는 4시간(`GOAX_INJECT_TTL`) 안엔 다시 안 줘요.
 compaction 뒤엔 4시간 TTL 이 다시 줄 여지를 남겨요. 세션 id 가 stdin 에 없으면(수동 실행) 예전처럼 매번 줘요.
 
-## Stop 게이트 — 붙잡는 건 한 번, 세션당 8회까지
+## Stop 게이트 — 멈춰 세우는 건 한 번, 세션당 8회까지
 
 `stop/spec-gate.sh` 는 `current-task.json` 의 phase 가 `implementing`·`review` 이고 `tasks-gate.sh` 가 위반을
 보고할 때만 `{"decision":"block","reason":…}` 로 한 턴을 더 줘요. Claude Code 가 재시도할 땐
@@ -72,7 +72,7 @@ compaction 뒤엔 4시간 TTL 이 다시 줄 여지를 남겨요. 세션 id 가 
 (`current-task.json` 의 `handoff.now`)에 그 spec 이 **24시간 안에** 적혀 있으면 멈추는 게 의도라고 보고 잡지 않아요 —
 `status-note.sh --set now` 가 `handoff.now_at` 필드에 시각을 적고 게이트가 그 시각을 봐요. 시각이 없는 옛
 노트는 인정하지 않아요 (예전엔 spec 이름만 있으면 통과라서 몇 주 전 노트 한 줄이 새 세션의 게이트를 영구히
-침묵시켰어요). 지울 땐 `status-note.sh --clear now`. 이 훅은 지나가며 `.ax/.session/*` 의 24시간 넘은
+꺼 버렸어요). 지울 땐 `status-note.sh --clear now`. 이 훅은 실행될 때 `.ax/.session/*` 의 24시간 넘은
 디렉토리도 지워요 — 그 청소가 pre-edit 훅에만 있어서 Edit 없는 세션은 아무것도 못 지웠거든요.
 세션당 상한은 `GOAX_STOP_GATE_MAX`(기본 8) — `.ax/.session/<sid>/stop-blocks` 카운터. 끄려면 `sensors.mode=off`.
 
@@ -81,7 +81,7 @@ compaction 뒤엔 4시간 TTL 이 다시 줄 여지를 남겨요. 세션 id 가 
 시크릿의 형태를 아는 곳은 `.ax/scripts/bash/common.sh` 의 `goax_secret_rules` 표 **하나** 예요.
 `pre-commit/critical-rule-grep.sh` 의 검출은 `goax_secret_patterns`(표의 `use=both|detect` 행)에서,
 `redact_secrets` 의 마스킹은 같은 표의 `use=both|mask` 행에서 나와요. 형태를 하나 더할 땐 표에만 행을
-넣으세요 — 훅에 패턴을 다시 적으면 그 순간 두 곳이 갈라져요. 실제로 갈라져 있었고(웹훅은 마스킹만,
+넣으세요 — 훅에 패턴을 다시 적으면 그 순간 두 곳이 어긋나요. 실제로 어긋나 있었고(웹훅은 마스킹만,
 `pg_key` 는 마스킹만, `passwd`·`access_key` 는 검출만, AWS·Stripe·JWT 는 정량자가 서로 달랐어요),
 그래서 같은 파일에 검출과 마스킹이 다른 답을 냈어요.
 
@@ -96,7 +96,7 @@ stderr 로 흘리면 검출한 의미가 없어요.
 남기고 통과해요 (아래 jq 규약과 같은 원칙). 이 부재가 가장 흔한 시점은 설치 중간이에요 — `.ax/hooks` 는
 이미 있고 `.ax/scripts/bash` 는 아직 없는 창이 실재해서, 무성 통과면 안전망이 꺼진 걸 아무도 몰라요.
 
-## jq 가 없으면 침묵하지 않아요
+## jq 가 없어도 조용히 넘어가지 않아요
 
 `pre-bash/block-destructive.sh` 와 `pre-edit/check-protected-paths.sh` 는 stdin JSON 을 jq 로 파싱해요.
 jq 가 PATH 에 없으면 인자를 못 뽑아 그냥 통과(fail-open)하는데, 예전엔 그게 **무성**이라 `rm -rf /etc` 가
@@ -116,7 +116,7 @@ jq 가 PATH 에 없으면 인자를 못 뽑아 그냥 통과(fail-open)하는데
 
 - `warning` — stderr 메시지만 출력하고 통과 (default, 도입 초기 권장)
 - `fail` — Claude Code hook은 **exit 2**로 차단(stderr가 모델에 reroute), git pre-commit은 **exit 1**로 차단
-- `off` — hook 전체 침묵 (응급용)
+- `off` — 모든 hook 이 출력 없이 통과 (응급용)
 
 도입 초기엔 `warning`으로 시작해 팀이 룰을 학습하고, 데이터가 쌓이면 카테고리별로 `fail`로 승격하는 흐름을 권장해요. 모든 hook이 `goax_mode` helper(`.ax/scripts/bash/common.sh`)로 동일한 방식으로 이 값을 읽어요.
 

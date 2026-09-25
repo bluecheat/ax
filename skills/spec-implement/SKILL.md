@@ -100,7 +100,7 @@ TASK_DOMAIN=$(jq -r '.domain // "default"' .ax/current-task.json)
 TASK_FRICTION=$(jq -r '.friction // empty' .ax/current-task.json)   # 사용자가 이 task 에 미리 준 확인 강도 (C0)
 
 # 3. effective mode 결정 (priority: C5 > C3 > C0 > C1)
-EFFECTIVE_MODE="${TASK_FRICTION:-$CONF_MODE}"               # C0: task 단위 사전 승인이 config 기본값을 이겨요
+EFFECTIVE_MODE="${TASK_FRICTION:-$CONF_MODE}"               # C0: task 단위 사전 승인이 config 기본값보다 우선해요
 [ "$TASK_RISK" = "L3" ] && EFFECTIVE_MODE="$L3_OVERRIDE"   # C5: L3 override — 사전 승인도 못 넘어요
 
 # 4. mistake recurrence 체크 (C3)
@@ -121,7 +121,7 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 사용자가 구현 도중에 "이제부터 물어봐" · "그냥 쭉 해" 처럼 바꾸면 triage 와 같은 기준(의도 · 확신 없으면 안 적음)으로
 `bash .ax/scripts/bash/update-task.sh --set friction=<모드> --json` 으로 **파일에 먼저** 적고 같은 줄로 되비춰요.
 §4 의 Phase 경계마다 `jq -r '.friction // empty' .ax/current-task.json` 을 다시 읽어 `EFFECTIVE_MODE` 를 다시
-정해요 — 진입 때 한 번 읽은 값으로 끝까지 가면 도중에 바꾼 게 안 먹어요.
+정해요 — 진입 때 한 번 읽은 값으로 끝까지 가면 도중에 바꾼 값이 반영되지 않아요.
 
 결정 결과:
 - `EFFECTIVE_MODE = autopilot` → 모든 task silent, 실패·범위이탈·elevated 만 halt
@@ -215,7 +215,7 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 핵심: 이전 Phase 결과 요약 + 다음 Phase 파일 + 적용 룰 delta + 의존성 주의. *비판적 사고가 작동하도록* 정보 제공. `Phase N → Phase N+1` 전환 외에는 묻지 않음.
 
 경계에 설 때마다 §2 의 `TASK_FRICTION` 을 파일에서 다시 읽어요 — 도중에 사용자가 바꾼 값은 파일에만 있어요.
-`autopilot` 이면 이 박스를 찍지 않고 넘어가요 (사용자가 이미 준 답이에요). L3 override(C5) 는 그래도 이겨요.
+`autopilot` 이면 이 박스를 찍지 않고 넘어가요 (사용자가 이미 준 답이에요). L3 override(C5) 는 그래도 우선해요.
 
 ## 5. 완료 마킹 — silent
 
@@ -304,7 +304,7 @@ if [ "$OPEN" != "0" ] || [ "$(echo "$GATE" | jq -r '.result.task_count_drop')" !
 fi
 ```
 
-여기까지 왔으면 task 는 끝났어요. 이제 verdict 로 갈라요:
+여기까지 왔으면 task 는 끝났어요. 이제 verdict 에 따라 나눠요:
 
 | `REVIEW_REQ` | `VERDICT` | 할 것 |
 |---|---|---|
@@ -389,7 +389,7 @@ fi
  ▸ evaluator 필수 (L × L2) → goax:evaluator 기동 (새 컨텍스트 · spec + ADR 2 + diff)
  ✅ review.md — verdict: 진행 (발견 0건 · 검토 범위 9 파일)
  ✅ spec 014 구현 완료 · current-task.json → idle
- 👉 phase 경계라 지금 `/compact` 하기 좋아요 — 인계 노트와 PreCompact 스냅샷이 위치를 붙잡아요
+ 👉 phase 경계라 지금 `/compact` 하기 좋아요 — 인계 노트와 PreCompact 스냅샷이 작업 위치를 남겨 둬요
 ```
 
 ## 절대 금지

@@ -148,7 +148,7 @@ while IFS= read -r pair; do
         SEEN="$SEEN $k"
         continue
     fi
-    # 여기부터는 **왜** 떨어졌는지 메시지만 갈라요 — 판정은 위 전체 매치가 이미 했어요
+    # 여기부터는 **왜** 떨어졌는지 메시지만 나눠요 — 판정은 위 전체 매치가 이미 했어요
     case "$pair" in
         *=*) ;;
         *) BAD="$BAD [$pair: key=LEVEL 형식이 아니에요]"; continue ;;

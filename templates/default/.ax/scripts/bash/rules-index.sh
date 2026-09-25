@@ -13,7 +13,7 @@
 #   Spirit        .ax/spirit/rules/<cat>.md 의 `## SP-<CAT>-<NNN>: 제목`   → 🔵 CONVENTION, category=파일명
 #   Module        .ax/modules/<name>/rules.md 의 `## SP-<PFX>-<NNN>: 제목`  → 🔵 CONVENTION, category=모듈명
 #
-# 룰 본문은 요약하지 않아요 — 제목 줄 원문 그대로예요. 위반 검출은 hook (`pre-commit/critical-rule-grep.sh`) 몫이에요.
+# 룰 본문은 요약하지 않아요 — 제목 줄 원문 그대로예요. 위반 검출은 hook (`pre-commit/critical-rule-grep.sh`) 이 맡아요.
 #
 # Output (--json):
 #   {"status":"ok","result":{"rules":[{"token":"…","level":"critical|mandatory|convention","source":"constitution|spirit|module",

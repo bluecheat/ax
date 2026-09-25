@@ -20,7 +20,7 @@ if [ -n "$INPUT" ] && command -v jq >/dev/null 2>&1; then
 fi
 TARGET_PATH="${TARGET_PATH:-${CLAUDE_EDIT_PATH:-${1:-}}}"
 if [ -z "$TARGET_PATH" ]; then
-    # stdin 은 왔는데 경로를 못 뽑았으면 jq 가 없는 거예요. fail-open 은 유지하되 침묵하진 않아요 —
+    # stdin 은 왔는데 경로를 못 뽑았으면 jq 가 없는 거예요. fail-open 은 유지하되 조용히 넘어가진 않아요 —
     # 조용히 통과하면 보호 경로 deny 가 아무 출력 없이 꺼진 상태가 돼요.
     if [ -n "$INPUT" ] && ! command -v jq >/dev/null 2>&1; then
         printf '[goax] jq 없음 — 이 안전망이 비활성 상태예요 (보호 경로 검사)\n' >&2

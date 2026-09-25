@@ -28,7 +28,7 @@ if [ -n "$INPUT" ] && command -v jq >/dev/null 2>&1; then
 fi
 CMD="${CMD:-${CLAUDE_BASH_COMMAND:-${1:-}}}"
 if [ -z "$CMD" ]; then
-    # stdin 은 왔는데 명령을 못 뽑았으면 jq 가 없는 거예요. fail-open 은 유지하되 침묵하진 않아요 —
+    # stdin 은 왔는데 명령을 못 뽑았으면 jq 가 없는 거예요. fail-open 은 유지하되 조용히 넘어가진 않아요 —
     # 조용히 통과하면 `rm -rf /etc` 가 아무 출력 없이 exit 0 이고, 안전망이 꺼진 걸 아무도 몰라요.
     if [ -n "$INPUT" ] && ! command -v jq >/dev/null 2>&1; then
         printf '[goax] jq 없음 — 이 안전망이 비활성 상태예요 (파괴적 명령 차단)\n' >&2

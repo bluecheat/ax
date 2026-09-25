@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # .ax/scripts/bash/session-brief.sh — 세션 첫머리에 알릴 것을 결정론으로 모아요
 #
-# 세 가지만 봐요. 말할 게 없으면 아무것도 안 내요.
+# 말할 게 없으면 아무것도 안 내요. SessionStart 훅이 lines 를 그대로 컨텍스트에 넣어요.
 #   handoff  current-task.json 의 handoff — now(+now_at) · next · open 앞 3개씩, 진행 중 task(phase ≠ idle)
 #   version  .ax/version 설치본 < 플러그인 버전이면 "/up 으로 올리세요"
 #            플러그인 버전: ${CLAUDE_CONFIG_DIR:-~/.claude}/plugins/installed_plugins.json 의 goax@* →
@@ -11,15 +11,10 @@
 #            마지막 audit: .ax/mistakes/.last-audit(epoch) → 없으면 state.json .cross_cut.mistakes.last_audit
 #            미처리 중 같은 category 가 2건 이상이면 주기와 상관없이 "재발" 을 알려요 (audit.recurring).
 #
-# 왜: 실측(commerce, 2026-09-25) — 설치본 0.5.13 이 플러그인 0.6.3 에 두 달 넘게 머물러 0.6.0 의 룰 집행이
-#     안 닿았고, mistakes 는 22건 쌓였는데 audit 은 2026-05-09 뒤로 한 번도 안 돌았어요. HUD 한 칸은 안 보여요.
-#     SessionStart 훅(session-start/session-brief.sh)이 이 스크립트의 lines 를 그대로 컨텍스트에 넣어요.
-#
-# compaction 스냅샷 (PreCompact 훅 → SessionStart source=compact 훅):
-#   --snapshot --session <sid>       압축 직전 **사실**을 .ax/.session/<sid>/precompact.txt 에 적어요 — 브랜치·HEAD ·
-#                                    작업 트리의 바뀐 파일(최대 10) · 진행 중 spec 과 tasks 진행률. LLM 요약이 아니에요.
-#                                    요약은 Claude Code 가 하고, 요약이 흘린 "어디까지 했나" 를 파일이 붙잡아요.
-#   --after-compact --session <sid>  브리핑 맨 앞에 그 스냅샷을 붙여요 (파일은 읽고 지워요 — 한 번만 말해요).
+# compaction 스냅샷:
+#   --snapshot --session <sid>       압축 직전 사실(브랜치·HEAD · 바뀐 파일 5개 · 진행 중 spec 의 tasks 진행률)을
+#                                    .ax/.session/<sid>/precompact.txt 에 (PreCompact 훅). LLM 요약이 아니에요.
+#   --after-compact --session <sid>  인계 노트 뒤에 그 스냅샷을 한 번 붙이고 지워요 (SessionStart source=compact).
 #
 # Usage:
 #   bash session-brief.sh            # 사람용 텍스트 (lines 만)
@@ -68,11 +63,12 @@ if [ "$MODE" = snapshot ]; then
         BR=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
         HD=$(git -C "$ROOT" log -1 --format='%h %s' 2>/dev/null | cut -c1-100 || true)
         [ -n "$BR" ] && SNAP+=("브랜치 $BR · HEAD $HD")
-        CH=$(git -C "$ROOT" status --porcelain --untracked-files=all -- . 2>/dev/null | grep -v ' \.ax/' || true)
+        CH=$(git -C "$ROOT" -c core.quotePath=false status --porcelain --untracked-files=all -- . 2>/dev/null | grep -v ' \.ax/' || true)
         CHN=$(printf '%s' "$CH" | grep -c . || true)
         if [ "${CHN:-0}" -gt 0 ]; then
-            FILES=$(printf '%s\n' "$CH" | head -10 | awk '{ $1=""; sub(/^ /, ""); print }' | paste -sd ',' - | sed 's/,/, /g')
-            MORE=""; [ "$CHN" -gt 10 ] && MORE=" 외 $((CHN - 10))개"
+            # 경로는 5개 · 300자까지 — 긴 모노레포 경로 10개가 브리핑 상한(1200자)을 혼자 먹어 인계 노트를 밀어냈어요 (리뷰 실측)
+            FILES=$(printf '%s\n' "$CH" | head -5 | awk '{ $1=""; sub(/^ /, ""); print }' | paste -sd ',' - | sed 's/,/, /g' | cut -c1-300)
+            MORE=""; [ "$CHN" -gt 5 ] && MORE=" 외 $((CHN - 5))개"
             SNAP+=("커밋 안 된 변경 ${CHN}개: ${FILES}${MORE}")
         fi
     fi
@@ -103,14 +99,6 @@ if [ "$MODE" = snapshot ]; then
 fi
 
 LINES=()
-# ── compaction 직후 — 직전 스냅샷을 맨 앞에 ──────────────────────────
-if [ "$MODE" = after-compact ]; then
-    PF="$(goax_session_dir "$SESSION")/precompact.txt"
-    if [ -f "$PF" ]; then
-        while IFS= read -r l; do [ -n "$l" ] && LINES+=("압축 직전: $l"); done < "$PF"
-        [ "$DRY_RUN" = true ] || rm -f "$PF"
-    fi
-fi
 
 # ── 진행 중 task · handoff ─────────────────────────────────────────
 TASK_FILE="$ROOT/.ax/current-task.json"
@@ -127,6 +115,15 @@ if [ -f "$TASK_FILE" ] && jq -e . "$TASK_FILE" >/dev/null 2>&1; then
         (if (.next | length) > 0 then "다음: " + (.next | join(" · ")) else empty end),
         (if (.open | length) > 0 then "열린 질문: " + (.open | join(" · ")) else empty end)
     ' <<<"$HANDOFF_JSON")
+fi
+
+# ── compaction 직후 — 직전 스냅샷은 인계 노트 **뒤에** (길이 상한에 걸려도 인계 노트가 먼저 남도록) ──
+if [ "$MODE" = after-compact ]; then
+    PF="$(goax_session_dir "$SESSION")/precompact.txt"
+    if [ -f "$PF" ]; then
+        while IFS= read -r l; do [ -n "$l" ] && LINES+=("압축 직전: $l"); done < "$PF"
+        [ "$DRY_RUN" = true ] || rm -f "$PF"
+    fi
 fi
 
 # ── 버전 ──────────────────────────────────────────────────────────

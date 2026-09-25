@@ -23,7 +23,7 @@
 #   dispatched_unreported  디스패치됐는데 보고가 없는 미완료 task — "레인이 조용하다" 는 완료가 아니에요
 #   done_without_report    디스패치된 task 가 보고 기록 없이 [x] — 레인이 자기 체크박스를 켠 신호
 #   lane_file_conflicts    같은 파일을 두 레인이 소유 — 핫 파일 독점 위반
-#   unassigned_open        레인 없는 미완료 task — 코디네이터가 직접 하는 몫
+#   unassigned_open        레인 없는 미완료 task — 코디네이터가 직접 하는 일
 #
 # --assign 은 트랜잭션이에요 — 하나라도 거부되면 파일을 건드리지 않고 result 의
 # `rejected` 에 이유를 담아요. 부분 적용은 원장을 반쯤 옮겨 놓아서 더 나빠요.

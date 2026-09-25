@@ -29,7 +29,7 @@ ADE 루트        에이전트가 스킬을 찾는 곳.  .claude/skills/ 가 여
 프로젝트 루트    코드와 하네스가 있는 곳.    .ax/ 가 여기 있어요.
 ```
 
-단일 저장소면 둘이 같아요. **모노레포면 갈라져요:**
+단일 저장소면 둘이 같아요. **모노레포면 달라져요:**
 
 ```
 commerce-monorepo/          ← ADE 루트 (.claude/ 가 여기)
@@ -40,7 +40,7 @@ commerce-monorepo/          ← ADE 루트 (.claude/ 가 여기)
       └─ .ax/               ← 하네스는 여기
 ```
 
-갈라지면 문제가 생겨요. 스킬은 `.ax/scripts/bash/…` 를 부르는데, 세션이
+둘이 다르면 문제가 생겨요. 스킬은 `.ax/scripts/bash/…` 를 부르는데, 세션이
 저장소 루트에서 시작하면 `.ax/` 가 **하위**에 있어서 조상 탐색으로는 영영
 못 찾아요. 그래서 이 skill 이 `.goax-root` 포인터를 남겨요 —
 `common.sh` 의 `find_project_root` 가 그걸 읽어서 하네스를 찾아가요.
@@ -71,7 +71,7 @@ bash .ax/scripts/bash/vendor-skills.sh --plugin-dir "$PLUGIN_ROOT" --dry-run --j
  📍 루트
   ADE 루트      commerce-monorepo/            (.claude/ 가 여기)
   프로젝트 루트  commerce-monorepo/projects/commerce/  (.ax/ 가 여기)
-  → 갈라져 있어요. .goax-root 포인터를 만들게요.
+  → 둘이 달라요. .goax-root 포인터를 만들게요.
 
  📂 동봉 대상 — 20개
   .claude/skills/    15개  (up, onboarding, zero, triage, spec, lane, adr, …)
@@ -97,8 +97,8 @@ ADE 루트 ≠ 프로젝트 루트(모노레포)면 훅 배선도 같이 맞춰�
 ```bash
 bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" --json   # 단일 저장소면 프로젝트 settings 를 맞춰요
 ```
-루트 `.claude/settings.json` 의 **이 프로젝트 몫 goax 훅만** 템플릿대로 다시 써요 (`env CLAUDE_PROJECT_DIR=…/<프로젝트> bash …`).
-다른 훅·permissions·다른 goax 프로젝트 몫은 그대로예요. 손으로 쓰지 않아요 — 손으로 쓴 파일은 새 훅이 생겨도 안 따라와요.
+루트 `.claude/settings.json` 의 **이 프로젝트의 goax 훅만** 템플릿대로 다시 써요 (`env CLAUDE_PROJECT_DIR=…/<프로젝트> bash …`).
+다른 훅·permissions·다른 goax 프로젝트의 훅은 그대로예요. 손으로 쓰지 않아요 — 손으로 쓴 파일은 새 훅이 생겨도 안 따라와요.
 
 완료 후 안내:
 

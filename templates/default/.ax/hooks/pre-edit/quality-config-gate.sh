@@ -1,22 +1,12 @@
 #!/usr/bin/env bash
-# pre-edit hook — 품질 설정(lint · format · 타입 검사 · 커버리지 · git 훅) 파일을 고치기 전에 이유부터 적게 해요 (fact-forcing)
+# pre-edit hook — 품질 설정(lint·format·타입·커버리지·git 훅) 파일은 고치기 전에 이유부터 적게 해요
 #
-# 왜: 검사가 실패하면 모델은 코드를 고치는 대신 **검사를 느슨하게** 하는 쪽으로 가기 쉬워요 —
-#     규칙을 끄고, 임계값을 낮추고, 경로를 제외 목록에 넣어요. diff 에선 설정 한 줄이라 리뷰에서도 잘 안 보여요.
-#     (ECC 의 config-protection 과 같은 문제. 막는 대신 사실을 요구해요 — 정당한 수정은 한 번에 통과해요.)
-#
-# 대상: **이미 있는** 품질 설정 파일의 Edit/Write/MultiEdit — 새로 만드는 건 막지 않아요.
-#       기본값은 생태계 공통 파일 이름이고(아래 is_default), 그 밖은 프로젝트가 `sensors.quality_configs` 글롭으로 더해요.
-#       스택마다 기본 목록을 늘리지 않아요 — pyproject.toml · package.json · build.gradle 처럼 다른 설정이 섞인 파일은
-#       기본값에 없어요(고칠 때마다 걸리면 게이트가 소음이 돼요). 필요하면 프로젝트가 글롭으로 넣어요.
-# 동작: 이번 세션에 처음 고치는 품질 설정 파일이면 exit 2 로 한 번 막고 두 가지를 요구해요 —
-#         1. 무엇을 왜 바꾸는지 — 완화(규칙 끄기·임계값 낮추기·제외 추가)인지 강화인지
-#         2. 이 변경을 지시한 사용자 메시지 원문 — 없으면 고치지 말고 사용자에게 물어요
-#       같은 파일을 다시 고치면 통과해요 (파일 단위, 세션 한정). 세션당 3번까지 전체 안내, 그 뒤는 한 줄.
-#       세션 id 가 없으면(수동 실행·옛 런타임) 추적이 안 돼서 경고만 해요.
-# 모드: sensors.mode warning·fail 둘 다 막아요 (off 면 안 돌아요) — 통과 조건이 "적고 다시" 라 싸요.
-# 끄기: .ax/config.yml sensors.disabled_hooks 에 quality-config-gate, 또는 sensors.hook_profile: minimal
-# ❗ 성격: Bash 의 `sed -i` 로 고치면 이 훅은 안 걸려요. 사고 방지용이지 보안 경계가 아니에요.
+# 왜: 검사가 실패하면 코드 대신 규칙을 끄고 임계값을 낮추는 게 가장 싼 길이에요 (ECC config-protection).
+# 대상: **이미 있는** 파일 — 기본값(is_default: 생태계 공통 이름 + `.husky/`) + sensors.quality_configs 글롭.
+#   다른 설정이 섞인 파일(package.json · pyproject.toml · build.gradle)은 기본값이 아니에요 — 소음이 돼요.
+# 동작: 세션에서 처음 고치는 파일이면 exit 2 로 "완화/강화 · 사용자 지시 원문" 을 요구하고, 같은 파일 재편집은 통과.
+#   새 파일은 안 막아요. 3번째 뒤로는 한 줄. 세션 id 가 없으면 경고만.
+# 모드: warning·fail 둘 다 막아요. 끄기: sensors.disabled_hooks 에 quality-config-gate. Bash 의 `sed -i` 는 안 걸려요.
 set -uo pipefail
 
 [ -d "${CLAUDE_PROJECT_DIR:-$(pwd)}/.ax/hooks" ] || exit 0

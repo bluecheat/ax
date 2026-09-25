@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # .ax/scripts/bash/config-set.sh — .ax/config.yml 의 `<섹션>.<키>` 한 값을 락 안에서 바꿔요
 #
-# 왜: onboarding·zero 가 `commands.test` 같은 값을 모델의 Edit 로 적어 왔어요. 들여쓰기 한 칸이 틀리면
-#     goax_yaml_list·grep 파서가 조용히 빈 값을 읽고, 두 세션이 동시에 고치면 한쪽이 사라져요.
-#     값 하나를 바꾸는 결정론 도구가 있어야 SKILL.md 가 "무엇을" 만 정하고 "어떻게" 는 안 해요.
+# 왜: 모델의 Edit 로 적으면 들여쓰기 한 칸에 파서가 조용히 빈 값을 읽고, 동시 수정은 한쪽이 사라져요.
 #
 # Usage:
 #   bash config-set.sh <섹션>.<키> <값>            [--json] [--dry-run]   # 스칼라 — `  키: "값"` 으로 바꿔요
@@ -60,65 +58,87 @@ if [ "$DRY_RUN" != true ]; then
 fi
 unlock() { [ -n "$LOCK" ] && goax_unlock "$LOCK"; LOCK=""; }
 
-# awk 한 번 — 섹션 안 `  KEY:` 줄(과 블록 리스트면 그 아래 `    - …` 줄들)을 찾아 바꿔요.
-#   출력 첫 줄: "FOUND\t<before>" 또는 "MISSING". 나머지는 새 파일 본문.
-OUT=$(awk -v sec="$SEC" -v key="$KEY" -v op="$OP" -v qv="${QV:-}" -v raw="${VALUE:-}" '
-    function endlist() {
-        if (op == "add" && !dup) body = body "    - " qv "\n"
-        body = body pend; pend = ""; inlist = 0
+# awk 한 번 — 파일을 다 읽고(END) `섹션.키` 줄의 형태부터 판정한 뒤 바꿔요.
+#   형태: scalar(값이 있는 줄) · flow(`[…]`) · block(키 뒤가 비고 아래에 `- ` 항목들 — 들여쓰기 2칸 이상 아무거나).
+#   set 은 scalar 에만, --add/--clear 는 리스트(flow·block·빈 값)에만 — 모양이 다르면 쓰지 않고 거부해요
+#   (리뷰 실측: 리스트 키에 set 하면 항목이 고아로 남아 disabled_hooks 가 조용히 비었어요).
+#   값은 awk -v 가 아니라 ENVIRON 으로 넘겨요 — -v 는 `\n` · `\d` 같은 백슬래시 이스케이프를 해석해서 config.yml 을 깨뜨렸어요.
+#   출력 첫 줄: "FOUND\t<before>" · "MISSING" · "FLOWLIST" · "NOTLIST" · "NOTSCALAR". 나머지는 새 파일 본문.
+OUT=$(CS_SEC="$SEC" CS_KEY="$KEY" CS_OP="$OP" CS_QV="${QV:-}" CS_RAW="${VALUE:-}" awk '
+    function strip(v,   q, e) {                          # goax_yaml_list 와 같은 규칙 — 따옴표 한 쌍 · 주석
+        sub(/^[ \t]*-[ \t]*/, "", v); sub(/[ \t]+$/, "", v); q = substr(v, 1, 1)
+        if (q == "\042" || q == "\047") { e = length(v); while (e > 1 && substr(v, e, 1) != q) e--; if (e > 1) v = substr(v, 2, e - 2) }
+        else sub(/[ \t]+#.*$/, "", v)
+        return v
     }
-    BEGIN { insec = 0; found = 0; inlist = 0; before = ""; pend = "" }
-    {
-        line = $0
-        if (line ~ /^[^ \t#][^:]*:/) {                       # 최상위 키
-            if (inlist) { endlist() }
-            s = line; sub(/:.*/, "", s); insec = (s == sec)
-            body = body line "\n"; next
-        }
-        if (inlist) {
-            # 주석·빈 줄은 잠깐 들고 있어요 — 다음 줄이 항목이면 그 앞에, 리스트가 끝나면 새 항목 **뒤에** 내보내요
-            if (line ~ /^[ \t]*#/ || line ~ /^[ \t]*$/) { pend = pend line "\n"; next }
-            if (line ~ /^    +- /) {
-                body = body pend; pend = ""
-                v = line; sub(/^ *- */, "", v); sub(/[ \t]+$/, "", v); gsub(/^["\047]|["\047]$/, "", v)
-                before = before (before == "" ? "" : " | ") v
-                if (v == raw) dup = 1
-                if (op != "clear") body = body line "\n"
-                next
-            }
-            endlist()
-        }
-        if (insec && !found && line ~ ("^  " key ":")) {
-            found = 1
-            rest = line; sub("^  " key ":[ \t]*", "", rest)
-            if (op == "set") {
-                before = rest; sub(/[ \t]+#.*$/, "", before)
-                body = body "  " key ": " qv "\n"; next
-            }
-            # 리스트 — flow `[]`/`[a, b]` 또는 블록
-            if (rest ~ /^\[/) {
-                v = rest; sub(/^\[/, "", v); sub(/\].*$/, "", v); before = v
-                if (op == "clear") { body = body "  " key ": []\n"; next }
-                if (v ~ /[^ \t]/) { print "FLOWLIST"; exit }
-                body = body "  " key ":\n    - " qv "\n"; next
-            }
-            body = body "  " key (op == "clear" ? ": []" : ":") "\n"
-            inlist = 1; dup = 0; next
-        }
-        body = body line "\n"
-    }
+    { L[++n] = $0 }
     END {
-        if (inlist) endlist()
-        if (!found) { print "MISSING"; exit }
-        printf "FOUND\t%s\n%s", before, body
+        sec = ENVIRON["CS_SEC"]; key = ENVIRON["CS_KEY"]; op = ENVIRON["CS_OP"]; qv = ENVIRON["CS_QV"]; raw = ENVIRON["CS_RAW"]
+        insec = 0; k = 0
+        for (i = 1; i <= n; i++) {
+            if (L[i] ~ /^[^ \t#][^:]*:/) { s = L[i]; sub(/:.*/, "", s); insec = (s == sec); continue }
+            if (insec && L[i] ~ ("^  " key ":([ \t]|$)")) { k = i; break }
+        }
+        if (!k) { print "MISSING"; exit }
+        rest = L[k]; sub("^  " key ":[ \t]*", "", rest)
+        restv = rest; sub(/[ \t]+#.*$/, "", restv); if (restv ~ /^#/) restv = ""
+        # block 항목 범위: k+1 부터, 주석·빈 줄은 건너뛰며 `- ` 항목이 이어지는 동안
+        last = k; items = 0; ind = ""
+        for (i = k + 1; i <= n; i++) {
+            if (L[i] ~ /^[ \t]*#/ || L[i] ~ /^[ \t]*$/) continue
+            if (L[i] ~ /^  +- / || L[i] ~ /^  +-$/) {
+                items++; last = i
+                if (ind == "") { ind = L[i]; sub(/-.*/, "", ind) }
+                continue
+            }
+            break
+        }
+        before = ""
+        if (restv ~ /^\[/) {
+            kind = "flow"; v = restv; sub(/^\[/, "", v); sub(/\].*$/, "", v); before = v
+        } else if (restv != "") { kind = "scalar"; before = restv
+        } else if (items > 0) { kind = "block"
+        } else kind = "empty"
+        if (op == "set" && (kind == "block" || kind == "flow")) { print "NOTSCALAR"; exit }
+        if (op != "set" && kind == "scalar") { print "NOTLIST"; exit }
+        if (op == "add" && kind == "flow" && before ~ /[^ \t]/) { print "FLOWLIST"; exit }
+        if (ind == "") ind = "    "
+        out = ""
+        for (i = 1; i < k; i++) out = out L[i] "\n"
+        if (op == "set") {
+            out = out "  " key ": " qv "\n"; from = k + 1
+        } else if (op == "clear") {
+            if (kind == "block") {
+                for (i = k + 1; i <= last; i++) if (L[i] ~ /^  +-/) before = before (before == "" ? "" : " | ") strip(L[i])
+            }
+            out = out "  " key ": []\n"
+            for (i = k + 1; i <= last; i++) if (L[i] !~ /^  +-/) out = out L[i] "\n"
+            from = last + 1
+        } else {                                              # add
+            dup = 0
+            if (kind == "block") {
+                for (i = k + 1; i <= last; i++) if (L[i] ~ /^  +-/) {
+                    v = strip(L[i]); before = before (before == "" ? "" : " | ") v; if (v == raw) dup = 1
+                }
+                for (i = k; i <= last; i++) out = out L[i] "\n"
+                if (!dup) out = out ind "- " qv "\n"
+            } else {
+                out = out "  " key ":\n" ind "- " qv "\n"
+            }
+            from = last + 1
+        }
+        for (i = from; i <= n; i++) out = out L[i] "\n"
+        printf "FOUND\t%s\n%s", before, out
     }' "$CFG")
 HEAD1="${OUT%%$'\n'*}"
 case "$HEAD1" in
     MISSING)  unlock; fail "$SEC.$KEY 키가 config.yml 에 없어요 — 새 키는 만들지 않아요 (/up 으로 템플릿을 받아요)" ;;
     FLOWLIST) unlock; fail "$SEC.$KEY 가 한 줄 리스트([a, b])예요 — 블록 리스트로 바꾼 뒤 --add 해요" ;;
+    NOTSCALAR) unlock; fail "$SEC.$KEY 는 리스트예요 — --add / --clear 로 다뤄요" ;;
+    NOTLIST)  unlock; fail "$SEC.$KEY 는 한 값(스칼라)이에요 — --add 가 아니라 값을 바로 줘요" ;;
 esac
 BEFORE="${HEAD1#FOUND$'\t'}"
-NEW="${OUT#*$'\n'}"          # $(...) 가 끝 줄바꿈을 먹어요 — 쓸 때 하나 붙여요
+NEW="${OUT#*$'\n'}"          # $(...) 가 끝 줄바꿈을 없애요 — 쓸 때 하나 붙여요
 CHANGED=true
 cmp -s <(printf '%s\n' "$NEW") "$CFG" && CHANGED=false
 

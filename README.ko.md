@@ -249,7 +249,7 @@ bash .ax/scripts/bash/install-git-hooks.sh
 
 ## HUD — 하네스 위치만 한 줄
 
-statusline 은 **하네스 안에서 지금 어디인지**만 보여줘요. 모델·ctx%·에이전트 수·todo 는 OMC HUD 몫이고, 레인·게이트·경보는 skill 출력과 `doctor` 가 보여줘요.
+statusline 은 **하네스 안에서 지금 어디인지**만 보여줘요. 모델·ctx%·에이전트 수·todo 는 OMC HUD 가 보여주고, 레인·게이트·경보는 skill 출력과 `doctor` 가 보여줘요.
 
 ```
 [goax#0.5.1] | M×L2 · payment | spec ✓ › tasks ✓ › impl ● [######----]7/12 › review ○ | mistakes:3

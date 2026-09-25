@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop hook — 활성 spec 이 미완료인 채 턴이 끝나려 하면 **한 번** 붙잡아요
+# Stop hook — 활성 spec 이 미완료인 채 턴이 끝나려 하면 **한 번** 멈춰 세워요
 #
 # 왜 필요한가: 완료 게이트(G1~G6)는 파일 게이트라 커밋 시점(spec-completion-gate.sh)엔 걸리지만,
 # 커밋 없이 턴이 끝나면 아무도 안 봐요. 실사용 리포에서 spec 21개 중 14개가 미완료 task 를 남긴 채
@@ -10,15 +10,15 @@
 #   (1) 남은 task 를 마저   (2) 의도적 보류면 `- [~] … 보류: <사유>`   (3) 여기서 멈추는 거면 인계 노트
 # (3) 이 적혀 있으면(current-task.json `handoff.now` 에 spec 이름 + `now_at` 이 24시간 안) 다시 안 잡아요 —
 #     멈추는 게 의도인 거니까요. 시각을 보는 이유는 옛 노트 한 줄이 새 세션의 게이트를
-#     영구히 침묵시키면 안 되기 때문이에요 (status-note.sh --set now 가 `now_at` 에 시각을 적어요).
+#     영구히 꺼 버리면 안 되기 때문이에요 (status-note.sh --set now 가 `now_at` 에 시각을 적어요).
 #
 # 안전장치 셋:
-#   - `stop_hook_active=true` (이미 한 번 붙잡은 뒤의 재시도) → 즉시 통과. 무한 루프는 공식 계약이 막아요
+#   - `stop_hook_active=true` (이미 한 번 멈춰 세운 뒤의 재시도) → 즉시 통과. 무한 루프는 공식 계약이 막아요
 #   - 세션당 최대 GOAX_STOP_GATE_MAX 회 (기본 8) — `.ax/.session/<session_id>/stop-blocks` 카운터
-#   - `sensors.mode=off` → 침묵. phase 가 implementing·review 가 아니면(계획 단계) 침묵
+#   - `sensors.mode=off` → 통과. phase 가 implementing·review 가 아니면(계획 단계) 통과
 #
 # 입력: stdin JSON {session_id, cwd, hook_event_name:"Stop", stop_hook_active, ...}
-# 출력: 붙잡을 때 stdout {"decision":"block","reason":"..."} + exit 0 — reason 이 모델에게 가요.
+# 출력: 멈춰 세울 때 stdout {"decision":"block","reason":"..."} + exit 0 — reason 이 모델에게 가요.
 #      통과는 출력 없이 exit 0.
 set -uo pipefail
 
@@ -52,7 +52,7 @@ SPEC=$(basename "$SPEC_DIR")
 
 # 인계 노트에 이미 적혀 있으면 멈추는 게 의도예요 — 다시 안 잡아요.
 # 단 **24시간 안에 찍힌 노트만** 인정해요. 예전엔 "지금 상태" 에 spec 이름이 있기만 하면
-# 통과라서, 몇 주 전 노트 한 줄이 새 세션의 게이트를 영구히 침묵시켰어요 (다른 session_id 로
+# 통과라서, 몇 주 전 노트 한 줄이 새 세션의 게이트를 영구히 꺼 버렸어요 (다른 session_id 로
 # 몇 번을 불러도 빈 출력). `status-note.sh --set now` 가 `handoff.now_at` 에 시각을 적어요 —
 # 시각이 없는 노트는 인정하지 않아요. 인계 노트는 이미 열어 둔 current-task.json 안에 있어요.
 NOW_SEC=$(jq -r '(.handoff.now // []) | join("\n")' "$TASK_FILE" 2>/dev/null || true)
@@ -110,7 +110,7 @@ REASON="[goax] spec ${SPEC} 가 ${PHASE} 인데 완료 게이트 미통과 — $
  (3) 여기서 멈추는 거면 인계 노트에 적고 끝내세요 — 다음 세션이 대화가 아니라 파일에서 읽어요:
      bash .ax/scripts/bash/status-note.sh --set now \"spec ${SPEC} ${PHASE} 에서 멈춤 — <어디까지 · 왜>\"
      bash .ax/scripts/bash/status-note.sh --add next \"<다음 세션이 처음 할 일>\"
-인계 노트의 '지금 상태' 에 ${SPEC} 가 **24시간 안에** 적혀 있으면 이 게이트는 다시 잡지 않아요 (시각은 status-note.sh 가 \`now_at\` 에 적어요). (세션당 최대 ${CAP}회 · $((COUNT + 1))/${CAP} · sensors.mode=off 면 침묵)"
+인계 노트의 '지금 상태' 에 ${SPEC} 가 **24시간 안에** 적혀 있으면 이 게이트는 다시 잡지 않아요 (시각은 status-note.sh 가 \`now_at\` 에 적어요). (세션당 최대 ${CAP}회 · $((COUNT + 1))/${CAP} · sensors.mode=off 면 통과)"
 
 jq -nc --arg r "$REASON" '{decision:"block", reason:$r}'
 exit 0

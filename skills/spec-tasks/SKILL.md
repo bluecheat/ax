@@ -147,7 +147,7 @@ bash .ax/scripts/bash/update-task.sh --phase tasks --json
 
  ✅ tasks.md 추가 (tier: standard 유지)
  ✅ phase 갱신: spec_checked → tasks
- 👉 phase 경계라 지금 `/compact` 하기 좋아요 — 인계 노트와 PreCompact 스냅샷이 위치를 붙잡아요
+ 👉 phase 경계라 지금 `/compact` 하기 좋아요 — 인계 노트와 PreCompact 스냅샷이 작업 위치를 남겨 둬요
 
  📍 다음
   1. tasks.md 를 spec.md §3 acceptance + §7.5 Technical Context + ADR 기반으로 분해
