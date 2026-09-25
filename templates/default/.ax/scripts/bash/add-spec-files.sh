@@ -2,7 +2,7 @@
 # .ax/scripts/bash/add-spec-files.sh — 기존 spec에 tasks/research 등 점진 추가
 #
 # Usage:
-#   bash add-spec-files.sh --spec <NNN-slug> --add tasks,research,... \
+#   bash add-spec-files.sh --spec <id-slug> --add tasks,research,... \
 #                          [--json] [--dry-run] [--help]
 #
 # 동작:
@@ -55,17 +55,17 @@ PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
 TEMPLATE_DIR="$PROJECT_ROOT/.ax/_templates/spec"
 
 # Spec 디렉토리 찾기
-SPEC_DIR="$PROJECT_ROOT/.ax/docs/spec/$SPEC"
-if [ ! -d "$SPEC_DIR" ]; then
-    # NNN만 줬을 수도 — prefix 매칭
-    MATCH=$(ls -d "$PROJECT_ROOT/.ax/docs/spec/${SPEC}-"* 2>/dev/null | head -1 || true)
-    if [ -n "$MATCH" ]; then
-        SPEC_DIR="$MATCH"
-    else
-        goax_error "spec not found: $SPEC"
-        exit "$EXIT_ERROR"
-    fi
+# --spec 해석은 공통 규칙 (정확 일치 → 앞부분 1개 → 난수·slug 1개 → 실패). 여럿이면 고르지 않고 멈춰요 —
+# 새 ID 는 날짜로 시작해서 `--spec 2026-09-25` 가 같은 날 spec 여럿에 걸려요. 첫 번째를 조용히 고르면 엉뚱한 spec 에 써요.
+RESOLVED=$(goax_resolve_spec "$SPEC" "$PROJECT_ROOT/.ax/docs/spec") && RC=0 || RC=$?
+if [ "$RC" -eq 2 ]; then
+    goax_error "--spec '$SPEC' 이 여러 spec 에 걸려요: ${GOAX_SPEC_CANDIDATES} — 하나를 정확히 적으세요"
+    exit "$EXIT_ERROR"
+elif [ "$RC" -ne 0 ]; then
+    goax_error "spec not found: $SPEC"
+    exit "$EXIT_ERROR"
 fi
+SPEC_DIR="$PROJECT_ROOT/.ax/docs/spec/$RESOLVED"
 SPEC_REL="${SPEC_DIR#$PROJECT_ROOT/}"
 
 # add 항목 → 파일 경로

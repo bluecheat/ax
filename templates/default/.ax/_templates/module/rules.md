@@ -6,7 +6,7 @@ paths:                              # 이 모듈의 소스 글롭 — **비우�
   - "__module/src/path__/**"        # 편집 대상이 여기 매칭되면 훅이 이 파일 경로를 주입
                                     # (pre-edit/module-rules-inject.sh)
 adr:                                # 이 모듈의 결정 근거 ADR (선택) — 주입 시 같이 가리켜요
-  - .ax/docs/adr/NNNN-<slug>.md
+  - .ax/docs/adr/<id>-<slug>.md
 ---
 
 # __Module Name__ — 도메인 룰
@@ -24,7 +24,7 @@ adr:                                # 이 모듈의 결정 근거 ADR (선택) �
      critical-rule-grep.sh 가 위 `paths:` 에 맞는 staged 파일을 검사해요. frontmatter 에
      `severity: critical` 을 두면 (mode=fail 에서) 커밋을 막고, 없으면 경고만 해요.
      ❌/✅ 예시는 zero-probe.sh 의 pattern-rules 프로브가 패턴 검증에 써요
-  6. 결정 근거 있으면 `<!-- adr: .ax/docs/adr/NNNN-*.md -->` 코멘트
+  6. 결정 근거 있으면 `<!-- adr: .ax/docs/adr/<id>-*.md -->` 코멘트
 -->
 
 ## SP-__PREFIX__-001: <첫 번째 룰 제목 — 동사 형태>
@@ -35,7 +35,7 @@ adr:                                # 이 모듈의 결정 근거 ADR (선택) �
 ❌ <나쁜 예>
 
 <!-- 검출 패턴: <regex> -->
-<!-- adr: .ax/docs/adr/NNNN-*.md -->
+<!-- adr: .ax/docs/adr/<id>-*.md -->
 
 ---
 

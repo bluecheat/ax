@@ -29,6 +29,8 @@ if [ -f "$COMMON" ]; then
     # shellcheck source=../../scripts/bash/common.sh
     source "$COMMON"
 fi
+# 훅 끄기·프로필 — sensors.disabled_hooks · sensors.hook_profile
+type goax_hook_enabled >/dev/null 2>&1 && { goax_hook_enabled spirit-check standard || exit 0; }
 type goax_normalize_path >/dev/null 2>&1 || goax_normalize_path() { printf '%s' "${1:-}"; }
 
 TARGET_ABS=$(goax_normalize_path "$TARGET_PATH" "$PROJECT_ROOT")

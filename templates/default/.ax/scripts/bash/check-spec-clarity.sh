@@ -2,7 +2,7 @@
 # .ax/scripts/bash/check-spec-clarity.sh — spec.md 명료성 게이팅 + 진행률 visibility
 #
 # Usage:
-#   bash check-spec-clarity.sh --spec <NNN-slug> [--json] [--help]
+#   bash check-spec-clarity.sh --spec <id-slug> [--json] [--help]
 #   bash check-spec-clarity.sh --file <path>     [--json] [--help]
 #
 # 검사 항목 (게이팅 — fail 시 진행 차단):
@@ -66,12 +66,14 @@ if [ -n "$FILE" ]; then
     TARGET="$FILE"
 elif [ -n "$SPEC" ]; then
     PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
-    SPEC_DIR="$PROJECT_ROOT/.ax/docs/spec/$SPEC"
-    if [ ! -d "$SPEC_DIR" ]; then
-        MATCH=$(ls -d "$PROJECT_ROOT/.ax/docs/spec/${SPEC}-"* 2>/dev/null | head -1 || true)
-        [ -n "$MATCH" ] && SPEC_DIR="$MATCH"
+    # --spec 해석은 공통 규칙 — 여럿이면 첫 번째를 조용히 고르지 않고 멈춰요 (새 ID 는 날짜 앞부분이 겹쳐요)
+    RESOLVED=$(goax_resolve_spec "$SPEC" "$PROJECT_ROOT/.ax/docs/spec") && RC=0 || RC=$?
+    if [ "$RC" -eq 2 ]; then
+        if [ "$JSON_MODE" = true ]; then json_error "--spec '$SPEC' 이 여러 spec 에 걸려요: ${GOAX_SPEC_CANDIDATES} — 하나를 정확히 적으세요"; fi
+        goax_error "--spec '$SPEC' 이 여러 spec 에 걸려요: ${GOAX_SPEC_CANDIDATES}"; exit "$EXIT_ERROR"
     fi
-    TARGET="$SPEC_DIR/spec.md"
+    [ "$RC" -eq 0 ] && SPEC="$RESOLVED"
+    TARGET="$PROJECT_ROOT/.ax/docs/spec/$SPEC/spec.md"
 else
     if [ "$JSON_MODE" = true ]; then
         json_error "--spec or --file required"

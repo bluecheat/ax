@@ -79,7 +79,7 @@ elif [ -n "$VERDICT" ] && [ "$VERDICT" != "진행" ]; then
 fi
 
 if [ "$MODE" = "fail" ]; then
-    printf '  차단됨 (sensors.mode=fail). 우회가 필요하면 사용자 승인 후 --no-verify.\n' >&2
+    printf '  차단됨 (sensors.mode=fail). 우회가 필요하면 사용자가 직접 커밋해요 (`! git commit --no-verify …`) — 에이전트의 --no-verify 는 block-hook-bypass 가 막아요.\n' >&2
     exit 2
 fi
 exit 0

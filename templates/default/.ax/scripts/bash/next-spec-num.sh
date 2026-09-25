@@ -1,30 +1,35 @@
 #!/usr/bin/env bash
-# .ax/scripts/bash/next-spec-num.sh — 다음 spec/ADR 번호 계산
+# .ax/scripts/bash/next-spec-num.sh — 새 spec/ADR ID 발급 (이름은 옛 "번호" 시절 그대로)
 #
 # Usage:
 #   bash next-spec-num.sh [--kind spec|adr] [--reserve --slug <slug>] [--json] [--dry-run] [--help]
 #   bash next-spec-num.sh [--kind spec|adr] --check-duplicates [--json]
 #
-# --kind spec (기본) — .ax/docs/spec/NNN-*/ 스캔, NNN 3자리 zero-pad (overflow: 999)
-# --kind adr        — .ax/docs/adr/NNNN-*.md 스캔, NNNN 4자리 zero-pad (overflow: 9999)
+# ID 형식: `YYYY-MM-DD-<4hex>` (예: 2026-09-25-a3f1) — mistakes 파일과 같은 날짜+난수 계열이에요.
+#   spec → .ax/docs/spec/<id>-<slug>/      ADR → .ax/docs/adr/<id>-<slug>.md
 #
-# --reserve --slug <slug>  번호를 *원자적으로* 선점하고 실물까지 만들어요.
-#   계산만 하면 두 세션이 같은 max+1 을 받아 번호가 겹쳐요 (실사용에서 발생).
-#   그래서 번호만으로 먼저 만들고(NNN / NNNN.md) 곧바로 slug 를 붙여 rename 해요.
-#   - spec: mkdir NNN        → 실패하면 그 번호는 남이 가져간 것 → NNN+1 재시도
-#   - adr : noclobber > NNNN.md → 같은 원리 (O_EXCL)
-#   슬러그 없는 예약 상태도 스캔 glob 에 잡히도록 glob 이 `NNN*` 이에요 —
-#   `NNN-*` 였다면 rename 직전 창에서 다른 세션이 같은 번호를 또 골라요.
+# 왜 순번을 버렸나: 순번은 "지금 디렉토리의 최댓값 + 1" 이라 **브랜치마다** 같은 번호를 받아요.
+#   같은 작업 트리 안의 경합은 원장(.numbers/) + O_EXCL 로 막았지만, PR 스택·병렬 브랜치는 서로의
+#   디렉토리를 못 봐요. 실측(commerce, 2026-09-25): spec 번호 중복 8개, ADR 번호 중복 12개 (0008 은 3개).
+#   날짜+난수는 서로를 볼 필요가 없어요. 같은 날 같은 4hex 가 나올 확률은 무시할 만하고, 그래도 겹치면
+#   O_EXCL 생성이 실패해서 새 난수로 다시 뽑아요.
+#
+# 옛 순번(`NNN-slug/`, `NNNN-slug.md`)은 그대로 둬요 — 이름을 바꾸면 링크가 깨져요. 모든 파서가 두 형식을
+#   같이 읽어요. `--check-duplicates` 는 옛 순번끼리의 중복(과 만에 하나 새 ID 의 중복)을 보고해요.
+#   옛 원장 `.numbers/` 는 더 쓰지도 읽지도 않아요.
+#
+# --reserve --slug <slug>  ID 를 뽑아 실물까지 원자적으로 만들어요 (spec: mkdir, adr: noclobber).
+#                          --dry-run 이면 아무것도 안 만들고 경로만 보여줘요.
+# (--reserve 없이) 계산만  새 ID 미리보기 — 예약이 아니라서 호출할 때마다 달라요.
 #
 # Output (--json):
-#   {"status":"ok","result":{"next":"005","previous":"004","existing_count":4,
-#                            "reserved":true,"path":".ax/docs/spec/005-foo"},...}
+#   {"status":"ok","result":{"next":"2026-09-25-a3f1","previous":"<가장 최근 항목 이름>|null","existing_count":4,
+#                            "reserved":true,"path":".ax/docs/spec/2026-09-25-a3f1-foo"},...}
+#   --check-duplicates: {"duplicates":["0008",…],"duplicate_count":N}
 #
-# Output (text):
-#   005
-
+# Output (text): 2026-09-25-a3f1
+# Exit: 0 ok · 1 error
 set -euo pipefail
-
 SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 source "$SCRIPT_DIR/common.sh"
@@ -36,7 +41,6 @@ RESERVE=false
 CHECK_DUP=false
 SLUG=""
 KIND="spec"
-
 while [ $# -gt 0 ]; do
     case "$1" in
         --json)    JSON_MODE=true ;;
@@ -50,83 +54,40 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
-
-if [ "$RESERVE" = true ] && [ -z "$SLUG" ]; then
-    if [ "$JSON_MODE" = true ]; then json_error "--reserve requires --slug <slug>"; fi
-    goax_error "--reserve requires --slug <slug>"; exit "$EXIT_ERROR"
-fi
-
 if [ "$SHOW_HELP" = true ]; then
     goax_help "${BASH_SOURCE[0]}"
     exit "$EXIT_OK"
 fi
-
+if [ "$RESERVE" = true ] && [ -z "$SLUG" ]; then
+    if [ "$JSON_MODE" = true ]; then json_error "--reserve requires --slug <slug>"; fi
+    goax_error "--reserve requires --slug <slug>"; exit "$EXIT_ERROR"
+fi
 case "$KIND" in
     spec|adr) ;;
     *) goax_error "invalid --kind: $KIND (spec|adr)"; exit "$EXIT_ERROR" ;;
 esac
 
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
-
-# ── kind 별 파라미터 ──────────────────────────────────────────────
-# GLOB 이 `NNN-*` 가 아니라 `NNN*` 인 게 핵심이에요. 예약 단계의 이름은 아직
-# slug 가 없는 `NNN` 이라, `NNN-*` 로 스캔하면 다른 세션이 그 예약을 못 보고
-# 같은 번호를 또 골라요 (실사용에서 ADR 7 쌍이 이렇게 겹쳤어요).
 if [ "$KIND" = "adr" ]; then
-    NUM_DIR="$PROJECT_ROOT/.ax/docs/adr"
-    REL_DIR=".ax/docs/adr"
-    GLOB='[0-9][0-9][0-9][0-9]*.md'
-    FMT="%04d"; MAX=9999; ZERO="0000"; FIRST="0001"
-    FIRST_MSG="first ADR — create .ax/docs/adr/0001-<slug>.md"
-    OVERFLOW_MSG="ADR number overflow: 9999 초과 — NNNN-* 4자리 규약 위반. ADR 정리 후 재시도."
+    DIR="$PROJECT_ROOT/.ax/docs/adr"; REL_DIR=".ax/docs/adr"
 else
-    NUM_DIR="$PROJECT_ROOT/.ax/docs/spec"
-    REL_DIR=".ax/docs/spec"
-    GLOB='[0-9][0-9][0-9]*'
-    FMT="%03d"; MAX=999; ZERO="000"; FIRST="001"
-    FIRST_MSG="first spec — create .ax/docs/spec/001-<slug>/"
-    OVERFLOW_MSG="spec number overflow: 999 초과 — NNN-* 3자리 규약 위반. spec 정리/아카이브 후 재시도."
+    DIR="$PROJECT_ROOT/.ax/docs/spec"; REL_DIR=".ax/docs/spec"
 fi
 
-# 번호 원장 — 한 번 쓰인 번호는 영구히 점유돼요.
-# ADR 템플릿의 "폐기된 ADR 도 ID 재사용 안 함" 규약과 같은 의미예요.
-# 실물만 스캔하면 예약을 rename 하는 순간 번호가 다시 풀려서 경합이 재현돼요.
-MARK_DIR="$NUM_DIR/.numbers"
-
+# 항목 이름 (ADR 은 .md 뗀 것) — 새 ID 든 옛 순번이든 숫자로 시작하는 것만
 list_artifacts() {
-    # shellcheck disable=SC2086
-    ls -d "$NUM_DIR"/$GLOB 2>/dev/null | sed 's|.*/||' || true
+    [ -d "$DIR" ] || return 0
+    if [ "$KIND" = "adr" ]; then
+        find "$DIR" -maxdepth 1 -type f -name '[0-9]*.md' 2>/dev/null | sed 's|.*/||; s|\.md$||'
+    else
+        find "$DIR" -mindepth 1 -maxdepth 1 -type d -name '[0-9]*' 2>/dev/null | sed 's|.*/||'
+    fi
 }
 
-# 실물 번호를 원장에 반영 (기존 프로젝트 자동 백필 — 멱등)
-sync_ledger() {
-    [ -d "$NUM_DIR" ] || return 0
-    mkdir -p "$MARK_DIR" 2>/dev/null || return 0
-    local n
-    list_artifacts | sed -E 's/^([0-9]+).*/\1/' | sort -u | while IFS= read -r n; do
-        [ -n "$n" ] && [ ! -e "$MARK_DIR/$n" ] && : > "$MARK_DIR/$n" 2>/dev/null || true
-    done
-}
-
-# 점유된 번호 전체 = 실물 ∪ 원장
-list_taken() {
-    { list_artifacts | sed -E 's/^([0-9]+).*/\1/'
-      ls "$MARK_DIR" 2>/dev/null | grep -E '^[0-9]+$' || true
-    } | sort -u
-}
-
-# 읽기 전용 모드(--check-duplicates / --dry-run)에서는 원장을 건드리지 않아요.
-# 백필은 "이미 실물로 존재하는 번호"만 기록하므로 건너뛰어도 계산 결과는 동일해요
-# (list_taken 이 실물 ∪ 원장이라 실물 쪽에서 이미 커버돼요).
-if [ "$CHECK_DUP" != true ] && [ "$DRY_RUN" != true ]; then
-    sync_ledger
-fi
-ENTRIES=$(list_taken)
-# ── 중복 번호 진단 (--check-duplicates) ──────────────────────────
-# 예약 도입 이전에 만들어진 충돌은 자동으로 못 고쳐요 (링크가 깨지니까).
-# 대신 doctor 가 보이게 해서 사람이 판단하게 해요.
+# ── 중복 진단 (--check-duplicates) ────────────────────────────────
+# 옛 순번은 번호 부분끼리, 새 ID 는 ID 부분끼리 비교해요. 자동으로 고치지 않아요 (링크가 깨져요).
 if [ "$CHECK_DUP" = true ]; then
-    DUPS=$(list_artifacts | sed -E 's/^([0-9]+).*/\1/' | sort | uniq -d || true)
+    DUPS=$(list_artifacts | goax_doc_key | sort | uniq -d || true)
     DUP_COUNT=$(printf '%s' "$DUPS" | grep -c . || true); DUP_COUNT=${DUP_COUNT:-0}
     if [ "$JSON_MODE" = true ]; then
         DUP_JSON="[]"
@@ -135,7 +96,7 @@ if [ "$CHECK_DUP" = true ]; then
         fi
         RESULT=$(printf '{"duplicates":%s,"duplicate_count":%s}' "$DUP_JSON" "$DUP_COUNT")
         if [ "$DUP_COUNT" -gt 0 ]; then
-            json_output "ok" "$RESULT" "중복 번호 ${DUP_COUNT}건 — 링크가 깨질 수 있어 자동 수정하지 않아요. 재번호 여부는 사람이 결정하세요."
+            json_output "ok" "$RESULT" "중복 번호 ${DUP_COUNT}건 — 링크가 깨질 수 있어 자동 수정하지 않아요. 새 항목은 날짜+난수 ID 라 더 겹치지 않아요."
         else
             json_output "ok" "$RESULT" "중복 번호 없음"
         fi
@@ -145,99 +106,54 @@ if [ "$CHECK_DUP" = true ]; then
     exit "$EXIT_OK"
 fi
 
-EXISTING_COUNT=$(list_artifacts | grep -c . || true)
-EXISTING_COUNT=${EXISTING_COUNT:-0}
-TAKEN_COUNT=$(printf '%s' "$ENTRIES" | grep -c . || true)
-TAKEN_COUNT=${TAKEN_COUNT:-0}
+EXISTING_COUNT=$(list_artifacts | grep -c . || true); EXISTING_COUNT=${EXISTING_COUNT:-0}
+# 가장 최근 항목 — 새 ID 가 옛 순번보다 뒤, 같은 형식끼리는 이름순 (날짜·순번이 앞에 있어요)
+PREV=$(list_artifacts | goax_doc_sort | tail -1 || true)
 
-if [ ! -d "$NUM_DIR" ] || [ "$TAKEN_COUNT" -eq 0 ]; then
-    PREV="$ZERO"; NEXT="$FIRST"
-else
-    PREV=$(printf '%s\n' "$ENTRIES" | sed -E 's/^([0-9]+).*/\1/' | sort -n | tail -1)
-    PREV="${PREV:-$ZERO}"
-    NEXT_NUM=$((10#${PREV} + 1))
-    if [ "$NEXT_NUM" -gt "$MAX" ]; then
-        if [ "$JSON_MODE" = true ]; then json_error "$OVERFLOW_MSG"; fi
-        goax_error "$OVERFLOW_MSG"; exit "$EXIT_ERROR"
-    fi
-    NEXT=$(printf "$FMT" "$NEXT_NUM")
-fi
-
-# ── 계산만 (기존 동작 — 하위호환) ────────────────────────────────
-if [ "$RESERVE" != true ]; then
+make_path() {   # make_path <id> → 절대 경로
+    if [ "$KIND" = "adr" ]; then printf '%s/%s-%s.md' "$DIR" "$1" "$SLUG"; else printf '%s/%s-%s' "$DIR" "$1" "$SLUG"; fi
+}
+emit() {   # emit <id> <reserved> [path_rel] [next_step]
     if [ "$JSON_MODE" = true ]; then
-        RESULT=$(printf '{"next":"%s","previous":"%s","existing_count":%s,"reserved":false}' \
-                        "$NEXT" "$PREV" "$EXISTING_COUNT")
-        if [ "$TAKEN_COUNT" -eq 0 ]; then
-            json_output "ok" "$RESULT" "$FIRST_MSG"
-        elif [ "$KIND" = "adr" ]; then
-            json_output "ok" "$RESULT" "create $REL_DIR/${NEXT}-<slug>.md"
-        else
-            json_output "ok" "$RESULT" "create $REL_DIR/${NEXT}-<slug>/"
-        fi
+        RESULT=$(jq -nc --arg next "$1" --arg prev "$PREV" --argjson n "$EXISTING_COUNT" \
+                        --argjson reserved "$2" --arg path "${3:-}" \
+            '{next: $next, previous: (if $prev == "" then null else $prev end), existing_count: $n, reserved: $reserved}
+             + (if $path == "" then {} else {path: $path} end)')
+        json_output "ok" "$RESULT" "${4:-}"
     else
-        echo "$NEXT"
+        echo "$1"
     fi
+}
+
+# ── 계산만 (미리보기) ──────────────────────────────────────────────
+if [ "$RESERVE" != true ]; then
+    ID=$(goax_doc_id)
+    if [ "$KIND" = "adr" ]; then emit "$ID" false "" "create $REL_DIR/${ID}-<slug>.md (--reserve --slug 로 선점)"
+    else emit "$ID" false "" "create $REL_DIR/${ID}-<slug>/ (--reserve --slug 로 선점)"; fi
     exit "$EXIT_OK"
 fi
 
 # ── 예약 (--reserve) ──────────────────────────────────────────────
-if [ "$KIND" = "adr" ]; then FINAL_REL="$REL_DIR/${NEXT}-${SLUG}.md"; else FINAL_REL="$REL_DIR/${NEXT}-${SLUG}"; fi
 if [ "$DRY_RUN" = true ]; then
-    if [ "$JSON_MODE" = true ]; then
-        RESULT=$(printf '{"next":"%s","previous":"%s","existing_count":%s,"reserved":false,"path":"%s"}' \
-                        "$NEXT" "$PREV" "$EXISTING_COUNT" "$FINAL_REL")
-        json_output "ok" "$RESULT" "dry-run — would reserve $FINAL_REL"
-    else
-        echo "$NEXT"
-    fi
+    ID=$(goax_doc_id); P=$(make_path "$ID")
+    emit "$ID" false "${P#"$PROJECT_ROOT"/}" "dry-run — would reserve ${P#"$PROJECT_ROOT"/}"
     exit "$EXIT_OK"
 fi
 
-mkdir -p "$NUM_DIR" "$MARK_DIR"
-
-# 원장에 번호를 원자적으로 선점해요 (noclobber = O_EXCL).
-# 마커는 지우지 않아요 — 지우면 rename 직후 번호가 풀려 경합이 그대로 재현돼요.
-ATTEMPT=0; MAX_ATTEMPT=200; NUM=$((10#${NEXT})); CLAIMED=""
-while [ "$ATTEMPT" -lt "$MAX_ATTEMPT" ]; do
+mkdir -p "$DIR"
+CLAIMED=""; ATTEMPT=0
+while [ "$ATTEMPT" -lt 20 ]; do
     ATTEMPT=$((ATTEMPT + 1))
-    if [ "$NUM" -gt "$MAX" ]; then
-        if [ "$JSON_MODE" = true ]; then json_error "$OVERFLOW_MSG"; fi
-        goax_error "$OVERFLOW_MSG"; exit "$EXIT_ERROR"
+    ID=$(goax_doc_id); P=$(make_path "$ID")
+    if [ "$KIND" = "adr" ]; then
+        ( set -o noclobber; : > "$P" ) 2>/dev/null && { CLAIMED="$ID"; break; }
+    else
+        mkdir "$P" 2>/dev/null && { CLAIMED="$ID"; break; }
     fi
-    CAND=$(printf "$FMT" "$NUM")
-    if ( set -o noclobber; : > "$MARK_DIR/${CAND}" ) 2>/dev/null; then
-        CLAIMED="$CAND"; break
-    fi
-    NUM=$((NUM + 1))
 done
-
 if [ -z "$CLAIMED" ]; then
-    if [ "$JSON_MODE" = true ]; then json_error "번호 예약 실패 — ${MAX_ATTEMPT}회 연속 경합. 동시 세션이 비정상적으로 많거나 디렉토리 권한 문제."; fi
-    goax_error "번호 예약 실패 (${MAX_ATTEMPT}회 시도)"; exit "$EXIT_ERROR"
+    if [ "$JSON_MODE" = true ]; then json_error "ID 예약 실패 — 20회 연속 실패. 디렉토리 권한을 확인하세요: $REL_DIR"; fi
+    goax_error "ID 예약 실패 (20회 시도): $REL_DIR"; exit "$EXIT_ERROR"
 fi
-
-if [ "$KIND" = "adr" ]; then
-    FINAL="$NUM_DIR/${CLAIMED}-${SLUG}.md"; FINAL_REL="$REL_DIR/${CLAIMED}-${SLUG}.md"
-    CREATE_OK=false; : > "$FINAL" 2>/dev/null && CREATE_OK=true
-else
-    FINAL="$NUM_DIR/${CLAIMED}-${SLUG}";    FINAL_REL="$REL_DIR/${CLAIMED}-${SLUG}"
-    CREATE_OK=false; mkdir -p "$FINAL" 2>/dev/null && CREATE_OK=true
-fi
-
-if [ "$CREATE_OK" != true ]; then
-    # 마커는 남겨요 — 번호를 회수하면 다른 세션이 같은 번호를 집을 수 있어요
-    if [ "$JSON_MODE" = true ]; then json_error "번호 ${CLAIMED} 는 예약됐는데 실물 생성 실패: $FINAL_REL (권한 확인)"; fi
-    goax_error "실물 생성 실패: $FINAL_REL"; exit "$EXIT_ERROR"
-fi
-
-WARN="[]"
-[ "$CLAIMED" != "$NEXT" ] && WARN=$(_goax_json_array "번호 경합 — ${NEXT} 는 이미 사용 중이라 ${CLAIMED} 로 예약했어요")
-
-if [ "$JSON_MODE" = true ]; then
-    RESULT=$(printf '{"next":"%s","previous":"%s","existing_count":%s,"reserved":true,"path":"%s"}' \
-                    "$CLAIMED" "$PREV" "$EXISTING_COUNT" "$FINAL_REL")
-    json_output "ok" "$RESULT" "reserved $FINAL_REL — 내용을 채우세요" "$WARN"
-else
-    echo "$CLAIMED"
-fi
+emit "$CLAIMED" true "${P#"$PROJECT_ROOT"/}" "reserved ${P#"$PROJECT_ROOT"/} — 내용을 채우세요"
+exit "$EXIT_OK"

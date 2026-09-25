@@ -205,9 +205,9 @@
   영향 외부 spec은 그대로 — 팀이 별도 관리, SSOT 단일
 
  [b] ★ SDD 포맷 변환 흡수       [추천 — 4계층 통합]
-  생성 .ax/docs/spec/NNN-<slug>/{spec, plan, ...}.md (SDD 형식)
+  생성 .ax/docs/spec/<id>-<slug>/{spec, plan, ...}.md (SDD 형식)
     + .ax/docs/spec/imported/<name>/ (원본 snapshot)
-    + .ax/docs/adr/NNNN-*.md (외부 ADR 재번호)
+    + .ax/docs/adr/<id>-*.md (외부 ADR 재번호)
   영향 ⚠ 파일 N개. 우리 SDD 템플릿 헤더로 wrap, 본문 보존
   장점 spec-validate, triage 게이팅이 외부 spec까지 인식
   sync 외부 변경 시 .snapshot-meta로 diff 가능
@@ -242,7 +242,7 @@
 │  ●  [a]  Layer 1 + Layer 3 활성화                       ✓ 권장
 │      📂 .ax/spirit/rules/{architecture, data, testing, ops}.md 신설 (4 카테고리)
 │      📂 CLAUDE.md prepend (🔴/🟡/🔵 시그널 섹션 + 4계층 인덱스 append)
-│      📂 .ax/docs/adr/0001-goax-adoption.md 자동 생성 (Q2~Q4 결정 기록)
+│      📂 .ax/docs/adr/<id>-goax-adoption.md 자동 생성 (Q2~Q4 결정 기록)
 │      📂 .ax/modules/<name>/rules.md — Q2에서 매핑한 L2/L3 도메인만 stub
 │      ✓  정리: .ax/CLAUDE.md.suggested + .ax/adoption-plan.md 삭제 (적용 완료)
 │
@@ -277,7 +277,7 @@ universal 룰(secrets·파괴 명령·보호 경로)은 이미 hook 이 있어 �
 │  ○  [b]  나중에 — 🟡 MANDATORY 로 깔고 enforced_by: TODO:<deadline>   ✓ CRITICAL 보다 권장
 │      📂 라벨을 🟡 MANDATORY 로 시작. CLAUDE.md 에 enforced_by: TODO:YYYY-MM-DD
 │            (사용자 입력 — 기본 +4w = absolute date 로 즉시 변환, I2)
-│      📋 ADR 0001 에 checklist 추가:
+│      📋 goax 도입 ADR 에 checklist 추가:
 │            "- [ ] <YYYY-MM-DD> hook <name> 작성 또는 강등 (룰 ID: <scope>:MANDATORY:NNN)"
 │      ✓  거짓 약속 차단 (🔴 + TODO 는 I1 위반). 작성 후 🔴 승급이 정직.
 │      ⚠  doctor 가 매 호출마다 deadline 추적. 임박/초과 시 다음 단계 옵션 제시.
@@ -401,7 +401,7 @@ universal 룰(secrets·파괴 명령·보호 경로)은 이미 hook 이 있어 �
 🥳 onboarding 완료. .ax/.onboarding-pending 마커 정리했어요.
 
 📐 Spec 디렉토리 구조
- .ax/docs/spec/NNN-<slug>/  ← 작업 spec SSOT (spec 이 여기에 생성)
+ .ax/docs/spec/<id>-<slug>/  ← 작업 spec SSOT (spec 이 여기에 생성)
                               spec.md / tasks.md 인스턴스 (full tier 면 + research/data-model/...)
  .ax/_templates/spec/       ← 템플릿 (도메인에 맞게 수정 가능, doctor가 drift 감지)
 

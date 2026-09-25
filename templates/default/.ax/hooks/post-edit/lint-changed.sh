@@ -8,6 +8,14 @@ set -uo pipefail   # set -e 제거 — grep returning 1 (no match) 등이 hook �
 # Bootstrap guard — install 중간이거나 .ax/ 부분 정리 시 silent skip (UX 노이즈 방지)
 [ -d "${CLAUDE_PROJECT_DIR:-$(pwd)}/.ax/hooks" ] || exit 0
 
+# 훅 끄기·프로필 — .ax/config.yml sensors.disabled_hooks · sensors.hook_profile (common.sh goax_hook_enabled)
+_GOAX_C="${CLAUDE_PROJECT_DIR:-$(pwd)}/.ax/scripts/bash/common.sh"
+if [ -f "$_GOAX_C" ]; then
+    # shellcheck source=../../scripts/bash/common.sh
+    source "$_GOAX_C"
+    goax_hook_enabled lint-changed standard || exit 0
+fi
+
 # stdin JSON 파싱
 INPUT="$(cat 2>/dev/null || true)"
 TARGET_PATH=""

@@ -59,7 +59,7 @@ goax가 어떤 프로젝트에든 깔아주는 골격.
 ### Layer 3 — Spec / ADR
 
 - **왜**: ADR가 *context drift* 방지의 핵심이에요. 거부된 패턴을 적어두지 않으면 미래의 AI가 그 대안을 다시 제안해요.
-- **무엇**: `.ax/docs/adr/NNNN-*.md` (결정·검토대안·결과). 도메인 정의는 `.ax/docs/spec/<domain>.md` 또는 별도 spec 프로젝트.
+- **무엇**: `.ax/docs/adr/<id>-*.md` (결정·검토대안·결과). 도메인 정의는 `.ax/docs/spec/<domain>.md` 또는 별도 spec 프로젝트.
 
 ### Cross-cut — Mistake Loop
 

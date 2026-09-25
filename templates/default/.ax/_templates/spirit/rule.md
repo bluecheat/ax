@@ -14,7 +14,7 @@ enforced_by:                        # 무엇이 이 룰을 실제로 막나 — 
                                     # hook:<경로> · external:<도구> · human:<게이트> · TODO:<YYYY-MM-DD>
 enforced_kind: human                # block | warn | grep | arch | human | missing
                                     # grep = 아래 룰의 `검출 패턴:` 마커가 집행 (패턴 없는 룰은 doctor I7)
-# adr: .ax/docs/adr/NNNN-*.md           # 결정 근거 ADR (선택)
+# adr: .ax/docs/adr/<id>-*.md           # 결정 근거 ADR (선택)
 ---
 
 <!-- severity/enforced_by/enforced_kind 의 schema 와 invariant: .ax/docs/reference/rule-enforcement.md
@@ -34,7 +34,7 @@ enforced_kind: human                # block | warn | grep | arch | human | missi
      pre-commit 의 critical-rule-grep.sh 가 위 `paths:` 에 맞는 staged 파일을 이 정규식으로
      검사하고, severity 가 critical 이면 (mode=fail 에서) 커밋을 막아요. `paths:` 가 비면 안 돌아요.
      ❌/✅ 예시는 프로브가 써요 — zero-probe.sh 가 "❌ 는 걸리고 ✅ 는 안 걸린다" 를 재요
-  5. 결정 근거 있으면 `<!-- adr: .ax/docs/adr/NNNN-*.md -->` 코멘트
+  5. 결정 근거 있으면 `<!-- adr: .ax/docs/adr/<id>-*.md -->` 코멘트
   6. doctor §3.7 spirit lint 로 검증 (헤더 형식 + SP-* 토큰 중복)
 -->
 
@@ -46,7 +46,7 @@ enforced_kind: human                # block | warn | grep | arch | human | missi
 ❌ <나쁜 예>
 
 <!-- 검출 패턴: <regex> -->
-<!-- adr: .ax/docs/adr/NNNN-*.md -->
+<!-- adr: .ax/docs/adr/<id>-*.md -->
 
 ---
 

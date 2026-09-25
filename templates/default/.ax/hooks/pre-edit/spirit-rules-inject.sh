@@ -34,6 +34,8 @@ if [ -f "$COMMON" ]; then
     # shellcheck source=../../scripts/bash/common.sh
     source "$COMMON"
 fi
+# 훅 끄기·프로필 — sensors.disabled_hooks · sensors.hook_profile
+type goax_hook_enabled >/dev/null 2>&1 && { goax_hook_enabled spirit-rules-inject standard || exit 0; }
 type goax_normalize_path >/dev/null 2>&1 || goax_normalize_path() { printf '%s' "${1:-}"; }
 type goax_inject_fresh >/dev/null 2>&1 || goax_inject_fresh() { return 0; }
 
@@ -112,6 +114,12 @@ glob_hit() {   # 0 = 매치
 }
 
 MATCHED=()
+if type goax_rules_matching >/dev/null 2>&1 && type goax_glob_owners >/dev/null 2>&1; then
+    # 한 번의 python 으로 전부 매칭 (rule-read-gate.sh 와 같은 함수) — 글롭마다 python 을 띄우면 룰 41개에 0.9초
+    while IFS= read -r m; do
+        [ -n "$m" ] && MATCHED+=("$m")
+    done < <(goax_rules_matching "$SPIRIT_DIR" "$TARGET_REL" ".ax/spirit/rules/")
+else
 for f in "$SPIRIT_DIR"/*.md; do
     [ -f "$f" ] || continue
     matched_this=false
@@ -124,6 +132,7 @@ for f in "$SPIRIT_DIR"/*.md; do
     done < <(list_paths "$f")
     [ "$matched_this" = true ] && MATCHED+=(".ax/spirit/rules/$(basename "$f")")
 done
+fi
 
 # 매칭 없으면 silent
 [ ${#MATCHED[@]} -eq 0 ] && exit 0

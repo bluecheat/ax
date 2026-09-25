@@ -2,13 +2,13 @@
 
 > spec.md (WHAT/WHY) 를 받아 *어떻게* 만들지 dependency-ordered 체크리스트로 분해해요.
 > 각 task 는 1\~3 파일 변경, 1\~3 시간. 의존성 정렬되어 순차/병렬 실행 가능.
-> 설계 결정의 *근거* 는 별도 ADR (`.ax/docs/adr/NNNN-*.md`) 로 기록.
+> 설계 결정의 *근거* 는 별도 ADR (`.ax/docs/adr/<id>-*.md`) 로 기록.
 
 ---
 
 ## 0. 입력
 - [`spec.md`](spec.md) — SSOT (What/Why + Technical Context §7.5)
-- 관련 ADR (있으면): `.ax/docs/adr/NNNN-*.md`
+- 관련 ADR (있으면): `.ax/docs/adr/<id>-*.md`
 
 ---
 
@@ -95,7 +95,7 @@ task 에 의존하는 걸로 읽혀서 영원히 blocked 가 돼요.
 수동으로 세지 마세요 — 손으로 적은 숫자는 반드시 어긋나요.
 
 ```bash
-bash .ax/scripts/bash/tasks-gate.sh --spec <NNN-slug> --json
+bash .ax/scripts/bash/tasks-gate.sh --spec <id-slug> --json
 ```
 
 `[ ]` 미완료 수, AC 커버리지 간극, 매핑 없는 orphan task, 원장 불일치(보고 안 받은 디스패치 ·

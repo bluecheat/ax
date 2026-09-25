@@ -11,7 +11,7 @@
 #    },"next_step":"...","warnings":[],"errors":[]}
 #
 # 동작: KEYWORDS를 alternation 패턴(`a|b|c`)으로 만들고 6 군데 grep.
-#   - specs:    .ax/docs/spec/NNN-<slug>/ 디렉토리 이름 매칭
+#   - specs:    .ax/docs/spec/<id>-<slug>/ 디렉토리 이름 매칭
 #   - adrs:     .ax/docs/adr/*.md 본문 매칭
 #   - mistakes: .ax/mistakes/*.md 본문 매칭
 #   - rules:    CLAUDE.md + .ax/spirit/rules/*.md 본문 매칭

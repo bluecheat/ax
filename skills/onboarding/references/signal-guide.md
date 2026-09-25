@@ -102,9 +102,9 @@ invariant (doctor 가 매 호출 검증 — `check-rule-enforcement.sh`):
    - enforced_kind: missing
    - 해야 할 일: 룰에 `<!-- 검출 패턴: -->` 작성 (또는 전용 훅 `.ax/hooks/pre-commit/<name>.sh`) 후 🔴 승급
    ```
-4. ADR 0001 checklist 자동 추가: `- [ ] <YYYY-MM-DD> 검출 패턴/hook <name> 작성 또는 룰 강등 (<scope>:MANDATORY:NNN)` — doctor 가 `- [ ]` 를 grep + deadline 비교
+4. goax 도입 ADR(`<id>-goax-adoption.md`) checklist 자동 추가: `- [ ] <YYYY-MM-DD> 검출 패턴/hook <name> 작성 또는 룰 강등 (<scope>:MANDATORY:NNN)` — doctor 가 `- [ ]` 를 grep + deadline 비교
 
-**[c] 강등**: 시그널을 🟡 또는 🔵 로 바꿔 prepend. ADR 0001 에 "ArchUnit 등 자동화 미도입 → MANDATORY" 명시.
+**[c] 강등**: 시그널을 🟡 또는 🔵 로 바꿔 prepend. goax 도입 ADR 에 "ArchUnit 등 자동화 미도입 → MANDATORY" 명시.
 
 ## 마커 한 줄로 끝나는 룰 — 기본 경로
 

@@ -35,7 +35,7 @@ ROOT=$(pwd)   # 또는 감지한 PROJECT_ROOT
 ```bash
 SL_PRE=$(bash "$ROOT/.ax/scripts/bash/spirit-lint.sh" --json 2>/dev/null)
 echo "Spirit rules: $(echo "$SL_PRE" | jq -r '.result.rules_files // 0') 카테고리"
-echo "ADR: $(ls "$ROOT"/.ax/docs/adr/*.md 2>/dev/null | wc -l) · Spec: $(ls -d "$ROOT"/.ax/docs/spec/[0-9][0-9][0-9]-* 2>/dev/null | wc -l) · Mistakes: $(ls "$ROOT"/.ax/mistakes/*.md 2>/dev/null | grep -v README | wc -l)"
+echo "ADR: $(ls "$ROOT"/.ax/docs/adr/*.md 2>/dev/null | wc -l) · Spec: $(ls -d "$ROOT"/.ax/docs/spec/[0-9]*/ 2>/dev/null | wc -l) · Mistakes: $(ls "$ROOT"/.ax/mistakes/*.md 2>/dev/null | grep -v README | wc -l)"
 bash "$ROOT/.ax/scripts/bash/promote-mistake.sh" --json 2>/dev/null \
  | jq -r '.result.candidates[]? | "\(.category): \(.count)건"'   # 미승격 mistakes 카테고리 분포 (threshold 이상만)
 ```
@@ -58,6 +58,7 @@ Spirit 카테고리 수를 `spirit-lint.sh` 로, mistake 카테고리 집계를 
 | **Sensors — Liveness** | 장치 생사 C1~C4 | `check-sensor-liveness.sh` (§3.10) |
 | **번호 무결성** | spec/ADR 중복 번호 | `next-spec-num.sh --check-duplicates` (§3.11) |
 | **동봉본** | vendored skills 신선도 | `vendor-skills.sh --check` (§3.12) |
+| **모노레포 훅 배선** | ADE 루트(저장소 루트) settings 에 이 프로젝트의 goax 훅이 템플릿대로 있나 | `ade-settings.sh --check` (§3.14) |
 | **인계 노트** | current-task.json `handoff` 기한(`- [ ] YYYY-MM-DD`) 임박·초과 — zero 의 가정 검증 · ablation 재검토 | `doctor-scan.sh handoff` (§3.6~) |
 
 각 항목 ✅ / ⚠️ / ❌. 규칙은 §4.
@@ -251,7 +252,7 @@ L_BZ=$(echo "$RESULT_L" | jq -r '.result.blocking_zero'); L_RM=$(echo "$RESULT_L
 N_SPEC=$(bash "$ROOT/.ax/scripts/bash/next-spec-num.sh" --kind spec --check-duplicates --json 2>/dev/null | jq -r '.result.duplicate_count // 0')
 N_ADR=$(bash "$ROOT/.ax/scripts/bash/next-spec-num.sh" --kind adr --check-duplicates --json 2>/dev/null | jq -r '.result.duplicate_count // 0')
 ```
-읽기 전용 · 자동 수정 X — 재번호는 기존 링크를 깨뜨려서 사람이 결정해요. 0 이면 생략: `🔢 번호 무결성 — ⚠️ ADR 중복 N건 / spec 중복 N건`.
+읽기 전용 · 자동 수정 X — 재번호는 기존 링크를 깨뜨려서 사람이 결정해요. 새 항목은 날짜+난수 ID(`YYYY-MM-DD-<4hex>`)라 더 겹치지 않아요 — 이 검사는 옛 순번이 브랜치끼리 겹친 흔적을 보여줘요. 0 이면 생략: `🔢 번호 무결성 — ⚠️ ADR 중복 N건 / spec 중복 N건 (옛 순번)`.
 
 ### 3.12 동봉본 신선도 — `vendor-skills.sh --check`
 
@@ -274,6 +275,16 @@ RI=$(bash "$ROOT/.ax/scripts/bash/rules-index.sh" --json 2>/dev/null); RI_C=$(ec
 ```
 
 전체 진단에선 `🏛️ Layer 1` 줄에 카운트만 써요: `✅ AGENTS.md (시그널 🔴×$RI_C / 🟡×$RI_M / 🔵×$RI_V, 4계층 인덱스 ✓)`. 룰은 외워서 적용하지 않아요 — 매번 이 스크립트로 다시 읽어요.
+
+### 3.14 모노레포 훅 배선 — `ade-settings.sh --check`
+
+```bash
+ADE=$(bash "$ROOT/.ax/scripts/bash/ade-settings.sh" --check --plugin-dir "$PLUGIN_ROOT" --json 2>/dev/null); ADE_RC=$?
+ADE_MISS=$(echo "$ADE" | jq -r '.result.missing // [] | length'); ADE_STALE=$(echo "$ADE" | jq -r '.result.stale // [] | length')
+```
+`ADE_RC=2`(단일 저장소 — ADE 루트 = 프로젝트 루트)면 생략. 세션을 저장소 루트에서 열면 훅은 **루트의** `.claude/settings.json` 에서만
+등록돼요 — 여기서 빠진 훅은 프로젝트 settings 에 있어도 발화하지 않아요. `🧭 모노레포 훅 — ✅ 템플릿과 일치 · ⚠️ 누락 N · 잔재 M:
+ade-settings.sh --apply (다른 훅·permissions 는 보존)`. 누락 목록은 `.result.missing` 그대로 보여줘요. 자동 적용은 안 해요 — 사용자 [a] 뒤에만.
 
 ## 4. 출력
 

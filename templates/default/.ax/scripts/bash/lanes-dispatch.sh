@@ -2,10 +2,10 @@
 # .ax/scripts/bash/lanes-dispatch.sh — 레인 디스패치 원장. tasks.md 안에 살아요
 #
 # Usage:
-#   bash lanes-dispatch.sh [--spec <NNN-slug>] [--status] [--json]
-#   bash lanes-dispatch.sh [--spec <NNN-slug>] --assign "T010=A,T011=A,T020=B" [--force] [--dry-run] [--json]
-#   bash lanes-dispatch.sh [--spec <NNN-slug>] --dispatch <lane> [--force] [--dry-run] [--json]
-#   bash lanes-dispatch.sh [--spec <NNN-slug>] --report <lane | T010,T011> [--dry-run] [--json]
+#   bash lanes-dispatch.sh [--spec <id-slug>] [--status] [--json]
+#   bash lanes-dispatch.sh [--spec <id-slug>] --assign "T010=A,T011=A,T020=B" [--force] [--dry-run] [--json]
+#   bash lanes-dispatch.sh [--spec <id-slug>] --dispatch <lane> [--force] [--dry-run] [--json]
+#   bash lanes-dispatch.sh [--spec <id-slug>] --report <lane | T010,T011> [--dry-run] [--json]
 #
 # 왜 필요한가 — 코디네이터의 기억은 컨텍스트 창 안에만 있어요. 어떤 task 를 어느 레인에
 # 넘겼고 무엇이 돌아왔는지가 전부 창 안에 있는데, 그 창은 썩고 압축되고 세션이 죽으면

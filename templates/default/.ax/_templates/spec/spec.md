@@ -3,7 +3,7 @@
 > **이 문서가 SSOT (Single Source of Truth) 예요.**
 > tasks.md / 구현 단계는 이 문서 (+ 관련 ADR) 를 입력으로 공유해요.
 > 코드와 spec 이 다르면 spec 이 맞다고 가정 — 코드를 spec 에 맞춰요.
-> 설계 결정 (Trade-offs · 거부된 대안 근거) 은 ADR `.ax/docs/adr/NNNN-*.md` 가 단독 기록해요.
+> 설계 결정 (Trade-offs · 거부된 대안 근거) 은 ADR `.ax/docs/adr/<id>-*.md` 가 단독 기록해요.
 
 ---
 
@@ -11,11 +11,11 @@
 
 | 필드 | 값 |
 |---|---|
-| Spec ID | NNN-<slug> |
+| Spec ID | <id>-<slug> |
 | 작성자 | <이름> |
 | 작성일 | YYYY-MM-DD |
 | 상태 | 초안 / 검토 중 / 승인 / 폐기 |
-| 관련 ADR | .ax/docs/adr/NNNN-*.md (있으면) |
+| 관련 ADR | .ax/docs/adr/<id>-*.md (있으면) |
 | Triage 결과 | size=L, risk=L2 (`goax triage` 출력 첨부) |
 
 ---
@@ -49,7 +49,7 @@
 - A: <대안 A> — Pros/Cons → 채택 여부
 - B: <대안 B> — Pros/Cons → 채택 여부
 
-→ 채택된 대안과 거부된 대안의 *결정 근거* 는 ADR (`.ax/docs/adr/NNNN-*.md`) 로 기록해요. spec.md 는 *무엇·왜* 만, *어떻게/왜 그 길* 은 ADR.
+→ 채택된 대안과 거부된 대안의 *결정 근거* 는 ADR (`.ax/docs/adr/<id>-*.md`) 로 기록해요. spec.md 는 *무엇·왜* 만, *어떻게/왜 그 길* 은 ADR.
 
 ---
 
@@ -135,7 +135,7 @@ API/이벤트가 있으면 [`contracts/`](contracts/) 디렉토리로:
 | 스택·언어 | <e.g. Kotlin 2.0 + Spring Boot 3.3 / TypeScript> |
 | 영향 모듈 | <module-a, module-b> |
 | 적용 룰 | <CRITICAL/MANDATORY 룰 토큰 — e.g. `AX:CRITICAL:003`, `SP-SEC-002`> |
-| 진입 ADR | <.ax/docs/adr/NNNN-*.md — 설계 결정 기록 위치> |
+| 진입 ADR | <.ax/docs/adr/<id>-*.md — 설계 결정 기록 위치> |
 
 > 짧게. 3~5 줄이면 충분. *어떻게* 의 디테일은 tasks.md 가, *왜 그 결정* 은 ADR 이 담당해요.
 

@@ -15,7 +15,7 @@
 
 ### 🟡 MANDATORY
 
-🟡 **`starter:MANDATORY:001`** 신규 도메인/모듈 추가 시 ADR 작성 — `docs/adr/NNN-*.md`로 결정 근거 + 검토된 대안 기록
+🟡 **`starter:MANDATORY:001`** 신규 도메인/모듈 추가 시 ADR 작성 — `.ax/docs/adr/<id>-*.md`로 결정 근거 + 검토된 대안 기록
 
 🟡 **`starter:MANDATORY:002`** Cross-domain/cross-module 변경 시 두 번째 리뷰어 승인
 

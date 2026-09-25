@@ -31,7 +31,7 @@ goax 의 hook 은 **bash + 패턴 매칭**이에요. 그래서 이런 성질을 
 
 - **`block-destructive.sh`** — 셸 명령 문자열은 같은 동작을 무한히 다르게 쓸 수 있어서 문자열 매칭으로 "모든" 파괴적 명령을 막는 건 원리적으로 불가능해요. 이 훅의 목표는 *사고 방지*예요.
 - **`check-protected-paths.sh`** — `Edit`/`Write`/`MultiEdit` 도구 호출만 봐요. 같은 파일을 `Bash` 로 고치면 발화하지 않아요.
-- **`--no-verify`** — git pre-commit wrapper 는 이 플래그 한 줄로 건너뛸 수 있어요. 사람이 명시적으로 우회하는 걸 막을 수단은 없어요.
+- **`--no-verify`** — git pre-commit wrapper 는 이 플래그 한 줄로 건너뛸 수 있어요. 에이전트가 Bash 도구로 거는 `--no-verify` · `core.hooksPath` 바꿔치기 · `HUSKY=0` 은 `block-hook-bypass.sh` 가 막지만, 사람이 터미널에서 명시적으로 우회하는 걸 막을 수단은 없어요.
 
 **따라서:**
 

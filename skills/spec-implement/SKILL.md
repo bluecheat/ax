@@ -35,7 +35,7 @@ context로 로드:
 - `CLAUDE.md` (Layer 1)
 - `<영향 받는 모듈>/CLAUDE.md` (Layer 2)
 - `$SPEC_DIR/spec.md` (요구사항 + §7.5 Technical Context)
-- 관련 ADR `docs/adr/NNNN-*.md` (설계 결정 — spec.md §7.5 의 *진입 ADR* 인용)
+- 관련 ADR `docs/adr/<id>-*.md` (설계 결정 — spec.md §7.5 의 *진입 ADR* 인용)
 - `$SPEC_DIR/tasks.md` (체크리스트)
 
 ## 1.5 진입 게이트 — `[P]` 주장 검증 + 실행 모드 결정

@@ -1,6 +1,6 @@
 ---
 name: adr
-description: "ADR (Architecture Decision Record) 작성 워크플로우. 새 결정을 .ax/docs/adr/NNNN-<slug>.md로 기록. 트리거: '/adr', 'ADR 작성', 'adr', '결정 기록', '아키텍처 결정', 'rationale', '선택의 근거'."
+description: "ADR (Architecture Decision Record) 작성 워크플로우. 새 결정을 .ax/docs/adr/<id>-<slug>.md로 기록 (id = YYYY-MM-DD-<4hex>). 트리거: '/adr', 'ADR 작성', 'adr', '결정 기록', '아키텍처 결정', 'rationale', '선택의 근거'."
 ---
 
 # adr — ADR 작성 워크플로우
@@ -41,11 +41,8 @@ SEARCH=$(bash .ax/scripts/bash/triage-search.sh --keywords "$KEYWORDS" --json)
 echo "$SEARCH" | jq -r '.result.adrs[]  | "adr  \(.score)\t\(.path)"'
 echo "$SEARCH" | jq -r '.result.specs[] | "spec \(.score)\t\(.path)"'
 
-# 다음 번호 *미리보기* (NNNN 4자리 zero-pad) — 아직 확정 아니에요.
-# 확정은 §3 생성 시점의 --reserve 가 해요. 여기서 예약하면 사용자가 취소한
-# ADR 번호가 원장에 남아 영구히 비어요.
-NEXT=$(bash .ax/scripts/bash/next-spec-num.sh --kind adr --json | jq -r '.result.next')
-echo "다음 ADR 번호(예정): $NEXT"
+# ID 는 날짜+난수(YYYY-MM-DD-<4hex>)라 미리 볼 게 없어요 — §3 의 --reserve 가 뽑아요.
+# 순번이 아니라서 다른 브랜치의 ADR 과 겹치지 않아요 (옛 NNNN 순번 ADR 은 그대로 읽어요).
 
 # 폐기·대체된 ADR 확인 (재제안 차단)
 grep -lE "^\| 상태 \|.*폐기|superseded" .ax/docs/adr/*.md 2>/dev/null
@@ -54,20 +51,20 @@ grep -lE "^\| 상태 \|.*폐기|superseded" .ax/docs/adr/*.md 2>/dev/null
 ## 2. 출력
 
 ```
-📝 ADR Write (slug: payment-refund-strategy, 다음 번호: 0006)
+📝 ADR Write (slug: payment-refund-strategy)
 
  📍 발견
   기존 관련 ADR 0002-pg-multi-provider.md
       0004-rules-token-convention.md
   도메인 매칭 payment → L3 (config.yml)
-  기반 spec  .ax/docs/spec/005-payment-refund-window/ (있으면)
+  기반 spec  .ax/docs/spec/<id>-payment-refund-window/ (있으면)
 
  🎯 목표 결정·검토 대안·trade-off를 0000-template.md 양식으로 기록
 
  ─ 옵션 ──────────────────────────────────────────
 
- [a] ✓ 다음으로 0006 ADR 작성      [권장]
-  생성 .ax/docs/adr/0006-payment-refund-strategy.md
+ [a] ✓ 새 ADR 작성                [권장]
+  생성 .ax/docs/adr/<id>-payment-refund-strategy.md
     (0000-template.md 복사 + 메타 채움)
   다음 사용자가 컨텍스트·검토된 대안·결정 본문 작성
     완료 시 spec.md 메타에 ADR 링크 추가
@@ -78,27 +75,26 @@ grep -lE "^\| 상태 \|.*폐기|superseded" .ax/docs/adr/*.md 2>/dev/null
  [c] 기존 ADR 갱신 (대체 / 폐기)
   → 어느 ADR을 대체하나요? (예: 0002 폐기, 새 결정으로)
 
- ▸ 답해주세요 [a] / [b] (slug 같이) / [c] (대상 ADR 번호 같이)
+ ▸ 답해주세요 [a] / [b] (slug 같이) / [c] (대상 ADR 파일 같이)
 ```
 
 ## 3. 적용
 
 [a] 응답 시:
 ```bash
-# 번호를 원자적으로 예약 + 실물 생성. 경합하면 다음 번호로 물러나므로
-# **반환된 번호를 써야 해요** — §1 의 미리보기 값을 그대로 쓰면 안 돼요.
+# ID 를 뽑아 실물까지 원자적으로 생성해요 — **반환된 ID·경로를 써야 해요**.
 SLUG="payment-refund-strategy"
 RES=$(bash .ax/scripts/bash/next-spec-num.sh --kind adr --reserve --slug "$SLUG" --json)
 [ "$(echo "$RES" | jq -r '.status')" = "ok" ] || { echo "$RES" | jq -r '.errors|join("\n")'; exit 1; }
 NUM=$(echo "$RES" | jq -r '.result.next')
 DEST=$(echo "$RES" | jq -r '.result.path')
-echo "$RES" | jq -r '.warnings[]?'        # 경합 시 "0006 대신 0007 로 예약" 안내
 
 cp .ax/_templates/adr/0000-template.md "$DEST"
 
 # 메타 자동 채움 (tmp-mv — BSD/GNU sed 모두 호환)
 sed \
- -e "s/| ADR ID | NNNN |/| ADR ID | $NUM |/" \
+ -e "s/^# ADR <id>:/# ADR $NUM:/" \
+ -e "s/| ADR ID | <id> |/| ADR ID | $NUM |/" \
  -e "s/| 작성일 | YYYY-MM-DD |/| 작성일 | $(date +%Y-%m-%d) |/" \
  -e "s/<한 줄 결정>/Payment Refund Strategy/" \
  "$DEST" > "$DEST.tmp" && mv "$DEST.tmp" "$DEST"
@@ -106,7 +102,7 @@ sed \
 
 ✓ 메시지:
 ```
-✓ ADR 0006 — .ax/docs/adr/0006-payment-refund-strategy.md (template 복사, 메타 채움)
+✓ ADR 2026-09-25-a3f1 — .ax/docs/adr/2026-09-25-a3f1-payment-refund-strategy.md (template 복사, 메타 채움)
 
 다음 단계
  1. 컨텍스트 작성 — 현재 상태 / 트리거 / 제약
@@ -118,7 +114,7 @@ sed \
 
 ## 4. onboarding Q5와 일관
 
-`onboarding`이 Q5에서 자동 생성하는 `0001-goax-adoption.md`도 **이 template (0000-template.md)을 사용**해요. 즉:
+`onboarding`이 Q5에서 자동 생성하는 `<id>-goax-adoption.md`도 **이 template (0000-template.md)을 사용**해요. 즉:
 - onboarding이 만든 ADR과 사용자가 `adr`로 만든 ADR이 같은 양식
 - 후속 ADR (0002, 0003, ...)도 동일 — 가독성·자동 통계 가능
 

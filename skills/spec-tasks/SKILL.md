@@ -18,7 +18,7 @@ description: "기존 spec에 tasks.md 추가 + 분해 가이드 — 'tasks 분�
 
 ```bash
 SPEC=$(jq -r '.spec_dir | split("/") | .[-1]' .ax/current-task.json 2>/dev/null)
-[ -z "$SPEC" ] && goax_error "no spec in current-task.json — use /spec-tasks <NNN-slug>"
+[ -z "$SPEC" ] && goax_error "no spec in current-task.json — use /spec-tasks <id-slug>"
 
 SPEC_DIR=".ax/docs/spec/$SPEC"
 if [ ! -f "$SPEC_DIR/spec.md" ]; then

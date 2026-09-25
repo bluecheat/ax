@@ -2,7 +2,7 @@
 # .ax/scripts/bash/tasks-plan.sh — tasks.md 를 실행 그래프로 읽기
 #
 # Usage:
-#   bash tasks-plan.sh [--spec <NNN-slug>] [--json] [--help]
+#   bash tasks-plan.sh [--spec <id-slug>] [--json] [--help]
 #
 # 하는 일:
 #   ready       지금 바로 시작 가능한 task (미완료 + 의존이 전부 완료)
