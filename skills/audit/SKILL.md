@@ -64,19 +64,29 @@ find .ax/mistakes -name "*.md" -mtime -7 2>/dev/null | sort # 최근 7일
  🎯 목표 반복 패턴 → CRITICAL/MANDATORY/CONVENTION 룰 승격
    (.ax/config.yml의 promotion_threshold 기준)
 
- ▸ 집행 사다리 — 후보마다 **위에서부터** 물어요. 산문 룰은 마지막이에요
+ ▸ 가이드 먼저 — 룰 본문은 "어떻게 해야 하나"(위치·이름·방법)로 시작해요. 막는 방법 우선순위는 그 가이드를
+   무엇으로 집행할지 고르는 거지, 가이드를 대신하지 않아요. 금지만 적힌 룰은 피할 것만 알려주고
+   쓸 것은 추측하게 둬서, 가장 가까운 선례(대개 잔재)를 따라 쓰게 돼요.
+
+ ▸ 막는 방법 우선순위 — 후보마다 **위에서부터** 보고, 처음 해당하는 하나를 골라요. 문서만 두는 ④ 는 마지막이에요
    ① 구조로 제거할 수 있나? (디렉토리·타입·의존 방향으로 아예 못 쓰게)  → ADR + 리팩토링 task
-   ② 이미 있는 lint/CI 가 잡을 수 있나?                                → enforced_by: external:<도구> + 프로브
-   ③ grep 한 줄로 잡히나?                                               → 룰 아래 <!-- 검출 패턴: <ERE> --> (이번 커밋에서 집행)
-   ④ 셋 다 아니면                                                        → 산문 룰 (🟡/🔵 · 사람 게이트)
+   ② 이미 있는 lint/CI 가 잡을 수 있나? (ArchUnit·detekt 등)            → enforced_by: external:<도구> + 프로브
+   ③ grep 한 줄로 잡히고, 걸리면 커밋을 멈춰야 하나?                     → 룰 아래 <!-- 검출 패턴: <ERE> --> (이번 커밋에서 집행)
+   ④ 셋 다 아니면                                                        → 가이드만 (🟡/🔵 · 사람 게이트)
    근거: 룰·스킬·스타일 가이드는 soft — 모델은 잊어요. 리뷰 코멘트로 룰을 지키게 하는 순간이
    code smell 이고, 그 자리는 lint·CI 실패·구조 제거로 옮겨야 해요. ③ 은 이 스킬이 바로 해요.
+
+ ▸ ③ grep 검사를 쓰지 않는 경우 — 가이드만 두고 ② CI 테스트로 올리거나 ④ 리뷰로 내려요
+   · 경고로 끝나는 규약 — 이름·위치처럼 "다르게 하라" 로는 답이 안 나오는 룰. 경고는 틀렸다는 것만 알리고
+     무엇을 쓸지는 가이드가 알려줘요. 구조로 잴 수 있으면 ② (ArchUnit 같은 CI 테스트 + 잔재 허용목록)
+   · 잔재가 많은 패턴 — `critical-rule-grep.sh` 는 staged 파일 전체를 봐서, 잔재 파일을 건드릴 때마다 무관한
+     경고가 떠요. 패턴을 넣기 전에 `grep -rlE '<ERE>' <paths> | wc -l` 로 잔재 수를 재서 후보에 적어요
 
  ─ 승격 후보 ──────────────────────────────────────
 
  [a] ✅ security → 🔴 CRITICAL     [권장 — 3회+]
   패턴 PG 키 평문 노출 2회 + DB 비번 로그 1회
-  사다리 ③ grep — `(password|secret|api[_-]?key|token)[[:space:]]*[=:][[:space:]]*["'][^"']{6,}` (①·② 해당 없음)
+  막는 방법 ③ grep 검사 — `(password|secret|api[_-]?key|token)[[:space:]]*[=:][[:space:]]*["'][^"']{6,}` (①·② 해당 없음)
   제안 SP-SEC-NNN — 시크릿 hardcode 절대 금지 (frontmatter severity: critical, enforced_by: hook:...)
   생성 .ax/spirit/rules/<project>-security.md 에 SP-SEC-NNN 추가 (없으면 신설)
         frontmatter paths: ["**/*.kt", "**/*.kts", ...] 명시 — 주입 훅과 grep 집행 둘 다 이 paths 를 봐요 (비면 둘 다 안 돌아요)
@@ -93,12 +103,13 @@ find .ax/mistakes -name "*.md" -mtime -7 2>/dev/null | sort # 최근 7일
 
  [c] pr → 🟡 MANDATORY       [검토]
   패턴 refactor + feature 한 PR 로 묶음 4회
-  사다리 ④ 산문 — 한 PR 의 의도는 diff 로 못 재요 (①~③ 해당 없음)
+  막는 방법 ④ 리뷰 — 한 PR 의 의도는 diff 로 못 재요 (①~③ 해당 없음)
   제안 SP-PR-NNN — refactor + feature 한 PR 금지 (severity: mandatory, enforced_by: human:pr-review)
   생성/수정/영향 (spirit/rules 만)
 
  [d] naming → 🔵 CONVENTION      [선택]
   패턴 파일명 underscore vs kebab 혼재 2회
+  막는 방법 가이드 + ② CI 테스트 — "kebab-case 로 짓는다" 가 본문, 기존 lint 가 파일명을 보면 거기로 (③ 경고만으론 무엇을 쓸지 안 나와요)
   제안 SP-NAMING-NNN 추가 (.ax/spirit/rules/<project>-naming.md, severity: convention)
   생성/수정/영향 (spirit/rules 만)
 
@@ -169,7 +180,7 @@ enforced_kind: grep
 룰은 매 turn hook 으로 inject 돼요. verbose 하면 매 작업마다 토큰 낭비. 그리고 매번 새 세션에서 읽히는 evergreen 문서 — 이전 세션 흔적 (시간 부사·발견 경위·일회성 ref) 이 본문에 박히면 6개월 뒤엔 노이즈.
 
 **압축**
-- **3줄 골격 권장** — `위반 예` / `대안` / `검증`(grep 이면 `<!-- 검출 패턴: -->` 마커, 아니면 external 도구·사람 게이트 한 줄). 헤더 1줄 + 본문 3줄 = 4줄로 끝나면 베스트.
+- **3줄 골격 권장** — `대안`(어떻게 해야 하나 — 빠지면 안 되는 줄) / `위반 예` / `검증`(grep 이면 `<!-- 검출 패턴: -->` 마커, 아니면 external 도구·사람 게이트 한 줄). 헤더 1줄 + 본문 3줄 = 4줄로 끝나면 베스트. 이름·위치 규약은 `대안` 을 위치·이름·예시로 여러 줄 풀어도 돼요.
 - **한 줄 한 사실** — 한 bullet 에 사실 1개. "A 이고 B 이며 C" 는 3 bullet 으로 쪼개기.
 - **의례적 표현 제거** — "다음과 같이", "~할 수 있어요", "참고로", "필요시", "일반적으로" 다 삭제. `~해요` 체 자체는 유지 (tone).
 - **단정·명령형** — "~하면 좋습니다" → "~해요" / "~금지". 완곡 어법 X.
@@ -202,7 +213,7 @@ before / after 예시:
 
 **완료 검증 (다음 단계 진입 전 필수)** — `grep '^## SP-SEC-001' .ax/spirit/rules/*.md` 가 1줄 이상 hit 해야 함. 0 hit 면 룰 본문 안 쓰인 것 — 추가 Edit 후 재검증. 0 hit 인 채로 4.3 시도하면 archive 스크립트가 `SP token not found` 에러로 거부.
 
-사다리 ③(grep) 으로 승격했으면 하나 더 — 패턴이 자기 예시를 실제로 잡는지:
+③ grep 검사로 승격했으면 하나 더 — 패턴이 자기 예시를 실제로 잡는지:
 
 ```bash
 PROBE=$(bash .ax/scripts/bash/zero-probe.sh --only pattern-rules --json)
@@ -257,7 +268,8 @@ grep -h '^model:' .ax/mistakes/*.md .ax/mistakes/_archive/*/*/*.md 2>/dev/null \
 - 사용자 동의 없이 룰을 자동 승격 X
 - mistakes 파일 삭제 X — 이력은 보존 (archive 는 mv 이지 rm 아님)
 - 1회만 있는 패턴은 승격 후보로 띄우지 않음 (소음)
-- **grep 으로 잡히는 룰을 패턴 없이 산문으로만 승격 X** — 사다리 ③ 이면 `<!-- 검출 패턴: -->` 이 룰 본문의 일부예요. 산문만 쓰면 다음 audit 에 같은 카테고리가 또 올라와요
+- **커밋을 멈춰야 하는 룰을 패턴 없이 산문으로만 승격 X** — ③ grep 검사로 막는 룰이면 `<!-- 검출 패턴: -->` 이 룰 본문의 일부예요. 산문만 쓰면 다음 audit 에 같은 카테고리가 또 올라와요
+- **가이드 없이 금지·경고만 있는 룰로 승격 X** — `대안` 이 없으면 모델은 가장 가까운 선례(대개 잔재)를 따라 써요. 경고로 끝나는 규약은 ③ grep 검사 대신 가이드 + ② CI 테스트로 가요
 - 캡처만 하고 audit 안 함 → 누적만 됨 (주 1회는 회고)
 - **마킹 (4.1) 만 하고 룰 본문 (4.2) 또는 archive (4.3) 스킵 후 보고 X** — promoted_to 마킹된 mistake 가 `.ax/mistakes/` root 에 남아있으면 미완료. 4.3 archive 까지 끝낸 후 검증 (root 에 promoted_to 마킹 0건) 후 보고.
 
