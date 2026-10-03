@@ -88,6 +88,8 @@ fi
 
 CTX="[goax] 이 파일에 걸린 상위 계층이에요. 편집 전에 해당 파일을 Read 하세요.
 ${LINES}"
+# 모듈·ADR 이 많아도 10,000자 상한(넘으면 파일로 빠져요) 아래로
+CTX=$(printf '%s' "$CTX" | goax_cap_context "" "전체 목록: bash .ax/scripts/bash/rules-index.sh --source module")
 
 if command -v jq >/dev/null 2>&1; then
     jq -nc --arg c "$CTX" \

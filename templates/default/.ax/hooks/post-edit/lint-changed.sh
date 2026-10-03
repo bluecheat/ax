@@ -3,7 +3,8 @@
 #
 # 명령: .ax/config.yml `commands.lint_file` — "<글롭> => <명령>" 목록, 첫 매칭 하나만. `{file}` 은 셸 인용된 상대 경로.
 #   비어 있으면 아무것도 안 해요 — 확장자로 도구를 추측하지 않아요. 후보는 detect-stack.sh.
-# 결과: 통과면 조용히, 실패면 PostToolUse additionalContext 로 출력 앞 40줄·3000자 (막지 않아요).
+# 결과: 통과면 조용히, 실패면 PostToolUse additionalContext 로 출력 앞 40줄·3000바이트 (막지 않아요).
+#   자르기는 goax_cap_context — 한글 중간에서 안 끊고, 꼬리에 생략량과 직접 돌릴 명령을 적어요.
 # 시간: GOAX_LINT_TIMEOUT(30초) — timeout/gtimeout 이 있을 때만 끊어요.
 # 끄기: sensors.disabled_hooks 에 lint-changed, 또는 sensors.hook_profile: minimal
 set -uo pipefail   # set -e 제거 — grep returning 1 (no match) 등이 hook 본체를 silent abort하지 않도록
@@ -62,7 +63,8 @@ fi
 NOTE="시간 초과(${TO}초)"; [ "$RC" -ne 124 ] && NOTE="exit $RC"
 CTX="[goax] lint 실패 — $REL ($NOTE)
 명령: $RUN   (commands.lint_file: \"$GLOB\")
-$(printf '%s\n' "$OUT" | head -40 | cut -c1-300 | head -c 3000)
+$(printf '%s\n' "$OUT" | head -40 | goax_cap_context 3000 "전체 출력은 위 명령을 직접 실행해서 보세요")
 고친 파일의 문제면 지금 고치세요. 원래 있던 문제거나 명령이 잘못됐으면 사용자에게 알려요 — 설정을 느슨하게 하지 않아요."
+CTX=$(printf '%s' "$CTX" | goax_cap_context)
 jq -nc --arg c "$CTX" '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c}}'
 exit 0

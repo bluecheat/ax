@@ -38,6 +38,7 @@ fi
 type goax_hook_enabled >/dev/null 2>&1 && { goax_hook_enabled spirit-rules-inject standard || exit 0; }
 type goax_normalize_path >/dev/null 2>&1 || goax_normalize_path() { printf '%s' "${1:-}"; }
 type goax_inject_fresh >/dev/null 2>&1 || goax_inject_fresh() { return 0; }
+type goax_cap_context >/dev/null 2>&1 || goax_cap_context() { head -c "${GOAX_CONTEXT_MAX:-8000}"; }   # common.sh 없을 때 — 바이트 상한만
 
 TARGET_ABS=$(goax_normalize_path "$TARGET_PATH" "$PROJECT_ROOT")
 ROOT_ABS=$(goax_normalize_path "$PROJECT_ROOT" "$PROJECT_ROOT")
@@ -151,6 +152,8 @@ for m in "${FRESH[@]}"; do
     LIST+="- $m"$'\n'
 done
 CTX="📋 Path-scoped spirit rules apply to ${TARGET_REL} — Read these before editing if not yet:"$'\n'"$LIST"
+# 룰 파일이 많아도 10,000자 상한(넘으면 파일로 빠져요) 아래로
+CTX=$(printf '%s' "$CTX" | goax_cap_context "" "전체 목록: bash .ax/scripts/bash/rules-index.sh --source spirit")
 
 # JSON 출력
 if command -v jq >/dev/null 2>&1; then

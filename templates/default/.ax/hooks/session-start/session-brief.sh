@@ -39,5 +39,7 @@ LINES=$(GOAX_PROJECT_DIR="$PROJECT_ROOT" bash "$BRIEF" --json ${MODE_ARGS[@]+"${
 
 CTX="[goax] 세션 브리핑
 $(printf '%s\n' "$LINES" | sed 's/^/- /')"
+# 스크립트 상한(GOAX_SESSION_BRIEF_MAX)을 크게 잡아도 10,000자 상한(넘으면 파일로 빠져요) 아래로
+CTX=$(printf '%s' "$CTX" | goax_cap_context "" "전체: bash .ax/scripts/bash/session-brief.sh")
 jq -nc --arg c "$CTX" '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$c}}'
 exit 0

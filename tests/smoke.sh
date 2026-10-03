@@ -5041,6 +5041,102 @@ popd >/dev/null || true
 rm -rf "$VL"
 
 # ───────────────────────────────────────────────────────────
+section "61. 훅 출력 예산 — 모델에게 주는 글은 10,000자 상한 아래, 한글 중간에서 안 끊어요"
+# ───────────────────────────────────────────────────────────
+# Claude Code 는 훅의 additionalContext·stdout 이 10,000자를 넘으면 파일로 빼고 앞 2,000자만 보여 줘요.
+# 그 파일을 읽으라고 하지도 않아요. 그래서 주입 훅은 goax_cap_context 로 먼저 줄여요.
+# 최악 입력(50KB 출력 lint · 모듈/룰 수백 개 · 아주 긴 브리핑)을 넣고, 출력이 유효한 JSON 이고 상한 아래인지 봐요.
+if command -v jq >/dev/null 2>&1; then
+    OB=$(mktemp -d)
+    mkdir -p "$OB/.ax/scripts/bash" "$OB/.ax/hooks" "$OB/src" "$OB/.ax/spirit/rules" "$OB/.ax/modules"
+    cp "$REPO/templates/default/.ax/scripts/bash/"*.sh "$OB/.ax/scripts/bash/"; cp -R "$REPO/templates/default/.ax/hooks/"* "$OB/.ax/hooks/"
+    cp "$REPO/templates/default/.ax/config.yml" "$OB/.ax/config.yml"; cp "$REPO/templates/default/.ax/current-task.json.template" "$OB/.ax/current-task.json"
+    : > "$OB/src/a.ts"
+    # 상한 검사 — 유효 JSON · 문자 수 < 10000 · 바이트 수 ≤ 8000 · 깨진 글자(U+FFFD) 없음 · 생략 꼬리 있음
+    ob_check() {   # <이름> <훅 stdout>
+        local name="$1" out="$2" ctx chars bytes
+        ctx=$(printf '%s' "$out" | jq -er '.hookSpecificOutput.additionalContext' 2>/dev/null) \
+            || { fail "$name — 유효한 JSON additionalContext 가 아니에요: $(printf '%s' "$out" | head -c 200)"; return; }
+        chars=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext | length')
+        bytes=$(printf '%s' "$ctx" | LC_ALL=C wc -c | tr -d ' ')
+        if [ "$chars" -lt 10000 ] && [ "$bytes" -le 8000 ] && ! printf '%s' "$ctx" | grep -q $'\xef\xbf\xbd' \
+            && printf '%s' "$ctx" | grep -q '생략'; then
+            pass "$name — 최악 입력에서도 ${chars}자·${bytes}바이트, 유효 JSON, 생략 꼬리"
+        else
+            fail "$name — chars=$chars bytes=$bytes (상한 10000자·8000바이트, 생략 꼬리 필요)"
+        fi
+    }
+    # 헬퍼 단위 — 상한 아래면 그대로, 넘으면 꼬리까지 상한 안 · 바이트 경계가 글자 중간이어도 유효한 UTF-8
+    OBH=$( (source "$REPO/templates/default/.ax/scripts/bash/common.sh"
+        [ "$(printf 'short' | goax_cap_context)" = short ] || echo "짧은 입력이 바뀜"
+        for m in 100 101 102 103; do
+            r=$(awk 'BEGIN{for(i=0;i<20000;i++) printf "가나다"; print ""}' | goax_cap_context "$m" "전체: x")
+            b=$(printf '%s' "$r" | LC_ALL=C wc -c | tr -d ' ')
+            [ "$b" -le "$m" ] || echo "max=$m 인데 $b바이트"
+            printf '%s' "$r" | jq -Rrs . 2>/dev/null | grep -q $'\xef\xbf\xbd' && echo "max=$m 에서 글자가 깨짐"
+            printf '%s' "$r" | tail -1 | grep -q '바이트 생략 — 전체: x$' || echo "max=$m 꼬리 없음: $(printf '%s' "$r" | tail -1)"
+        done) 2>&1)
+    [ -z "$OBH" ] && pass "goax_cap_context — 상한 아래면 그대로, 넘으면 꼬리까지 상한 안 · 3바이트 글자를 반으로 안 잘라요" \
+        || fail "goax_cap_context: $OBH"
+
+    # lint-changed — 50KB 넘게 찍고 실패하는 lint_file 명령
+    cat > "$OB/big-lint.sh" <<'EOF'
+awk 'BEGIN{for(i=0;i<20000;i++) printf "한글"; print ""; for(i=0;i<500;i++) print "src/a.ts:" i " 경고 " i}'
+exit 1
+EOF
+    (cd "$OB" && bash .ax/scripts/bash/config-set.sh --add commands.lint_file '**/*.ts => bash big-lint.sh {file}' >/dev/null)
+    ob_check "lint-changed" "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$OB/src/a.ts" \
+        | CLAUDE_PROJECT_DIR="$OB" bash "$OB/.ax/hooks/post-edit/lint-changed.sh")"
+
+    # module-rules-inject — src/** 에 걸린 모듈 300개
+    i=0; while [ "$i" -lt 300 ]; do
+        mkdir -p "$OB/.ax/modules/module-with-a-fairly-long-name-$i"
+        printf -- '---\napplies_to: [code]\npaths:\n  - "src/**"\n---\n' > "$OB/.ax/modules/module-with-a-fairly-long-name-$i/rules.md"
+        printf -- '---\ncategory: c%s\npaths:\n  - "src/**"\n---\n## SP-C%s-001: x\n' "$i" "$i" > "$OB/.ax/spirit/rules/category-with-a-long-name-$i.md"
+        i=$((i + 1))
+    done
+    ob_check "module-rules-inject" "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"src/a.ts"}}' \
+        | CLAUDE_PROJECT_DIR="$OB" bash "$OB/.ax/hooks/pre-edit/module-rules-inject.sh")"
+    ob_check "spirit-rules-inject" "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"src/a.ts"}}' \
+        | CLAUDE_PROJECT_DIR="$OB" bash "$OB/.ax/hooks/pre-edit/spirit-rules-inject.sh")"
+
+    # session-brief 훅 — 스크립트 상한을 아주 크게 잡은 경우를 흉내 내요 (스크립트를 50KB 를 내는 가짜로)
+    cat > "$OB/.ax/scripts/bash/session-brief.sh" <<'EOF'
+awk 'BEGIN{printf "{\"status\":\"ok\",\"result\":{\"lines\":["; for(i=0;i<1000;i++) printf "%s\"인계 노트 항목 %d — 아주 긴 설명이 붙어 있어요\"", (i?",":""), i; print "]}}"}'
+EOF
+    ob_check "session-brief 훅" "$(printf '{"session_id":"s","source":"startup"}' \
+        | CLAUDE_PROJECT_DIR="$OB" bash "$OB/.ax/hooks/session-start/session-brief.sh")"
+
+    # harness-pointer — 경로 몇 줄이라 자를 일은 없지만, 출력은 유효 JSON 이고 같은 함수를 거쳐요
+    HPO=$(printf '{"agent_type":"Explore"}' | CLAUDE_PROJECT_DIR="$OB" bash "$OB/.ax/hooks/subagent-start/harness-pointer.sh")
+    { [ -z "$HPO" ] || printf '%s' "$HPO" | jq -e '.hookSpecificOutput.additionalContext | length < 10000' >/dev/null; } \
+        && pass "harness-pointer — 유효 JSON · 상한 아래" || fail "harness-pointer 출력: $HPO"
+
+    # block-destructive — heredoc 으로 50KB 를 쓰는 명령 끝에 rm -rf / 가 붙으면 되돌려 주는 원문은 앞부분만
+    BIG=$(awk 'BEGIN{for(i=0;i<20000;i++) printf "가나"}')
+    BDE=$(jq -nc --arg c "cat > f <<'X'
+$BIG
+X
+rm -rf /" '{tool_input:{command:$c}}' | CLAUDE_PROJECT_DIR="$OB" bash "$OB/.ax/hooks/pre-bash/block-destructive.sh" 2>&1 >/dev/null); BDR=$?
+    BDB=$(printf '%s' "$BDE" | LC_ALL=C wc -c | tr -d ' ')
+    [ "$BDR" = 2 ] && [ "$BDB" -lt 2000 ] && printf '%s' "$BDE" | grep -q '생략 — 원문은 방금 보낸 명령 그대로예요' \
+        && pass "block-destructive — 막을 때 되돌려 주는 명령은 앞 600바이트만 (${BDB}바이트)" \
+        || fail "block-destructive 큰 명령: rc=$BDR bytes=$BDB"
+    rm -rf "$OB"
+else
+    pass "§61 — jq 없음, skip"
+fi
+# 정적 — additionalContext 를 내는 훅은 전부 goax_cap_context 를 거쳐요 (stop/ 은 다른 레인이 맡아요)
+OB_MISS=""
+for h in "$REPO"/templates/default/.ax/hooks/*/*.sh; do
+    case "$h" in */stop/*|*/pre-commit/*) continue ;; esac
+    grep -q 'additionalContext:' "$h" || continue
+    grep -q 'goax_cap_context' "$h" || OB_MISS="$OB_MISS $(basename "$(dirname "$h")")/$(basename "$h")"
+done
+[ -z "$OB_MISS" ] && pass "additionalContext 를 내는 훅 전부 goax_cap_context 를 거쳐요" \
+    || fail "goax_cap_context 없이 additionalContext 를 내는 훅:$OB_MISS"
+
+# ───────────────────────────────────────────────────────────
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────
 if [ "$fail_count" -eq 0 ]; then

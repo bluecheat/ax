@@ -41,6 +41,59 @@ function clip(s, n,   nw, w, out, cand, i) {
 }
 '
 
+# ─── 훅이 모델에게 주는 글의 길이 상한 — goax_cap_context ───────────────
+# printf '%s' "$CTX" | goax_cap_context [최대 바이트] [전체를 볼 곳]
+#   Claude Code 는 훅의 additionalContext·systemMessage·stdout 이 10,000자를 넘으면 파일로 빼고 앞 2,000자만
+#   보여 줘요. 그 파일을 읽으라고 하지도 않아요. 그래서 훅이 먼저 그 아래로 줄여요.
+#   상한은 바이트로 재요. 바이트 수는 글자 수보다 작을 수 없어서 로케일과 상관없이 글자 상한도 지켜져요.
+#   기본은 GOAX_CONTEXT_MAX(8000). 넘으면 "… N바이트 생략 — <볼 곳>" 꼬리까지 합쳐 상한 안에 들어오게 자르고,
+#   멀티바이트 글자 중간에서는 끊지 않아요. 자를 자리 가까이에 줄바꿈이 있으면 거기서 끊어요.
+#   끝 줄바꿈은 지워져요 (`$(...)` 와 같아요).
+goax_cap_context() {
+    local max="${1:-}" where="${2:-}" s n lines tail k cut cn pre pn drop i b need om ol
+    case "$max" in ''|*[!0-9]*) max="${GOAX_CONTEXT_MAX:-8000}" ;; esac
+    case "$max" in ''|*[!0-9]*) max=8000 ;; esac
+    s=$(cat)
+    n=$(printf '%s' "$s" | LC_ALL=C wc -c | tr -d ' ')
+    if [ "$n" -le "$max" ]; then printf '%s\n' "$s"; return 0; fi
+    lines=$(printf '%s\n' "$s" | wc -l | tr -d ' ')
+    # 꼬리 길이는 생략 수의 자릿수에 달려요 — 전체 크기로 위쪽 어림을 잡아요
+    tail="… ${n}바이트·${lines}줄 생략${where:+ — $where}"
+    k=$(( max - $(printf '%s' "$tail" | LC_ALL=C wc -c | tr -d ' ') - 1 ))
+    [ "$k" -lt 0 ] && k=0
+    cut=$(printf '%s' "$s" | LC_ALL=C head -c "$k")
+    cn=$(printf '%s' "$cut" | LC_ALL=C wc -c | tr -d ' ')
+    pre="${cut%$'\n'*}"
+    if [ "$pre" != "$cut" ]; then
+        pn=$(printf '%s' "$pre" | LC_ALL=C wc -c | tr -d ' ')
+        [ $((pn * 4)) -ge $((cn * 3)) ] && { cut="$pre"; cn="$pn"; }
+    fi
+    # 끝에 반쯤 잘린 UTF-8 글자가 있으면 그 바이트들을 버려요
+    # shellcheck disable=SC2046
+    set -- $(printf '%s' "$cut" | LC_ALL=C tail -c 4 | od -An -tu1)
+    drop=0; i=$#
+    while [ "$i" -gt 0 ]; do
+        b="${!i}"
+        if [ "$b" -lt 128 ]; then break; fi
+        if [ "$b" -ge 192 ]; then
+            need=2; [ "$b" -ge 224 ] && need=3; [ "$b" -ge 240 ] && need=4
+            [ $(( $# - i + 1 )) -lt "$need" ] && drop=$(( $# - i + 1 ))
+            break
+        fi
+        i=$((i - 1))
+    done
+    if [ "$drop" -gt 0 ]; then
+        cn=$((cn - drop))
+        cut=$(printf '%s' "$cut" | LC_ALL=C head -c "$cn")
+    fi
+    om=$((n - cn))
+    ol=$(( lines - $(printf '%s\n' "$cut" | wc -l | tr -d ' ') ))
+    [ "$ol" -lt 0 ] && ol=0
+    if [ "$ol" -gt 0 ]; then tail="… ${om}바이트·${ol}줄 생략${where:+ — $where}"
+    else tail="… ${om}바이트 생략${where:+ — $where}"; fi
+    printf '%s\n%s\n' "$cut" "$tail"
+}
+
 # Exit codes
 EXIT_OK=0
 EXIT_ERROR=1

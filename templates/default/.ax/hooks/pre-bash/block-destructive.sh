@@ -52,6 +52,9 @@ if [ -f "$COMMON" ]; then
     source "$COMMON"
     SENSOR_MODE=$(goax_mode 2>/dev/null || echo warning)
 fi
+type goax_cap_context >/dev/null 2>&1 || goax_cap_context() { cat; }   # common.sh 없을 때 — 자르지 않아요
+# 막을 때 되돌려 주는 명령 원문 — heredoc 으로 큰 파일을 쓰는 명령이면 수십 KB 가 그대로 다시 들어가요. 앞부분만.
+cmd_shown() { printf '%s' "$CMD" | goax_cap_context 600 "원문은 방금 보낸 명령 그대로예요"; }
 
 # ─── 매처 헬퍼 ──────────────────────────────────────────────────────
 # 정규화된 명령에 대해 확장 정규식 매칭.
@@ -146,7 +149,7 @@ fi
 
 if [ -n "$CATASTROPHIC_HIT" ]; then
     printf '\033[31m[goax hook]\033[0m 🚨 CATASTROPHIC 명령 차단 (mode 무관): %s\n' "$CATASTROPHIC_HIT" >&2
-    printf '명령: %s\n' "$CMD" >&2
+    printf '명령: %s\n' "$(cmd_shown)" >&2
     printf '복구 불가능한 삭제로 보여요. 의도한 게 맞으면 사용자에게 확인받고 직접 실행해.\n' >&2
     exit 2
 fi
@@ -188,12 +191,12 @@ fi
 if [ -n "$RECOVERABLE_HIT" ]; then
     if [ "$SENSOR_MODE" = "fail" ]; then
         printf '\033[31m[goax hook]\033[0m 차단된 파괴적 패턴 (mode=fail): %s\n' "$RECOVERABLE_HIT" >&2
-        printf '명령: %s\n' "$CMD" >&2
+        printf '명령: %s\n' "$(cmd_shown)" >&2
         printf '우회가 필요하면 사용자에게 명시적 승인을 받아 직접 실행해.\n' >&2
         exit 2
     fi
     printf '\033[33m[goax hook]\033[0m ⚠ 파괴적 패턴 (mode=%s, 경고만): %s\n' "$SENSOR_MODE" "$RECOVERABLE_HIT" >&2
-    printf '명령: %s\n' "$CMD" >&2
+    printf '명령: %s\n' "$(cmd_shown)" >&2
     exit 0
 fi
 
