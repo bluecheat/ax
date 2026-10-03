@@ -1,0 +1,24 @@
+schema_version: "1.1"
+name: trigger-lane-run-near-miss
+description: "'레인' 이 들어간 근접 표현 — 배정이 끝났으니 lane 이 아니라 spec-implement"
+tags: [trigger, lane, spec-implement]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: "레인 배정은 끝났어. 이제 레인으로 돌려"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: fires-spec-implement
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?spec-implement"'
+    min: 1
+  - name: not-lane
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?lane"'
+    min: 0
+    max: 0
+    arm: both

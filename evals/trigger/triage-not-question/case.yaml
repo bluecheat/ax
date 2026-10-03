@@ -1,0 +1,18 @@
+schema_version: "1.1"
+name: trigger-triage-not-question
+description: "설명만 원하는 질문 — triage 의 '첫 메시지 자동 발동' 이 과하게 번지지 않는가. 어떤 goax skill 도 안 불려야 해요"
+tags: [trigger]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: "이 정규식이 뭘 매칭하는지 설명만 해줘: ^[0-9]{3}-[0-9]{4}$"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: no-skill
+    type: tool_used
+    tool: Skill
+    min: 0
+    max: 0
+    arm: both

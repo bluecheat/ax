@@ -1,0 +1,31 @@
+schema_version: "1.1"
+name: trigger-doctor-diagnose
+description: "설치 상태 진단 — 재설치(up)·spec 점검과 구분"
+tags: [trigger, doctor, spec-validate, up]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: "goax 훅이 안 도는 것 같은데 하네스 상태 좀 점검해줘"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: fires-doctor
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?doctor"'
+    min: 1
+  - name: not-up
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?up"'
+    min: 0
+    max: 0
+    arm: both
+  - name: not-spec-validate
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?spec-validate"'
+    min: 0
+    max: 0
+    arm: both
