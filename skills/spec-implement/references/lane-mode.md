@@ -36,10 +36,17 @@ bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --dispatch A --json   # �
 
 브리프는 `lane` skill §10 형식 그대로예요 — 소유 파일(그 레인 task 들의 `files:` 합집합) ·
 금지 파일(다른 레인 소유 + `protected_paths` + 버전 파일) · task ID 와 각 `검증:` 명령 ·
-정지 조건 · "커밋하지 않는다" · "체크박스는 켜지 않는다" · "결과를 최종 메시지에 전부 담는다
-(`SendMessage`·`ListAgents` 는 이 레인엔 없어요 — 최종 응답이 유일한 산출물 경로예요)".
+정지 조건 · "커밋하지 않는다" · "체크박스는 켜지 않는다" · 보고 경로. 보고 경로는 레인을 띄우는 방식이 정해요:
 
-`Agent` 도구로 `goax:lane-worker` 를 띄워요 (vendor 설치면 `lane-worker`). 준비된 레인이
+| 띄우는 방식 | 레인의 도구 | 보고 경로 | 레인의 최종 응답 |
+|---|---|---|---|
+| `Agent` 도구 (서브에이전트) | `SendMessage`·`ListAgents` 없음 | 최종 응답에 전문 — 유일한 산출물 경로 | 보고 전문 |
+| 팀원(teammate) | `SendMessage` 있음 | `SendMessage` 로 코디네이터에게 1회, task 별로 나눠 한 메시지 ≤ 약 3,000자 | "보고를 SendMessage 로 보냈어요 — task N건, 검증 exit 0" 한 줄 |
+
+브리프엔 둘 중 **실제로 띄우는 방식**의 줄을 적어요. 팀원 레인에 서브에이전트 규약("최종 메시지에 전부")을
+주면 같은 보고가 SendMessage · idle 통지 · 후속 답으로 세 번 와요 (실측).
+
+`Agent` 도구(또는 팀원)로 `goax:lane-worker` 를 띄워요 (vendor 설치면 `lane-worker`). 준비된 레인이
 여럿이면 **한 메시지에 같이** 띄워요 — 하나 띄우고 기다렸다 다음을 띄우는 건 병렬이 아니에요.
 
 **격리** — 기본은 공유 워킹 트리예요. 파일 소유권이 물리적 충돌을 막고, 원장이 소유 겹침을
@@ -53,6 +60,10 @@ bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --report A --json        
 bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --report T010,T011 --json   # 일부만 왔을 때
 ```
 
+**팀원 레인이면 idle 통지는 요약이고, 전문은 `SendMessage` 로 와요.** 통지의 result 는 길면
+`[result truncated]` 로 잘려요 — 그걸 보고 재요청하지 말고 SendMessage 로 온 메시지들을 먼저 모아요
+("레인 A 보고 1/N" 의 N 개가 다 왔는지). 원장 `--report` 는 전문이 다 도착한 task 만 적어요.
+
 그다음 **보고에 인용된 검증 명령을 코디네이터가 직접 다시 돌려요.** 통과한 task 만 §5 로
 체크박스를 켜요. 레인이 "완료" 라고 했어도 명령이 실패하면 미완료예요 — 보고와 완료는 별개예요.
 
@@ -63,8 +74,9 @@ bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --report T010,T011 --json
 bash .ax/scripts/bash/status-note.sh --add renamed "Pill.tone → variant (레인 A, T011)" --json
 ```
 
-- 보고가 잘렸으면 잘린 지점을 지목해서 이어 보내달라고 해요 ("T3 섹션 3번째 항목부터"). "다시
-  보내주세요" 만 하면 앞부분이 또 오고 또 잘려요
+- 보고가 잘렸으면 **잘린 줄을 그대로 인용해 지목하고** 그 다음부터 보내달라고 해요 ("T3 섹션의
+  `$ pnpm test Card` 출력 다음 줄부터", "1/3 메시지의 마지막 줄 `…` 다음부터"). "다시 보내주세요" 만 하면
+  앞부분이 또 오고 또 잘려요. 다시 작업하지 말고 이미 만든 결과를 보내라고 덧붙여요
 - 레인이 소유 목록 밖 파일을 건드렸다고 보고하면 → §7 범위 이탈, halt
 - 레인이 정지 조건에 걸려 멈췄으면 → 전제가 틀린 거예요. 남은 task 를 재배정하지 말고 사용자 결정
 
