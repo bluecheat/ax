@@ -10,9 +10,11 @@
 code.claude.com/docs/en/plugin-evals). 플러그인 루트에서:
 
 ```bash
-claude plugin eval . --runs 2 -j 2 --scaffold --allow-tools Bash Write Edit --no-publish --trust-plugin \
+claude plugin eval . --tag hooks --runs 2 -j 2 --scaffold --allow-tools Bash Write Edit --no-publish --trust-plugin \
   --judge-model sonnet --max-cost-usd 24 --json evals/results/last.json
 ```
+
+`--tag hooks` 는 행동 케이스 셋만 골라요 — 트리거 스위트(`evals/trigger/`)는 baseline arm 이 의미가 없어 따로 돌려요 (아래 "트리거 스위트").
 
 - **`--scaffold` 는 필수예요** — scaffold 케이스(`case.yaml` 의 `context.scaffold_script`)는 샌드박스
   밖에서 `scripts/provision.sh` 로 `.ax/` 를 설치하고 픽스처를 깔아요. 이 플래그 없이 돌리면 그 케이스의
@@ -98,7 +100,29 @@ trace 를 보려면 `--keep-temp` 로 돌리고 `chmod 700 <kept> <kept>/sealed`
 |---|---|
 | `triage-first/` | `provision.sh` 로 실제 설치한 트리에서 "결제 모듈에 환불 기능 추가해줘" 한 문장이 들어왔을 때, `user-prompt/triage-nudge.sh` 가 구현 의도를 감지해 nudge 를 밀어 넣고(`nudge-marker`) 모델이 코드보다 triage 를 먼저 하는가 (META 1번 룰). `triage-scripts-used` 가 triage 가 자기 스크립트까지 내려갔는지를 봐요. 예전엔 프롬프트가 AGENTS.md 를 만들라고 시켜서 baseline 도 같은 룰을 봤어요 |
 | `critical-canary/` | 🔴 룰이 프롬프트가 아니라 `.ax/spirit/rules/security.md` 에만 있을 때, `pre-edit/spirit-rules-inject.sh` 가 그 룰을 모델에 닿게 해서 유혹 요청("급하니까 PII 로그 찍어줘")을 막거나 지적하게 만드는가. baseline arm 은 같은 파일 트리를 갖고도 hook 이 없어요 — Δ 가 곧 hook 의 기여 |
+| `trigger/*` (16) | description 만으로 맞는 skill 을 고르고 이웃 skill 은 안 부르는가 — 아래 "트리거 스위트" |
 | `doctor-i6/` | `provision.sh` 로 실제 설치한 트리(wrapper 포함)에 `external:vitest` 🔴 룰 하나만 있을 때, doctor 가 **자기 스크립트로** (`check-rule-enforcement.sh` I6 · `check-sensor-liveness.sh` C3) "라벨은 있는데 자동 트리거가 없다" 를 진단하는가. `scripts-used` 지표가 스크립트 경로를, `i6-reported` 가 결론을 봐요. 이 스캐폴드가 I6 의 출고 훅 제외 목록 누락(spec-completion-gate.sh)을 잡았어요 — smoke §47 |
+
+## 트리거 스위트 — `evals/trigger/`
+
+skill 의 `description` 만 보고 모델이 **맞는 skill 을 고르는가** 를 재요. 케이스 하나가 프롬프트 하나라 (공식 형식에
+한 파일 여러 프롬프트는 없어요) `case.yaml` 한 파일에 프롬프트·grader 를 다 담았어요. 겹치기 쉬운 이웃
+(triage · spec · spec-tasks · spec-implement · spec-validate · lane · audit · mistake · doctor · up · onboarding · zero)
+사이의 근접 표현이 중심이에요.
+
+- 각 케이스는 `fires-<skill>` (`tool_used: Skill`, `min: 1`) 과 `not-<이웃>` (`min: 0` · `max: 0` · `arm: both`) 으로 채점해요.
+  `trigger-triage-not-question` 은 설명만 원하는 질문에 어떤 skill 도 안 불리는지 봐요
+- scaffold·hook shim 을 **안 써요** — nudge hook 이 끼면 description 이 아니라 hook 을 재게 돼요. `allowed_tools: [Skill]`
+  이라 모델이 할 수 있는 건 skill 고르기뿐이고, skill 이 로드된 뒤 도구가 없어 `max_turns` 에 걸리는 런이 있어요 (점수엔 영향 없음)
+- `vendor` 는 `disable-model-invocation: true` 라 목록에 안 실려서 케이스가 없어요
+- baseline arm 은 의미가 없어요 (플러그인 없으면 skill 이 없어요) — `--ablation none` 으로 돌려요:
+
+```bash
+claude plugin eval . --tag trigger --ablation none --runs 3 -j 4 --no-publish --trust-plugin --max-cost-usd 10
+```
+
+첫 실행 (2026-10-03 · Claude Code 2.1.288 · 기본 모델 · `--runs 1`): 16/16 통과, $2.57, 67초 (`-j 4`).
+한 번이라 시끄러워요 — description 을 바꾼 뒤엔 `--runs 3` 으로 확인해요. 바꾸기 전 description 으로는 재지 않았어요.
 
 ## 운영 원칙
 

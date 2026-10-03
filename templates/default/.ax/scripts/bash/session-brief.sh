@@ -24,7 +24,7 @@
 # Output (--json):
 #   {"status":"ok","result":{"lines":[…],"version":{"installed":"0.5.13","plugin":"0.6.3","behind":true},
 #     "audit":{"unresolved":13,"last_audit":"2026-05-09T…Z"|null,"days_since":139|null,"cadence":7,"overdue":true},
-#     "task":{"task_id":…,"description":…,"phase":…}|null,
+#     "task":{"task_id":…,"description":…,"phase":…}|null, "other_tasks":[{task_id,description,phase}…] (.ax/tasks/ 의 병렬 작업),
 #     "handoff":{"now":[…],"now_at":…,"next":[…],"open":[…]}},…}
 # Exit: 0 ok · 1 error · 2 skipped (jq 없음)
 
@@ -110,6 +110,25 @@ if [ -f "$TASK_FILE" ] && jq -e . "$TASK_FILE" >/dev/null 2>&1; then
     if [ "$TASK_JSON" != "null" ]; then
         LINES+=("진행 중: $(jq -r '"\(.task_id // "-") \(.description // "") (phase: \(.phase))"' <<<"$TASK_JSON")")
     fi
+fi
+# 병렬 작업 — .ax/tasks/*.json 중 지금 작업이 아니고 idle 이 아닌 것. 다른 세션이 진행 중일 수 있어요
+# GOAX_TASK_TTL_DAYS(기본 7일) 넘게 안 바뀐 작업은 따로 세요 — 버려진 작업일 가능성이 높아요
+OTHERS_JSON="[]"; STALE_IDS=""
+TASK_TTL=$(( ${GOAX_TASK_TTL_DAYS:-7} * 86400 ))
+ACTIVE_ID=$( [ -f "$TASK_FILE" ] && jq -r '.task_id // empty' "$TASK_FILE" 2>/dev/null || true)
+for tf in "$ROOT"/.ax/tasks/*.json; do
+    [ -f "$tf" ] || continue
+    o=$(jq -c --arg a "$ACTIVE_ID" --argjson ttl "$TASK_TTL" 'select((.phase // "idle") != "idle" and (.task_id // "") != $a)
+          | {task_id, description, phase, stale: ((now - (((.updated_at // "") | try fromdateiso8601 catch 0))) >= $ttl)}' "$tf" 2>/dev/null) || continue
+    [ -n "$o" ] || continue
+    if [ "$(jq -r .stale <<<"$o")" = true ]; then STALE_IDS="${STALE_IDS:+$STALE_IDS, }$(jq -r .task_id <<<"$o")"
+    else OTHERS_JSON=$(jq -c --argjson o "$o" '. + [$o | del(.stale)]' <<<"$OTHERS_JSON"); fi
+done
+if [ "$OTHERS_JSON" != "[]" ]; then
+    LINES+=("다른 진행 중 작업: $(jq -r 'map("\(.task_id) \(.description // "") (\(.phase))") | join(" · ")' <<<"$OTHERS_JSON") — 이어서 하려면 update-task.sh --task <id> --activate")
+fi
+[ -z "$STALE_IDS" ] || LINES+=("오래 멈춘 작업: ${STALE_IDS} — 끝났거나 버린 거면 reset-task.sh --task <id> 로 정리해요")
+if [ -f "$TASK_FILE" ] && jq -e . "$TASK_FILE" >/dev/null 2>&1; then
     while IFS= read -r l; do [ -n "$l" ] && LINES+=("$l"); done < <(jq -r '
         (if (.now | length) > 0 then "지금: " + (.now | join(" · ")) + (if .now_at then " (" + .now_at + ")" else "" end) else empty end),
         (if (.next | length) > 0 then "다음: " + (.next | join(" · ")) else empty end),
@@ -215,11 +234,11 @@ if [ "$JSON_MODE" = true ]; then
         --arg inst "$INSTALLED" --arg plug "$PLUGIN" --argjson behind "$BEHIND" \
         --argjson unres "$UNRESOLVED" --argjson last "$LAST_ISO" --argjson days "$DAYS" \
         --argjson cad "$CADENCE" --argjson over "$OVERDUE" --arg rec "$RECUR" \
-        --argjson task "$TASK_JSON" --argjson handoff "$HANDOFF_JSON" \
+        --argjson task "$TASK_JSON" --argjson handoff "$HANDOFF_JSON" --argjson others "$OTHERS_JSON" \
         '{lines: $lines,
           version: {installed: (if $inst == "" then null else $inst end), plugin: (if $plug == "" then null else $plug end), behind: $behind},
           audit: {unresolved: $unres, last_audit: $last, days_since: $days, cadence: $cad, overdue: $over, recurring: $rec},
-          task: $task, handoff: $handoff}')
+          task: $task, other_tasks: $others, handoff: $handoff}')
     json_output ok "$RESULT" ""
 else
     printf '%s\n' ${OUT[@]+"${OUT[@]}"}

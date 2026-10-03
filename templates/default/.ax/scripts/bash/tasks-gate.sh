@@ -194,18 +194,22 @@ EOF
         verdict=$(head -1 "$dir/review.md" 2>/dev/null \
                   | sed -n 's/^verdict:[[:space:]]*//p' | sed -E 's/[[:space:]]+$//' || true)
     fi
-    local TF="$PROJECT_ROOT/.ax/current-task.json"
-    if command -v jq >/dev/null 2>&1 && [ -f "$TF" ]; then
-        local sd; sd=$(basename "$(jq -r '.spec_dir // "/"' "$TF" 2>/dev/null || echo /)")
-        if [ "$sd" = "$name" ]; then
-            local sz rk ev
+    # size×risk 는 이 spec 을 맡은 작업에서 읽어요 — 지금 작업(current-task.json)이든 병렬 작업(.ax/tasks/*.json)이든.
+    # 지금 작업만 보면 다른 세션이 새 작업을 여는 순간 이 spec 의 evaluator 필수 조건이 사라져요.
+    if command -v jq >/dev/null 2>&1; then
+        local TF sd sz="" rk="" ev
+        for TF in "$PROJECT_ROOT/.ax/current-task.json" "$PROJECT_ROOT"/.ax/tasks/*.json; do
+            [ -f "$TF" ] || continue
+            sd=$(basename "$(jq -r '.spec_dir // "/"' "$TF" 2>/dev/null || echo /)")
+            [ "$sd" = "$name" ] || continue
             sz=$(jq -r '.size // empty' "$TF" 2>/dev/null || true)
             rk=$(jq -r '.risk // empty' "$TF" 2>/dev/null || true)
-            if [ -n "$sz" ] && [ -n "$rk" ]; then
-                ev=$(bash "$SCRIPT_DIR/tier-from-state.sh" --json --size "$sz" --risk "$rk" 2>/dev/null \
-                     | jq -r '.result.evaluator // empty' 2>/dev/null || true)
-                [ "$ev" = "required" ] && required=true
-            fi
+            [ -n "$sz" ] && [ -n "$rk" ] && break
+        done
+        if [ -n "$sz" ] && [ -n "$rk" ]; then
+            ev=$(bash "$SCRIPT_DIR/tier-from-state.sh" --json --size "$sz" --risk "$rk" 2>/dev/null \
+                 | jq -r '.result.evaluator // empty' 2>/dev/null || true)
+            [ "$ev" = "required" ] && required=true
         fi
     fi
 

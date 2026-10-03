@@ -80,8 +80,8 @@ if [ "$SHOW_HELP" = true ]; then
 fi
 
 if ! command -v jq >/dev/null 2>&1; then
-    if [ "$JSON_MODE" = true ]; then json_error "jq 미설치"
-    else goax_error "jq 미설치 — invariant 검증 불가"; exit "$EXIT_ERROR"; fi
+    if [ "$JSON_MODE" = true ]; then json_error "jq 가 필요해요 — brew install jq (macOS) · apt-get install jq (Debian/Ubuntu) 뒤 다시"
+    else goax_error "jq 가 필요해요 — brew install jq (macOS) · apt-get install jq (Debian/Ubuntu) 뒤 다시 (invariant 검증 불가)"; exit "$EXIT_ERROR"; fi
 fi
 
 ROOT=$(find_project_root) || exit "$EXIT_ERROR"

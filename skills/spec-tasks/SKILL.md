@@ -1,6 +1,6 @@
 ---
 name: spec-tasks
-description: "기존 spec에 tasks.md 추가 + 분해 가이드 — 'tasks 분해', 'tasks.md 작성', '작업 분해', '체크리스트 만들어'. spec.md (§3 acceptance + §7.5 Technical Context) + 관련 ADR 기반. add-spec-files.sh 로 selective cp. 슬래시로도 호출 가능: '/spec-tasks'."
+description: "spec.md 가 이미 있고 그걸 실행할 체크리스트(tasks.md)로 쪼개야 할 때 써요. 트리거: 'tasks 분해', 'tasks.md 작성', '작업 분해', '체크리스트 만들어', '/spec-tasks'. 안 쓰는 경우: spec 자체가 아직 없을 때(spec), 분해한 tasks 를 여러 에이전트로 가를지 정할 때(lane), tasks 를 실제로 실행할 때(spec-implement)."
 ---
 
 # spec-tasks — tasks.md 단계
@@ -137,7 +137,8 @@ task 가 있으면 그건 spec 에 없는 일을 하고 있다는 신호예요.
 ## 4. current-task.json 갱신
 
 ```bash
-bash .ax/scripts/bash/update-task.sh --phase tasks --json
+WORK_ID="${WORK_ID:-}"   # ← 이 대화에서 triage 가 연 작업 id 를 넣어요 (모르면 비워요 — 병렬 작업이 있으면 update-task 가 되물어요)
+bash .ax/scripts/bash/update-task.sh --phase tasks ${WORK_ID:+--task "$WORK_ID"} --json
 ```
 
 ## 5. 출력

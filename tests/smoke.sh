@@ -2384,7 +2384,7 @@ grep -q -- '--delta' "$REPO/skills/spec-validate/SKILL.md" && grep -q -- '--fixu
     && pass "spec-validate·spec-tasks·agents — --delta/--fixup/--stage tasks 가 호출부·수신부에 모두 있음" || fail "spec-review 새 옵션 — 스크립트만 있고 skill/agent 가 안 씀"
 grep -q '빌드·테스트' "$REPO/agents/architect.md" && grep -q '빌드·테스트' "$REPO/agents/evaluator.md" && grep -q '검증 예산' "$REPO/skills/spec-validate/SKILL.md" \
     && pass "spec 리뷰 검증 예산 — grep·read 만, 빌드·테스트 금지 (agents + skill)" || fail "spec 리뷰 — 검증 예산 미명시"
-grep -q 'update-task.sh --phase implementing' "$REPO/skills/spec-implement/SKILL.md" && grep -q 'update-task.sh --phase review' "$REPO/skills/spec-implement/SKILL.md" \
+grep -qE 'update-task\.sh .*--phase implementing' "$REPO/skills/spec-implement/SKILL.md" && grep -qE 'update-task\.sh .*--phase review' "$REPO/skills/spec-implement/SKILL.md" \
     && pass "spec-implement — phase implementing/review 를 실제로 씀 (HUD 가 움직이는 조건)" || fail "spec-implement — phase 기록 없음 (HUD 가 tasks 에 멈춤)"
 grep -q 'hud' "$REPO/templates/default/.ax/hud/state.json.template" && grep -q 'hud.plugin_version' "$REPO/docs/state-ownership.md" \
     && pass "state.json hud 캐시 — template · ownership 문서 동기화" || fail "state.json hud 캐시 3-way 동기화 누락"
@@ -5039,6 +5039,173 @@ VL_MANY=$(CLAUDE_PROJECT_DIR="$VL" bash .ax/hooks/pre-commit/critical-rule-grep.
     || fail "critical-rule-grep — 요약 줄 축약 실패: $VL_MANY"
 popd >/dev/null || true
 rm -rf "$VL"
+
+# ───────────────────────────────────────────────────────────
+section "61. 작업별 상태 — .ax/tasks/<id>.json, 병렬 작업이 서로 덮지 않아요"
+# ───────────────────────────────────────────────────────────
+PT=$(mktemp -d)
+mkdir -p "$PT/.ax/scripts/bash" "$PT/.ax/hooks/pre-commit" "$PT/.ax/docs/spec/sa" "$PT/.ax/docs/spec/sb" "$PT/src"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,update-task,tier-from-state,reset-task,session-brief,tasks-gate}.sh "$PT/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/hooks/pre-commit/spec-completion-gate.sh" "$PT/.ax/hooks/pre-commit/"
+cp "$REPO/templates/default/.ax/current-task.json.template" "$PT/.ax/current-task.json"
+echo '{}' > "$PT/.ax/state.json"
+pt_u() { GOAX_PROJECT_DIR="$PT" bash "$PT/.ax/scripts/bash/update-task.sh" "$@" --json 2>/dev/null; }
+pt_r() { GOAX_PROJECT_DIR="$PT" bash "$PT/.ax/scripts/bash/reset-task.sh" "$@" --json 2>/dev/null; }
+pt_c() { jq -r "$1" "$PT/.ax/current-task.json"; }
+pt_u --start --phase triaged --set task_id=A --set description=결제 >/dev/null
+pt_u --phase implementing --set spec_dir=.ax/docs/spec/sa >/dev/null
+pt_u --start --phase triaged --set task_id=B --set description=검색 >/dev/null
+[ "$(pt_c .task_id)" = B ] && [ "$(jq -r '.phase + " " + .spec_dir' "$PT/.ax/tasks/A.json")" = "implementing .ax/docs/spec/sa" ] \
+    && pass "update-task --start — 새 작업이 지금 작업이 되고 앞 작업은 .ax/tasks/A.json 에 남아요" \
+    || fail "update-task --start — 앞 작업 유실: $(cat "$PT/.ax/current-task.json" | jq -c '{task_id,phase}')"
+PTJ=$(pt_u --task A --phase review)
+{ [ "$(printf '%s' "$PTJ" | jq -r '.result.active')" = false ] && [ "$(pt_c '.task_id + " " + .phase')" = "B triaged" ] \
+    && [ "$(jq -r .phase "$PT/.ax/tasks/A.json")" = review ] && [ "$(pt_c '.handoff | type')" = object ]; } \
+    && pass "update-task --task A — 지금 작업(B)·handoff 는 그대로, A 파일만 갱신" \
+    || fail "update-task --task — 다른 작업을 덮음: $PTJ"
+pt_u --task Z --phase review >/dev/null; [ $? -eq 1 ] && [ ! -f "$PT/.ax/tasks/Z.json" ] \
+    && pass "update-task --task <없는 id> — exit 1 · 파일을 만들지 않아요" || fail "update-task — 없는 작업을 만들었어요"
+# 진행 중 작업이 여럿인데 --task 가 없으면 어느 세션 것인지 몰라요 — 덮지 않고 되물어요
+PTN=$(pt_u --phase implementing); [ "$(printf '%s' "$PTN" | jq -r .status)" = error ] && [ "$(pt_c .phase)" = triaged ] \
+    && pass "update-task — 진행 중 작업이 여럿이면 --task 없는 갱신은 거부 (지금 작업 그대로)" || fail "update-task — --task 없이 덮었어요: $PTN"
+pt_u --start --set task_id=A >/dev/null; [ "$(jq -r .description "$PT/.ax/tasks/A.json")" = 결제 ] && [ "$(pt_c .task_id)" = B ] \
+    && pass "update-task --start — 이미 있는 id 는 거부 (옛 기록 위에 병합하지 않아요)" || fail "update-task --start — 같은 id 로 덮었어요"
+[ "$(pt_u --task 'a/b' --phase spec | jq -r .status)" = error ] && [ "$(pt_u --task NOPE --phase spec --dry-run | jq -r .status)" = error ] \
+    && pass "update-task — 잘못된 id 거부 · --dry-run 도 없는 작업은 error" || fail "update-task — id 검증/dry-run 대상 확인 실패"
+pt_u --task B --set spec_dir=.ax/docs/spec/sb --phase implementing >/dev/null
+SB_OUT=$(GOAX_PROJECT_DIR="$PT" bash "$PT/.ax/scripts/bash/session-brief.sh" --json 2>/dev/null)
+printf '%s' "$SB_OUT" | jq -e '(.result.other_tasks | map(.task_id)) == ["A"] and (.result.lines | map(select(test("다른 진행 중 작업"))) | length) == 1' >/dev/null \
+    && pass "session-brief — 병렬 작업(A)을 다른 진행 중 작업으로 알려요" || fail "session-brief — other_tasks 누락: $(printf '%s' "$SB_OUT" | jq -c .result.other_tasks)"
+# 완료 게이트는 진행 중 작업 전부의 spec 을 봐요 — 지금 작업이 B 여도 A 의 spec 을 건드리는 커밋은 걸려요
+printf '## 3. \n- [ ] **AC1** a\n' > "$PT/.ax/docs/spec/sa/spec.md"; printf -- '- [ ] T001 [AC1] a — files: src/a.ts\n' > "$PT/.ax/docs/spec/sa/tasks.md"
+printf '## 3. \n- [ ] **AC1** a\n' > "$PT/.ax/docs/spec/sb/spec.md"; printf -- '- [ ] T001 [AC1] b — files: src/b.ts\n' > "$PT/.ax/docs/spec/sb/tasks.md"
+echo x > "$PT/src/a.ts"; git -C "$PT" init -q 2>/dev/null; git -C "$PT" add src/a.ts 2>/dev/null
+PG_OUT=$(cd "$PT" && CLAUDE_PROJECT_DIR="$PT" bash "$PT/.ax/hooks/pre-commit/spec-completion-gate.sh" 2>&1)
+{ printf '%s' "$PG_OUT" | grep -q 'spec sa — 0/1 완료' && printf '%s' "$PG_OUT" | grep -q 'spec sb 미완료 1 — 이번 커밋과 무관해 건너뛰어요'; } \
+    && pass "spec-completion-gate — 병렬 작업의 spec 도 봐요 (A 의 spec 은 자세히 · B 는 무관해 한 줄)" \
+    || fail "spec-completion-gate — 병렬 작업 spec 판정 실패: $PG_OUT"
+# G6 — 지금 작업이 아닌 spec 도 그 작업의 size×risk 로 evaluator 필수를 판정해요
+pt_u --task A --set size=L --set risk=L2 >/dev/null
+GOAX_PROJECT_DIR="$PT" bash "$PT/.ax/scripts/bash/tasks-gate.sh" --spec sa --json 2>/dev/null | jq -e '.result.review_required == true' >/dev/null \
+    && pass "tasks-gate G6 — 병렬 작업(지금 작업 아님)의 spec 도 evaluator 필수 판정" || fail "tasks-gate G6 — 비활성 작업 spec 의 필수 판정이 빠짐"
+# 오래 멈춘 작업 — 완료 게이트는 건너뛰고 session-brief 는 정리하라고 알려요
+PG_OLD=$(cd "$PT" && GOAX_TASK_TTL_DAYS=0 CLAUDE_PROJECT_DIR="$PT" bash "$PT/.ax/hooks/pre-commit/spec-completion-gate.sh" 2>&1)
+SB_OLD=$(GOAX_TASK_TTL_DAYS=0 GOAX_PROJECT_DIR="$PT" bash "$PT/.ax/scripts/bash/session-brief.sh" 2>/dev/null)
+{ ! printf '%s' "$PG_OLD" | grep -q 'spec sa' && printf '%s' "$SB_OLD" | grep -q '오래 멈춘 작업: A'; } \
+    && pass "TTL — 오래 멈춘 병렬 작업은 완료 게이트에서 빠지고 session-brief 가 정리를 권해요" || fail "TTL 처리 실패: $PG_OLD / $SB_OLD"
+pt_u --task A --activate >/dev/null
+[ "$(pt_c '.task_id + " " + .phase + " " + .description')" = "A review 결제" ] && [ "$(jq -r .phase "$PT/.ax/tasks/B.json")" = implementing ] \
+    && pass "update-task --task A --activate — A 로 돌아가고 B 는 자기 파일에" || fail "update-task --activate 실패: $(pt_c '{task_id,phase}|tostring')"
+[ "$(pt_r --task --json | jq -r .status 2>/dev/null)" != ok ] && [ -f "$PT/.ax/tasks/B.json" ] \
+    && pass "reset-task --task 값 없음 — 다음 옵션을 id 로 삼키지 않아요" || fail "reset-task --task 가 --json 을 삼켰어요"
+PR_J=$(pt_r --task B)
+{ [ "$(printf '%s' "$PR_J" | jq -r '.result.active')" = false ] && [ ! -f "$PT/.ax/tasks/B.json" ] && [ "$(pt_c .task_id)" = A ]; } \
+    && pass "reset-task --task B — B 파일만 지우고 지금 작업(A)은 그대로" || fail "reset-task --task — $PR_J"
+pt_r >/dev/null
+{ [ "$(pt_c .phase)" = idle ] && [ ! -f "$PT/.ax/tasks/A.json" ] && [ "$(pt_c '.handoff | type')" = object ]; } \
+    && pass "reset-task — 지금 작업을 끝내면 파일도 지우고 idle · handoff 는 남아요" || fail "reset-task — 지금 작업 리셋 실패"
+# 옛 형식 — task_id 가 있는 current-task.json 만 있고 작업 파일이 없으면 첫 갱신에 옮겨요
+jq '.task_id = "OLD" | .phase = "spec" | .description = "옛"' "$PT/.ax/current-task.json" > "$PT/ct.tmp" && mv "$PT/ct.tmp" "$PT/.ax/current-task.json"
+pt_u --phase tasks >/dev/null
+[ "$(jq -r '.description + " " + .phase' "$PT/.ax/tasks/OLD.json" 2>/dev/null)" = "옛 tasks" ] && [ "$(pt_c .phase)" = tasks ] \
+    && pass "update-task — 옛 형식(작업 파일 없음)은 첫 갱신에 .ax/tasks/ 로 옮겨요" || fail "update-task — 옛 형식 이전 실패"
+grep -qxF '.ax/tasks/' "$REPO/templates/default/.gitignore.template" \
+    && pass ".gitignore.template — .ax/tasks/ (런타임 상태)" || fail ".gitignore.template — .ax/tasks/ 누락"
+rm -rf "$PT"
+section "62. 훅 출력 예산 — 모델에게 주는 글은 10,000자 상한 아래, 한글 중간에서 안 끊어요"
+# ───────────────────────────────────────────────────────────
+# Claude Code 는 훅의 additionalContext·stdout 이 10,000자를 넘으면 파일로 빼고 앞 2,000자만 보여 줘요.
+# 그 파일을 읽으라고 하지도 않아요. 그래서 주입 훅은 goax_cap_context 로 먼저 줄여요.
+# 최악 입력(50KB 출력 lint · 모듈/룰 수백 개 · 아주 긴 브리핑)을 넣고, 출력이 유효한 JSON 이고 상한 아래인지 봐요.
+if command -v jq >/dev/null 2>&1; then
+    OB=$(mktemp -d)
+    mkdir -p "$OB/.ax/scripts/bash" "$OB/.ax/hooks" "$OB/src" "$OB/.ax/spirit/rules" "$OB/.ax/modules"
+    cp "$REPO/templates/default/.ax/scripts/bash/"*.sh "$OB/.ax/scripts/bash/"; cp -R "$REPO/templates/default/.ax/hooks/"* "$OB/.ax/hooks/"
+    cp "$REPO/templates/default/.ax/config.yml" "$OB/.ax/config.yml"; cp "$REPO/templates/default/.ax/current-task.json.template" "$OB/.ax/current-task.json"
+    : > "$OB/src/a.ts"
+    # 상한 검사 — 유효 JSON · 문자 수 < 10000 · 바이트 수 ≤ 8000 · 깨진 글자(U+FFFD) 없음 · 생략 꼬리 있음
+    ob_check() {   # <이름> <훅 stdout>
+        local name="$1" out="$2" ctx chars bytes
+        ctx=$(printf '%s' "$out" | jq -er '.hookSpecificOutput.additionalContext' 2>/dev/null) \
+            || { fail "$name — 유효한 JSON additionalContext 가 아니에요: $(printf '%s' "$out" | head -c 200)"; return; }
+        chars=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext | length')
+        bytes=$(printf '%s' "$ctx" | LC_ALL=C wc -c | tr -d ' ')
+        if [ "$chars" -lt 10000 ] && [ "$bytes" -le 8000 ] && ! printf '%s' "$ctx" | grep -q $'\xef\xbf\xbd' \
+            && printf '%s' "$ctx" | grep -q '생략'; then
+            pass "$name — 최악 입력에서도 ${chars}자·${bytes}바이트, 유효 JSON, 생략 꼬리"
+        else
+            fail "$name — chars=$chars bytes=$bytes (상한 10000자·8000바이트, 생략 꼬리 필요)"
+        fi
+    }
+    # 헬퍼 단위 — 상한 아래면 그대로, 넘으면 꼬리까지 상한 안 · 바이트 경계가 글자 중간이어도 유효한 UTF-8
+    OBH=$( (source "$REPO/templates/default/.ax/scripts/bash/common.sh"
+        [ "$(printf 'short' | goax_cap_context)" = short ] || echo "짧은 입력이 바뀜"
+        for m in 100 101 102 103; do
+            r=$(awk 'BEGIN{for(i=0;i<20000;i++) printf "가나다"; print ""}' | goax_cap_context "$m" "전체: x")
+            b=$(printf '%s' "$r" | LC_ALL=C wc -c | tr -d ' ')
+            [ "$b" -le "$m" ] || echo "max=$m 인데 $b바이트"
+            printf '%s' "$r" | jq -Rrs . 2>/dev/null | grep -q $'\xef\xbf\xbd' && echo "max=$m 에서 글자가 깨짐"
+            printf '%s' "$r" | tail -1 | grep -q '바이트 생략 — 전체: x$' || echo "max=$m 꼬리 없음: $(printf '%s' "$r" | tail -1)"
+        done) 2>&1)
+    [ -z "$OBH" ] && pass "goax_cap_context — 상한 아래면 그대로, 넘으면 꼬리까지 상한 안 · 3바이트 글자를 반으로 안 잘라요" \
+        || fail "goax_cap_context: $OBH"
+
+    # lint-changed — 50KB 넘게 찍고 실패하는 lint_file 명령
+    cat > "$OB/big-lint.sh" <<'EOF'
+awk 'BEGIN{for(i=0;i<20000;i++) printf "한글"; print ""; for(i=0;i<500;i++) print "src/a.ts:" i " 경고 " i}'
+exit 1
+EOF
+    (cd "$OB" && bash .ax/scripts/bash/config-set.sh --add commands.lint_file '**/*.ts => bash big-lint.sh {file}' >/dev/null)
+    ob_check "lint-changed" "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$OB/src/a.ts" \
+        | CLAUDE_PROJECT_DIR="$OB" bash "$OB/.ax/hooks/post-edit/lint-changed.sh")"
+
+    # module-rules-inject — src/** 에 걸린 모듈 300개
+    i=0; while [ "$i" -lt 300 ]; do
+        mkdir -p "$OB/.ax/modules/module-with-a-fairly-long-name-$i"
+        printf -- '---\napplies_to: [code]\npaths:\n  - "src/**"\n---\n' > "$OB/.ax/modules/module-with-a-fairly-long-name-$i/rules.md"
+        printf -- '---\ncategory: c%s\npaths:\n  - "src/**"\n---\n## SP-C%s-001: x\n' "$i" "$i" > "$OB/.ax/spirit/rules/category-with-a-long-name-$i.md"
+        i=$((i + 1))
+    done
+    ob_check "module-rules-inject" "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"src/a.ts"}}' \
+        | CLAUDE_PROJECT_DIR="$OB" bash "$OB/.ax/hooks/pre-edit/module-rules-inject.sh")"
+    ob_check "spirit-rules-inject" "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"src/a.ts"}}' \
+        | CLAUDE_PROJECT_DIR="$OB" bash "$OB/.ax/hooks/pre-edit/spirit-rules-inject.sh")"
+
+    # session-brief 훅 — 스크립트 상한을 아주 크게 잡은 경우를 흉내 내요 (스크립트를 50KB 를 내는 가짜로)
+    cat > "$OB/.ax/scripts/bash/session-brief.sh" <<'EOF'
+awk 'BEGIN{printf "{\"status\":\"ok\",\"result\":{\"lines\":["; for(i=0;i<1000;i++) printf "%s\"인계 노트 항목 %d — 아주 긴 설명이 붙어 있어요\"", (i?",":""), i; print "]}}"}'
+EOF
+    ob_check "session-brief 훅" "$(printf '{"session_id":"s","source":"startup"}' \
+        | CLAUDE_PROJECT_DIR="$OB" bash "$OB/.ax/hooks/session-start/session-brief.sh")"
+
+    # harness-pointer — 경로 몇 줄이라 자를 일은 없지만, 출력은 유효 JSON 이고 같은 함수를 거쳐요
+    HPO=$(printf '{"agent_type":"Explore"}' | CLAUDE_PROJECT_DIR="$OB" bash "$OB/.ax/hooks/subagent-start/harness-pointer.sh")
+    { [ -z "$HPO" ] || printf '%s' "$HPO" | jq -e '.hookSpecificOutput.additionalContext | length < 10000' >/dev/null; } \
+        && pass "harness-pointer — 유효 JSON · 상한 아래" || fail "harness-pointer 출력: $HPO"
+
+    # block-destructive — heredoc 으로 50KB 를 쓰는 명령 끝에 rm -rf / 가 붙으면 되돌려 주는 원문은 앞부분만
+    BIG=$(awk 'BEGIN{for(i=0;i<20000;i++) printf "가나"}')
+    BDE=$(jq -nc --arg c "cat > f <<'X'
+$BIG
+X
+rm -rf /" '{tool_input:{command:$c}}' | CLAUDE_PROJECT_DIR="$OB" bash "$OB/.ax/hooks/pre-bash/block-destructive.sh" 2>&1 >/dev/null); BDR=$?
+    BDB=$(printf '%s' "$BDE" | LC_ALL=C wc -c | tr -d ' ')
+    [ "$BDR" = 2 ] && [ "$BDB" -lt 2000 ] && printf '%s' "$BDE" | grep -q '생략 — 원문은 방금 보낸 명령 그대로예요' \
+        && pass "block-destructive — 막을 때 되돌려 주는 명령은 앞 600바이트만 (${BDB}바이트)" \
+        || fail "block-destructive 큰 명령: rc=$BDR bytes=$BDB"
+    rm -rf "$OB"
+else
+    pass "§61 — jq 없음, skip"
+fi
+# 정적 — additionalContext 를 내는 훅은 전부 goax_cap_context 를 거쳐요 (stop/ 은 다른 레인이 맡아요)
+OB_MISS=""
+for h in "$REPO"/templates/default/.ax/hooks/*/*.sh; do
+    case "$h" in */stop/*|*/pre-commit/*) continue ;; esac
+    grep -q 'additionalContext:' "$h" || continue
+    grep -q 'goax_cap_context' "$h" || OB_MISS="$OB_MISS $(basename "$(dirname "$h")")/$(basename "$h")"
+done
+[ -z "$OB_MISS" ] && pass "additionalContext 를 내는 훅 전부 goax_cap_context 를 거쳐요" \
+    || fail "goax_cap_context 없이 additionalContext 를 내는 훅:$OB_MISS"
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"

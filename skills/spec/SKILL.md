@@ -1,6 +1,6 @@
 ---
 name: spec
-description: "새 spec 디렉토리 생성 — 'spec 만들어줘', 'goax spec new <slug>', '스펙 작성 시작'. `.ax/docs/spec/<id>-<slug>/`(id = YYYY-MM-DD-<4hex>) 에 size×risk에 맞는 tier(standard/full)만큼만 SDD 산출물 생성. plan.md 폐기 — 설계 결정은 ADR 로. tier override: '--tier standard|full' 또는 자연어 '간단/풀패키지'. 결정론은 .ax/scripts/bash/ 위임. 슬래시로도 호출 가능: '/spec'."
+description: "triage 가 M 이상으로 분류했거나 사용자가 spec 을 새로 쓰자고 할 때 써요 — 새 spec 디렉토리를 만들어요. 트리거: 'spec 만들어줘', '스펙 작성 시작', 'goax spec new <slug>', '/spec', tier 지정('--tier standard|full', '간단', '풀패키지'). 안 쓰는 경우: 이미 있는 spec 을 체크리스트로 쪼개기(spec-tasks), spec 명료성 확인·리뷰(spec-validate), 설계 결정 하나 남기기(adr), 아직 분류 전인 새 작업 요청(triage)."
 ---
 
 # goax spec — 새 SDD 디렉토리 (tier-aware, script-backed)
@@ -142,7 +142,8 @@ NEXT_STEP=$(echo "$RESULT" | jq -r '.next_step')
 ## 3.5. current-task.json 갱신
 
 ```bash
-bash .ax/scripts/bash/update-task.sh --phase spec \
+WORK_ID="${WORK_ID:-}"   # ← 이 대화에서 triage 가 연 작업 id 를 넣어요 (모르면 비워요 — 병렬 작업이 있으면 update-task 가 되물어요)
+bash .ax/scripts/bash/update-task.sh --phase spec ${WORK_ID:+--task "$WORK_ID"} \
  --set "spec_id=$SPEC_ID" --set "spec_dir=$SPEC_DIR" --set "spec_tier=$TIER" --json
 ```
 

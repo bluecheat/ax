@@ -1,6 +1,6 @@
 ---
 name: adr
-description: "ADR (Architecture Decision Record) 작성 워크플로우. 새 결정을 .ax/docs/adr/<id>-<slug>.md로 기록 (id = YYYY-MM-DD-<4hex>). 트리거: '/adr', 'ADR 작성', 'adr', '결정 기록', '아키텍처 결정', 'rationale', '선택의 근거'."
+description: "되돌리기 비싼 설계·아키텍처 결정을 내렸거나 그 근거를 남겨야 할 때 써요. 트리거: '/adr', 'ADR 작성', 'adr', '결정 기록', '아키텍처 결정', 'rationale', '선택의 근거', '왜 이렇게 정했는지 남겨'. 안 쓰는 경우: 기능 단위 요구사항 문서(spec), 실수 기록(mistake)."
 ---
 
 # adr — ADR 작성 워크플로우

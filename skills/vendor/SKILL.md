@@ -1,6 +1,7 @@
 ---
 name: vendor
-description: "goax skill·command·agent 를 저장소에 동봉해서 plugin 설치 없이 팀 전체가 쓰게 만들어요. 모노레포처럼 ADE 루트(.claude/)와 프로젝트 루트(.ax/)가 다른 경우를 자동 처리. 트리거: '/vendor', 'goax 동봉', '플러그인 없이', '팀에 배포', 'vendoring', '스킬 복사', 'goax vendor'."
+description: "goax skill·command·agent 를 저장소에 동봉해 plugin 설치 없이 팀 전체가 쓰게 할 때 써요 (모노레포 포함). 저장소에 파일을 한꺼번에 쓰는 일이라 사용자가 '/vendor' 로 직접 부를 때만 돌아요. 키워드: 'goax 동봉', 'goax vendor', 'vendoring', '플러그인 없이', '팀에 배포'."
+disable-model-invocation: true
 ---
 
 # vendor — 저장소에 goax 동봉

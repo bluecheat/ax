@@ -1,6 +1,6 @@
 ---
 name: spec-implement
-description: "tasks.md 의 - [ ] 항목을 실행하고 완료 시 - [x] 로 마킹 — '구현 시작', 'tasks 실행', 'task 진행', '레인 실행', '레인으로 돌려'. tasks.md 에 레인 배정(`레인:`)이 있으면 코디네이터로 lane-worker 를 띄우고 원장(lanes-dispatch.sh)에 디스패치·보고를 기록해요. 진입 시 tasks-plan.sh violations 검사, 완료 시 tasks-gate.sh G1~G6 + 새 컨텍스트 evaluator 게이트. 실패 시 halt+보고. friction 강도는 .ax/config.yml 의 confirmation 정책으로 결정. 슬래시로도 호출 가능: '/spec-implement'."
+description: "tasks.md 의 미완료 항목(- [ ])을 실제로 실행할 때 써요 — 레인 배정이 끝난 tasks.md 를 돌릴 때도 이 skill 이에요. 트리거: '구현 시작', 'tasks 실행', 'task 진행', '레인 실행', '레인으로 돌려', '/spec-implement'. 안 쓰는 경우: tasks.md 가 아직 없을 때(spec-tasks), 레인을 어떻게 가를지 정할 때(lane), spec 없이 들어온 새 작업 요청 '구현해줘'(triage 가 먼저)."
 ---
 
 # spec-implement — 구현 단계
@@ -73,7 +73,11 @@ CONFLICT_N=$(echo "$LEDGER" | jq '.result.lane_file_conflicts | length')
 멈춰 있어요 (이전 판까지의 실제 결함 — spec-implement 가 phase 를 안 썼어요).
 
 ```bash
-bash .ax/scripts/bash/update-task.sh --phase implementing --json
+# 이 작업의 id 를 진입할 때 한 번 잡아 두고 이후 갱신에 계속 넘겨요. 같은 프로젝트에서 다른 세션이 다른 작업을
+# 열면 current-task.json 의 "지금 작업" 이 바뀌는데, --task 를 주면 내 작업 파일(.ax/tasks/<id>.json)만 고쳐요.
+# triage 가 이 대화에서 연 작업 id 가 우선이에요 — 모를 때만 지금 작업을 읽어요 (그 사이 다른 세션이 바꿨을 수 있어요)
+WORK_ID="${WORK_ID:-$(jq -r '.task_id // empty' .ax/current-task.json 2>/dev/null)}"   # tasks.md 의 T0NN 과 다른 작업 id 예요
+bash .ax/scripts/bash/update-task.sh --phase implementing ${WORK_ID:+--task "$WORK_ID"} --json
 bash .ax/scripts/bash/update-state.sh >/dev/null 2>&1 || true    # HUD 캐시 (review 단계 표시 여부)
 ```
 
@@ -333,7 +337,7 @@ phase 가 `implementing`/`review` 인데 `tasks-gate.sh` 가 아직 실패면, �
 띄우기 전에 phase 를 `review` 로 적어요 — HUD 체인의 `review ●` 가 여기서 켜져요:
 
 ```bash
-bash .ax/scripts/bash/update-task.sh --phase review --json
+bash .ax/scripts/bash/update-task.sh --phase review ${WORK_ID:+--task "$WORK_ID"} --json
 ```
 
 evaluator 가 파일을 직접 써요. 코디네이터는 결과를 받아 적지 않아요 — 받아 적는 순간 검사받는
@@ -346,7 +350,7 @@ evaluator 가 파일을 직접 써요. 코디네이터는 결과를 받아 적�
 if [ "$COMPLETE" = "true" ]; then
  echo "✅ spec $SPEC 구현 완료."
  [ -f "$SPEC_DIR/review.md" ] && echo "  ✅ evaluator verdict: $(head -1 "$SPEC_DIR/review.md")"
- bash .ax/scripts/bash/reset-task.sh >/dev/null 2>&1 || true
+ bash .ax/scripts/bash/reset-task.sh ${WORK_ID:+--task "$WORK_ID"} >/dev/null 2>&1 || true
  echo "  ✅ current-task.json reset → phase=idle"
  bash .ax/scripts/bash/status-note.sh --set now "" --json >/dev/null 2>&1 || true    # 끝난 항목은 지워요 — SSOT 는 git log · ADR
  bash .ax/scripts/bash/status-note.sh --add next "spec $SPEC 완료 — 다음 작업은 triage 부터" --json >/dev/null 2>&1 || true

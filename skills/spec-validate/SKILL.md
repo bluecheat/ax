@@ -1,6 +1,6 @@
 ---
 name: spec-validate
-description: "spec 명료성 게이팅 + 합의 리뷰 + 진행률 visibility — 'spec 확인', 'goax spec check', '스펙 게이트', '합의 리뷰', 'spec 리뷰', '--consensus'. spec.md 의 NEEDS CLARIFICATION + placeholder `<...>` + 빈 필수 섹션 3 항목을 게이팅하고, 그 뒤 size L/XL 은 architect·evaluator 를 새 컨텍스트로 병렬·독립 리뷰(검토 범위가 달라요 — architect 는 구조·대안, evaluator 는 AC·코드 현실; spec-review.sh 가 리뷰어별 verdict 파일과 sha 를 집계하고 재리뷰는 --delta 로 바뀐 곳만, 통과 뒤 오타는 --fixup), M 은 '--consensus' 로 선택. tasks.md 진행률 + AC 진행률을 visibility 로 노출. 슬래시로도 호출 가능: '/spec-validate'."
+description: "spec 을 tasks 분해·구현으로 넘기기 전에 명료한지 확인하거나 합의 리뷰를 받을 때, 또는 spec 의 tasks·AC 진행률을 볼 때 써요. size L/XL spec 은 넘기기 전에 꼭 거쳐요. 트리거: 'spec 확인', 'spec 리뷰', '스펙 게이트', '합의 리뷰', 'goax spec check', '--consensus', 'spec 진행률', '/spec-validate'. 안 쓰는 경우: spec 을 새로 만들 때(spec), 구현이 끝난 코드의 완료 확인(spec-implement), 하네스 설치 상태 점검(doctor)."
 ---
 
 # goax spec-validate — 명료성 게이팅 + 진행률 visibility
@@ -252,11 +252,12 @@ bash .ax/scripts/bash/update-state.sh --skill spec-validate   # canonical(derive
 명료성 통과 **그리고** 합의 리뷰 통과(필수일 때) 시 phase 진행, 미해소 시 blocked_by 기록 → 다음 skill (`spec-tasks` / `spec-implement`) 이 phase 보고 차단:
 
 ```bash
+WORK_ID="${WORK_ID:-}"   # ← 이 대화에서 triage 가 연 작업 id 를 넣어요 (모르면 비워요 — 병렬 작업이 있으면 update-task 가 되물어요)
 # 통과 — 명료성 + (required 면) spec-review pass
-bash .ax/scripts/bash/update-task.sh --phase spec_checked --blocked-by '[]' --json
+bash .ax/scripts/bash/update-task.sh --phase spec_checked ${WORK_ID:+--task "$WORK_ID"} --blocked-by '[]' --json
 bash .ax/scripts/bash/update-state.sh >/dev/null 2>&1 || true     # HUD: spec ✓ › tasks ●
 
 # 미해소 — blocked_by 에 위치/카테고리 기록 (합의 리뷰 미통과도 여기)
 BLOCKED='["spec.md:42 NEEDS","spec.md:18 placeholder","review-spec: evaluator 보강 필요"]'
-bash .ax/scripts/bash/update-task.sh --phase spec_blocked --blocked-by "$BLOCKED" --json
+bash .ax/scripts/bash/update-task.sh --phase spec_blocked ${WORK_ID:+--task "$WORK_ID"} --blocked-by "$BLOCKED" --json
 ```

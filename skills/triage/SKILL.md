@@ -1,6 +1,6 @@
 ---
 name: triage
-description: "사용자가 새 작업·기능·수정·리팩토링·버그 fix를 요청할 때 가장 먼저 자동 매칭되는 skill. Size × Risk로 30초 안에 분류하고 spirit·룰·페르소나를 자동 주입. 트리거: '구현해줘', '만들어줘', '작업 계획', '어떻게 만들지', '고쳐줘', '추가해줘', '바꿔줘', '리팩토링', '리팩터링', 'fix', '버그', '기능 추가', 'PR 만들어', '작업하자', '/triage', 'classify', 새 대화 첫 메시지에서 작업 의도가 보이면 자동 발동. EnterPlanMode 안에서도 1회 호출 필수."
+description: "새 작업 요청이 들어오면 코드를 건드리기 전에 가장 먼저 써요 — 기능 추가·수정·버그 fix·리팩토링 요청을 Size×Risk 로 분류해요. 트리거: '구현해줘', '만들어줘', '고쳐줘', '추가해줘', '바꿔줘', '리팩토링', '리팩터링', 'fix', '버그', '기능 추가', '작업 계획', '어떻게 만들지', 'PR 만들어', '작업하자', '/triage', 'classify'. 새 대화 첫 메시지에 작업 의도가 보이면 바로, EnterPlanMode 안에서도 한 번 써요. 안 쓰는 경우: 설명·질문만 하는 대화, 이미 분류된 작업의 spec 만들기(spec), tasks.md 실행('구현 시작' — spec-implement), 빈 리포에서 새 제품 정의(zero), 실수 기록(mistake)."
 ---
 
 # Triage Skill
@@ -197,7 +197,7 @@ M×L2 에서 사용자가 합의 리뷰를 켜면 `intent_notes.consensus_review
 분류 직후 `.ax/current-task.json`에 작업 컨텍스트를 기록해요. spec/spec-tasks/spec-implement/audit 이 이 파일을 *입력*으로 받음 (LLM 재추론 X).
 
 ```bash
-TASK_ID=$(date -u +%Y-%m-%d)-$(printf '%03d' $((RANDOM % 1000)))
+TASK_ID=$(date -u +%Y-%m-%d)-$(od -An -N2 -tx1 /dev/urandom | tr -d ' \n')   # 4hex — 같은 날 병렬 작업끼리 안 겹치게
 INTENT_JSON='{}'   # 0단계 답변 — 축별 객체 (예: '{"why":"버그 수정 — 환불 실패"}'), 스킵 시 {}
                    # M×L2 모호 영역에서 합의 리뷰를 켰으면 '{"consensus_review":"true"}' 도 병합
 
@@ -211,12 +211,19 @@ bash .ax/scripts/bash/update-task.sh --start --phase triaged \
 # 사용자가 이 작업의 확인 강도를 말했으면 같이 적어요 (아래 "friction — 자연어로 받아요"). spec-implement 가
 # config.yml 의 confirmation.mode 대신 이 값을 읽어요 (L3 는 여전히 override).
 # 말하지 않았으면 적지 않아요 — 기본값을 여기서 정하면 사용자가 config 를 바꿔도 반영되지 않아요.
-[ -n "${FRICTION:-}" ] && bash .ax/scripts/bash/update-task.sh --set "friction=$FRICTION" --json
+[ -n "${FRICTION:-}" ] && bash .ax/scripts/bash/update-task.sh --task "$TASK_ID" --set "friction=$FRICTION" --json
 
 # 계획은 어디서 세워도 돼요 (OMC plan · 다른 plan 도구 · 사람이 쓴 문서). 이 작업의 계획 문서가 있으면 경로를 적어요 —
 # spec 이 "원 계획" 으로 링크하고, spec 부터는 goax 가 관리해요. M 이상은 계획 문서가 있어도 spec 디렉토리를 만들어요.
-[ -n "${PLAN_DOC:-}" ] && bash .ax/scripts/bash/update-task.sh --set "plan_doc=$PLAN_DOC" --json
+[ -n "${PLAN_DOC:-}" ] && bash .ax/scripts/bash/update-task.sh --task "$TASK_ID" --set "plan_doc=$PLAN_DOC" --json
 ```
+
+**진행 중인 작업이 이미 있으면** (`phase` 가 `idle` 이 아니면) 새 작업을 `--start` 로 열어도 앞 작업은 사라지지 않아요 —
+작업마다 `.ax/tasks/<task_id>.json` 에 남고, current-task.json 은 지금 작업의 사본이에요. 앞 작업으로 돌아갈 땐
+`update-task.sh --task <id> --activate`, 다른 세션의 작업을 건드리지 않고 내 작업만 고칠 땐 `--task <id>` 를 붙여요.
+같은 작업을 이어 하는 거면 `--start` 하지 않아요 (같은 id 로 `--start` 하면 거부돼요).
+**작업 id 를 사용자에게 한 번 보여주고 이 대화 내내 기억해요** — spec · spec-tasks · spec-validate · spec-implement 가
+`--task <id>` 로 넘겨요. 병렬 작업이 있는데 `--task` 가 없으면 update-task 가 덮지 않고 되물어요.
 
 이후 spec 이 `.ax/scripts/bash/tier-from-state.sh --json`로 tier 자동 결정.
 
@@ -266,7 +273,7 @@ bash .ax/scripts/bash/update-task.sh --start --phase triaged \
 ### 종료 후 — intent_notes 병합
 
 ```bash
-bash .ax/scripts/bash/update-task.sh --merge-intent "$REVERSE_INTERVIEW_JSON" --json   # 같은 키면 새 값이 우선해요
+bash .ax/scripts/bash/update-task.sh --merge-intent "$REVERSE_INTERVIEW_JSON" --task "$TASK_ID" --json   # 같은 키면 새 값이 우선해요
 ```
 
 spec/spec-tasks 는 이 `intent_notes` 를 입력으로 받아 §3 acceptance criteria 와 §7.5 Technical Context 를 채워요 — 재질문·재추론하지 않아요.

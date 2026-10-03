@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: "goax 설치 상태 진단 — 'goax doctor', 'goax 진단', '하네스 점검', 'goax 상태', 'spirit 점검', 'spirit lint', 'rules 보여줘', '룰 인덱스', 'CRITICAL 룰만' 트리거. 4계층 + cross-cut + sensors 결손, Spirit 무결성, 룰 통합 인덱스, 룰이 실제로 세션에 닿는지(도달 지도)를 스크립트로 검사하고 다음 단계를 안내. 슬래시로도 호출 가능: '/doctor'."
+description: "goax 가 이 프로젝트에 제대로 깔려 돌아가는지 의심될 때, 또는 지금 걸린 룰과 spirit 을 훑어볼 때 써요. 트리거: 'goax doctor', 'goax 진단', '하네스 점검', 'goax 상태', '훅이 안 돌아', 'spirit 점검', 'spirit lint', 'rules 보여줘', '룰 인덱스', 'CRITICAL 룰만', '/doctor'. 안 쓰는 경우: 아직 설치 전이거나 새 버전으로 맞출 때(up), 실수 회고·룰 승격(audit), spec 문서 점검(spec-validate)."
 ---
 
 # goax doctor — 4계층 결손 진단

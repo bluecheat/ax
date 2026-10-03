@@ -41,6 +41,61 @@ function clip(s, n,   nw, w, out, cand, i) {
 }
 '
 
+# ─── 훅이 모델에게 주는 글의 길이 상한 — goax_cap_context ───────────────
+# printf '%s' "$CTX" | goax_cap_context [최대 바이트] [전체를 볼 곳]
+#   Claude Code 는 훅의 additionalContext·systemMessage·stdout 이 10,000자를 넘으면 파일로 빼고 앞 2,000자만
+#   보여 줘요. 그 파일을 읽으라고 하지도 않아요. 그래서 훅이 먼저 그 아래로 줄여요.
+#   상한은 바이트로 재요. 바이트 수는 글자 수보다 작을 수 없어서 로케일과 상관없이 글자 상한도 지켜져요.
+#   기본은 GOAX_CONTEXT_MAX(8000). 넘으면 "… N바이트 생략 — <볼 곳>" 꼬리까지 합쳐 상한 안에 들어오게 자르고,
+#   멀티바이트 글자 중간에서는 끊지 않아요. 자를 자리 가까이에 줄바꿈이 있으면 거기서 끊어요.
+#   끝 줄바꿈은 지워져요 (`$(...)` 와 같아요).
+goax_cap_context() {
+    local max="${1:-}" where="${2:-}" s n lines tail k cut cn pre pn drop i b need om ol
+    case "$max" in ''|*[!0-9]*) max="${GOAX_CONTEXT_MAX:-8000}" ;; esac
+    case "$max" in ''|*[!0-9]*) max=8000 ;; esac
+    s=$(cat)
+    n=$(printf '%s' "$s" | LC_ALL=C wc -c | tr -d ' ')
+    if [ "$n" -le "$max" ]; then printf '%s\n' "$s"; return 0; fi
+    lines=$(printf '%s\n' "$s" | wc -l | tr -d ' ')
+    # 꼬리 길이는 생략 수의 자릿수에 달려요 — 전체 크기로 위쪽 어림을 잡아요
+    tail="… ${n}바이트·${lines}줄 생략${where:+ — $where}"
+    k=$(( max - $(printf '%s' "$tail" | LC_ALL=C wc -c | tr -d ' ') - 1 ))
+    [ "$k" -lt 0 ] && k=0
+    # 파이프(`printf | head -c`)로 자르면 큰 입력에서 printf 가 SIGPIPE 로 "Broken pipe" 를 stderr 에 찍어요 —
+    # C 로케일 서브셸의 바이트 단위 부분 문자열로 잘라요
+    cut=$(LC_ALL=C; printf '%s' "${s:0:$k}")
+    cn=$(printf '%s' "$cut" | LC_ALL=C wc -c | tr -d ' ')
+    pre="${cut%$'\n'*}"
+    if [ "$pre" != "$cut" ]; then
+        pn=$(printf '%s' "$pre" | LC_ALL=C wc -c | tr -d ' ')
+        [ $((pn * 4)) -ge $((cn * 3)) ] && { cut="$pre"; cn="$pn"; }
+    fi
+    # 끝에 반쯤 잘린 UTF-8 글자가 있으면 그 바이트들을 버려요
+    # shellcheck disable=SC2046
+    set -- $(printf '%s' "$cut" | LC_ALL=C tail -c 4 | od -An -tu1)
+    drop=0; i=$#
+    while [ "$i" -gt 0 ]; do
+        b="${!i}"
+        if [ "$b" -lt 128 ]; then break; fi
+        if [ "$b" -ge 192 ]; then
+            need=2; [ "$b" -ge 224 ] && need=3; [ "$b" -ge 240 ] && need=4
+            [ $(( $# - i + 1 )) -lt "$need" ] && drop=$(( $# - i + 1 ))
+            break
+        fi
+        i=$((i - 1))
+    done
+    if [ "$drop" -gt 0 ]; then
+        cn=$((cn - drop))
+        cut=$(LC_ALL=C; printf '%s' "${cut:0:$cn}")
+    fi
+    om=$((n - cn))
+    ol=$(( lines - $(printf '%s\n' "$cut" | wc -l | tr -d ' ') ))
+    [ "$ol" -lt 0 ] && ol=0
+    if [ "$ol" -gt 0 ]; then tail="… ${om}바이트·${ol}줄 생략${where:+ — $where}"
+    else tail="… ${om}바이트 생략${where:+ — $where}"; fi
+    printf '%s\n%s\n' "$cut" "$tail"
+}
+
 # Exit codes
 EXIT_OK=0
 EXIT_ERROR=1
@@ -1192,6 +1247,17 @@ goax_rule_contracts() {
         /^[^[:space:]]/ { cur = "" }
     ' "$file"
 }
+
+# ─── 작업별 상태 — .ax/tasks/<task_id>.json ─────────────────────────────
+# 작업 하나 = 파일 하나예요. current-task.json 은 **지금 작업**의 사본(최상위 task 필드)과 handoff 를 들고
+# 있어서, 읽는 쪽(HUD · 게이트 · triage)은 예전처럼 current-task.json 만 보면 돼요. 병렬 작업이면 각자
+# update-task.sh --task <id> 로 자기 파일만 갱신하고, 지금 작업이 아닌 쪽은 current-task.json 을 건드리지 않아요.
+#   goax_task_key <id>          파일 이름에 쓸 키 ([[:alnum:]_.-] 밖은 `_`)
+#   goax_task_path <root> <id>  <root>/.ax/tasks/<key>.json
+#   GOAX_TASK_FIELDS            작업 필드 — 지금 작업을 바꿀 때 current-task.json 에서 지우고 새 작업 것으로 채워요
+GOAX_TASK_FIELDS='["task_id","description","size","risk","domain","spec_id","spec_dir","spec_tier","plan_doc","friction","started_at","updated_at","phase","intent_notes","blocked_by"]'
+goax_task_key() { printf '%s' "${1:-}" | tr -c '[:alnum:]_.-' '_'; }
+goax_task_path() { printf '%s/.ax/tasks/%s.json' "${1:-.}" "$(goax_task_key "${2:-}")"; }
 
 # goax_glob_owners <path>
 #   stdin `<label>\t<glob>` 줄 중 glob 이 path 에 맞는 label 을 처음 나온 순서대로 한 번씩 출력.

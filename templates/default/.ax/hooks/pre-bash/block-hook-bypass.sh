@@ -48,7 +48,9 @@ fi
 [ -z "$REASON" ] && exit 0
 
 printf '\033[31m[goax hook]\033[0m 🚫 git 훅 우회 차단: %s\n' "$REASON" >&2
-printf '명령: %s\n' "$CMD" >&2
+# 막을 때 되돌려 주는 명령 원문 — heredoc 으로 큰 파일을 쓰는 명령이면 수십 KB 가 그대로 다시 들어가요. 앞부분만.
+cmd_shown() { printf '%s' "$CMD" | goax_cap_context 600 "원문은 방금 보낸 명령 그대로예요"; }
+printf '명령: %s\n' "$(cmd_shown)" >&2
 printf '프로젝트의 git 훅은 룰 집행 장치예요 (enforced_by: hook:* · external:*). 에이전트가 끄면 집행이 사라져요.\n' >&2
 printf '훅이 실패했다면 그 원인을 고치세요. 정말 우회해야 하면 사용자에게 직접 실행해 달라고 요청하세요 (프롬프트에서 `! <명령>`).\n' >&2
 exit 2

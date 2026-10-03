@@ -3,7 +3,9 @@
 #
 # Usage:
 #   bash tier-from-state.sh [--json] [--size S|M|L|XL] [--risk L0|L1|L2|L3] [--help]
-#   bash tier-from-state.sh --reset [--json]   # current-task.json → idle (handoff 는 남겨요)
+#   bash tier-from-state.sh --reset [--task <id>] [--json]   # 작업을 끝내요 — 그 작업의 .ax/tasks/<id>.json 을 지우고,
+#                                                            # 지금 작업이면 current-task.json 도 idle 로 (handoff 는 남겨요).
+#                                                            # --task 가 지금 작업이 아니면 current-task.json 은 그대로예요
 #
 # 우선순위:
 #   1. CLI --size --risk 인자
@@ -37,11 +39,15 @@ SHOW_HELP=false
 SIZE_ARG=""
 RISK_ARG=""
 RESET=false
+TASK_OPT=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --json)    JSON_MODE=true ;;
         --reset)   RESET=true ;;
+        --task)    # 다음 토큰이 옵션(--json 등)이면 삼키지 않아요 — 삼키면 오류가 JSON 봉투 없이 나가요
+                   if [ $# -lt 2 ] || [ "${2#--}" != "$2" ] || [ -z "${2:-}" ]; then goax_error "--task 의 값이 비었어요 — 작업 id 를 줘요"; exit "$EXIT_ERROR"; fi
+                   shift; TASK_OPT="$1" ;;
         --help|-h) SHOW_HELP=true ;;
         --size)    shift; SIZE_ARG="${1:-}" ;;
         --risk)    shift; RISK_ARG="${1:-}" ;;
@@ -80,6 +86,35 @@ if [ "$RESET" = true ]; then
         MSG="다른 프로세스가 .ax/current-task.json 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
         if [ "$JSON_MODE" = true ]; then json_error "$MSG"; fi
         goax_error "$MSG"; exit "$EXIT_ERROR"
+    fi
+    ACTIVE=$(jq -r '.task_id // empty' "$TASK_FILE" 2>/dev/null || true)
+    TARGET="${TASK_OPT:-$ACTIVE}"
+    # 작업 파일 — 끝낸 작업은 지워요 (무엇을 했는지는 git log · ADR 이 원본이에요). 락 순서는 current-task → 작업 파일
+    if [ -n "$TARGET" ]; then
+        TF=$(goax_task_path "$PROJECT_ROOT" "$TARGET")
+        if [ -n "$TASK_OPT" ] && [ "$TARGET" != "$ACTIVE" ] && [ ! -f "$TF" ]; then
+            goax_unlock "$LOCK"
+            MSG="작업 ${TARGET} 이 없어요 (${TF#"$PROJECT_ROOT"/}) — 진행 중 작업은 session-brief.sh 가 보여줘요"
+            if [ "$JSON_MODE" = true ]; then json_error "$MSG"; fi
+            goax_error "$MSG"; exit "$EXIT_ERROR"
+        fi
+        TLOCK="$(goax_normalize_path "$TF" "$PROJECT_ROOT").lock"
+        if ! goax_lock "$TLOCK" "${GOAX_LOCK_TIMEOUT:-10}"; then
+            goax_unlock "$LOCK"
+            MSG="다른 프로세스가 ${TF#"$PROJECT_ROOT"/} 을 쓰는 중이에요 — 잠시 뒤 다시 해요 (남은 락이면 ${TLOCK#"$PROJECT_ROOT"/} 를 지워요)"
+            if [ "$JSON_MODE" = true ]; then json_error "$MSG"; fi
+            goax_error "$MSG"; exit "$EXIT_ERROR"
+        fi
+        rm -f "$TF"; goax_unlock "$TLOCK"
+    fi
+    if [ -n "$TASK_OPT" ] && [ "$TARGET" != "$ACTIVE" ]; then
+        goax_unlock "$LOCK"
+        if [ "$JSON_MODE" = true ]; then
+            json_output "ok" "$(jq -nc --arg t "$TARGET" '{reset:true, task_id:$t, active:false}')" "작업 ${TARGET} 을 끝냈어요 — 지금 작업은 ${ACTIVE:-없음} 그대로예요"
+        else
+            echo "[goax] 작업 ${TARGET} 끝 — 지금 작업(${ACTIVE:-없음})은 그대로"
+        fi
+        exit "$EXIT_OK"
     fi
     jq '.task_id = null
         | .description = null
