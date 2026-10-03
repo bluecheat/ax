@@ -12,6 +12,8 @@
 #   게이트가 그냥 성가신 게 되고, 결국 우회 대상이 돼요.
 #
 # 진행 중인 spec 이 없으면(phase=idle) 조용히 통과. 커밋마다 떠들지 않아요.
+# 스테이지 파일이 그 spec 에 안 걸리면(spec 디렉토리 밖 · tasks.md `files:` 와 무관) 한 줄만 내고 통과해요 —
+# mode=fail 에서도요. 막는 건 그 spec 을 건드리는 커밋이에요.
 set -uo pipefail
 
 [ -d "${CLAUDE_PROJECT_DIR:-$(pwd)}/.ax/hooks" ] || exit 0
@@ -60,6 +62,38 @@ VERDICT=$(printf '%s' "$OUT" | jq -r '.result.review_verdict // ""')
 VIOL=$(printf '%s' "$OUT" | jq -r '.result.violations // 0')
 
 [ "${VIOL:-0}" -eq 0 ] && exit 0
+
+# 이번 커밋이 그 spec 에 걸릴 때만 자세히 말해요. 무관한 커밋(문서 한 줄)마다 같은 경고가 나오면
+# 아무도 읽지 않게 되고, 정작 그 spec 을 커밋할 때의 경고도 묻혀요 (실측: 커밋마다 반복).
+# 걸린다 = 스테이지 파일이 spec 디렉토리 안이거나, tasks.md 의 `files:` 경로(파일 또는 디렉토리)와 겹쳐요.
+SPEC_DIR_REL=".ax/docs/spec/$SPEC"
+STAGED=$(git -C "$PROJECT_ROOT" -c core.quotePath=false diff --cached --name-only 2>/dev/null || true)
+if [ -n "$SPEC" ] && [ -n "$STAGED" ]; then
+    TASK_PATHS=""
+    if [ -f "$PROJECT_ROOT/$SPEC_DIR_REL/tasks.md" ]; then
+        # 펜스 안은 형식 설명이에요 — 템플릿 예시 `path/a.kt` 를 실제 경로로 세지 않아요
+        TASK_PATHS=$(awk '
+            /^[[:space:]]*```/ { fence = !fence; next }
+            fence { next }
+            /^- \[[ x~X]\] / && match($0, /files:[ ]*/) {
+                n = split(substr($0, RSTART + RLENGTH), a, ",")
+                for (i = 1; i <= n; i++) {
+                    p = a[i]; gsub(/^[ `]+|[ `]+$/, "", p); sub(/^\.\//, "", p); gsub(/\/+/, "/", p); sub(/\/$/, "", p)
+                    if (p != "") print p
+                }
+            }' "$PROJECT_ROOT/$SPEC_DIR_REL/tasks.md")
+    fi
+    # 경로 목록은 ENVIRON 으로 넘겨요 — 줄바꿈이 든 값을 -v 로 주면 mawk 가 거부해요
+    RELATED=$(printf '%s\n' "$STAGED" | GOAX_TP="$TASK_PATHS" awk -v sd="$SPEC_DIR_REL" '
+        BEGIN { n = split(ENVIRON["GOAX_TP"], P, "\n") }
+        { s = $0
+          if (index(s, sd "/") == 1) { print s; exit }
+          for (i = 1; i <= n; i++) if (P[i] != "" && (s == P[i] || index(s, P[i] "/") == 1)) { print s; exit } }')
+    if [ -z "$RELATED" ]; then
+        printf '\033[33m[goax gate]\033[0m spec %s 미완료 %s — 이번 커밋과 무관해 건너뛰어요\n' "$SPEC" "$OPEN" >&2
+        exit 0
+    fi
+fi
 
 printf '\033[33m[goax gate]\033[0m spec %s — %s/%s 완료' "$SPEC" "$DONE" "$TOTAL" >&2
 [ "${PAUSED:-0}" -gt 0 ] && printf ' (보류 %s)' "$PAUSED" >&2

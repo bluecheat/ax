@@ -1661,6 +1661,29 @@ OUT_H2=$(CLAUDE_PROJECT_DIR=$TGH bash "$TGH/.ax/hooks/pre-commit/spec-completion
 [ -z "$OUT_H2" ] && [ "$RC_H2" -eq 0 ] \
     && pass "spec-completion-gate — phase=triaged·spec 없음이면 jq 에러 없이 조용히 통과" \
     || fail "spec-completion-gate — triaged·spec 없음인데 출력함(exit $RC_H2): $OUT_H2"
+
+# 스테이지 파일이 그 spec 에 안 걸리면 한 줄만 내고 통과 (mode=fail 에서도) — 커밋마다 같은 경고가
+# 반복되면 아무도 안 읽어요. 걸리는 커밋(spec 디렉토리 · tasks.md files: 경로)만 자세히 말하고 막아요
+mkdir -p "$TGH/.ax/docs/spec/012-x" "$TGH/src/feat"
+printf '## 3. \n- [ ] **AC1** a\n- [ ] **AC2** b\n' > "$TGH/.ax/docs/spec/012-x/spec.md"
+printf -- '```\n- [ ] T000 예시 — files: README.md\n```\n- [x] T001 [AC1] a — files: src/a.ts\n- [ ] T002 [AC2] b — files: ./src/feat/\n' > "$TGH/.ax/docs/spec/012-x/tasks.md"
+echo '{"phase":"implementing","spec_dir":".ax/docs/spec/012-x"}' > "$TGH/.ax/current-task.json"
+printf 'sensors:\n  mode: fail\n' > "$TGH/.ax/config.yml"
+echo x > "$TGH/README.md"; echo x > "$TGH/src/a.ts"; echo x > "$TGH/src/feat/b.ts"; echo x > "$TGH/src/feature.ts"
+git -C "$TGH" init -q 2>/dev/null
+scg() { git -C "$TGH" reset -q 2>/dev/null; git -C "$TGH" add -- "$@" 2>/dev/null
+        OUT_S=$(cd "$TGH" && CLAUDE_PROJECT_DIR=$TGH bash "$TGH/.ax/hooks/pre-commit/spec-completion-gate.sh" 2>&1); RC_S=$?; }
+scg README.md src/feature.ts
+if [ "$RC_S" -eq 0 ] && [ "$(printf '%s\n' "$OUT_S" | grep -c .)" -eq 1 ] && printf '%s' "$OUT_S" | grep -q '무관해 건너뛰어요'; then
+    pass "spec-completion-gate — 무관한 커밋은 한 줄만 · mode=fail 에서도 통과 (펜스 안 예시 경로 · src/feat 접두 오인 없음)"
+else fail "spec-completion-gate — 무관한 커밋인데 rc=$RC_S: $OUT_S"; fi
+scg src/feat/b.ts
+[ "$RC_S" -eq 2 ] && printf '%s' "$OUT_S" | grep -q '미완료 task' \
+    && pass "spec-completion-gate — tasks.md files: 디렉토리 아래 파일을 스테이지하면 자세히 · 차단" \
+    || fail "spec-completion-gate — files: 경로 커밋인데 rc=$RC_S: $OUT_S"
+scg .ax/docs/spec/012-x/tasks.md
+[ "$RC_S" -eq 2 ] && pass "spec-completion-gate — spec 디렉토리 파일을 스테이지하면 차단" \
+    || fail "spec-completion-gate — spec 디렉토리 커밋인데 rc=$RC_S: $OUT_S"
 rm -rf "$TGH"
 
 # ───────────────────────────────────────────────────────────
