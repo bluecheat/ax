@@ -85,9 +85,9 @@ fi
 
 if [ ! -f "$TARGET" ]; then
     if [ "$JSON_MODE" = true ]; then
-        json_error "file not found: $TARGET"
+        json_error "파일이 없어요: $TARGET — spec 목록은 ls .ax/docs/spec/ · --spec <id> 로 주면 그 spec.md 를 찾아요"
     else
-        goax_error "file not found: $TARGET"
+        goax_error "파일이 없어요: $TARGET — spec 목록은 ls .ax/docs/spec/ · --spec <id> 로 주면 그 spec.md 를 찾아요"
         exit "$EXIT_ERROR"
     fi
 fi

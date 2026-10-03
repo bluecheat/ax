@@ -132,7 +132,7 @@ if [ "$MODE" = apply ] && { [ -n "$MISSING" ] || [ -n "$STALE" ]; }; then
                                           | map(select((.hooks | length) > 0))))
                 | with_entries(select((.value | length) > 0))) as $kept
             | .hooks = (reduce ($exp | to_entries[]) as $e ($kept; .[$e.key] = ((.[$e.key] // []) + $e.value)))' > "$TMP"; then
-            rm -f "$TMP"; goax_unlock "$LOCK"; goax_error "settings 병합 실패 — 아무것도 안 바꿨어요"; exit "$EXIT_ERROR"
+            rm -f "$TMP"; goax_unlock "$LOCK"; goax_error "settings 병합 실패 — 아무것도 안 바꿨어요. 현재 상태는 bash .ax/scripts/bash/ade-settings.sh --check --json"; exit "$EXIT_ERROR"
         fi
         mv "$TMP" "$SETTINGS"
         goax_unlock "$LOCK"

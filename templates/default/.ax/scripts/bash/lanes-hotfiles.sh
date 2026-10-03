@@ -85,8 +85,9 @@ fi
 
 TASKS="$PROJECT_ROOT/.ax/docs/spec/$SPEC/tasks.md"
 if [ ! -f "$TASKS" ]; then
-    if [ "$JSON_MODE" = true ]; then json_error "tasks.md 를 찾을 수 없어요: .ax/docs/spec/${SPEC:-<없음>}/tasks.md"; fi
-    goax_error "no tasks.md for spec '${SPEC:-<none>}'"; exit "$EXIT_ERROR"
+    NO_TASKS="tasks.md 를 찾을 수 없어요: .ax/docs/spec/${SPEC:-<없음>}/tasks.md — spec-tasks skill 로 만들거나 bash .ax/scripts/bash/add-spec-files.sh --spec ${SPEC:-<id>} --add tasks"
+    if [ "$JSON_MODE" = true ]; then json_error "$NO_TASKS"; fi
+    goax_error "$NO_TASKS"; exit "$EXIT_ERROR"
 fi
 
 # 파싱 — tasks-plan.sh 와 같은 한 줄 형식을 읽어요: "ID|state|P|files(,)"

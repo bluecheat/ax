@@ -52,8 +52,9 @@ PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
 cd "$PROJECT_ROOT"
 
 if [ ! -d ".git" ] && [ ! -f ".git" ]; then
-    if [ "$JSON_MODE" = true ]; then json_error "not a git repository: $PROJECT_ROOT"
-    else goax_error "not a git repository: $PROJECT_ROOT"; exit "$EXIT_ERROR"; fi
+    NO_GIT="git 저장소가 아니에요: $PROJECT_ROOT — git init 뒤 다시 실행하세요 (git 없이는 pre-commit 집행이 없어요)"
+    if [ "$JSON_MODE" = true ]; then json_error "$NO_GIT"
+    else goax_error "$NO_GIT"; exit "$EXIT_ERROR"; fi
 fi
 
 GIT_DIR=$(git -C "$PROJECT_ROOT" rev-parse --git-dir 2>/dev/null) || GIT_DIR=".git"

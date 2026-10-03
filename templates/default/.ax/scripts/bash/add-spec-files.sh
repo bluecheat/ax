@@ -62,7 +62,7 @@ if [ "$RC" -eq 2 ]; then
     goax_error "--spec '$SPEC' 이 여러 spec 에 걸려요: ${GOAX_SPEC_CANDIDATES} — 하나를 정확히 적으세요"
     exit "$EXIT_ERROR"
 elif [ "$RC" -ne 0 ]; then
-    goax_error "spec not found: $SPEC"
+    goax_error "spec 을 못 찾았어요: '$SPEC' — 목록은 ls .ax/docs/spec/ · 새 spec 은 spec skill 로 먼저 만들어요"
     exit "$EXIT_ERROR"
 fi
 SPEC_DIR="$PROJECT_ROOT/.ax/docs/spec/$RESOLVED"
