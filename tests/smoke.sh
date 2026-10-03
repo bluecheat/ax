@@ -3219,6 +3219,35 @@ else
         | jq -e '.decision=="block"' >/dev/null 2>&1 \
         && pass "stop 게이트 — 24시간 지난 인계 노트는 불인정 (영구 통과증 아님)" || fail "stop 게이트 — 오래된 노트로 영구 통과"
 
+    # spec ID 로 적은 인계 노트도 인정 — 다른 스크립트의 --spec 처럼. 전체 이름만 찾던 때는
+    # "spec 2026-10-03-1b92 implementing" 이라고 적어도 한 번 더 막았어요 (실측)
+    sg() { printf '{"session_id":"%s","stop_hook_active":false}' "$1" | CLAUDE_PROJECT_DIR="$ST" bash "$ST/.ax/hooks/stop/spec-gate.sh" 2>/dev/null; }
+    note() { CLAUDE_PROJECT_DIR="$ST" bash "$ST/.ax/scripts/bash/status-note.sh" --set now "$1" --json >/dev/null 2>&1; }
+    note "spec 014 에서 멈춤 — T001"
+    [ -z "$(sg i1)" ] && pass "stop 게이트 — 옛 순번 ID(014)로 적은 노트도 인정" || fail "stop 게이트 — 옛 순번 ID 노트를 무시"
+    note "T0140 작업 중 · 2014 년 자료"
+    sg i2 | jq -e '.decision=="block"' >/dev/null 2>&1 \
+        && pass "stop 게이트 — ID 는 경계가 있을 때만 (T0140·2014 는 014 가 아니에요)" || fail "stop 게이트 — 014 가 T0140 에 걸림"
+    mkdir -p "$ST/.ax/docs/spec/2026-10-03-1b92-sharing-web"
+    cp "$ST/.ax/docs/spec/014-x/"{spec,tasks}.md "$ST/.ax/docs/spec/2026-10-03-1b92-sharing-web/"
+    echo '{"phase":"implementing","spec_dir":".ax/docs/spec/2026-10-03-1b92-sharing-web","size":"M","risk":"L1"}' > "$ST/.ax/current-task.json"
+    SG_R=$(sg i3 | jq -r '.reason // empty')
+    case "$SG_R" in
+        *'--set now "spec 2026-10-03-1b92 implementing'*'spec ID(2026-10-03-1b92)'*)
+            pass "stop 게이트 — 안내 문구의 예시가 spec ID 로 (ID 로 적으면 통과한다고 알림)" ;;
+        *) fail "stop 게이트 — 안내 문구에 ID 예시 없음: ${SG_R:0:200}" ;;
+    esac
+    note "spec 2026-10-03-1b92 implementing — T001 까지"
+    I4=$(sg i4); note "2026-10-03-1b92에서 멈춤"; I5=$(sg i5)
+    note "spec 2026-10-03-1b92-sharing-web 에서 멈춤"; I6=$(sg i6)
+    [ -z "$I4" ] && [ -z "$I5" ] && [ -z "$I6" ] \
+        && pass "stop 게이트 — 새 ID(YYYY-MM-DD-hex)·한글이 붙은 ID·전체 이름 노트 모두 인정" \
+        || fail "stop 게이트 — 새 ID 노트 불인정: [${I4:0:40}][${I5:0:40}][${I6:0:40}]"
+    note "spec 2026-10-03-1b93 implementing"
+    sg i7 | jq -e '.decision=="block"' >/dev/null 2>&1 \
+        && pass "stop 게이트 — 다른 spec 의 ID 는 불인정" || fail "stop 게이트 — 다른 spec ID 로 통과"
+    echo '{"phase":"implementing","spec_dir":".ax/docs/spec/014-x","size":"M","risk":"L1"}' > "$ST/.ax/current-task.json"
+
     printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash .ax/hooks/stop/spec-gate.sh"}]}],"Stop":[]}}' > "$ST/.claude/settings.json"
     GOAX_PROJECT_DIR="$ST" bash "$ST/.ax/scripts/bash/doctor-scan.sh" --json --plugin-dir "$REPO" 2>/dev/null \
         | jq -e '.result.hooks.missing | index("Stop .ax/hooks/stop/spec-gate.sh")' >/dev/null 2>&1 \
