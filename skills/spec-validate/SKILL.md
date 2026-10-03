@@ -252,11 +252,12 @@ bash .ax/scripts/bash/update-state.sh --skill spec-validate   # canonical(derive
 명료성 통과 **그리고** 합의 리뷰 통과(필수일 때) 시 phase 진행, 미해소 시 blocked_by 기록 → 다음 skill (`spec-tasks` / `spec-implement`) 이 phase 보고 차단:
 
 ```bash
+WORK_ID="${WORK_ID:-}"   # ← 이 대화에서 triage 가 연 작업 id 를 넣어요 (모르면 비워요 — 병렬 작업이 있으면 update-task 가 되물어요)
 # 통과 — 명료성 + (required 면) spec-review pass
-bash .ax/scripts/bash/update-task.sh --phase spec_checked --blocked-by '[]' --json
+bash .ax/scripts/bash/update-task.sh --phase spec_checked ${WORK_ID:+--task "$WORK_ID"} --blocked-by '[]' --json
 bash .ax/scripts/bash/update-state.sh >/dev/null 2>&1 || true     # HUD: spec ✓ › tasks ●
 
 # 미해소 — blocked_by 에 위치/카테고리 기록 (합의 리뷰 미통과도 여기)
 BLOCKED='["spec.md:42 NEEDS","spec.md:18 placeholder","review-spec: evaluator 보강 필요"]'
-bash .ax/scripts/bash/update-task.sh --phase spec_blocked --blocked-by "$BLOCKED" --json
+bash .ax/scripts/bash/update-task.sh --phase spec_blocked ${WORK_ID:+--task "$WORK_ID"} --blocked-by "$BLOCKED" --json
 ```

@@ -88,6 +88,9 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 [ "$NARGS" -gt 0 ] || fail "바꿀 것이 없어요 — --phase · --set · --blocked-by · --merge-intent · --start · --activate 중 하나는 줘요"
 [ "$ACTIVATE" = false ] || [ -n "$TASK_OPT" ] || fail "--activate 는 --task <id> 와 같이 줘요 — 어느 작업을 지금 작업으로 할지요"
+# 작업 id 는 파일 이름이 돼요 — 고치지 않고 거부해요 (`a/b` 와 `a_b` 가 같은 파일로 가면 안 돼요)
+valid_id() { printf '%s' "$1" | grep -Eq '^[[:alnum:]_][[:alnum:]_.-]*$'; }
+[ -z "$TASK_OPT" ] || valid_id "$TASK_OPT" || fail "작업 id 는 영숫자·_·.·- 만 써요 (받은 값: '${TASK_OPT}')"
 
 # ── 값 검증 — 전부 파일을 열기 전에. 하나라도 틀리면 아무것도 안 써요 ──
 # enum 은 case 로 잡되 [a-z] 범위는 안 써요 (en_US.UTF-8 에서 [a-z] 가 대문자도 물어요 — CLAUDE.md)
@@ -107,7 +110,8 @@ for kv in ${SET_KV[@]+"${SET_KV[@]}"}; do
         risk)      case "$v" in L0|L1|L2|L3) ;; *) fail "risk 는 L0|L1|L2|L3 중 하나예요 (받은 값: '${v}')" ;; esac ;;
         spec_tier) case "$v" in standard|full) ;; *) fail "spec_tier 는 standard|full 중 하나예요 (받은 값: '${v}')" ;; esac ;;
         friction)  case "$v" in autopilot|phase_gate|per_task) ;; *) fail "friction 은 autopilot|phase_gate|per_task 중 하나예요 (받은 값: '${v}')" ;; esac ;;
-        task_id|description|domain|spec_id|spec_dir) ;;
+        task_id)   valid_id "$v" || fail "task_id 는 영숫자·_·.·- 만 써요 (받은 값: '${v}')" ;;
+        description|domain|spec_id|spec_dir) ;;
         plan_doc)  case "$v" in *$'\n'*) fail "plan_doc 는 경로 한 줄이에요" ;; esac ;;
         *) fail "--set 이 받는 키는 task_id·description·size·risk·domain·spec_id·spec_dir·spec_tier·friction·plan_doc 이에요 (받은 키: '${k}')" ;;
     esac
@@ -143,10 +147,49 @@ FILTER='. + $sets
     | .updated_at = $ts'
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
+# 대상 작업 고르기 — --task > (--start 의) 새 task_id > 지금 작업. 비면 옛 형식(current-task.json 만).
+# dry-run 은 락 없이, 실제 쓰기는 락 안에서 불러요. 막을 일이면 ERRMSG 를 채우고 1.
+TASK_TTL=$(( ${GOAX_TASK_TTL_DAYS:-7} * 86400 ))
+resolve_target() {
+    ERRMSG=""; TF=""; TASK_REL=""
+    ACTIVE=$(jq -r '.task_id // empty' "$FILE")
+    NEW_ID=$(printf '%s' "$SETS" | jq -r '.task_id // empty')
+    TARGET="$TASK_OPT"
+    if [ -n "$TARGET" ] && [ -n "$NEW_ID" ] && [ "$NEW_ID" != "$TARGET" ]; then
+        ERRMSG="--task ${TARGET} 와 --set task_id=${NEW_ID} 가 달라요 — 작업 id 는 바꾸지 않아요"; return 1
+    fi
+    [ -n "$TARGET" ] || TARGET="$NEW_ID"
+    if [ -z "$TARGET" ] && [ -n "$ACTIVE" ]; then
+        # --task 없이 "지금 작업" 을 고치려는데 진행 중 작업이 여럿이면 어느 세션 것인지 몰라요 — 덮지 않고 되물어요
+        local others
+        others=$(for f in "$PROJECT_ROOT"/.ax/tasks/*.json; do [ -f "$f" ] || continue
+                     jq -r --arg a "$ACTIVE" --argjson ttl "$TASK_TTL" \
+                        'select((.phase // "idle") != "idle" and (.task_id // "") != $a
+                                and (now - (((.updated_at // "") | try fromdateiso8601 catch 0))) < $ttl) | .task_id' "$f" 2>/dev/null
+                 done | paste -sd, -)
+        if [ -n "$others" ]; then
+            ERRMSG="진행 중 작업이 여럿이에요 (지금 ${ACTIVE} · 다른 ${others}) — 내 작업 id 를 --task <id> 로 줘요 (triage 가 알려준 id)"; return 1
+        fi
+        TARGET="$ACTIVE"
+    fi
+    [ -n "$TARGET" ] || return 0
+    TF=$(goax_task_path "$PROJECT_ROOT" "$TARGET"); TASK_REL=${TF#"$PROJECT_ROOT"/}
+    if [ "$START" = true ] && [ -f "$TF" ]; then
+        ERRMSG="작업 ${TARGET} 이 이미 있어요 ($TASK_REL) — 이어서 하려면 --task ${TARGET} (--activate), 새 작업이면 새 id 로 --start"; return 1
+    fi
+    if [ ! -f "$TF" ] && [ "$TARGET" != "$ACTIVE" ] && [ "$START" != true ]; then
+        ERRMSG="작업 ${TARGET} 이 없어요 ($TASK_REL) — 새 작업은 triage 가 --start 로 열어요"; return 1
+    fi
+    return 0
+}
+
 if [ "$DRY_RUN" = true ]; then
     # 락도 파일도 안 건드려요 — 검증만 하고 "무엇이 바뀔지" 를 답해요 (JSON 이 깨졌으면 여기서도 알려요)
     jq -e . "$FILE" >/dev/null 2>&1 || fail "$REL 을 읽지 못했어요 — JSON 이 깨졌는지 봐요"
-    RES=$(jq -nc --arg p "$REL" --arg ph "$PHASE" --argjson ch "$CHANGED" '{path: $p, dry_run: true, phase: (if $ph != "" then $ph else null end), changed: $ch}')
+    resolve_target || fail "$ERRMSG"
+    RES=$(jq -nc --arg p "$REL" --arg ph "$PHASE" --argjson ch "$CHANGED" --arg t "$TARGET" --arg tf "$TASK_REL" \
+        '{path: $p, dry_run: true, phase: (if $ph != "" then $ph else null end), changed: $ch,
+          task_id: (if $t != "" then $t else null end), task_file: (if $tf != "" then $tf else null end)}')
     [ "$JSON_MODE" = true ] && json_output "ok" "$RES" "dry-run — 안 썼어요" || goax_log "dry-run — $REL 안 썼어요 (바뀔 키: $(printf '%s' "$CHANGED" | jq -r 'join(", ")'))"
     exit "$EXIT_OK"
 fi
@@ -157,15 +200,7 @@ fi
 LOCK="$(goax_normalize_path "$PROJECT_ROOT/.ax/current-task.json" "$PROJECT_ROOT").lock"
 goax_lock "$LOCK" "${GOAX_LOCK_TIMEOUT:-10}" || fail "다른 프로세스가 $REL 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
 jq -e . "$FILE" >/dev/null 2>&1 || { goax_unlock "$LOCK"; fail "$REL 을 읽지 못했어요 — JSON 이 깨졌는지 봐요 (원본은 그대로예요)"; }
-ACTIVE=$(jq -r '.task_id // empty' "$FILE")
-NEW_ID=$(printf '%s' "$SETS" | jq -r '.task_id // empty')
-# 대상 작업 — --task > (--start 의) 새 task_id > 지금 작업. 비면 옛 형식(current-task.json 만)
-TARGET="$TASK_OPT"
-if [ -n "$TARGET" ] && [ -n "$NEW_ID" ] && [ "$NEW_ID" != "$TARGET" ]; then
-    goax_unlock "$LOCK"; fail "--task ${TARGET} 와 --set task_id=${NEW_ID} 가 달라요 — 작업 id 는 바꾸지 않아요"
-fi
-[ -n "$TARGET" ] || TARGET="$NEW_ID"
-[ -n "$TARGET" ] || TARGET="$ACTIVE"
+resolve_target || { goax_unlock "$LOCK"; fail "$ERRMSG"; }
 ARGS_JQ=(--arg p "$PHASE" --argjson sets "$SETS" --argjson bb "$BLOCKED" --argjson it "$INTENT" --argjson st "$START" --arg ts "$TS")
 TMP="$FILE.tmp.$$"
 MIRROR=true; TASK_REL=""
@@ -175,7 +210,6 @@ if [ -z "$TARGET" ]; then
     fi
     mv "$TMP" "$FILE"
 else
-    TF=$(goax_task_path "$PROJECT_ROOT" "$TARGET"); TASK_REL=${TF#"$PROJECT_ROOT"/}
     mkdir -p "$(dirname "$TF")" || { goax_unlock "$LOCK"; fail ".ax/tasks/ 를 만들지 못했어요 — 권한을 봐요"; }
     # --start 로 다른 작업을 열 때 지금 작업이 아직 파일이 없으면(옛 형식에서 넘어온 첫 갱신) 먼저 자기 파일로 남겨요
     if { [ "$START" = true ] || [ "$ACTIVATE" = true ]; } && [ -n "$ACTIVE" ] && [ "$ACTIVE" != "$TARGET" ]; then
@@ -186,15 +220,12 @@ else
     fi
     TLOCK="$(goax_normalize_path "$TF" "$PROJECT_ROOT").lock"
     goax_lock "$TLOCK" "${GOAX_LOCK_TIMEOUT:-10}" || { goax_unlock "$LOCK"; fail "다른 프로세스가 $TASK_REL 을 쓰는 중이에요 — 잠시 뒤 다시 해요"; }
-    if [ -f "$TF" ]; then
+    if [ -f "$TF" ] && [ "$START" != true ]; then
         BASE=$(jq -c . "$TF" 2>/dev/null) || { goax_unlock "$TLOCK"; goax_unlock "$LOCK"; fail "$TASK_REL 을 읽지 못했어요 — JSON 이 깨졌는지 봐요"; }
     elif [ "$TARGET" = "$ACTIVE" ]; then
         BASE=$(jq -c --argjson k "$GOAX_TASK_FIELDS" 'with_entries(select(.key as $x | $k | index($x)))' "$FILE")   # 옛 형식 → 첫 갱신에 옮겨요
-    elif [ "$START" = true ]; then
-        BASE='{"intent_notes":{},"blocked_by":[]}'
     else
-        goax_unlock "$TLOCK"; goax_unlock "$LOCK"
-        fail "작업 ${TARGET} 이 없어요 ($TASK_REL) — 새 작업은 triage 가 --start 로 열어요"
+        BASE='{"intent_notes":{},"blocked_by":[]}'   # --start 의 새 작업 (없는 작업은 resolve_target 이 이미 막았어요)
     fi
     REC=$(printf '%s' "$BASE" | jq -c "${ARGS_JQ[@]}" --arg id "$TARGET" "$FILTER | .task_id = \$id") \
         || { goax_unlock "$TLOCK"; goax_unlock "$LOCK"; fail "$TASK_REL 갱신 값을 만들지 못했어요"; }

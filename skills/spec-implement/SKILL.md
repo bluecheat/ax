@@ -75,7 +75,8 @@ CONFLICT_N=$(echo "$LEDGER" | jq '.result.lane_file_conflicts | length')
 ```bash
 # 이 작업의 id 를 진입할 때 한 번 잡아 두고 이후 갱신에 계속 넘겨요. 같은 프로젝트에서 다른 세션이 다른 작업을
 # 열면 current-task.json 의 "지금 작업" 이 바뀌는데, --task 를 주면 내 작업 파일(.ax/tasks/<id>.json)만 고쳐요.
-WORK_ID=$(jq -r '.task_id // empty' .ax/current-task.json 2>/dev/null)   # tasks.md 의 T0NN 과 다른 작업 id 예요
+# triage 가 이 대화에서 연 작업 id 가 우선이에요 — 모를 때만 지금 작업을 읽어요 (그 사이 다른 세션이 바꿨을 수 있어요)
+WORK_ID="${WORK_ID:-$(jq -r '.task_id // empty' .ax/current-task.json 2>/dev/null)}"   # tasks.md 의 T0NN 과 다른 작업 id 예요
 bash .ax/scripts/bash/update-task.sh --phase implementing ${WORK_ID:+--task "$WORK_ID"} --json
 bash .ax/scripts/bash/update-state.sh >/dev/null 2>&1 || true    # HUD 캐시 (review 단계 표시 여부)
 ```

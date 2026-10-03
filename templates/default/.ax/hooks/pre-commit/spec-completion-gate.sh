@@ -31,12 +31,16 @@ MODE=$(goax_mode 2>/dev/null || echo warning)
 command -v jq >/dev/null 2>&1 || exit 0
 
 # 진행 중인 작업들의 spec — 지금 작업(current-task.json)과 병렬 작업(.ax/tasks/*.json) 중 phase ≠ idle 이고
-# spec_dir 이 있는 것. 같은 spec 은 한 번만 봐요. 없으면 검사할 대상이 없어요.
+# spec_dir 이 있는 것. 같은 spec 은 한 번만 봐요. 병렬 작업은 GOAX_TASK_TTL_DAYS(기본 7일) 안에 갱신된 것만 —
+# 버려진 작업이 커밋마다 검사되면 안 돼요 (정리는 reset-task.sh --task <id>, session-brief 가 알려줘요).
 TASK_FILE="$PROJECT_ROOT/.ax/current-task.json"
-SPECS=$(for f in "$TASK_FILE" "$PROJECT_ROOT"/.ax/tasks/*.json; do
-            [ -f "$f" ] || continue
-            jq -r 'select((.phase // "idle") != "idle") | .spec_dir // empty' "$f" 2>/dev/null
-        done | while IFS= read -r d; do [ -n "$d" ] && basename "$d"; done | awk '!seen[$0]++')
+TASK_TTL=$(( ${GOAX_TASK_TTL_DAYS:-7} * 86400 ))
+SPECS=$({ jq -r 'select((.phase // "idle") != "idle") | .spec_dir // empty' "$TASK_FILE" 2>/dev/null
+          for f in "$PROJECT_ROOT"/.ax/tasks/*.json; do
+              [ -f "$f" ] || continue
+              jq -r --argjson ttl "$TASK_TTL" 'select((.phase // "idle") != "idle"
+                  and (now - (((.updated_at // "") | try fromdateiso8601 catch 0))) < $ttl) | .spec_dir // empty' "$f" 2>/dev/null
+          done; } | while IFS= read -r d; do [ -n "$d" ] && basename "$d"; done | awk '!seen[$0]++')
 [ -n "$SPECS" ] || exit 0
 
 check_spec() {   # $1 = spec 이름 — 막아야 하면 2

@@ -45,7 +45,9 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --json)    JSON_MODE=true ;;
         --reset)   RESET=true ;;
-        --task)    shift; TASK_OPT="${1:-}"; [ -n "$TASK_OPT" ] || { goax_error "--task 의 값이 비었어요"; exit "$EXIT_ERROR"; } ;;
+        --task)    # 다음 토큰이 옵션(--json 등)이면 삼키지 않아요 — 삼키면 오류가 JSON 봉투 없이 나가요
+                   if [ $# -lt 2 ] || [ "${2#--}" != "$2" ] || [ -z "${2:-}" ]; then goax_error "--task 의 값이 비었어요 — 작업 id 를 줘요"; exit "$EXIT_ERROR"; fi
+                   shift; TASK_OPT="$1" ;;
         --help|-h) SHOW_HELP=true ;;
         --size)    shift; SIZE_ARG="${1:-}" ;;
         --risk)    shift; RISK_ARG="${1:-}" ;;
@@ -97,7 +99,13 @@ if [ "$RESET" = true ]; then
             goax_error "$MSG"; exit "$EXIT_ERROR"
         fi
         TLOCK="$(goax_normalize_path "$TF" "$PROJECT_ROOT").lock"
-        if goax_lock "$TLOCK" "${GOAX_LOCK_TIMEOUT:-10}"; then rm -f "$TF"; goax_unlock "$TLOCK"; fi
+        if ! goax_lock "$TLOCK" "${GOAX_LOCK_TIMEOUT:-10}"; then
+            goax_unlock "$LOCK"
+            MSG="다른 프로세스가 ${TF#"$PROJECT_ROOT"/} 을 쓰는 중이에요 — 잠시 뒤 다시 해요 (남은 락이면 ${TLOCK#"$PROJECT_ROOT"/} 를 지워요)"
+            if [ "$JSON_MODE" = true ]; then json_error "$MSG"; fi
+            goax_error "$MSG"; exit "$EXIT_ERROR"
+        fi
+        rm -f "$TF"; goax_unlock "$TLOCK"
     fi
     if [ -n "$TASK_OPT" ] && [ "$TARGET" != "$ACTIVE" ]; then
         goax_unlock "$LOCK"

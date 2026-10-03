@@ -142,7 +142,8 @@ NEXT_STEP=$(echo "$RESULT" | jq -r '.next_step')
 ## 3.5. current-task.json 갱신
 
 ```bash
-bash .ax/scripts/bash/update-task.sh --phase spec \
+WORK_ID="${WORK_ID:-}"   # ← 이 대화에서 triage 가 연 작업 id 를 넣어요 (모르면 비워요 — 병렬 작업이 있으면 update-task 가 되물어요)
+bash .ax/scripts/bash/update-task.sh --phase spec ${WORK_ID:+--task "$WORK_ID"} \
  --set "spec_id=$SPEC_ID" --set "spec_dir=$SPEC_DIR" --set "spec_tier=$TIER" --json
 ```
 

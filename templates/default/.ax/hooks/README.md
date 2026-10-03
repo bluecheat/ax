@@ -72,6 +72,8 @@ compaction 뒤엔 4시간 TTL 이 다시 줄 여지를 남겨요. 세션 id 가 
 (`current-task.json` 의 `handoff.now`)에 그 spec 이 **24시간 안에** 적혀 있으면 멈추는 게 의도라고 보고 잡지 않아요.
 spec 은 ID(`2026-10-03-1b92`, 옛 순번 `014`)로 적어도 되고 디렉터리 전체 이름으로 적어도 돼요 — 다른 스크립트의
 `--spec` 과 같은 기준이에요. ID 는 앞뒤가 영숫자가 아닐 때만 인정해요 (`014` 가 `T0140` 에 걸리지 않게).
+Stop 게이트는 **지금 작업**(current-task.json)만 봐요 — 훅은 어느 작업이 이 세션 것인지 모르기 때문이에요. 병렬 작업의
+spec 은 커밋 때 `pre-commit/spec-completion-gate.sh` 가 보고, `tasks-gate.sh` G6 은 그 spec 을 맡은 작업(`.ax/tasks/*.json`)의 size×risk 로 판정해요.
 `status-note.sh --set now` 가 `handoff.now_at` 필드에 시각을 적고 게이트가 그 시각을 봐요. 시각이 없는 옛
 노트는 인정하지 않아요 (예전엔 spec 이름만 있으면 통과라서 몇 주 전 노트 한 줄이 새 세션의 게이트를 영구히
 꺼 버렸어요). 지울 땐 `status-note.sh --clear now`. 이 훅은 실행될 때 `.ax/.session/*` 의 24시간 넘은

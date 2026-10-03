@@ -137,7 +137,8 @@ task 가 있으면 그건 spec 에 없는 일을 하고 있다는 신호예요.
 ## 4. current-task.json 갱신
 
 ```bash
-bash .ax/scripts/bash/update-task.sh --phase tasks --json
+WORK_ID="${WORK_ID:-}"   # ← 이 대화에서 triage 가 연 작업 id 를 넣어요 (모르면 비워요 — 병렬 작업이 있으면 update-task 가 되물어요)
+bash .ax/scripts/bash/update-task.sh --phase tasks ${WORK_ID:+--task "$WORK_ID"} --json
 ```
 
 ## 5. 출력

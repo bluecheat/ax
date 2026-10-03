@@ -5065,7 +5065,14 @@ PTJ=$(pt_u --task A --phase review)
     || fail "update-task --task — 다른 작업을 덮음: $PTJ"
 pt_u --task Z --phase review >/dev/null; [ $? -eq 1 ] && [ ! -f "$PT/.ax/tasks/Z.json" ] \
     && pass "update-task --task <없는 id> — exit 1 · 파일을 만들지 않아요" || fail "update-task — 없는 작업을 만들었어요"
-pt_u --set spec_dir=.ax/docs/spec/sb --phase implementing >/dev/null
+# 진행 중 작업이 여럿인데 --task 가 없으면 어느 세션 것인지 몰라요 — 덮지 않고 되물어요
+PTN=$(pt_u --phase implementing); [ "$(printf '%s' "$PTN" | jq -r .status)" = error ] && [ "$(pt_c .phase)" = triaged ] \
+    && pass "update-task — 진행 중 작업이 여럿이면 --task 없는 갱신은 거부 (지금 작업 그대로)" || fail "update-task — --task 없이 덮었어요: $PTN"
+pt_u --start --set task_id=A >/dev/null; [ "$(jq -r .description "$PT/.ax/tasks/A.json")" = 결제 ] && [ "$(pt_c .task_id)" = B ] \
+    && pass "update-task --start — 이미 있는 id 는 거부 (옛 기록 위에 병합하지 않아요)" || fail "update-task --start — 같은 id 로 덮었어요"
+[ "$(pt_u --task 'a/b' --phase spec | jq -r .status)" = error ] && [ "$(pt_u --task NOPE --phase spec --dry-run | jq -r .status)" = error ] \
+    && pass "update-task — 잘못된 id 거부 · --dry-run 도 없는 작업은 error" || fail "update-task — id 검증/dry-run 대상 확인 실패"
+pt_u --task B --set spec_dir=.ax/docs/spec/sb --phase implementing >/dev/null
 SB_OUT=$(GOAX_PROJECT_DIR="$PT" bash "$PT/.ax/scripts/bash/session-brief.sh" --json 2>/dev/null)
 printf '%s' "$SB_OUT" | jq -e '(.result.other_tasks | map(.task_id)) == ["A"] and (.result.lines | map(select(test("다른 진행 중 작업"))) | length) == 1' >/dev/null \
     && pass "session-brief — 병렬 작업(A)을 다른 진행 중 작업으로 알려요" || fail "session-brief — other_tasks 누락: $(printf '%s' "$SB_OUT" | jq -c .result.other_tasks)"
@@ -5077,9 +5084,20 @@ PG_OUT=$(cd "$PT" && CLAUDE_PROJECT_DIR="$PT" bash "$PT/.ax/hooks/pre-commit/spe
 { printf '%s' "$PG_OUT" | grep -q 'spec sa — 0/1 완료' && printf '%s' "$PG_OUT" | grep -q 'spec sb 미완료 1 — 이번 커밋과 무관해 건너뛰어요'; } \
     && pass "spec-completion-gate — 병렬 작업의 spec 도 봐요 (A 의 spec 은 자세히 · B 는 무관해 한 줄)" \
     || fail "spec-completion-gate — 병렬 작업 spec 판정 실패: $PG_OUT"
+# G6 — 지금 작업이 아닌 spec 도 그 작업의 size×risk 로 evaluator 필수를 판정해요
+pt_u --task A --set size=L --set risk=L2 >/dev/null
+GOAX_PROJECT_DIR="$PT" bash "$PT/.ax/scripts/bash/tasks-gate.sh" --spec sa --json 2>/dev/null | jq -e '.result.review_required == true' >/dev/null \
+    && pass "tasks-gate G6 — 병렬 작업(지금 작업 아님)의 spec 도 evaluator 필수 판정" || fail "tasks-gate G6 — 비활성 작업 spec 의 필수 판정이 빠짐"
+# 오래 멈춘 작업 — 완료 게이트는 건너뛰고 session-brief 는 정리하라고 알려요
+PG_OLD=$(cd "$PT" && GOAX_TASK_TTL_DAYS=0 CLAUDE_PROJECT_DIR="$PT" bash "$PT/.ax/hooks/pre-commit/spec-completion-gate.sh" 2>&1)
+SB_OLD=$(GOAX_TASK_TTL_DAYS=0 GOAX_PROJECT_DIR="$PT" bash "$PT/.ax/scripts/bash/session-brief.sh" 2>/dev/null)
+{ ! printf '%s' "$PG_OLD" | grep -q 'spec sa' && printf '%s' "$SB_OLD" | grep -q '오래 멈춘 작업: A'; } \
+    && pass "TTL — 오래 멈춘 병렬 작업은 완료 게이트에서 빠지고 session-brief 가 정리를 권해요" || fail "TTL 처리 실패: $PG_OLD / $SB_OLD"
 pt_u --task A --activate >/dev/null
 [ "$(pt_c '.task_id + " " + .phase + " " + .description')" = "A review 결제" ] && [ "$(jq -r .phase "$PT/.ax/tasks/B.json")" = implementing ] \
     && pass "update-task --task A --activate — A 로 돌아가고 B 는 자기 파일에" || fail "update-task --activate 실패: $(pt_c '{task_id,phase}|tostring')"
+[ "$(pt_r --task --json | jq -r .status 2>/dev/null)" != ok ] && [ -f "$PT/.ax/tasks/B.json" ] \
+    && pass "reset-task --task 값 없음 — 다음 옵션을 id 로 삼키지 않아요" || fail "reset-task --task 가 --json 을 삼켰어요"
 PR_J=$(pt_r --task B)
 { [ "$(printf '%s' "$PR_J" | jq -r '.result.active')" = false ] && [ ! -f "$PT/.ax/tasks/B.json" ] && [ "$(pt_c .task_id)" = A ]; } \
     && pass "reset-task --task B — B 파일만 지우고 지금 작업(A)은 그대로" || fail "reset-task --task — $PR_J"

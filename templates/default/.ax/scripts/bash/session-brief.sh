@@ -112,16 +112,22 @@ if [ -f "$TASK_FILE" ] && jq -e . "$TASK_FILE" >/dev/null 2>&1; then
     fi
 fi
 # 병렬 작업 — .ax/tasks/*.json 중 지금 작업이 아니고 idle 이 아닌 것. 다른 세션이 진행 중일 수 있어요
-OTHERS_JSON="[]"
+# GOAX_TASK_TTL_DAYS(기본 7일) 넘게 안 바뀐 작업은 따로 세요 — 버려진 작업일 가능성이 높아요
+OTHERS_JSON="[]"; STALE_IDS=""
+TASK_TTL=$(( ${GOAX_TASK_TTL_DAYS:-7} * 86400 ))
 ACTIVE_ID=$( [ -f "$TASK_FILE" ] && jq -r '.task_id // empty' "$TASK_FILE" 2>/dev/null || true)
 for tf in "$ROOT"/.ax/tasks/*.json; do
     [ -f "$tf" ] || continue
-    o=$(jq -c --arg a "$ACTIVE_ID" 'select((.phase // "idle") != "idle" and (.task_id // "") != $a) | {task_id, description, phase}' "$tf" 2>/dev/null) || continue
-    [ -n "$o" ] && OTHERS_JSON=$(jq -c --argjson o "$o" '. + [$o]' <<<"$OTHERS_JSON")
+    o=$(jq -c --arg a "$ACTIVE_ID" --argjson ttl "$TASK_TTL" 'select((.phase // "idle") != "idle" and (.task_id // "") != $a)
+          | {task_id, description, phase, stale: ((now - (((.updated_at // "") | try fromdateiso8601 catch 0))) >= $ttl)}' "$tf" 2>/dev/null) || continue
+    [ -n "$o" ] || continue
+    if [ "$(jq -r .stale <<<"$o")" = true ]; then STALE_IDS="${STALE_IDS:+$STALE_IDS, }$(jq -r .task_id <<<"$o")"
+    else OTHERS_JSON=$(jq -c --argjson o "$o" '. + [$o | del(.stale)]' <<<"$OTHERS_JSON"); fi
 done
 if [ "$OTHERS_JSON" != "[]" ]; then
     LINES+=("다른 진행 중 작업: $(jq -r 'map("\(.task_id) \(.description // "") (\(.phase))") | join(" · ")' <<<"$OTHERS_JSON") — 이어서 하려면 update-task.sh --task <id> --activate")
 fi
+[ -z "$STALE_IDS" ] || LINES+=("오래 멈춘 작업: ${STALE_IDS} — 끝났거나 버린 거면 reset-task.sh --task <id> 로 정리해요")
 if [ -f "$TASK_FILE" ] && jq -e . "$TASK_FILE" >/dev/null 2>&1; then
     while IFS= read -r l; do [ -n "$l" ] && LINES+=("$l"); done < <(jq -r '
         (if (.now | length) > 0 then "지금: " + (.now | join(" · ")) + (if .now_at then " (" + .now_at + ")" else "" end) else empty end),
