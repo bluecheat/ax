@@ -3231,6 +3231,39 @@ else
     printf '%s' "$SEC_ERR" | grep -q 'AKIAIOSFODNN7EXAMPLE' \
         && fail "critical-rule-grep — 매칭 줄을 그대로 출력 (시크릿이 컨텍스트·로그로 새요)" \
         || pass "critical-rule-grep — 파일 이름만 보고, 매칭 줄은 안 찍음"
+
+    # kv-detect 는 키 이름 뒤 `:` 를 값의 시작으로 읽어서 TS 타입 자리까지 시크릿으로 잡았어요.
+    # 실측(one-tenth): `token: string,` · `messageFor?(target: UserTarget, token: string, platform: Platform)`
+    # 이 "CRITICAL 위반 1건" 이 됐고, 그 프로젝트는 sensors.mode 를 warning 으로 내렸어요.
+    # 타입 자리(원시 타입 · `?:` · 시그니처/제네릭/유니온 안의 타입 이름)만 빼고, 값 대입은 그대로 잡아요.
+    {
+        printf 'export interface PushTarget {\n  token: string,\n  apiKey?: string;\n  password: Password;\n'
+        printf '  messageFor?(target: UserTarget, token: string, platform: Platform): string;\n'
+        printf '  secret: Record<string, string>;\n  accessKey: AccessKey | null;\n  tokens: TokenPair[];\n}\n'
+        printf 'export function send(token: string, secret: SecretRef): void {}\n'
+        printf 'const cache = new Map<string, { token: string | undefined }>();\n'
+        printf 'val token: String\nlet password: String?\n'
+    } > fx/ts-types.ts
+    git reset -q >/dev/null 2>&1; git add -f fx/ts-types.ts >/dev/null 2>&1
+    TS_ERR=$(CLAUDE_PROJECT_DIR="$SEC" bash .ax/hooks/pre-commit/critical-rule-grep.sh 2>&1 >/dev/null); TS_RC=$?
+    [ "$TS_RC" -eq 0 ] \
+        && pass "critical-rule-grep — TS·Kotlin·Swift 타입 선언 (token: string · ?: · 시그니처 인자 · 제네릭 · 유니온) 은 시크릿 아님" \
+        || fail "critical-rule-grep — 타입 선언을 시크릿으로 차단 (rc=$TS_RC): $TS_ERR"
+    printf 'const token: string = "%s";\n' abc123def456ghi            > fx/ts-hit1.ts
+    printf 'const cfg = { token: "%s", user: User };\n' abc123def456   > fx/ts-hit2.ts
+    printf 'const apiKey = "%s";\n' abc123def456ghi                    > fx/ts-hit3.ts
+    printf 'password: %s\n' hunter2xyz                                 > fx/ts-hit4.yml
+    printf 'secret: %s\n' Abc123Secret                                 > fx/ts-hit5.yml
+    printf 'send({ token: "%s" }, token: string)\n' abc123def456ghi    > fx/ts-hit6.ts
+    ts_missed=""
+    for f in fx/ts-hit1.ts fx/ts-hit2.ts fx/ts-hit3.ts fx/ts-hit4.yml fx/ts-hit5.yml fx/ts-hit6.ts; do
+        git reset -q >/dev/null 2>&1; git add -f "$f" >/dev/null 2>&1
+        CLAUDE_PROJECT_DIR="$SEC" bash .ax/hooks/pre-commit/critical-rule-grep.sh >/dev/null 2>&1
+        [ $? -eq 2 ] || ts_missed="$ts_missed $f"
+    done
+    [ -z "$ts_missed" ] \
+        && pass "critical-rule-grep — 타입 옆 값 대입 6종 (: string = \"…\" · { token: \"…\" } · = \"…\" · YAML 2종 · 같은 줄 타입+값) 은 그대로 차단" \
+        || fail "critical-rule-grep — 타입 자리를 빼다가 값 대입까지 놓침:$ts_missed"
     popd >/dev/null || true
     rm -rf "$SEC"
 
@@ -3246,6 +3279,12 @@ else
         [ $? -eq 0 ] && [ ! -f .probe-secret.txt ] \
             && pass "probe/secret-scan.sh — 게이트가 프로브 검체를 차단 (PASS) + 픽스처 정리" \
             || fail "probe/secret-scan.sh — PROBE FAILED (secrets 게이트가 뚫림) 또는 픽스처 잔존"
+        # 짝 프로브 — 타입 옆 값은 막고 타입 선언만은 통과 (kv-detect 오탐이 mode 를 warning 으로 내리게 했어요)
+        cp "$REPO/templates/zero/probe/examples/secret-scan-typed.sh" .ax/probes/
+        TYPED_OUT=$(CLAUDE_PROJECT_DIR="$PRB" bash .ax/probes/secret-scan-typed.sh 2>&1); TYPED_RC=$?
+        [ "$TYPED_RC" -eq 0 ] && [ ! -f .probe-secret-typed.ts ] \
+            && pass "probe/secret-scan-typed.sh — 타입 옆 시크릿 값은 차단 · 타입 선언만은 통과 (PASS) + 픽스처 정리" \
+            || fail "probe/secret-scan-typed.sh — rc=$TYPED_RC: $TYPED_OUT"
     else
         fail "probe/secret-scan.sh — provision 이 .git/hooks/pre-commit 을 안 깔아서 프로브를 못 돌림"
     fi

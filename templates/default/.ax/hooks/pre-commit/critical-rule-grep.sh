@@ -89,21 +89,14 @@ echo "[goax] CRITICAL 룰 검사 (mode=$SENSOR_MODE) — 대상 $(echo "$STAGED"
 #   ② 일반 key=value — 값 첫 글자에서 `$`·`<`·`{`·`%`·`(` 를 빼서 `${GITHUB_TOKEN}`·`<from env>`
 #      같은 참조 표기를 오탐하지 않아요. 값은 6자 이상이라 `secret: null`·`token_count = 0` 도 안 걸려요
 #      (키 이름의 대소문자는 표가 브래킷으로 담고 있어서 `grep -i` 가 필요 없어요)
+#      TS·Kotlin·Swift 타입 자리(`token: string,`)는 kv-detect 전에 지워요 — `goax_secret_scan_file` 이 해요
 #
-# `grep` 의 `-e` 는 필수예요 — PEM 행이 `-----` 로 시작해서, 빼면 옵션으로 읽혀 rc=2 가 나고
-# 그 한 종이 조용히 미탐돼요.
-SECRET_PATTERNS=$(goax_secret_patterns)
-
+# 파일을 읽는 건 `goax_secret_scan_file` 하나예요 (줄번호 + 라벨만 내고 내용은 안 내요).
 SECRET_FILES=""
 while IFS= read -r f; do
     [ -z "$f" ] || [ ! -f "$f" ] && continue
-    hit=""
-    while IFS= read -r pat; do
-        [ -z "$pat" ] && continue
-        if grep -qIE -e "$pat" "$f" 2>/dev/null; then hit="$pat"; break; fi
-    done <<< "$SECRET_PATTERNS"
     # 매칭된 줄은 안 찍어요 — 시크릿을 stderr·로그로 다시 흘리면 검출한 의미가 없어요
-    [ -n "$hit" ] && SECRET_FILES="${SECRET_FILES}${f}"$'\n'
+    [ -n "$(goax_secret_scan_file "$f")" ] && SECRET_FILES="${SECRET_FILES}${f}"$'\n'
 done <<< "$STAGED"
 if [ -n "$SECRET_FILES" ]; then
     SECRET_N=$(printf '%s' "$SECRET_FILES" | grep -c . || true)

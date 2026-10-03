@@ -79,7 +79,7 @@ compaction 뒤엔 4시간 TTL 이 다시 줄 여지를 남겨요. 세션 id 가 
 ## Secrets 검출 — 패턴의 SSOT 는 `common.sh` 의 표 하나예요
 
 시크릿의 형태를 아는 곳은 `.ax/scripts/bash/common.sh` 의 `goax_secret_rules` 표 **하나** 예요.
-`pre-commit/critical-rule-grep.sh` 의 검출은 `goax_secret_patterns`(표의 `use=both|detect` 행)에서,
+`pre-commit/critical-rule-grep.sh` 의 검출은 `goax_secret_scan_file`(표의 `use=both|detect` 행)에서,
 `redact_secrets` 의 마스킹은 같은 표의 `use=both|mask` 행에서 나와요. 형태를 하나 더할 땐 표에만 행을
 넣으세요 — 훅에 패턴을 다시 적으면 그 순간 두 곳이 어긋나요. 실제로 어긋나 있었고(웹훅은 마스킹만,
 `pg_key` 는 마스킹만, `passwd`·`access_key` 는 검출만, AWS·Stripe·JWT 는 정량자가 서로 달랐어요),
@@ -88,7 +88,9 @@ compaction 뒤엔 4시간 TTL 이 다시 줄 여지를 남겨요. 세션 id 가 
 표는 두 갈래를 담아요. ① 발급처가 형식을 정해둔 토큰 — 대소문자를 그대로 봐야 오탐이 안 늘어요.
 ② `key=value` — 키 이름의 대소문자는 표가 브래킷으로 담고 있어서 `grep -i` 가 필요 없고, 검출 행과
 마스킹 행이 키 목록 조각을 공유해요. `${GITHUB_TOKEN}`·`<from env>` 같은 참조 표기와 `secret: null`·
-`token_count = 0` 은 값 첫 글자와 최소 길이로 걸러요. 검출되면 **파일 이름만** 찍어요 — 매칭된 줄을
+`token_count = 0` 은 값 첫 글자와 최소 길이로 걸러요. TS·Kotlin·Swift 타입 자리(`token: string,` ·
+`apiKey?: Foo` · `(token: string, …)`)는 `key=value` 를 보기 전에 줄에서 지워요 — 같은 줄의 값 대입은 그대로
+남아 걸려요. 검출되면 **파일 이름만** 찍어요 — 매칭된 줄을
 stderr 로 흘리면 검출한 의미가 없어요.
 
 `common.sh` 가 없으면 검출할 패턴 자체가 없어요. 그때는 조용히 통과하지 않고

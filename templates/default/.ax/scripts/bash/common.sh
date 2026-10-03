@@ -158,6 +158,7 @@ goax_hook_exit() {
 #
 #   goax_secret_rules()     표 자체. 한 행 = <use> TAB <label> TAB <ERE> TAB <sed 치환문>
 #   goax_secret_patterns()  use=both|detect 행의 ERE 만 (검출용)
+#   goax_secret_scan_file() 파일 하나를 검출해 `줄번호 TAB 라벨` 출력 (kv-detect 는 타입 자리를 지운 뒤)
 #   redact_secrets()        use=both|mask 행에서 sed 스크립트를 만들어 실행 (시그니처 불변)
 #
 # 행을 더할 때 지킬 것:
@@ -201,6 +202,50 @@ AXEOF
 # `-----` 로 시작해서 옵션으로 읽혀요).
 goax_secret_patterns() {
     goax_secret_rules | awk -F'\t' '$1=="both"||$1=="detect"{print $3}'
+}
+
+# ─── kv-detect 의 타입 자리 제외 ─────────────────────────────────────
+# kv-detect 는 키 이름 뒤 `:` 를 값의 시작으로 읽어요. 그래서 TS·Kotlin·Swift 의 **타입 자리**가 값으로 읽혀요
+# — 실측(one-tenth): `token: string,` · `messageFor?(target: UserTarget, token: string, platform: Platform)`
+# 이 CRITICAL 1건이 됐고, 그 프로젝트는 sensors.mode 를 warning 으로 내렸어요 (안전망 전체가 꺼진 셈이에요).
+# ERE 에는 lookahead 가 없어서 행 하나로 "타입이면 빼라" 를 못 써요. 그래서 kv-detect 를 돌리기 **전에**
+# 줄에서 타입 자리만 지워요. 지우는 건 `키: 타입` 조각뿐이라 같은 줄의 값 대입(`token: string = "…"`,
+# `{ token: "…" }`)은 그대로 남아 걸려요. 줄 수는 바뀌지 않아요 (줄 번호가 원본과 같아요).
+#   ① 원시 타입 — `token: string` · `password: String?` · `secret: number[]` (뒤가 식별자 글자가 아니면)
+#   ② 선택 속성·인자 — `apiKey?: Foo` (`?:` 는 값 문법에 없어요)
+#   ③ 타입 이름 + 타입 문법 — `token: UserToken,` · `)` · `;` · `|` · `&` · `<` · `>` · `[`
+#      (`=` 는 일부러 빼요 — `token: Foo = "…"` 의 대입을 남기려고요)
+#   ④ 줄 끝의 대문자 낱말 — `password: Password` (세미콜론 없는 interface). 숫자가 섞이면 빼지 않아요
+#      (`secret: Abc123Secret` 같은 YAML 값을 놓치지 않으려고요)
+# 대가: `{token: abc123def, …}` 처럼 따옴표 없는 값 뒤에 `,` 가 오는 YAML flow 표기는 ③ 에 걸려 빠져요.
+#   발급처 형태(ghp_·sk-·AKIA 등)는 별도 행이라 영향 없어요.
+_GOAX_SECRET_TS_TYPES='string|number|boolean|bigint|symbol|any|unknown|never|object|void|null|undefined|String|Number|Boolean|Int|Long|Double|Float|Bool|Char|Byte|Short|Any|Object|Unit'
+goax_secret_type_strip_script() {
+    local kv="(${_GOAX_SECRET_KV_KEYS})" id='[[:alpha:]_$][[:alnum:]_$.]*'
+    printf 's#%s[?]?[[:space:]]*:[[:space:]]*(%s)([^[:alnum:]_$]|$)#\\1 \\3#g\n' "$kv" "$_GOAX_SECRET_TS_TYPES"
+    printf 's#%s[?][[:space:]]*:[[:space:]]*%s#\\1#g\n' "$kv" "$id"
+    printf 's#%s[[:space:]]*:[[:space:]]*%s([[:space:]]*[],;)|&<>[])#\\1\\2#g\n' "$kv" "$id"
+    printf 's#%s[[:space:]]*:[[:space:]]*[[:upper:]][[:alpha:]]*[[:space:]]*$#\\1#\n' "$kv"
+}
+
+# goax_secret_scan_file <file>
+#   걸린 줄마다 `<줄번호> TAB <라벨>` 을 출력해요 (한 줄에 여러 행이 걸리면 표 순서상 첫 라벨 하나).
+#   줄 **내용**은 내보내지 않아요 — 시크릿을 stderr·로그로 다시 흘리면 검출한 의미가 없어요.
+#   바이너리는 건너뛰어요 (grep -I). 검출 폭은 표(goax_secret_rules)와 같고, kv-detect 만 타입 자리를 지운 뒤 봐요.
+goax_secret_scan_file() {
+    local f="${1:-}" label pat strip
+    [ -f "$f" ] || return 0
+    grep -qI '' "$f" 2>/dev/null || return 0          # 바이너리·빈 파일
+    strip=$(goax_secret_type_strip_script)
+    goax_secret_rules | awk -F'\t' '$1=="both"||$1=="detect"{print $2 "\t" $3}' \
+    | while IFS=$'\t' read -r label pat; do
+        [ -n "$pat" ] || continue
+        if [ "$label" = "kv-detect" ]; then
+            sed -E "$strip" "$f" 2>/dev/null | grep -nE -e "$pat" 2>/dev/null
+        else
+            grep -nIE -e "$pat" -- "$f" 2>/dev/null
+        fi | awk -F: -v l="$label" '{print $1 "\t" l}'
+    done | sort -n -s -k1,1 | awk -F'\t' '!seen[$1]++'
 }
 
 # Redact secrets in stdin, print redacted to stdout.
