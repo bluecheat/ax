@@ -69,10 +69,12 @@ if [ "$N" -gt 3 ]; then
     exit 2
 fi
 
+# 막을 때 되돌려 주는 명령 원문 — heredoc 으로 큰 파일을 쓰는 명령이면 수십 KB 가 그대로 다시 들어가요. 앞부분만.
+cmd_shown() { printf '%s' "$CMD" | goax_cap_context 600 "원문은 방금 보낸 명령 그대로예요"; }
 {
     printf '\033[33m[goax hook]\033[0m ✋ 되돌리기 어려운 명령이에요 — 실행 전에 사실을 먼저 적어 주세요 (이번 세션 %s번째).\n' "$N"
     printf '%s\n' "$HITS" | sed 's/^/  감지: /'
-    printf '  명령: %s\n' "$CMD"
+    printf '  명령: %s\n' "$(cmd_shown)"
     printf '  1. 이 명령이 지우거나 되돌릴 파일 목록 — 추적 안 되는(untracked) 파일, 내가 만들지 않은 파일은 특히 (`git status --porcelain <경로>` 로 확인)\n'
     printf '  2. 되돌리는 절차 한 줄 (없으면 "복구 불가" 라고 적기)\n'
     printf '  3. 이 작업을 지시한 사용자 메시지 원문 인용\n'

@@ -119,9 +119,9 @@ unset _GOAX_KW_ARR _kw _esc
 
 if [ -z "$ALT" ]; then
     if [ "$JSON_MODE" = true ]; then
-        json_error "keywords resolved to empty pattern"
+        json_error "키워드가 비었어요 (공백·기호만 남았어요) — --keywords \"payment refund\" 처럼 낱말을 주세요"
     else
-        goax_error "keywords resolved to empty pattern"
+        goax_error "키워드가 비었어요 (공백·기호만 남았어요) — --keywords \"payment refund\" 처럼 낱말을 주세요"
         exit "$EXIT_ERROR"
     fi
 fi

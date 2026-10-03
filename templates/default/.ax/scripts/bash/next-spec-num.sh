@@ -147,7 +147,7 @@ while [ "$ATTEMPT" -lt 20 ]; do
 done
 if [ -z "$CLAIMED" ]; then
     if [ "$JSON_MODE" = true ]; then json_error "ID 예약 실패 — 20회 연속 실패. 디렉토리 권한을 확인하세요: $REL_DIR"; fi
-    goax_error "ID 예약 실패 (20회 시도): $REL_DIR"; exit "$EXIT_ERROR"
+    goax_error "ID 예약 실패 — 20회 연속 실패. 디렉토리 권한을 확인하세요: ls -ld $REL_DIR"; exit "$EXIT_ERROR"
 fi
 emit "$CLAIMED" true "${P#"$PROJECT_ROOT"/}" "reserved ${P#"$PROJECT_ROOT"/} — 내용을 채우세요"
 exit "$EXIT_OK"

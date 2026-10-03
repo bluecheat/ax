@@ -95,8 +95,9 @@ TEMPLATE="$PROJECT_ROOT/.ax/_templates/mistakes/mistake.md"
 MISTAKES="$PROJECT_ROOT/.ax/mistakes"
 
 if [ ! -f "$TEMPLATE" ]; then
-    if [ "$JSON_MODE" = true ]; then json_error "template not found: $TEMPLATE"
-    else goax_error "template not found: $TEMPLATE"; exit "$EXIT_ERROR"; fi
+    NO_TPL="mistake 템플릿이 없어요: $TEMPLATE — /up 으로 .ax/_templates 를 복구한 뒤 다시"
+    if [ "$JSON_MODE" = true ]; then json_error "$NO_TPL"
+    else goax_error "$NO_TPL"; exit "$EXIT_ERROR"; fi
 fi
 mkdir -p "$MISTAKES"
 

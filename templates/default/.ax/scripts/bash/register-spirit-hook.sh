@@ -37,8 +37,8 @@ if [ "$SHOW_HELP" = true ]; then
 fi
 
 if ! command -v jq >/dev/null 2>&1; then
-    if [ "$JSON_MODE" = true ]; then json_error "jq 미설치"
-    else goax_error "jq 미설치 — settings.json 안전 머지 불가"; exit "$EXIT_ERROR"; fi
+    if [ "$JSON_MODE" = true ]; then json_error "jq 가 필요해요 — brew install jq (macOS) · apt-get install jq (Debian/Ubuntu) 뒤 다시"
+    else goax_error "jq 가 필요해요 — brew install jq (macOS) · apt-get install jq (Debian/Ubuntu) 뒤 다시 (settings.json 안전 머지 불가)"; exit "$EXIT_ERROR"; fi
 fi
 
 fail() { if [ "$JSON_MODE" = true ]; then json_error "$1"; fi; goax_error "$1"; exit "$EXIT_ERROR"; }

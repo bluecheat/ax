@@ -71,7 +71,7 @@ PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
 TEMPLATE_DIR="$PROJECT_ROOT/.ax/_templates/spec"
 
 if [ ! -d "$TEMPLATE_DIR" ]; then
-    goax_error "_templates not found at $TEMPLATE_DIR"
+    goax_error "spec 템플릿이 없어요: $TEMPLATE_DIR — /up 으로 .ax/_templates 를 복구한 뒤 다시"
     exit "$EXIT_ERROR"
 fi
 
@@ -115,9 +115,9 @@ DEST_REL=".ax/docs/spec/${NUM}-${SLUG}"
 #  자기 자신의 예약에 걸리면 항상 실패해요.)
 if [ -e "$DEST" ] && [ "$RESERVED_BY_US" != true ]; then
     if [ "$JSON_MODE" = true ]; then
-        json_error "spec dir already exists: $DEST_REL"
+        json_error "spec 디렉토리가 이미 있어요: $DEST_REL — 새 ID 는 bash .ax/scripts/bash/next-spec-num.sh --reserve --slug <slug> · 기존 spec 에 파일을 더하려면 add-spec-files.sh"
     else
-        goax_error "spec dir already exists: $DEST_REL"
+        goax_error "spec 디렉토리가 이미 있어요: $DEST_REL — 새 ID 는 bash .ax/scripts/bash/next-spec-num.sh --reserve --slug <slug> · 기존 spec 에 파일을 더하려면 add-spec-files.sh"
         exit "$EXIT_ERROR"
     fi
 fi
@@ -184,9 +184,9 @@ done
 # 후속 spec-tasks/spec-implement 가 깨짐. 0.1.8 fix (PR review).
 if [ ${#MISSING[@]} -gt 0 ]; then
     if [ "$JSON_MODE" = true ]; then
-        json_error "mandatory templates missing in $TEMPLATE_DIR: ${MISSING[*]}"
+        json_error "mandatory templates missing in $TEMPLATE_DIR: ${MISSING[*]} — /up 으로 복구하세요 (바뀐 곳은 check-templates-drift.sh)"
     else
-        goax_error "mandatory templates missing in $TEMPLATE_DIR: ${MISSING[*]}"
+        goax_error "mandatory templates missing in $TEMPLATE_DIR: ${MISSING[*]} — /up 으로 복구하세요 (바뀐 곳은 check-templates-drift.sh)"
         exit "$EXIT_ERROR"
     fi
 fi

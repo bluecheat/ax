@@ -66,6 +66,8 @@ fi
 
 CTX="[goax] 이 프로젝트에는 하네스가 있어요. 편집이나 판단 전에 아래를 Read 하세요 (경로만 드려요):
 ${LINES}규율: 커밋하지 않아요 · 브리프에 소유 파일 목록이 있으면 그 밖은 건드리지 않아요 · 정량 주장엔 센 명령과 출력을 붙여요."
+# 경로 몇 줄이라 보통 짧지만, 상한은 다른 주입 훅과 같은 함수로 지켜요
+type goax_cap_context >/dev/null 2>&1 && CTX=$(printf '%s' "$CTX" | goax_cap_context)
 
 jq -nc --arg c "$CTX" '{hookSpecificOutput:{hookEventName:"SubagentStart", additionalContext:$c}}'
 exit 0
