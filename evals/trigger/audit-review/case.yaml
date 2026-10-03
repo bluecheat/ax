@@ -1,0 +1,24 @@
+schema_version: "1.1"
+name: trigger-audit-review
+description: "누적 회고·승격 — 1건 capture(mistake)와 구분"
+tags: [trigger, audit, mistake]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: "이번 달 쌓인 실수들 회고하자. 같은 문제가 반복되는 게 있으면 룰로 올릴 후보도 뽑아줘"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: fires-audit
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?audit"'
+    min: 1
+  - name: not-mistake
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?mistake"'
+    min: 0
+    max: 0
+    arm: both

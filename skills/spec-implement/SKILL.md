@@ -1,6 +1,6 @@
 ---
 name: spec-implement
-description: "tasks.md 의 - [ ] 항목을 실행하고 완료 시 - [x] 로 마킹 — '구현 시작', 'tasks 실행', 'task 진행', '레인 실행', '레인으로 돌려'. tasks.md 에 레인 배정(`레인:`)이 있으면 코디네이터로 lane-worker 를 띄우고 원장(lanes-dispatch.sh)에 디스패치·보고를 기록해요. 진입 시 tasks-plan.sh violations 검사, 완료 시 tasks-gate.sh G1~G6 + 새 컨텍스트 evaluator 게이트. 실패 시 halt+보고. friction 강도는 .ax/config.yml 의 confirmation 정책으로 결정. 슬래시로도 호출 가능: '/spec-implement'."
+description: "tasks.md 의 미완료 항목(- [ ])을 실제로 실행할 때 써요 — 레인 배정이 끝난 tasks.md 를 돌릴 때도 이 skill 이에요. 트리거: '구현 시작', 'tasks 실행', 'task 진행', '레인 실행', '레인으로 돌려', '/spec-implement'. 안 쓰는 경우: tasks.md 가 아직 없을 때(spec-tasks), 레인을 어떻게 가를지 정할 때(lane), spec 없이 들어온 새 작업 요청 '구현해줘'(triage 가 먼저)."
 ---
 
 # spec-implement — 구현 단계

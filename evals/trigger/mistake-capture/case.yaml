@@ -1,0 +1,31 @@
+schema_version: "1.1"
+name: trigger-mistake-capture
+description: "1건 capture — 회고(audit)·수정 요청(triage)과 구분"
+tags: [trigger, audit, mistake, triage]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: "방금 마이그레이션에서 컬럼명 잘못 쓴 거, 실수로 기록 남겨줘"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: fires-mistake
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?mistake"'
+    min: 1
+  - name: not-audit
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?audit"'
+    min: 0
+    max: 0
+    arm: both
+  - name: not-triage
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?triage"'
+    min: 0
+    max: 0
+    arm: both

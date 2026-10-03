@@ -139,7 +139,7 @@ Natural-language tier overrides: `"simple"` / `"spec + tasks"` → standard · `
 | `/goax` | Index — shows all triggers (the only remaining slash command) |
 | "set up goax" / "install goax" | up → onboarding (brownfield) or zero (greenfield) |
 | "start a new project" / "from zero" | zero — 0→1 entry: product · business · ADR · enforcement plumbing |
-| "vendor goax" | vendor — ship skills inside the repo without the plugin |
+| `/vendor` (explicit only) | vendor — ship skills inside the repo without the plugin. `disable-model-invocation: true`: it writes many files into the repo, so it runs only when you type `/vendor` and stays out of the skill listing |
 | "diagnose" / "goax doctor" | doctor — gap diagnosis + `_templates` drift |
 | "show rules" / "critical rules only" | doctor → `rules-index.sh` — Constitution + Spirit + Module index |
 | "create spec — <slug>" | spec — tier-aware spec generation |

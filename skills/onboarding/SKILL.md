@@ -1,6 +1,6 @@
 ---
 name: onboarding
-description: "/up (install or update) 직후 또는 사용자가 'goax 분석/마무리/세팅' 등을 말할 때 발동. .ax/.onboarding-pending 마커가 있으면 우선 처리. 프로젝트의 CLAUDE.md·모듈·도메인·외부 spec을 실제로 읽고 도메인 위험도(L0~L3) 매핑·hooks 강도·룰 분류를 사용자와 대화하며 .ax/config.yml과 adoption-plan.md에 기록. 트리거: '/onboarding', 'goax 도입 마무리', 'goax 분석', 'goax 마무리', '하네스 onboarding'."
+description: "goax 를 깐 기존 프로젝트(brownfield)에서 도메인 위험도·룰·hook 강도를 프로젝트에 맞게 정리할 때 써요. up 직후 .ax/.onboarding-pending 이 남아 있으면 먼저 써요. 트리거: '/onboarding', 'goax 분석', 'goax 마무리', 'goax 도입 마무리', 'goax 세팅', '하네스 onboarding'. 안 쓰는 경우: 설치 자체(up), 빈 리포에서 새 제품 시작(zero), 설치 상태 진단(doctor)."
 ---
 
 # onboarding — 프로젝트 분석 + 5가지 결정

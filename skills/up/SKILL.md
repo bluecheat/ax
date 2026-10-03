@@ -1,6 +1,6 @@
 ---
 name: up
-description: "goax 프로젝트 install or idempotent update — '/up', 'goax up', 'goax 도입', 'goax 설치', 'goax 셋업', '하네스 적용' 등 자연어 트리거. 프로젝트를 분석하고 사용자 동의 후 .ax/ + AGENTS.md (Constitution SSOT) + CLAUDE.md (Claude Code alias) 를 설치. multi-CLI 지원 — Claude Code/OpenCode 환경 자동 감지, OpenCode 환경에선 opencode.json 추가 설치. brownfield 면 onboarding skill 로 이어감."
+description: "goax 를 프로젝트에 처음 설치하거나, 깔린 goax 를 새 plugin 버전으로 맞출 때 써요. Claude Code·OpenCode 둘 다예요. 트리거: '/up', 'goax up', 'goax 설치', 'goax 도입', 'goax 셋업', 'goax 업데이트', '하네스 적용'. 안 쓰는 경우: 설치 뒤 도메인·룰 정리('goax 분석'·'goax 마무리' — onboarding), 설치 상태 진단(doctor), 빈 리포에서 새 제품 시작(zero), plugin 없이 저장소에 동봉('/vendor')."
 ---
 
 # goax up — install or idempotent update (4계층 하네스 도입)

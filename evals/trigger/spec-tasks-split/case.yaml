@@ -1,0 +1,31 @@
+schema_version: "1.1"
+name: trigger-spec-tasks-split
+description: "이미 있는 spec 을 tasks 로 — spec 을 새로 만들거나 바로 실행하면 안 돼요"
+tags: [trigger, spec, spec-implement, spec-tasks]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: "payment-refund spec.md 는 다 써놨어. 이제 이걸 작업 단위 체크리스트로 쪼개줘"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: fires-spec-tasks
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?spec-tasks"'
+    min: 1
+  - name: not-spec
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?spec"'
+    min: 0
+    max: 0
+    arm: both
+  - name: not-spec-implement
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?spec-implement"'
+    min: 0
+    max: 0
+    arm: both

@@ -1,0 +1,31 @@
+schema_version: "1.1"
+name: trigger-spec-new
+description: "spec 생성 — 이웃 spec-tasks·spec-validate 와 구분"
+tags: [trigger, spec, spec-tasks, spec-validate]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: "환불 기능은 M 사이즈로 분류됐어. payment-refund 로 spec 새로 만들어줘"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: fires-spec
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?spec"'
+    min: 1
+  - name: not-spec-tasks
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?spec-tasks"'
+    min: 0
+    max: 0
+    arm: both
+  - name: not-spec-validate
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?spec-validate"'
+    min: 0
+    max: 0
+    arm: both

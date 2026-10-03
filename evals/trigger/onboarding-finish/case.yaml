@@ -1,0 +1,24 @@
+schema_version: "1.1"
+name: trigger-onboarding-finish
+description: "brownfield 마무리 — 설치(up)를 다시 돌리면 안 돼요"
+tags: [trigger, onboarding, up]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: "goax 는 깔았어. 우리 프로젝트 도메인별 위험도랑 룰 정리하는 마무리 해줘"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: fires-onboarding
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?onboarding"'
+    min: 1
+  - name: not-up
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?up"'
+    min: 0
+    max: 0
+    arm: both
