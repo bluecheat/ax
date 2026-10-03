@@ -23,13 +23,22 @@ echo "$LEDGER" | jq -r '.result.unassigned_open | join(" ")'                    
 - §3.2 strict 조건(L3 + SP-SEC/DATA 등)에 걸리는 task 는 **레인에 넘기지 않아요.**
   코디네이터가 `[y/n]` 을 받고 직접 해요
 
-**2. 디스패치를 원장에 먼저 적고, 그다음 띄워요.**
+**2. 디스패치를 원장에 먼저 적고, 그다음 띄워요.** 원장엔 **이번 브리프에 실제로 넣은 task 만** 적어요.
 
 ```bash
-bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --dispatch A --json   # 파일 소유 충돌이면 여기서 거부돼요
+bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --dispatch T010,T011 --json   # 이번 라운드에 맡기는 task 만
+bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --dispatch A --json           # 레인의 미완료 전부를 한 번에 맡길 때
 ```
 
-**exit 1 이 항상 에러는 아니에요** — 그 레인의 미완료 task 가 전부 이미 디스패치·보고까지
+- **task 목록이 기본이에요.** §1 의 "ready ∩ 레인 A" 는 보통 레인 A 의 일부라서, `--dispatch A` 로 적으면
+  아무도 안 맡은 task 까지 시각이 찍혀요. 그러면 `dispatched_unreported` 와 완료 게이트의 "보고 안 받은
+  디스패치" 에 안 보낸 task 가 섞여 신호가 흐려져요 (실측: 레인 하나의 8 task 가 실제 기동보다 77분 먼저
+  찍혔고, 아무도 안 맡은 4 task 가 경보에 들어갔어요)
+- 목록은 전부 미완료 · 같은 레인이어야 해요. 아니면 exit 1 이고 원장은 그대로예요
+- 이미 디스패치된 task 를 다시 적으면 시각을 갱신하고 `보고:` 를 지운 뒤 `warnings` 에 알려요 — 재전송이에요
+- 파일 소유 충돌이면 둘 다 여기서 거부돼요 (그 task 들이 속한 레인 기준)
+
+**exit 1 이 항상 에러는 아니에요** — 레인 이름으로 보냈는데 그 레인의 미완료 task 가 전부 이미 디스패치·보고까지
 끝났으면 (더 보낼 게 없으면) `--dispatch` 가 exit 1 로 끝나요 (`status: error` + "전부 보고까지
 받았어요 — 그래도 다시 보내려면 --force"). 이건 종료 조건이지 실패가 아니에요 — §5 로 넘어가서
 `ready`·`dispatched_unreported` 를 다시 봐요. 진짜 실패(파일 소유 충돌)는 메시지가 달라요.
