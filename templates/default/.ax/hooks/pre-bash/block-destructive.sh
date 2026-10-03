@@ -63,7 +63,9 @@ matches() { printf '%s' "$NORM" | grep -qE "$1"; }
 # rm 과 무관한 `df -h /` 의 ` /` 때문에 CATASTROPHIC 으로 막혀 20GB 빌드 캐시를 못 지웠고 디스크가
 # 120MB 까지 찼어요. heredoc 으로 파일을 쓰는 명령도 본문 낱말(`rm -r`·` / `)로 같은 일이 났어요.
 # 세그먼트마다 앞에 공백 하나를 붙여 둬서 아래 ` …` 로 시작하는 패턴이 그대로 맞아요.
-SEGS=$(printf '%s\n' "$CMD" | tr -d '\047\042' | tr '\t' ' ' \
+# 줄 이어쓰기(`\` + 줄바꿈)는 셸이 한 명령으로 읽어요 — 먼저 붙여야 `rm -rf \⏎ /` 가 두 세그먼트로 갈라지지 않아요.
+CMD_JOINED=${CMD//$'\\\n'/ }
+SEGS=$(printf '%s\n' "$CMD_JOINED" | tr -d '\047\042' | tr '\t' ' ' \
     | awk '{ gsub(/&&|\|\||[;|&()`]/, "\n"); print }' \
     | sed -E 's/  +/ /g; s/^ */ /; s/ +$//' | grep -v '^ *$' || true)
 SEG=""
@@ -96,10 +98,11 @@ CD_DANGER=""   # 바로 앞 cd 가 루트·시스템·홈이었으면 그 목적
 
 while IFS= read -r SEG; do
     [ -n "$SEG" ] || continue
-    # cd 는 다음 세그먼트의 상대 경로가 어디를 가리키는지 정해요. 다른 곳으로 cd 하면 풀려요.
-    if seg_matches '^ cd( |$)'; then
-        if seg_matches '^ cd$' || seg_matches "^ cd${ROOT_TARGET}" || seg_matches "^ cd${HOME_TARGET}"; then
-            CD_DANGER="${SEG# cd}"; CD_DANGER="${CD_DANGER# }"; CD_DANGER="${CD_DANGER:-~}"
+    # cd·pushd 는 다음 세그먼트의 상대 경로가 어디를 가리키는지 정해요. 다른 곳으로 옮기면 풀려요.
+    if seg_matches '^ (cd|pushd)( |$)'; then
+        DEST=$(printf '%s' "$SEG" | sed -E 's/^ (cd|pushd)//')
+        if [ -z "$DEST" ] || printf '%s' "$DEST" | grep -qE "^(${ROOT_TARGET}|${HOME_TARGET})"; then
+            CD_DANGER="${DEST# }"; CD_DANGER="${CD_DANGER:-~}"
         else
             CD_DANGER=""
         fi

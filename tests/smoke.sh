@@ -1150,6 +1150,15 @@ assert_blocked 'cd / && rm -rf *'            'cd / 뒤 상대 글롭 — 실제�
 assert_blocked 'cd ~; rm -rf .'              'cd ~ 뒤 rm -rf .'
 assert_blocked 'cd /usr && rm -rf ./*'       'cd /usr 뒤 rm -rf ./*'
 assert_passed  'cd / && ls; cd /tmp/x && rm -rf *' '루트에 갔다가 다른 곳으로 cd 한 뒤 rm -rf *'
+assert_blocked 'pushd / && rm -rf *'         'pushd / 뒤 상대 글롭 — cd 와 같아요'
+# 줄 이어쓰기(`\` + 줄바꿈)는 한 명령이에요 — 세그먼트로 자르기 전에 붙여요 (줄바꿈이 든 명령은 jq 로 JSON 을 만들어요)
+for bd_cont in $'rm -rf \\\n /' $'sudo rm -rf \\\n  ~' $'rm -rf \\\n  /usr'; do
+    jq -nc --arg c "$bd_cont" '{tool_input:{command:$c}}' \
+        | CLAUDE_PROJECT_DIR=$BD_FX bash "$BD_FX/.ax/hooks/pre-bash/block-destructive.sh" >/dev/null 2>&1
+    bd_rc=$?
+    if [ "$bd_rc" -eq 2 ]; then pass "block-destructive 차단: 줄 이어쓰기로 나눈 $(printf '%s' "$bd_cont" | tr '\n' ' ')"
+    else fail "block-destructive 미차단 (exit=$bd_rc): 줄 이어쓰기로 나눈 $(printf '%s' "$bd_cont" | tr '\n' ' ')"; fi
+done
 
 rm -rf "$BD_FX"
 
