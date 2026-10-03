@@ -218,6 +218,11 @@ bash .ax/scripts/bash/update-task.sh --start --phase triaged \
 [ -n "${PLAN_DOC:-}" ] && bash .ax/scripts/bash/update-task.sh --set "plan_doc=$PLAN_DOC" --json
 ```
 
+**진행 중인 작업이 이미 있으면** (`phase` 가 `idle` 이 아니면) 새 작업을 `--start` 로 열어도 앞 작업은 사라지지 않아요 —
+작업마다 `.ax/tasks/<task_id>.json` 에 남고, current-task.json 은 지금 작업의 사본이에요. 앞 작업으로 돌아갈 땐
+`update-task.sh --task <id> --activate`, 다른 세션의 작업을 건드리지 않고 내 작업만 고칠 땐 `--task <id>` 를 붙여요.
+같은 작업을 이어 하는 거면 `--start` 하지 않아요 (새 작업으로 갈라져요).
+
 이후 spec 이 `.ax/scripts/bash/tier-from-state.sh --json`로 tier 자동 결정.
 
 ### friction — 자연어로 받아요, 되묻지 않고 되비춰요

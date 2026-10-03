@@ -11,7 +11,7 @@
 | `detect-model.sh` | 지금 돌고 있는 모델 식별 — override → `$GOAX_MODEL` → transcript 스캔 → unknown | (진단·로깅용) |
 | `next-spec-num.sh` | 새 spec/ADR ID 발급 — `YYYY-MM-DD-<4hex>` (`--kind spec\|adr`, `--reserve --slug` 로 실물까지 O_EXCL 생성). 순번이 아니라 브랜치끼리 안 겹쳐요. `--check-duplicates` 는 옛 순번(`NNN`/`NNNN`) 중복 진단 | `spec`, `adr`, `doctor` |
 | `tier-from-state.sh` | current-task.json + config.yml → tier 결정 + evaluator 필수 여부 + spec_review 필수 여부(Size 축만) (`--reset` 는 `reset-task.sh` 경유) | `spec`, `tasks-gate.sh`, `spec-review.sh`, `update-state.sh` |
-| `update-task.sh` | `current-task.json` 의 task 필드를 **락 안에서 in-place** 갱신 — `--phase <p>` · `--set task_id\|description\|size\|risk\|domain\|spec_id\|spec_dir\|spec_tier\|friction\|plan_doc=<v>` (`plan_doc` = 외부 계획 문서 경로 — spec 의 "원 계획") · `--blocked-by '<json>'` · `--merge-intent '<json>'` · `--start`. enum(size·risk·spec_tier·phase) 검증 실패면 아무것도 안 씀. SKILL.md 의 인라인 jq 를 대체 — 인라인은 무락이라 `handoff` 를 잃어요 | `triage`, `spec`, `spec-validate`, `spec-tasks`, `spec-implement` |
+| `update-task.sh` | `current-task.json` 의 task 필드를 **락 안에서 in-place** 갱신 — 작업별 원본은 `.ax/tasks/<task_id>.json` (`--task <id>` 면 그 작업만 · 지금 작업이 아니면 current-task.json 은 그대로 · `--activate` 로 지금 작업 전환) — `--phase <p>` · `--set task_id\|description\|size\|risk\|domain\|spec_id\|spec_dir\|spec_tier\|friction\|plan_doc=<v>` (`plan_doc` = 외부 계획 문서 경로 — spec 의 "원 계획") · `--blocked-by '<json>'` · `--merge-intent '<json>'` · `--start`. enum(size·risk·spec_tier·phase) 검증 실패면 아무것도 안 씀. SKILL.md 의 인라인 jq 를 대체 — 인라인은 무락이라 `handoff` 를 잃어요 | `triage`, `spec`, `spec-validate`, `spec-tasks`, `spec-implement` |
 | `init-spec-dir.sh` | tier별 selective spec 디렉토리 생성 | `spec` |
 | `add-spec-files.sh` | 기존 spec에 tasks/research 등 점진 추가 | `spec-tasks`, `spec --add` |
 | `slug-from-text.sh` | 영문 텍스트 → kebab-case 정규화·검증 | `spec` |
@@ -24,7 +24,7 @@
 | `init-mistake-file.sh` | mistake 파일 skeleton 생성 (template cp + frontmatter 치환) | `mistake`, `audit` |
 | `install-git-hooks.sh` | `.ax/hooks/pre-commit/*.sh` chain 을 git pre-commit wrapper 로 설치 (모든 환경 기본 — 사람 터미널 커밋 커버) | `up`, `onboarding` |
 | `register-spirit-hook.sh` | `.claude/settings.json` 에 spirit-rules-inject hook idempotent 등록 | `doctor` |
-| `reset-task.sh` | 작업 완료 후 `current-task.json` → phase=idle 리셋 (`tier-from-state.sh --reset` 위임). `handoff` 는 남기고, 파일이 없으면 만들지 않고 exit 1 | `spec-implement` |
+| `reset-task.sh` | 작업 완료 후 `current-task.json` → phase=idle 리셋 (`tier-from-state.sh --reset` 위임). 그 작업의 `.ax/tasks/<id>.json` 은 지워요 · `--task <id>` 가 지금 작업이 아니면 그 파일만. `handoff` 는 남기고, 파일이 없으면 만들지 않고 exit 1 | `spec-implement` |
 | `session-brief.sh` | 세션 첫머리 브리핑 — 진행 중 task · 인계 노트(now·next·open 앞 3개) · 설치본 < 플러그인 버전 · 밀린 audit · 같은 category 실수 재발. 말할 게 없으면 빈 출력, 글자 상한 `--max-chars`(기본 1200). `--snapshot --session <sid>` 는 압축 직전 사실(브랜치·HEAD·바뀐 파일·tasks 진행률)을 적고, `--after-compact` 가 한 번 앞에 붙여요 | SessionStart 훅 `session-start/session-brief.sh`, PreCompact 훅 `pre-compact/snapshot.sh` |
 | `update-state.sh` | `.ax/` 실측 → `.ax/state.json` (layers/cross_cut/sensors_mode + HUD 캐시 `hud.{plugin_version,review_required,cached_at}`) 갱신. `--skill <name>` 이 `last_skill`·`skill_calls+=1` 을, `--last-mistake <file>` 이 `last_mistake_file` 을 **같은 락·같은 쓰기** 안에서 찍어요 — SKILL.md 가 state.json 을 인라인 jq 로 쓰면 안 돼요 (smoke 가 막아요) | 모든 skill 의 마무리 (`--skill <자기 이름>`) |
 | `triage-search.sh` | KEYWORDS 로 6 군데(specs/adrs/mistakes/rules/modules/imported) 검색 + 동의어 확장 + 매칭수 랭킹 + 스니펫 + 도메인 boost | `triage` |

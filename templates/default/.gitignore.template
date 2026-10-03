@@ -1,6 +1,7 @@
 # goax — runtime/임시 산출물 (per-machine, per-session)
 .ax/state.json
 .ax/current-task.json
+.ax/tasks/
 
 # 재생성 캐시 (build-memory.sh — markdown·상태에서 결정론 재생성)
 .ax/MEMORY.md

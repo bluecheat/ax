@@ -74,6 +74,7 @@ to_json_arr() { grep -v '^$' | jq -R . | jq -sc .; }
 # ── migration ────────────────────────────────────────────────────
 GI_EXPECT=".ax/state.json
 .ax/current-task.json
+.ax/tasks/
 .ax/*.suggested
 .ax/.onboarding-pending"
 if [ -n "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/templates/default/.gitignore.template" ]; then

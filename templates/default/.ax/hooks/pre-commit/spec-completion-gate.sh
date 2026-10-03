@@ -30,90 +30,102 @@ MODE=$(goax_mode 2>/dev/null || echo warning)
 
 command -v jq >/dev/null 2>&1 || exit 0
 
-# 활성 spec 이 있을 때만 — 없으면 검사할 대상이 없어요
+# 진행 중인 작업들의 spec — 지금 작업(current-task.json)과 병렬 작업(.ax/tasks/*.json) 중 phase ≠ idle 이고
+# spec_dir 이 있는 것. 같은 spec 은 한 번만 봐요. 없으면 검사할 대상이 없어요.
 TASK_FILE="$PROJECT_ROOT/.ax/current-task.json"
-[ -f "$TASK_FILE" ] || exit 0
-PHASE=$(jq -r '.phase // "idle"' "$TASK_FILE" 2>/dev/null || echo idle)
-[ "$PHASE" = "idle" ] && exit 0
+SPECS=$(for f in "$TASK_FILE" "$PROJECT_ROOT"/.ax/tasks/*.json; do
+            [ -f "$f" ] || continue
+            jq -r 'select((.phase // "idle") != "idle") | .spec_dir // empty' "$f" 2>/dev/null
+        done | while IFS= read -r d; do [ -n "$d" ] && basename "$d"; done | awk '!seen[$0]++')
+[ -n "$SPECS" ] || exit 0
 
-OUT=$(bash "$GATE" --json 2>/dev/null || true)
-[ -z "$OUT" ] && exit 0
-printf '%s' "$OUT" | jq -e '.result' >/dev/null 2>&1 || exit 0
+check_spec() {   # $1 = spec 이름 — 막아야 하면 2
+    OUT=$(bash "$GATE" --spec "$1" --json 2>/dev/null || true)
+    [ -z "$OUT" ] && return 0
+    printf '%s' "$OUT" | jq -e '.result' >/dev/null 2>&1 || return 0
 
-# skipped/error 는 result 가 항상 {} — 검사 못 했다는 뜻이지 위반이 아니에요.
-# tasks-gate.sh 가 이미 자기 next_step 으로 사유를 말하니 여기선 조용히 통과.
-STATUS=$(printf '%s' "$OUT" | jq -r '.status // ""')
-case "$STATUS" in
-    ok|warning) ;;
-    *) exit 0 ;;
-esac
+    # skipped/error 는 result 가 항상 {} — 검사 못 했다는 뜻이지 위반이 아니에요.
+    # tasks-gate.sh 가 이미 자기 next_step 으로 사유를 말하니 여기선 조용히 통과.
+    STATUS=$(printf '%s' "$OUT" | jq -r '.status // ""')
+    case "$STATUS" in
+        ok|warning) ;;
+        *) return 0 ;;
+    esac
 
-SPEC=$(printf '%s' "$OUT" | jq -r '.result.spec // ""')
-OPEN=$(printf '%s' "$OUT" | jq -r '.result.open // 0')
-PAUSED=$(printf '%s' "$OUT" | jq -r '.result.paused // 0')
-DONE=$(printf '%s' "$OUT" | jq -r '.result.done // 0')
-TOTAL=$(printf '%s' "$OUT" | jq -r '.result.total // 0')
-UNCOV=$(printf '%s' "$OUT" | jq -r '(.result.ac_uncovered // []) | join(", ")')
-DROP=$(printf '%s' "$OUT" | jq -r '.result.task_count_drop // 0')
-UNREP=$(printf '%s' "$OUT" | jq -r '(.result.dispatched_unreported // []) | join(", ")')
-NOREP=$(printf '%s' "$OUT" | jq -r '(.result.done_without_report // []) | join(", ")')
-REQ=$(printf '%s' "$OUT" | jq -r '.result.review_required // false')
-VERDICT=$(printf '%s' "$OUT" | jq -r '.result.review_verdict // ""')
-VIOL=$(printf '%s' "$OUT" | jq -r '.result.violations // 0')
+    SPEC=$(printf '%s' "$OUT" | jq -r '.result.spec // ""')
+    OPEN=$(printf '%s' "$OUT" | jq -r '.result.open // 0')
+    PAUSED=$(printf '%s' "$OUT" | jq -r '.result.paused // 0')
+    DONE=$(printf '%s' "$OUT" | jq -r '.result.done // 0')
+    TOTAL=$(printf '%s' "$OUT" | jq -r '.result.total // 0')
+    UNCOV=$(printf '%s' "$OUT" | jq -r '(.result.ac_uncovered // []) | join(", ")')
+    DROP=$(printf '%s' "$OUT" | jq -r '.result.task_count_drop // 0')
+    UNREP=$(printf '%s' "$OUT" | jq -r '(.result.dispatched_unreported // []) | join(", ")')
+    NOREP=$(printf '%s' "$OUT" | jq -r '(.result.done_without_report // []) | join(", ")')
+    REQ=$(printf '%s' "$OUT" | jq -r '.result.review_required // false')
+    VERDICT=$(printf '%s' "$OUT" | jq -r '.result.review_verdict // ""')
+    VIOL=$(printf '%s' "$OUT" | jq -r '.result.violations // 0')
 
-[ "${VIOL:-0}" -eq 0 ] && exit 0
+    [ "${VIOL:-0}" -eq 0 ] && return 0
 
-# 이번 커밋이 그 spec 에 걸릴 때만 자세히 말해요. 무관한 커밋(문서 한 줄)마다 같은 경고가 나오면
-# 아무도 읽지 않게 되고, 정작 그 spec 을 커밋할 때의 경고도 묻혀요 (실측: 커밋마다 반복).
-# 걸린다 = 스테이지 파일이 spec 디렉토리 안이거나, tasks.md 의 `files:` 경로(파일 또는 디렉토리)와 겹쳐요.
-SPEC_DIR_REL=".ax/docs/spec/$SPEC"
-STAGED=$(git -C "$PROJECT_ROOT" -c core.quotePath=false diff --cached --name-only 2>/dev/null || true)
-if [ -n "$SPEC" ] && [ -n "$STAGED" ]; then
-    TASK_PATHS=""
-    if [ -f "$PROJECT_ROOT/$SPEC_DIR_REL/tasks.md" ]; then
-        # 펜스 안은 형식 설명이에요 — 템플릿 예시 `path/a.kt` 를 실제 경로로 세지 않아요
-        TASK_PATHS=$(awk '
-            /^[[:space:]]*```/ { fence = !fence; next }
-            fence { next }
-            /^- \[[ x~X]\] / && match($0, /files:[ ]*/) {
-                n = split(substr($0, RSTART + RLENGTH), a, ",")
-                for (i = 1; i <= n; i++) {
-                    p = a[i]; gsub(/^[ `]+|[ `]+$/, "", p); sub(/^\.\//, "", p); gsub(/\/+/, "/", p); sub(/\/$/, "", p)
-                    if (p != "") print p
-                }
-            }' "$PROJECT_ROOT/$SPEC_DIR_REL/tasks.md")
+    # 이번 커밋이 그 spec 에 걸릴 때만 자세히 말해요. 무관한 커밋(문서 한 줄)마다 같은 경고가 나오면
+    # 아무도 읽지 않게 되고, 정작 그 spec 을 커밋할 때의 경고도 묻혀요 (실측: 커밋마다 반복).
+    # 걸린다 = 스테이지 파일이 spec 디렉토리 안이거나, tasks.md 의 `files:` 경로(파일 또는 디렉토리)와 겹쳐요.
+    SPEC_DIR_REL=".ax/docs/spec/$SPEC"
+    STAGED=$(git -C "$PROJECT_ROOT" -c core.quotePath=false diff --cached --name-only 2>/dev/null || true)
+    if [ -n "$SPEC" ] && [ -n "$STAGED" ]; then
+        TASK_PATHS=""
+        if [ -f "$PROJECT_ROOT/$SPEC_DIR_REL/tasks.md" ]; then
+            # 펜스 안은 형식 설명이에요 — 템플릿 예시 `path/a.kt` 를 실제 경로로 세지 않아요
+            TASK_PATHS=$(awk '
+                /^[[:space:]]*```/ { fence = !fence; next }
+                fence { next }
+                /^- \[[ x~X]\] / && match($0, /files:[ ]*/) {
+                    n = split(substr($0, RSTART + RLENGTH), a, ",")
+                    for (i = 1; i <= n; i++) {
+                        p = a[i]; gsub(/^[ `]+|[ `]+$/, "", p); sub(/^\.\//, "", p); gsub(/\/+/, "/", p); sub(/\/$/, "", p)
+                        if (p != "") print p
+                    }
+                }' "$PROJECT_ROOT/$SPEC_DIR_REL/tasks.md")
+        fi
+        # 경로 목록은 ENVIRON 으로 넘겨요 — 줄바꿈이 든 값을 -v 로 주면 mawk 가 거부해요
+        RELATED=$(printf '%s\n' "$STAGED" | GOAX_TP="$TASK_PATHS" awk -v sd="$SPEC_DIR_REL" '
+            BEGIN { n = split(ENVIRON["GOAX_TP"], P, "\n") }
+            { s = $0
+              if (index(s, sd "/") == 1) { print s; exit }
+              for (i = 1; i <= n; i++) if (P[i] != "" && (s == P[i] || index(s, P[i] "/") == 1)) { print s; exit } }')
+        if [ -z "$RELATED" ]; then
+            printf '\033[33m[goax gate]\033[0m spec %s 미완료 %s — 이번 커밋과 무관해 건너뛰어요\n' "$SPEC" "$OPEN" >&2
+            return 0
+        fi
     fi
-    # 경로 목록은 ENVIRON 으로 넘겨요 — 줄바꿈이 든 값을 -v 로 주면 mawk 가 거부해요
-    RELATED=$(printf '%s\n' "$STAGED" | GOAX_TP="$TASK_PATHS" awk -v sd="$SPEC_DIR_REL" '
-        BEGIN { n = split(ENVIRON["GOAX_TP"], P, "\n") }
-        { s = $0
-          if (index(s, sd "/") == 1) { print s; exit }
-          for (i = 1; i <= n; i++) if (P[i] != "" && (s == P[i] || index(s, P[i] "/") == 1)) { print s; exit } }')
-    if [ -z "$RELATED" ]; then
-        printf '\033[33m[goax gate]\033[0m spec %s 미완료 %s — 이번 커밋과 무관해 건너뛰어요\n' "$SPEC" "$OPEN" >&2
-        exit 0
+
+    printf '\033[33m[goax gate]\033[0m spec %s — %s/%s 완료' "$SPEC" "$DONE" "$TOTAL" >&2
+    [ "${PAUSED:-0}" -gt 0 ] && printf ' (보류 %s)' "$PAUSED" >&2
+    printf '\n' >&2
+    [ "${OPEN:-0}" -gt 0 ] && printf '  · 미완료 task %s개 — 끝내거나 `- [~] … 보류: <사유>` 로 표기하세요\n' "$OPEN" >&2
+    [ -n "$UNCOV" ] && printf '  · 대응 task 가 없는 수용 기준: %s\n' "$UNCOV" >&2
+    if [ "${DROP:-0}" -gt 0 ]; then
+        printf '\033[31m  · task %s개가 사라졌어요\033[0m — 미완료를 지워서 통과시키는 건 안 돼요.\n' "$DROP" >&2
+        printf '    의도적으로 범위를 줄인 거면 spec.md 의 수용 기준도 같이 줄이세요.\n' >&2
     fi
-fi
+    [ -n "$UNREP" ] && printf '  · 보고 안 받은 디스패치: %s — 산출물을 받고 lanes-dispatch.sh --report 로 기록하세요\n' "$UNREP" >&2
+    [ -n "$NOREP" ] && printf '\033[31m  · 보고 없이 완료 표시: %s\033[0m — 레인이 자기 체크박스를 켰어요. 코디네이터가 검증 뒤에 켜야 해요\n' "$NOREP" >&2
+    if [ "$REQ" = "true" ] && [ -z "$VERDICT" ]; then
+        printf '  · evaluator 리뷰 필수 (size×risk) — review.md 가 없어요. 새 컨텍스트로 evaluator 를 띄우세요\n' >&2
+    elif [ -n "$VERDICT" ] && [ "$VERDICT" != "진행" ]; then
+        printf '  · evaluator verdict "%s" — 지적을 task 로 옮기거나 재논의한 뒤 커밋하세요\n' "$VERDICT" >&2
+    fi
 
-printf '\033[33m[goax gate]\033[0m spec %s — %s/%s 완료' "$SPEC" "$DONE" "$TOTAL" >&2
-[ "${PAUSED:-0}" -gt 0 ] && printf ' (보류 %s)' "$PAUSED" >&2
-printf '\n' >&2
-[ "${OPEN:-0}" -gt 0 ] && printf '  · 미완료 task %s개 — 끝내거나 `- [~] … 보류: <사유>` 로 표기하세요\n' "$OPEN" >&2
-[ -n "$UNCOV" ] && printf '  · 대응 task 가 없는 수용 기준: %s\n' "$UNCOV" >&2
-if [ "${DROP:-0}" -gt 0 ]; then
-    printf '\033[31m  · task %s개가 사라졌어요\033[0m — 미완료를 지워서 통과시키는 건 안 돼요.\n' "$DROP" >&2
-    printf '    의도적으로 범위를 줄인 거면 spec.md 의 수용 기준도 같이 줄이세요.\n' >&2
-fi
-[ -n "$UNREP" ] && printf '  · 보고 안 받은 디스패치: %s — 산출물을 받고 lanes-dispatch.sh --report 로 기록하세요\n' "$UNREP" >&2
-[ -n "$NOREP" ] && printf '\033[31m  · 보고 없이 완료 표시: %s\033[0m — 레인이 자기 체크박스를 켰어요. 코디네이터가 검증 뒤에 켜야 해요\n' "$NOREP" >&2
-if [ "$REQ" = "true" ] && [ -z "$VERDICT" ]; then
-    printf '  · evaluator 리뷰 필수 (size×risk) — review.md 가 없어요. 새 컨텍스트로 evaluator 를 띄우세요\n' >&2
-elif [ -n "$VERDICT" ] && [ "$VERDICT" != "진행" ]; then
-    printf '  · evaluator verdict "%s" — 지적을 task 로 옮기거나 재논의한 뒤 커밋하세요\n' "$VERDICT" >&2
-fi
+    if [ "$MODE" = "fail" ]; then
+        printf '  차단됨 (sensors.mode=fail). 우회가 필요하면 사용자가 직접 커밋해요 (`! git commit --no-verify …`) — 에이전트의 --no-verify 는 block-hook-bypass 가 막아요.\n' >&2
+        return 2
+    fi
+    return 0
+}
 
-if [ "$MODE" = "fail" ]; then
-    printf '  차단됨 (sensors.mode=fail). 우회가 필요하면 사용자가 직접 커밋해요 (`! git commit --no-verify …`) — 에이전트의 --no-verify 는 block-hook-bypass 가 막아요.\n' >&2
-    exit 2
-fi
-exit 0
+RC=0
+while IFS= read -r sp; do
+    [ -n "$sp" ] || continue
+    check_spec "$sp" || RC=$?
+done <<< "$SPECS"
+exit "$RC"

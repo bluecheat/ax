@@ -2384,7 +2384,7 @@ grep -q -- '--delta' "$REPO/skills/spec-validate/SKILL.md" && grep -q -- '--fixu
     && pass "spec-validate·spec-tasks·agents — --delta/--fixup/--stage tasks 가 호출부·수신부에 모두 있음" || fail "spec-review 새 옵션 — 스크립트만 있고 skill/agent 가 안 씀"
 grep -q '빌드·테스트' "$REPO/agents/architect.md" && grep -q '빌드·테스트' "$REPO/agents/evaluator.md" && grep -q '검증 예산' "$REPO/skills/spec-validate/SKILL.md" \
     && pass "spec 리뷰 검증 예산 — grep·read 만, 빌드·테스트 금지 (agents + skill)" || fail "spec 리뷰 — 검증 예산 미명시"
-grep -q 'update-task.sh --phase implementing' "$REPO/skills/spec-implement/SKILL.md" && grep -q 'update-task.sh --phase review' "$REPO/skills/spec-implement/SKILL.md" \
+grep -qE 'update-task\.sh .*--phase implementing' "$REPO/skills/spec-implement/SKILL.md" && grep -qE 'update-task\.sh .*--phase review' "$REPO/skills/spec-implement/SKILL.md" \
     && pass "spec-implement — phase implementing/review 를 실제로 씀 (HUD 가 움직이는 조건)" || fail "spec-implement — phase 기록 없음 (HUD 가 tasks 에 멈춤)"
 grep -q 'hud' "$REPO/templates/default/.ax/hud/state.json.template" && grep -q 'hud.plugin_version' "$REPO/docs/state-ownership.md" \
     && pass "state.json hud 캐시 — template · ownership 문서 동기화" || fail "state.json hud 캐시 3-way 동기화 누락"
@@ -5039,6 +5039,61 @@ VL_MANY=$(CLAUDE_PROJECT_DIR="$VL" bash .ax/hooks/pre-commit/critical-rule-grep.
     || fail "critical-rule-grep — 요약 줄 축약 실패: $VL_MANY"
 popd >/dev/null || true
 rm -rf "$VL"
+
+# ───────────────────────────────────────────────────────────
+section "61. 작업별 상태 — .ax/tasks/<id>.json, 병렬 작업이 서로 덮지 않아요"
+# ───────────────────────────────────────────────────────────
+PT=$(mktemp -d)
+mkdir -p "$PT/.ax/scripts/bash" "$PT/.ax/hooks/pre-commit" "$PT/.ax/docs/spec/sa" "$PT/.ax/docs/spec/sb" "$PT/src"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,update-task,tier-from-state,reset-task,session-brief,tasks-gate}.sh "$PT/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/hooks/pre-commit/spec-completion-gate.sh" "$PT/.ax/hooks/pre-commit/"
+cp "$REPO/templates/default/.ax/current-task.json.template" "$PT/.ax/current-task.json"
+echo '{}' > "$PT/.ax/state.json"
+pt_u() { GOAX_PROJECT_DIR="$PT" bash "$PT/.ax/scripts/bash/update-task.sh" "$@" --json 2>/dev/null; }
+pt_r() { GOAX_PROJECT_DIR="$PT" bash "$PT/.ax/scripts/bash/reset-task.sh" "$@" --json 2>/dev/null; }
+pt_c() { jq -r "$1" "$PT/.ax/current-task.json"; }
+pt_u --start --phase triaged --set task_id=A --set description=결제 >/dev/null
+pt_u --phase implementing --set spec_dir=.ax/docs/spec/sa >/dev/null
+pt_u --start --phase triaged --set task_id=B --set description=검색 >/dev/null
+[ "$(pt_c .task_id)" = B ] && [ "$(jq -r '.phase + " " + .spec_dir' "$PT/.ax/tasks/A.json")" = "implementing .ax/docs/spec/sa" ] \
+    && pass "update-task --start — 새 작업이 지금 작업이 되고 앞 작업은 .ax/tasks/A.json 에 남아요" \
+    || fail "update-task --start — 앞 작업 유실: $(cat "$PT/.ax/current-task.json" | jq -c '{task_id,phase}')"
+PTJ=$(pt_u --task A --phase review)
+{ [ "$(printf '%s' "$PTJ" | jq -r '.result.active')" = false ] && [ "$(pt_c '.task_id + " " + .phase')" = "B triaged" ] \
+    && [ "$(jq -r .phase "$PT/.ax/tasks/A.json")" = review ] && [ "$(pt_c '.handoff | type')" = object ]; } \
+    && pass "update-task --task A — 지금 작업(B)·handoff 는 그대로, A 파일만 갱신" \
+    || fail "update-task --task — 다른 작업을 덮음: $PTJ"
+pt_u --task Z --phase review >/dev/null; [ $? -eq 1 ] && [ ! -f "$PT/.ax/tasks/Z.json" ] \
+    && pass "update-task --task <없는 id> — exit 1 · 파일을 만들지 않아요" || fail "update-task — 없는 작업을 만들었어요"
+pt_u --set spec_dir=.ax/docs/spec/sb --phase implementing >/dev/null
+SB_OUT=$(GOAX_PROJECT_DIR="$PT" bash "$PT/.ax/scripts/bash/session-brief.sh" --json 2>/dev/null)
+printf '%s' "$SB_OUT" | jq -e '(.result.other_tasks | map(.task_id)) == ["A"] and (.result.lines | map(select(test("다른 진행 중 작업"))) | length) == 1' >/dev/null \
+    && pass "session-brief — 병렬 작업(A)을 다른 진행 중 작업으로 알려요" || fail "session-brief — other_tasks 누락: $(printf '%s' "$SB_OUT" | jq -c .result.other_tasks)"
+# 완료 게이트는 진행 중 작업 전부의 spec 을 봐요 — 지금 작업이 B 여도 A 의 spec 을 건드리는 커밋은 걸려요
+printf '## 3. \n- [ ] **AC1** a\n' > "$PT/.ax/docs/spec/sa/spec.md"; printf -- '- [ ] T001 [AC1] a — files: src/a.ts\n' > "$PT/.ax/docs/spec/sa/tasks.md"
+printf '## 3. \n- [ ] **AC1** a\n' > "$PT/.ax/docs/spec/sb/spec.md"; printf -- '- [ ] T001 [AC1] b — files: src/b.ts\n' > "$PT/.ax/docs/spec/sb/tasks.md"
+echo x > "$PT/src/a.ts"; git -C "$PT" init -q 2>/dev/null; git -C "$PT" add src/a.ts 2>/dev/null
+PG_OUT=$(cd "$PT" && CLAUDE_PROJECT_DIR="$PT" bash "$PT/.ax/hooks/pre-commit/spec-completion-gate.sh" 2>&1)
+{ printf '%s' "$PG_OUT" | grep -q 'spec sa — 0/1 완료' && printf '%s' "$PG_OUT" | grep -q 'spec sb 미완료 1 — 이번 커밋과 무관해 건너뛰어요'; } \
+    && pass "spec-completion-gate — 병렬 작업의 spec 도 봐요 (A 의 spec 은 자세히 · B 는 무관해 한 줄)" \
+    || fail "spec-completion-gate — 병렬 작업 spec 판정 실패: $PG_OUT"
+pt_u --task A --activate >/dev/null
+[ "$(pt_c '.task_id + " " + .phase + " " + .description')" = "A review 결제" ] && [ "$(jq -r .phase "$PT/.ax/tasks/B.json")" = implementing ] \
+    && pass "update-task --task A --activate — A 로 돌아가고 B 는 자기 파일에" || fail "update-task --activate 실패: $(pt_c '{task_id,phase}|tostring')"
+PR_J=$(pt_r --task B)
+{ [ "$(printf '%s' "$PR_J" | jq -r '.result.active')" = false ] && [ ! -f "$PT/.ax/tasks/B.json" ] && [ "$(pt_c .task_id)" = A ]; } \
+    && pass "reset-task --task B — B 파일만 지우고 지금 작업(A)은 그대로" || fail "reset-task --task — $PR_J"
+pt_r >/dev/null
+{ [ "$(pt_c .phase)" = idle ] && [ ! -f "$PT/.ax/tasks/A.json" ] && [ "$(pt_c '.handoff | type')" = object ]; } \
+    && pass "reset-task — 지금 작업을 끝내면 파일도 지우고 idle · handoff 는 남아요" || fail "reset-task — 지금 작업 리셋 실패"
+# 옛 형식 — task_id 가 있는 current-task.json 만 있고 작업 파일이 없으면 첫 갱신에 옮겨요
+jq '.task_id = "OLD" | .phase = "spec" | .description = "옛"' "$PT/.ax/current-task.json" > "$PT/ct.tmp" && mv "$PT/ct.tmp" "$PT/.ax/current-task.json"
+pt_u --phase tasks >/dev/null
+[ "$(jq -r '.description + " " + .phase' "$PT/.ax/tasks/OLD.json" 2>/dev/null)" = "옛 tasks" ] && [ "$(pt_c .phase)" = tasks ] \
+    && pass "update-task — 옛 형식(작업 파일 없음)은 첫 갱신에 .ax/tasks/ 로 옮겨요" || fail "update-task — 옛 형식 이전 실패"
+grep -qxF '.ax/tasks/' "$REPO/templates/default/.gitignore.template" \
+    && pass ".gitignore.template — .ax/tasks/ (런타임 상태)" || fail ".gitignore.template — .ax/tasks/ 누락"
+rm -rf "$PT"
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"

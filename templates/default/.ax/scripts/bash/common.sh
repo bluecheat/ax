@@ -1193,6 +1193,17 @@ goax_rule_contracts() {
     ' "$file"
 }
 
+# ─── 작업별 상태 — .ax/tasks/<task_id>.json ─────────────────────────────
+# 작업 하나 = 파일 하나예요. current-task.json 은 **지금 작업**의 사본(최상위 task 필드)과 handoff 를 들고
+# 있어서, 읽는 쪽(HUD · 게이트 · triage)은 예전처럼 current-task.json 만 보면 돼요. 병렬 작업이면 각자
+# update-task.sh --task <id> 로 자기 파일만 갱신하고, 지금 작업이 아닌 쪽은 current-task.json 을 건드리지 않아요.
+#   goax_task_key <id>          파일 이름에 쓸 키 ([[:alnum:]_.-] 밖은 `_`)
+#   goax_task_path <root> <id>  <root>/.ax/tasks/<key>.json
+#   GOAX_TASK_FIELDS            작업 필드 — 지금 작업을 바꿀 때 current-task.json 에서 지우고 새 작업 것으로 채워요
+GOAX_TASK_FIELDS='["task_id","description","size","risk","domain","spec_id","spec_dir","spec_tier","plan_doc","friction","started_at","updated_at","phase","intent_notes","blocked_by"]'
+goax_task_key() { printf '%s' "${1:-}" | tr -c '[:alnum:]_.-' '_'; }
+goax_task_path() { printf '%s/.ax/tasks/%s.json' "${1:-.}" "$(goax_task_key "${2:-}")"; }
+
 # goax_glob_owners <path>
 #   stdin `<label>\t<glob>` 줄 중 glob 이 path 에 맞는 label 을 처음 나온 순서대로 한 번씩 출력.
 #   goax_glob_filter 의 반대 방향(경로 하나 × 글롭 여럿)이고 규칙은 goax_glob_match 와 같아요.
