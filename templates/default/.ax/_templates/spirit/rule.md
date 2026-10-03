@@ -14,6 +14,9 @@ enforced_by:                        # 무엇이 이 룰을 실제로 막나 — 
                                     # hook:<경로> · external:<도구> · human:<게이트> · TODO:<YYYY-MM-DD>
 enforced_kind: human                # block | warn | grep | arch | human | missing
                                     # grep = 아래 룰의 `검출 패턴:` 마커가 집행 (패턴 없는 룰은 doctor I7)
+# contract: <테스트 경로>               # 이 파일의 룰을 막는 짝 테스트 (선택, 목록도 돼요). 테스트 이름에
+#                                     # SP-ID 를 넣으면(`it('SP-X-001: …')`) doctor 가 어느 룰이 막혀 있나 봐요
+# contract_ids: [SP-X-001]             # 계약 대상만 고를 때 (없으면 파일의 모든 SP-ID)
 # adr: .ax/docs/adr/<id>-*.md           # 결정 근거 ADR (선택)
 ---
 

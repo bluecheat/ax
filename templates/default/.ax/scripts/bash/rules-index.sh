@@ -17,8 +17,9 @@
 #
 # Output (--json):
 #   {"status":"ok","result":{"rules":[{"token":"…","level":"critical|mandatory|convention","source":"constitution|spirit|module",
-#     "category":"…","text":"…","file":"…","line":N,"pattern":bool}],"counts":{"critical":N,"mandatory":N,"convention":N,"total":N},
+#     "category":"…","text":"…","file":"…","line":N,"pattern":bool,"contract":bool}],"counts":{"critical":N,"mandatory":N,"convention":N,"total":N},
 #   `pattern` — 그 룰에 `<!-- 검출 패턴: -->` 마커가 있어 critical-rule-grep.sh 가 실제로 집행하는가 (Spirit/Module 만)
+#   `contract` — 파일 frontmatter `contract:` 의 테스트 파일이 있고 그 본문에 토큰이 나오는가 (텍스트 출력은 🧪)
 #     "constitution_file":"AGENTS.md"},…}
 # Exit: 0 ok · 1 error · 2 skipped (jq 없음, --json 일 때)
 
@@ -66,7 +67,7 @@ done
 
 # 한 줄 = token<TAB>level<TAB>source<TAB>category<TAB>text<TAB>file<TAB>line<TAB>pattern(true|false)
 ROWS=""
-add_row() { ROWS="${ROWS}$1	$2	$3	$4	$5	$6	$7	${8:-false}
+add_row() { ROWS="${ROWS}$1	$2	$3	$4	$5	$6	$7	${8:-false}	${9:-false}
 "; }
 
 if [ -n "$RULES_FILE" ]; then
@@ -83,15 +84,20 @@ if [ -n "$RULES_FILE" ]; then
 fi
 
 scan_sp() {   # $1=file $2=source $3=category
-    local f="$1" src="$2" cat="$3" ln n body tok txt pats has
+    local f="$1" src="$2" cat="$3" ln n body tok txt pats has con tf p
     pats=$(type goax_rule_patterns >/dev/null 2>&1 && goax_rule_patterns "$f" || true)   # 패턴 있는 토큰 목록 (common.sh 파서 — 훅과 같은 것)
+    # 계약(`contract:` 짝 테스트)이 막는 토큰 — 테스트 파일이 있고 그 본문에 토큰이 나올 때만 (spirit-lint F6 와 같은 판정)
+    local cl ctf=""; cl=$(type goax_rule_contracts >/dev/null 2>&1 && goax_rule_contracts "$f" || true)
+    while IFS= read -r p; do [ -n "$p" ] && [ -f "$p" ] && ctf="${ctf}${p}"$'\n'; done < <(printf '%s\n' "$cl" | awk -F'\t' '$1=="path"{print $2}')
     while IFS= read -r ln; do
         [ -z "$ln" ] && continue
         n=${ln%%:*}; body=${ln#*:}
         tok=$(printf '%s' "$body" | sed -E 's/^## (SP-[A-Z]+-[0-9]{3}):.*/\1/')
         txt=$(printf '%s' "$body" | sed -E 's/^## SP-[A-Z]+-[0-9]{3}:[[:space:]]*//; s/[[:space:]]+$//')
         has=false; printf '%s\n' "$pats" | grep -q "^${tok}"$'\t' && has=true
-        add_row "$tok" convention "$src" "$cat" "$txt" "${f#./}" "$n" "$has"
+        con=false
+        while IFS= read -r tf; do [ -n "$tf" ] && grep -qF -- "$tok" "$tf" 2>/dev/null && { con=true; break; }; done <<< "$ctf"
+        add_row "$tok" convention "$src" "$cat" "$txt" "${f#./}" "$n" "$has" "$con"
     done < <(grep -nE '^## SP-[A-Z]+-[0-9]{3}:' "$f" 2>/dev/null || true)
 }
 for f in .ax/spirit/rules/*.md; do
@@ -118,7 +124,7 @@ C_N=$(count_lv critical); M_N=$(count_lv mandatory); V_N=$(count_lv convention)
 T_N=$(( C_N + M_N + V_N ))
 
 if [ "$JSON_MODE" = true ]; then
-    RJ=$(printf '%s' "$FILTERED" | jq -Rc 'split("\t") | select(length>=7) | {token:.[0],level:.[1],source:.[2],category:.[3],text:.[4],file:.[5],line:(.[6]|tonumber),pattern:((.[7] // "false")=="true")}' | jq -sc .)
+    RJ=$(printf '%s' "$FILTERED" | jq -Rc 'split("\t") | select(length>=7) | {token:.[0],level:.[1],source:.[2],category:.[3],text:.[4],file:.[5],line:(.[6]|tonumber),pattern:((.[7] // "false")=="true"),contract:((.[8] // "false")=="true")}' | jq -sc .)
     RESULT=$(jq -nc --argjson r "$RJ" --arg c "$C_N" --arg m "$M_N" --arg v "$V_N" --arg t "$T_N" --arg cf "$RULES_FILE" \
         '{rules:$r,counts:{critical:($c|tonumber),mandatory:($m|tonumber),convention:($v|tonumber),total:($t|tonumber)},constitution_file:$cf}')
     if [ -n "$FIND" ] && [ "$T_N" -eq 0 ]; then
@@ -136,6 +142,7 @@ print_level() {   # $1=level $2=헤더
     printf '%s' "$FILTERED" | awk -F'\t' -v lv="$lv" '$2==lv {
         src = ($3=="constitution") ? "Constitution" : (($3=="spirit") ? "Spirit/" $4 : "Module/" $4)
         mark = ($8=="true") ? " ⌕" : ""
+        if ($9=="true") mark = mark " 🧪"
         printf " - %s — %s [%s]%s\n     📍 %s:%s\n", $1, $5, src, mark, $6, $7 }'
 }
 # ⌕ = 검출 패턴 마커가 있어 pre-commit 이 실제로 집행하는 룰

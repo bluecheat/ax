@@ -10,7 +10,7 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 | pre-bash/ | bash 도구 호출 직전 | 파괴적 명령 차단 · git 훅 우회(`--no-verify` 등) 차단 · 프로젝트 안 되돌리기 어려운 명령은 사실 확인 · `git commit` 감지 시 pre-commit 체인 위임 |
 | pre-edit/ | Edit/Write 직전 | 보호 경로 변경 확인 + spirit 룰 점검 · 룰 경로 주입 · 이 파일에 걸린 룰을 안 읽었으면 편집 차단(`rule-read-gate`) · 품질 설정 수정은 이유 먼저(`quality-config-gate`) |
 | post-edit/ | Edit/Write 직후 | `commands.lint_file` 로 편집한 파일 하나를 검사, 실패하면 출력을 모델에게 (막지 않음 · 비어 있으면 아무것도 안 함) |
-| pre-commit/ | git commit 직전 | CRITICAL 룰 정적 검출 (위반 시 차단/경고만 — 자동 캡처는 폐기, §"Mistake 캡처" 참고) |
+| pre-commit/ | git commit 직전 | CRITICAL 룰 정적 검출 (위반 시 차단/경고만 — 자동 캡처는 폐기, §"Mistake 캡처" 참고) · 활성 spec 완료 게이트 (스테이지 파일이 그 spec 디렉토리나 tasks.md `files:` 에 걸릴 때만 자세히 · 아니면 한 줄) |
 | subagent-start/ | 서브에이전트가 뜨는 순간 | Constitution·Spirit·현재 spec·인계 노트 **경로**를 additionalContext 로 — 하네스가 메인 세션 밖으로 닿게 (goax 자기 에이전트는 제외) |
 | stop/ | 턴이 끝나려는 순간 | 활성 spec(implementing·review)이 완료 게이트 미통과면 **한 번** 멈춰 세우고 "마저 하기 · 보류 표기 · 인계 노트" 셋 중 하나를 시켜요 |
 

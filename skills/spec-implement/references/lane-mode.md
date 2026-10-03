@@ -44,7 +44,7 @@ bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --dispatch A --json      
 `ready`·`dispatched_unreported` 를 다시 봐요. 진짜 실패(파일 소유 충돌)는 메시지가 달라요.
 
 브리프는 `lane` skill §10 형식 그대로예요 — 소유 파일(그 레인 task 들의 `files:` 합집합) ·
-금지 파일(다른 레인 소유 + `protected_paths` + 버전 파일) · task ID 와 각 `검증:` 명령 ·
+금지 파일(다른 레인 소유 + `protected_paths` + 버전 파일) · 공용 자원(포매터 범위 · 브라우저 세션 이름 · 빌드 출력 경로 · 디스크 기준 — 비어 있으면 띄우기 전에 채워요) · task ID 와 각 `검증:` 명령 ·
 정지 조건 · "커밋하지 않는다" · "체크박스는 켜지 않는다" · 보고 경로. 보고 경로는 레인을 띄우는 방식이 정해요:
 
 | 띄우는 방식 | 레인의 도구 | 보고 경로 | 레인의 최종 응답 |
