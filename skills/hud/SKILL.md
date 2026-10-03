@@ -1,6 +1,6 @@
 ---
 name: hud
-description: "goax HUD(statusline) 관리 — 'HUD 활성화', 'statusline 설정', 'HUD 갱신', 'hud preset', 'HUD 미리보기', 'HUD 끄기', '/hud'. 하네스 위치만 한 줄로 보여줘요: 설치 버전 · triage Size×Risk · M 이상의 spec › tasks › impl › review 진행 단계 · 실수 누적. OMC HUD 와 같은 문법(프리셋 minimal/focused/full · ASCII 바)이고, 다른 statusline 과 합칠 땐 stdin 을 양쪽에 먹이는 합성 스크립트를 써요. 슬래시로도 호출 가능: '/hud'."
+description: "goax 상태 표시줄(statusline)을 켜거나 끄거나 프리셋을 바꿀 때, 다른 statusline 과 합칠 때 써요. 트리거: '/hud', 'HUD 활성화', 'HUD 끄기', 'HUD 갱신', 'HUD 미리보기', 'hud preset', 'statusline 설정'. 안 쓰는 경우: 하네스 설치 상태 진단(doctor), spec 진행률 확인(spec-validate)."
 ---
 
 # hud — 하네스 위치 한 줄

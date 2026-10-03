@@ -1,6 +1,6 @@
 ---
 name: mistake
-description: "실수·결함을 사용자 의도대로 **1건 캡처** 하는 skill (write-only, capture phase). 트리거: '/mistake', '실수 기록해줘', '실수 남겨줘', 'mistake 캡처', 'mistake 박아줘', '이번 실수 적어줘', '방금 거 mistake 로 박아'. 사용자 인터뷰 (category/severity/detected_by/context_link/ONE_LINE) → init-mistake-file.sh 가 frontmatter 채움 → LLM 이 본문 (5 Whys / 영향 / audit 액션) Edit 으로 채움. **'기록'·'캡처'·'남겨'·'박기'·'적어' 같은 capture 의도 키워드만 매칭** — '회고'·'심사'·'룰 승격' 같은 review 의도는 audit skill 이 담당. 사용자가 capture 의도 표현 즉시 자동 발동."
+description: "방금 일어난 실수·결함 1건을 기록으로 남기자고 할 때 바로 써요. 트리거: '/mistake', '실수 기록해줘', '실수 남겨줘', '이번 실수 적어줘', 'mistake 캡처', 'mistake 박아줘', '방금 거 mistake 로 박아'. 안 쓰는 경우: 쌓인 실수의 회고·패턴 분석·룰 승격('회고'·'분석'·'재발'·'승격' — audit), 그 버그를 지금 고쳐 달라는 요청('고쳐줘' — triage), 설계 결정 기록(adr)."
 ---
 
 # Mistake Capture Skill
