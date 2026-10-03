@@ -1044,8 +1044,8 @@ rm -rf "$PM_FX"
 # ───────────────────────────────────────────────────────────
 section "15. PR #1085 review fixes — security/correctness/escape"
 # ───────────────────────────────────────────────────────────
-# §15/§41 분담: 여기는 git/원격/sudo 계열 경고 7종 + CATASTROPHIC 16종 + 무해 9종(무음).
-# 상위 경로(..) 계열 경고 5종 · 일상 rm 3종(무음) · jq 부재는 §41 담당이에요 — 섞지 마세요.
+# §15/§41 분담: 여기는 git/원격/sudo 계열 경고 7종 + CATASTROPHIC 24종 + 무해 16종(무음 · 세그먼트 범위 회귀 13종 포함).
+# 상위 경로(..) 계열 경고 5종 · 일상 rm 4종(무음) · jq 부재는 §41 담당이에요 — 섞지 마세요.
 
 # 15.1 block-destructive — rm variants + git push variants
 # capture-mistake.sh 폐기 후 — block-destructive 가 더 이상 호출 안 함.
@@ -1130,6 +1130,35 @@ assert_passed 'rm -rf ./dist'              'rm -rf ./dist'
 assert_passed 'git rm -r --cached .intro'  'git rm -r --cached'
 assert_passed 'find . -name x -delete'     'find . -delete (루트 아님)'
 assert_passed 'grep -r / etc/hosts'        'grep -r (rm 아님)'
+
+# 세그먼트 범위 — 세 조건(rm · 재귀 · 루트 경로)을 명령 전체가 아니라 **rm 이 든 단순 명령 하나** 안에서 봐요.
+# 실측(one-tenth): 디스크가 120MB 남은 상태에서 세션 스크래치패드의 20GB 빌드 캐시를 지우려던 명령이
+# 뒤에 붙은 `df -h /` 의 ` /` 때문에 CATASTROPHIC 으로 막혔어요. heredoc 본문의 낱말에도 같은 일이 났어요.
+SP=/private/tmp/claude-502/-Users-me-proj/0f1e2d3c-sess/scratchpad
+assert_passed "cd $SP/ios-dd && rm -rf Build/Intermediates.noindex Index.noindex ModuleCache.noindex Logs; du -sh . ; df -h / | tail -1" \
+    '실측 — 스크래치패드 빌드 캐시 삭제 + 뒤의 df -h /'
+assert_passed "rm -rf $SP/ios-dd $SP/ios-dd2"                    '세션 스크래치패드 절대 경로'
+assert_passed "rm -rf /tmp/claude-501/-p/s/scratchpad/x && ls /" '/tmp/claude-* 스크래치패드 + 뒤의 ls /'
+assert_passed 'D=/private/tmp/claude-502/p/s/scratchpad/ios-dd; rm -rf $D/Build; df -h /' '변수 경로 + df -h /'
+assert_passed 'cat > a.md <<EOF\nrm -rf 는 쓰지 마세요\n/ 루트도요\nEOF' 'heredoc 본문의 낱말'
+# 같은 단순 명령 안이면 여전히 막아요
+assert_blocked 'rm -rf / ; echo done'        'rm -rf / 뒤에 다른 명령'
+assert_blocked 'ls && rm -rf /*'             '앞에 다른 명령 + rm -rf /*'
+assert_blocked 'df -h / && sudo rm -rf /usr' 'sudo rm -rf /usr (앞에 df -h /)'
+assert_blocked '(rm -rf ~)'                  'subshell 안 rm -rf ~'
+assert_blocked 'cd / && rm -rf *'            'cd / 뒤 상대 글롭 — 실제로 루트를 지워요'
+assert_blocked 'cd ~; rm -rf .'              'cd ~ 뒤 rm -rf .'
+assert_blocked 'cd /usr && rm -rf ./*'       'cd /usr 뒤 rm -rf ./*'
+assert_passed  'cd / && ls; cd /tmp/x && rm -rf *' '루트에 갔다가 다른 곳으로 cd 한 뒤 rm -rf *'
+assert_blocked 'pushd / && rm -rf *'         'pushd / 뒤 상대 글롭 — cd 와 같아요'
+# 줄 이어쓰기(`\` + 줄바꿈)는 한 명령이에요 — 세그먼트로 자르기 전에 붙여요 (줄바꿈이 든 명령은 jq 로 JSON 을 만들어요)
+for bd_cont in $'rm -rf \\\n /' $'sudo rm -rf \\\n  ~' $'rm -rf \\\n  /usr'; do
+    jq -nc --arg c "$bd_cont" '{tool_input:{command:$c}}' \
+        | CLAUDE_PROJECT_DIR=$BD_FX bash "$BD_FX/.ax/hooks/pre-bash/block-destructive.sh" >/dev/null 2>&1
+    bd_rc=$?
+    if [ "$bd_rc" -eq 2 ]; then pass "block-destructive 차단: 줄 이어쓰기로 나눈 $(printf '%s' "$bd_cont" | tr '\n' ' ')"
+    else fail "block-destructive 미차단 (exit=$bd_rc): 줄 이어쓰기로 나눈 $(printf '%s' "$bd_cont" | tr '\n' ' ')"; fi
+done
 
 rm -rf "$BD_FX"
 
@@ -3148,7 +3177,7 @@ fi
 # ───────────────────────────────────────────────────────────
 section "41. 설치기 · 훅 안전망 — 심링크 · 시크릿 · 상위 경로 · jq 부재 · 인계 기한 · 이벤트 키"
 # ───────────────────────────────────────────────────────────
-# §15/§41 분담: 여기는 상위 경로(..) 계열 경고 5종 + 일상 rm 3종(무음) + jq 부재 담당이에요.
+# §15/§41 분담: 여기는 상위 경로(..) 계열 경고 5종 + 일상 rm 4종(무음) + jq 부재 담당이에요.
 # git/원격/sudo 계열 경고 7종 + CATASTROPHIC 16종 + 무해 9종(무음)은 §15 담당 — 섞지 마세요.
 # 안전망이 *조용히* 꺼진 상태가 제일 나빠요 — 아무도 모르니까요. 여기 6개는 전부
 # "무경고로 통과했다" 가 회귀 내용이에요 (프로젝트 밖 쓰기 · 시크릿 9종 미탐 ·
@@ -3181,10 +3210,10 @@ else
     done
     [ "$parent_missed" -eq 0 ] && pass "block-destructive — 상위 경로 rm 5종 전부 경고 (../.. 포함)" || true
     parent_fp=0
-    for pc in 'rm -rf ./dist' 'rm -rf node_modules' 'rm -rf /tmp/build-cache'; do
+    for pc in 'rm -rf ./dist' 'rm -rf node_modules' 'rm -rf /tmp/build-cache' 'rm -rf build && cd ..'; do
         [ -z "$(bd_err "$pc")" ] || { fail "block-destructive — 일상 명령 '$pc' 오탐"; parent_fp=$((parent_fp+1)); }
     done
-    [ "$parent_fp" -eq 0 ] && pass "block-destructive — 일상 rm 3종은 그대로 통과 (오탐 0)" || true
+    [ "$parent_fp" -eq 0 ] && pass "block-destructive — 일상 rm 4종은 그대로 통과 (오탐 0 · 뒤 세그먼트의 cd .. 포함)" || true
 
     # PATH 에 `cat` 만 남겨요 — 훅은 stdin 을 읽어야 "jq 가 없다" 갈래에 도달해요.
     # bash·훅은 절대경로로 부르니 PATH 가 비어도 돌아요.
@@ -4367,6 +4396,11 @@ if command -v jq >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
         [ "$(df_rc "$c" fp)" = 0 ] || { fail "destructive-facts 오탐: $c"; DF_FP=1; }
     done
     [ "$DF_FP" -eq 0 ] && pass "destructive-facts — 재생성 디렉토리 · 프로젝트 밖 · 변수 경로 · 비재귀 rm · 안전한 git 은 통과 (오탐 0)"
+    # 세션 스크래치패드는 프로젝트 밖이라 묻지 않아요 — 프로젝트 루트 자체는 여전히 사실을 요구해요
+    [ "$(df_rc 'cd /private/tmp/claude-502/-p/s/scratchpad/ios-dd && rm -rf Build Index.noindex; df -h /' sp1)" = 0 ] \
+        && [ "$(df_rc "rm -rf $DF" sp2)" = 2 ] \
+        && pass "destructive-facts — 스크래치패드(프로젝트 밖)는 통과 · 프로젝트 루트 자체는 차단" \
+        || fail "destructive-facts — 스크래치패드/프로젝트 루트 판정이 틀려요"
     [ "$(df_rc 'git reset --hard' r1)" = 2 ] && [ "$(df_rc 'git reset --hard' r1)" = 0 ] \
         && pass "destructive-facts — 같은 명령 재시도는 통과 (사실을 적고 다시 온 것)" \
         || fail "destructive-facts — 재시도가 통과하지 않아요"

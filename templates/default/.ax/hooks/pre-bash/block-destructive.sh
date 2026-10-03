@@ -57,6 +57,20 @@ fi
 # 정규화된 명령에 대해 확장 정규식 매칭.
 matches() { printf '%s' "$NORM" | grep -qE "$1"; }
 
+# 단순 명령(세그먼트) 단위 — `;` `&&` `||` `|` `&` `(` `)` 백틱 줄바꿈에서 잘라요.
+# rm·재귀·대상 경로 세 조건은 **같은 세그먼트 안에서만** 봐요. 명령 전체에 걸어 두면 서로 다른 명령의
+# 조각이 합쳐져요 — 실측(one-tenth): `cd <스크래치패드> && rm -rf Build ...; df -h / | tail -1` 이
+# rm 과 무관한 `df -h /` 의 ` /` 때문에 CATASTROPHIC 으로 막혀 20GB 빌드 캐시를 못 지웠고 디스크가
+# 120MB 까지 찼어요. heredoc 으로 파일을 쓰는 명령도 본문 낱말(`rm -r`·` / `)로 같은 일이 났어요.
+# 세그먼트마다 앞에 공백 하나를 붙여 둬서 아래 ` …` 로 시작하는 패턴이 그대로 맞아요.
+# 줄 이어쓰기(`\` + 줄바꿈)는 셸이 한 명령으로 읽어요 — 먼저 붙여야 `rm -rf \⏎ /` 가 두 세그먼트로 갈라지지 않아요.
+CMD_JOINED=${CMD//$'\\\n'/ }
+SEGS=$(printf '%s\n' "$CMD_JOINED" | tr -d '\047\042' | tr '\t' ' ' \
+    | awk '{ gsub(/&&|\|\||[;|&()`]/, "\n"); print }' \
+    | sed -E 's/  +/ /g; s/^ */ /; s/ +$//' | grep -v '^ *$' || true)
+SEG=""
+seg_matches() { printf '%s' "$SEG" | grep -qE "$1"; }
+
 # `rm` 이 **명령어 위치**에 있는지 (confirm·npm 같은 부분 일치 배제).
 # 앞이 줄머리이거나 셸 구분자([;&|(]) 또는 공백. `git rm`, `sudo rm` 도 포함돼요.
 RM_INVOKED='(^| |[;&|(])rm '
@@ -78,23 +92,43 @@ HOME_TARGET=' (~|~/\*|\$HOME|\$HOME/\*|\$\{HOME\}|\$\{HOME\}/\*)( |$)'
 # ─── 1) CATASTROPHIC — 복구 불가, mode 무관 항상 차단 ────────────────
 CATASTROPHIC_HIT=""
 
-# 1-a. 재귀 rm + 루트/시스템 경로 (두 조건 동시 충족 시에만 — false positive 최소화)
-if matches "$RM_INVOKED" && matches "$RM_RECURSIVE" && matches "$ROOT_TARGET"; then
-    CATASTROPHIC_HIT="재귀 rm + 루트/시스템 경로"
-fi
+# 상대 경로 "현재 디렉토리 전부" — `cd /` 뒤의 `rm -rf *` 는 루트를 지워요.
+REL_ALL=' (\*|\.|\./|\./\*|\.\*)( |$)'
+CD_DANGER=""   # 바로 앞 cd 가 루트·시스템·홈이었으면 그 목적지
 
-# 1-b. 재귀 rm + 홈 디렉토리 전체
-if [ -z "$CATASTROPHIC_HIT" ] && matches "$RM_INVOKED" && matches "$RM_RECURSIVE" && matches "$HOME_TARGET"; then
-    CATASTROPHIC_HIT="재귀 rm + 홈 디렉토리 전체"
-fi
+while IFS= read -r SEG; do
+    [ -n "$SEG" ] || continue
+    # cd·pushd 는 다음 세그먼트의 상대 경로가 어디를 가리키는지 정해요. 다른 곳으로 옮기면 풀려요.
+    if seg_matches '^ (cd|pushd)( |$)'; then
+        DEST=$(printf '%s' "$SEG" | sed -E 's/^ (cd|pushd)//')
+        if [ -z "$DEST" ] || printf '%s' "$DEST" | grep -qE "^(${ROOT_TARGET}|${HOME_TARGET})"; then
+            CD_DANGER="${DEST# }"; CD_DANGER="${CD_DANGER:-~}"
+        else
+            CD_DANGER=""
+        fi
+        continue
+    fi
 
-# 1-c. rm 이 아닌 경로로 대량 삭제 — find -delete / find -exec rm
-if [ -z "$CATASTROPHIC_HIT" ] \
-   && matches '(^| |[;&|(])find ' \
-   && matches "$ROOT_TARGET" \
-   && matches ' (-delete( |$)|-exec +rm )'; then
-    CATASTROPHIC_HIT="find 를 통한 루트/시스템 경로 대량 삭제"
-fi
+    if seg_matches "$RM_INVOKED" && seg_matches "$RM_RECURSIVE"; then
+        # 1-a. 재귀 rm + 루트/시스템 경로 (같은 세그먼트에서 셋 다 — false positive 최소화)
+        if seg_matches "$ROOT_TARGET"; then
+            CATASTROPHIC_HIT="재귀 rm + 루트/시스템 경로"; break
+        fi
+        # 1-b. 재귀 rm + 홈 디렉토리 전체
+        if seg_matches "$HOME_TARGET"; then
+            CATASTROPHIC_HIT="재귀 rm + 홈 디렉토리 전체"; break
+        fi
+        # 1-b'. 루트·시스템·홈으로 cd 한 뒤 상대 경로 전부
+        if [ -n "$CD_DANGER" ] && seg_matches "$REL_ALL"; then
+            CATASTROPHIC_HIT="cd ${CD_DANGER} 뒤 재귀 rm (현재 디렉토리 전부)"; break
+        fi
+    fi
+
+    # 1-c. rm 이 아닌 경로로 대량 삭제 — find -delete / find -exec rm
+    if seg_matches '(^| )find ' && seg_matches "$ROOT_TARGET" && seg_matches ' (-delete( |$)|-exec +rm )'; then
+        CATASTROPHIC_HIT="find 를 통한 루트/시스템 경로 대량 삭제"; break
+    fi
+done <<< "$SEGS"
 
 # 1-d. 단독으로 복구 불가한 명령들
 if [ -z "$CATASTROPHIC_HIT" ]; then
@@ -130,9 +164,13 @@ RECOVERABLE_HIT=""
 # 더 위험한 `rm -rf ../..`·`../../etc`·`../../../` 는 그냥 통과시켰어요 (위험도 역전).
 # 이제 `..` 로 시작하는 경로 전체를 봐요: `..`, `../*`, `../..`, `../../etc`, `../../../`, `../foo`.
 PARENT_TARGET=' (\.\.(/\.\.)*(/[^ ]*)?|\.\./\*)( |$)'
-if matches "$RM_INVOKED" && matches "$RM_RECURSIVE" && matches "$PARENT_TARGET"; then
-    RECOVERABLE_HIT="재귀 rm + 상위 디렉토리(..)"
-fi
+# 1단계와 같이 세그먼트 안에서만 봐요 (`rm -rf build && cd ..` 는 상위 삭제가 아니에요).
+while IFS= read -r SEG; do
+    [ -n "$SEG" ] || continue
+    if seg_matches "$RM_INVOKED" && seg_matches "$RM_RECURSIVE" && seg_matches "$PARENT_TARGET"; then
+        RECOVERABLE_HIT="재귀 rm + 상위 디렉토리(..)"; break
+    fi
+done <<< "$SEGS"
 
 # 2-b. 히스토리/원격 되돌리기 계열
 if [ -z "$RECOVERABLE_HIT" ]; then
