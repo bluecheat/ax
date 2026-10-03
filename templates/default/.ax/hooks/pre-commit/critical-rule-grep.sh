@@ -42,12 +42,31 @@ SENSOR_MODE=$(goax_mode 2>/dev/null || echo warning)
 [ "$SENSOR_MODE" = "off" ] && exit 0
 
 VIOLATIONS=0
+LOCS=()   # 요약 줄에 다시 싣는 위치 — `file:line (규칙)`
 
 # 위반 보고 (counter 증가만 — mistake 기록은 사용자 명시 mistake skill 로)
+# Usage: report <category> <file:line> <규칙>
+#   위반마다 `file:line — 규칙` 한 줄이에요. 위치 없는 경고는 실측에서 diff 를 손으로 뒤지게 했어요.
+#   예전 2인자 형식(`report cat "메시지"`)도 그대로 찍혀요 — 프로젝트가 아래 스캐폴드를 채웠을 수 있어요.
 report() {
-    local category="$1"; local message="$2"; local detail="${3:-}"
-    printf '  ⚠ %s\n' "$message" >&2
+    local category="$1" loc="$2" rule="${3:-}"
+    if [ -n "$rule" ]; then
+        printf '  ⚠ %s — %s\n' "$loc" "$rule" >&2
+        LOCS+=("$loc (${rule%% (*})")
+    else
+        printf '  ⚠ %s\n' "$loc" >&2
+        LOCS+=("$loc")
+    fi
     VIOLATIONS=$((VIOLATIONS + 1))
+}
+
+# 요약 줄 꼬리 — 앞 3곳 + 외 N건. 출력이 잘리거나 다른 훅 출력과 섞여 요약 한 줄만 보여도 위치가 남아요.
+locs_tail() {
+    local n=${#LOCS[@]} i out=""
+    [ "$n" -gt 0 ] || return 0
+    for ((i = 0; i < n && i < 3; i++)); do out="${out}${out:+, }${LOCS[$i]}"; done
+    [ "$n" -gt 3 ] && out="${out} 외 $((n - 3))건"
+    printf ' — %s' "$out"
 }
 
 # core.quotePath=false — 기본값이면 한글 등 비ASCII 파일명이 "\355\225\234…" 로 인용돼 `-f` 검사에서 빠져요
@@ -69,7 +88,8 @@ echo "[goax] CRITICAL 룰 검사 (mode=$SENSOR_MODE) — 대상 $(echo "$STAGED"
 #           *test/context/*) continue ;;                      # 제외 경로 — 패턴 마커로는 못 해요
 #           *.kt)
 #               if grep -qE '^import[[:space:]]+org\.junit\.jupiter\.' "$f" 2>/dev/null; then
-#                   report "testing" "$f: JUnit5 import 금지 — SP-TEST-001"
+#                   ln=$(grep -nE '^import[[:space:]]+org\.junit\.jupiter\.' "$f" | head -1 | cut -d: -f1)
+#                   report "testing" "$f:$ln" "SP-TEST-001 JUnit5 import 금지"
 #               fi
 #               ;;
 #       esac
@@ -92,16 +112,15 @@ echo "[goax] CRITICAL 룰 검사 (mode=$SENSOR_MODE) — 대상 $(echo "$STAGED"
 #      TS·Kotlin·Swift 타입 자리(`token: string,`)는 kv-detect 전에 지워요 — `goax_secret_scan_file` 이 해요
 #
 # 파일을 읽는 건 `goax_secret_scan_file` 하나예요 (줄번호 + 라벨만 내고 내용은 안 내요).
-SECRET_FILES=""
+# 걸린 줄마다 `file:line — secrets:<라벨>` 이에요. 매칭된 줄 **내용**은 안 찍어요 — 시크릿을
+# stderr·로그로 다시 흘리면 검출한 의미가 없어요.
 while IFS= read -r f; do
     [ -z "$f" ] || [ ! -f "$f" ] && continue
-    # 매칭된 줄은 안 찍어요 — 시크릿을 stderr·로그로 다시 흘리면 검출한 의미가 없어요
-    [ -n "$(goax_secret_scan_file "$f")" ] && SECRET_FILES="${SECRET_FILES}${f}"$'\n'
+    while IFS=$'\t' read -r ln label; do
+        [ -n "$ln" ] || continue
+        report "secrets" "$f:$ln" "secrets:$label (값은 안 찍어요)"
+    done < <(goax_secret_scan_file "$f")
 done <<< "$STAGED"
-if [ -n "$SECRET_FILES" ]; then
-    SECRET_N=$(printf '%s' "$SECRET_FILES" | grep -c . || true)
-    report "secrets" "Secrets 추정 패턴 — ${SECRET_N}개 파일: $(printf '%s' "$SECRET_FILES" | tr '\n' ' ')"
-fi
 
 # ─── ① 룰 패턴 — `<!-- 검출 패턴: -->` 를 실제로 돌려요 ─────────────────────
 # 룰 파일마다: severity(파일) · paths(파일) · 패턴(룰 단위, goax_rule_patterns) 을 읽고,
@@ -162,7 +181,7 @@ if [ -n "$STAGED_SRC" ] && type goax_rule_patterns >/dev/null 2>&1; then
                     [ -z "$ln" ] && continue
                     hit="$tf:$ln"
                     if [ "$SEV" = "critical" ]; then
-                        report "rule-pattern" "$hit — $token (critical · $RF_REL)"
+                        report "rule-pattern" "$hit" "$token (critical · $RF_REL)"
                     else
                         printf '  · %s — %s (%s · %s — 차단 안 함)\n' "$hit" "$token" "$SEV" "$RF_REL" >&2
                         WARNINGS=$((WARNINGS + 1))
@@ -175,10 +194,10 @@ fi
 
 if [ "$VIOLATIONS" -gt 0 ]; then
     if [ "$SENSOR_MODE" = "fail" ]; then
-        echo "[goax] ✗ CRITICAL 위반 ${VIOLATIONS}건 — 차단 (mode=fail)" >&2
+        echo "[goax] ✗ CRITICAL 위반 ${VIOLATIONS}건 — 차단 (mode=fail)$(locs_tail)" >&2
         exit 2
     fi
-    echo "[goax] ⚠ CRITICAL 위반 ${VIOLATIONS}건 — 경고만 (mode=$SENSOR_MODE). 기록 원하면 mistake skill 호출" >&2
+    echo "[goax] ⚠ CRITICAL 위반 ${VIOLATIONS}건 — 경고만 (mode=$SENSOR_MODE)$(locs_tail). 기록 원하면 mistake skill 호출" >&2
     exit 0
 fi
 
