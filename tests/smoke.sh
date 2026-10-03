@@ -2453,6 +2453,22 @@ else
         && pass "rules-index --find — 없는 토큰은 warning" || fail "rules-index — 없는 토큰을 ok 로"
     rs rules-index.sh | grep -q '📍 AGENTS.md:5' && pass "rules-index 텍스트 — 원문 + 📍 위치" || fail "rules-index 텍스트 출력 형식"
 
+    # contract: — 짝 테스트가 막는 룰을 추적해요 (스칼라+주석 · 블록 목록 · contract_ids)
+    mkdir -p "$RS/apps"; printf "it('SP-UI-001: x')\nit('SP-CPY-002: y')\n" > "$RS/apps/ui.test.ts"
+    printf -- '---\ncategory: ui\ncontract: apps/ui.test.ts  # 테스트가 막아요\n---\n## SP-UI-001: a\n## SP-UI-002: b\n' > "$RS/.ax/spirit/rules/ui.md"
+    printf -- '---\ncategory: cpy\ncontract:\n  - apps/ui.test.ts\n  - apps/none.test.ts\ncontract_ids: [SP-CPY-002, SP-CPY-003]\n---\n## SP-CPY-002: a\n## SP-CPY-003: b\n' > "$RS/.ax/spirit/rules/cpy.md"
+    SLC=$(rs spirit-lint.sh --json)
+    echo "$SLC" | jq -e '[.result.contracts[]|select(.file==".ax/spirit/rules/cpy.md")][0] | .missing==["apps/none.test.ts"] and .covered==["SP-CPY-002"] and .uncovered==["SP-CPY-003"] and .explicit_ids==true' >/dev/null \
+        && pass "spirit-lint F6 — contract: 파일 없음 · contract_ids 중 테스트에 없는 ID 를 지목" || fail "spirit-lint F6 — 계약 검사 불일치: $(echo "$SLC" | jq -c .result.contracts)"
+    echo "$SLC" | jq -e '[.result.contracts[]|select(.file==".ax/spirit/rules/ui.md")][0] | .covered==["SP-UI-001"] and .uncovered==["SP-UI-002"] and .explicit_ids==false' >/dev/null \
+        && pass "spirit-lint F6 — contract_ids 가 없으면 파일의 모든 SP-ID 를 대상으로 (주석 붙은 스칼라 경로)" || fail "spirit-lint F6 — 스칼라 contract 해석 실패"
+    [ "$(echo "$SLC" | jq -r '.result.findings')" -eq "$(( $(echo "$SLJ" | jq -r '.result.findings') + 2 ))" ] \
+        && pass "spirit-lint F6 — finding 은 없는 파일 + 직접 적은 ID 만 (전체 대상의 빈 칸은 알림만)" || fail "spirit-lint F6 — finding 수 불일치"
+    [ "$(rs rules-index.sh --json | jq -r '[.result.rules[]|select(.contract)|.token]|sort|join(",")')" = "SP-CPY-002,SP-UI-001" ] \
+        && rs rules-index.sh | grep -q 'SP-UI-001 — a \[Spirit/ui\] 🧪' \
+        && pass "rules-index — 계약이 막는 룰에 contract:true · 🧪" || fail "rules-index — contract 표시 실패"
+    rm -rf "$RS/apps" "$RS/.ax/spirit/rules/ui.md" "$RS/.ax/spirit/rules/cpy.md"
+
     # doctor-scan — 잔재 · hook 등록 · 도달 지도
     DSJ=$(rs doctor-scan.sh --json --plugin-dir "$REPO")
     echo "$DSJ" | jq -e '(.result.migration.gitignore_missing|index(".ax/current-task.json"))!=null and (.result.migration.spec_readme_stale|length)==1 and (.result.migration.spec_empty_dirs|length)==1' >/dev/null \

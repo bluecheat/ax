@@ -1168,6 +1168,31 @@ goax_frontmatter_scalar() {
     ' "$file"
 }
 
+# goax_rule_contracts <file>
+#   룰 파일 frontmatter 의 `contract:`(그 룰을 막는 짝 테스트 경로)와 `contract_ids:`(계약 대상 SP-ID)를
+#   `path<TAB>값` · `id<TAB>값` 줄로 내요. 스칼라(`contract: a.test.ts  # 주석`) · 인라인 목록(`[a, b]`) ·
+#   블록 목록(`- a`) 셋 다 받아요. frontmatter 밖은 안 봐요 — 본문 예시가 계약으로 읽히면 안 돼요.
+goax_rule_contracts() {
+    local file="${1:-}"
+    [ -f "$file" ] || return 0
+    awk '
+        function clean(v) { sub(/(^|[[:space:]])#.*$/, "", v); gsub(/^[[:space:]\042\047`]+|[[:space:]\042\047`]+$/, "", v); return v }
+        function emit(k, v,   n, i, a) {
+            v = clean(v)
+            if (v ~ /^\[/) { sub(/^\[/, "", v); sub(/\].*$/, "", v); n = split(v, a, ",")
+                             for (i = 1; i <= n; i++) { a[i] = clean(a[i]); if (a[i] != "") print k "\t" a[i] } }
+            else if (v != "") print k "\t" v
+        }
+        NR == 1 && !/^---[[:space:]]*$/ { exit }
+        NR == 1 { next }
+        /^---[[:space:]]*$/ { exit }
+        /^contract:/     { cur = "path"; v = $0; sub(/^contract:/, "", v); emit(cur, v); next }
+        /^contract_ids:/ { cur = "id";   v = $0; sub(/^contract_ids:/, "", v); emit(cur, v); next }
+        cur != "" && /^[[:space:]]+-[[:space:]]+/ { v = $0; sub(/^[[:space:]]+-[[:space:]]+/, "", v); emit(cur, v); next }
+        /^[^[:space:]]/ { cur = "" }
+    ' "$file"
+}
+
 # goax_glob_owners <path>
 #   stdin `<label>\t<glob>` 줄 중 glob 이 path 에 맞는 label 을 처음 나온 순서대로 한 번씩 출력.
 #   goax_glob_filter 의 반대 방향(경로 하나 × 글롭 여럿)이고 규칙은 goax_glob_match 와 같아요.

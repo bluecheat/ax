@@ -10,6 +10,7 @@
 #   F3 헤더 형식    `## ` 헤더는 전부 `## SP-<CAT>-<NNN>: 제목` (spirit/rules + modules/*/rules.md)
 #   F4 토큰 중복    같은 SP-<CAT>-<NNN> 이 어디서든 두 번 (spirit ↔ modules 교차 포함)
 #   F5 placeholder  values/tone/rules 에 템플릿 잔재 (`__X__` · `<여기에` · `<자기 팀` · `TODO(goax)`)
+#   F6 계약         frontmatter `contract:` 테스트 파일이 있는지 · 계약 대상 SP-ID 가 테스트 본문에 나오는지
 #
 # 자동 수정은 안 해요 — 위치만 알려줘요. 헤더 형식은 `.ax/docs/reference/rules-tokens.md` 가 SSOT.
 #
@@ -17,7 +18,9 @@
 #   {"status":"ok|warning","result":{"files":{"values":true,"tone":true,"rules_dir":true,"rule_template":true},
 #     "rules_files":N,"rules_count":N,"missing_files":[],"missing_frontmatter":[],
 #     "bad_headers":[{"file":"…","line":N,"text":"…"}],"duplicates":[{"token":"SP-X-001","files":["…"]}],
-#     "placeholders":[{"file":"…","line":N}],"findings":N,"ok":bool},…}
+#     "placeholders":[{"file":"…","line":N}],
+#     "contracts":[{"file":"…","contract":["…"],"missing":[],"covered":["SP-X-001"],"uncovered":[],"explicit_ids":bool}],
+#     "findings":N,"ok":bool},…}
 # Exit: 0 ok/warning · 1 error · --strict 면 findings > 0 일 때 1
 
 set -uo pipefail
@@ -128,7 +131,53 @@ if [ -n "$TOK_LIST" ]; then
     done < <(printf '%s' "$TOK_LIST" | cut -f1 | sort | uniq -d)
 fi
 
-FINDINGS=$(( ${#MISSING[@]} + ${#NO_FM[@]} + BAD_N + DUP_N + PH_N ))
+# ── F6 계약 (`contract:` 짝 테스트) ────────────────────────────────
+# 테스트 파일이 있는지, 계약 대상 SP-ID 가 테스트 본문에 나오는지(테스트 이름에 ID 를 넣는 규약) 봐요.
+# 대상은 `contract_ids:` 가 있으면 그것, 없으면 파일의 모든 SP-ID. finding 으로 세는 건 없는 파일과
+# `contract_ids:` 로 직접 적었는데 안 나오는 ID 뿐이에요 — 전체를 대상으로 할 때 빠진 ID 는 `uncovered` 로 알려만 줘요.
+# 테스트가 CI 에서 실제로 도는지는 여기서 보장하지 않아요.
+CON_JSON="[]"; CON_N=0
+for f in "${RULE_FILES[@]:-}"; do
+    [ -n "$f" ] || continue
+    CL=$(goax_rule_contracts "$f")
+    [ -n "$CL" ] || continue
+    r=$(rel "$f")
+    PATHS=$(printf '%s\n' "$CL" | awk -F'\t' '$1=="path"{print $2}')
+    IDS=$(printf '%s\n' "$CL" | awk -F'\t' '$1=="id"{print $2}')
+    EXPLICIT=true
+    [ -n "$IDS" ] || { EXPLICIT=false; IDS=$(grep -oE '^## SP-[A-Z]+-[0-9]{3}:' "$f" | sed -E 's/^## //; s/:$//' || true); }
+    MISS_P=""; HAVE_P=""
+    while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        if [ -f "$PROJECT_ROOT/$p" ]; then HAVE_P="${HAVE_P}${PROJECT_ROOT}/${p}"$'\n'; else MISS_P="${MISS_P}${p}"$'\n'; fi
+    done <<< "$PATHS"
+    COV=""; UNCOV=""
+    while IFS= read -r id; do
+        [ -n "$id" ] || continue
+        hit=false
+        while IFS= read -r tf; do [ -n "$tf" ] && grep -qF -- "$id" "$tf" 2>/dev/null && { hit=true; break; }; done <<< "$HAVE_P"
+        if [ "$hit" = true ]; then COV="${COV}${id}"$'\n'; else UNCOV="${UNCOV}${id}"$'\n'; fi
+    done <<< "$IDS"
+    n_miss=$(printf '%s' "$MISS_P" | grep -c . || true)
+    n_unc=0; [ "$EXPLICIT" = true ] && n_unc=$(printf '%s' "$UNCOV" | grep -c . || true)
+    CON_N=$((CON_N + n_miss + n_unc))
+    if [ "$JSON_MODE" = true ]; then
+        CON_JSON=$(printf '%s' "$CON_JSON" | jq -c --arg f "$r" --arg p "$PATHS" --arg m "$MISS_P" --arg c "$COV" --arg u "$UNCOV" --argjson e "$EXPLICIT" '
+            def l: split("\n") | map(select(length > 0));
+            . + [{file:$f, contract:($p|l), missing:($m|l), covered:($c|l), uncovered:($u|l), explicit_ids:$e}]')
+    else
+        while IFS= read -r p; do [ -n "$p" ] && printf '  ✗ %s — contract: 파일 없음: %s\n' "$r" "$p"; done <<< "$MISS_P"
+        if [ -n "$UNCOV" ]; then
+            if [ "$EXPLICIT" = true ]; then
+                printf '  ✗ %s — contract_ids 가 테스트에 안 나와요: %s\n' "$r" "$(printf '%s' "$UNCOV" | tr '\n' ' ')"
+            else
+                printf '  · %s — 계약 없는 룰: %s\n' "$r" "$(printf '%s' "$UNCOV" | tr '\n' ' ')"
+            fi
+        fi
+    fi
+done
+
+FINDINGS=$(( ${#MISSING[@]} + ${#NO_FM[@]} + BAD_N + DUP_N + PH_N + CON_N ))
 OK=true; [ "$FINDINGS" -gt 0 ] && OK=false
 
 if [ "$JSON_MODE" = true ]; then
@@ -137,10 +186,10 @@ if [ "$JSON_MODE" = true ]; then
     RESULT=$(jq -nc \
         --argjson v "$F_VALUES" --argjson t "$F_TONE" --argjson rd "$F_RULES" --argjson tp "$F_TPL" \
         --arg rf "$SPIRIT_N" --arg rc "$RULES_COUNT" --argjson m "$mj" --argjson fm "$fmj" \
-        --argjson bad "$BAD_JSON" --argjson dup "$DUP_JSON" --argjson ph "$PH_JSON" \
+        --argjson bad "$BAD_JSON" --argjson dup "$DUP_JSON" --argjson ph "$PH_JSON" --argjson con "$CON_JSON" \
         --arg fn "$FINDINGS" --argjson ok "$OK" \
         '{files:{values:$v,tone:$t,rules_dir:$rd,rule_template:$tp},rules_files:($rf|tonumber),rules_count:($rc|tonumber),
-          missing_files:$m,missing_frontmatter:$fm,bad_headers:$bad,duplicates:$dup,placeholders:$ph,findings:($fn|tonumber),ok:$ok}')
+          missing_files:$m,missing_frontmatter:$fm,bad_headers:$bad,duplicates:$dup,placeholders:$ph,contracts:$con,findings:($fn|tonumber),ok:$ok}')
     if [ "$OK" = true ]; then
         json_output "ok" "$RESULT" "Spirit 무결성 이상 없음 — ${SPIRIT_N} 카테고리 · SP 토큰 ${RULES_COUNT}개"
     else

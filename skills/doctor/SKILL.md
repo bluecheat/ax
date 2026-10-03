@@ -49,7 +49,7 @@ Spirit 카테고리 수를 `spirit-lint.sh` 로, mistake 카테고리 집계를 
 |---|---|---|
 | **Layer 1** | Constitution 존재 + 시그널 라벨 + 4계층 인덱스 표 | `rules-index.sh` (§3.13) · `doctor-scan.sh reach` (§3.8) |
 | **Layer 0 / 설정** | `.ax/config.yml` (domain_risk 5+ 권장) + `.ax/version` | `zero-domain-risk.sh --show` |
-| **Cross-cut Spirit** | values/tone placeholder · rules/ 1개+ · 헤더 형식 · 토큰 중복 | `spirit-lint.sh` (§3.7) |
+| **Cross-cut Spirit** | values/tone placeholder · rules/ 1개+ · 헤더 형식 · 토큰 중복 · `contract:` 짝 테스트 | `spirit-lint.sh` (§3.7) |
 | **Cross-cut Mistake Loop** | `.ax/mistakes/` 존재 | — |
 | **Layer 3** | `.ax/docs/adr/` 1개+, `_templates/spec/` (drift 는 §3.5) | — |
 | **Layer 2** | `.ax/modules/*/rules.md` 카운트 + 도달 | `doctor-scan.sh reach` |
@@ -192,6 +192,7 @@ SL_BAD=$(echo "$SL" | jq -r '.result.bad_headers[] | "\(.file):\(.line) — \(.t
 SL_DUP=$(echo "$SL" | jq -r '.result.duplicates[] | "\(.token) — \(.files | join(", "))"')
 SL_MISS=$(echo "$SL" | jq -r '.result.missing_files + .result.missing_frontmatter | join(", ")')
 SL_PH=$(echo "$SL" | jq -r '.result.placeholders[] | "\(.file):\(.line)"')
+SL_CON=$(echo "$SL" | jq -r '.result.contracts[] | "\(.file) — 없는 테스트 \(.missing | join(", ")) · 계약 없는 룰 \(.uncovered | join(", "))"')
 ```
 
 헤더 형식 `## SP-<CAT>-<NNN>: 제목` 의 SSOT 는 `.ax/docs/reference/rules-tokens.md`. 0건이면 본 표 `◆ Cross-cut — Spirit` 줄의 ✅ 만:
@@ -201,6 +202,7 @@ SL_PH=$(echo "$SL" | jq -r '.result.placeholders[] | "\(.file):\(.line)"')
    ❗ 비표준 헤더 — <SL_BAD 한 줄씩>
    ❌ 중복 토큰 — <SL_DUP 한 줄씩>
    ❗ placeholder 잔재 — <SL_PH 한 줄씩>
+   ❗ 계약(contract:) — <SL_CON 한 줄씩 · 없는 테스트 파일과 contract_ids 로 적었는데 테스트에 안 나오는 ID 만 finding>
 ```
 다음 단계 `[n] ✅ spirit lint 정리 — 비표준 헤더 수정 + 중복 토큰 해소 (사용자와 함께, 자동 수정 X)`. "spirit 점검" 으로 불렸으면 이 절만 보고하고 끝내요. `--strict` 면 placeholder 도 fail.
 
