@@ -27,12 +27,13 @@ bash .ax/scripts/bash/zero-probe.sh --only secret-scan
 ## 시작하는 법
 
 `.ax/_templates/zero/probes/` 의 예시를 `.ax/probes/` 로 복사해서 프로젝트에 맞게 고쳐요.
-예시 넷이 네 가지 전형을 덮습니다.
+예시 다섯이 네 가지 전형을 덮습니다.
 
 | 예시 | 무엇을 재나 |
 |---|---|
 | `dependency-direction.sh` | 코드 위반을 만들고 **lint 가 막는지** |
 | `secret-scan.sh` | 위반 파일을 스테이지하고 **pre-commit 훅이 막는지** |
+| `secret-scan-typed.sh` | 타입 옆 시크릿 값은 **막고**, 타입 선언만 있는 파일은 **통과시키는지** (오탐이 게이트를 끄게 만들어요) |
 | `version-bump.sh` | 릴리즈 없는 버전 증가를 스테이지하고 **pre-commit 훅이 막는지** |
 | `ci-actually-ran.sh` | CI 가 성공했는지가 아니라 **게이트 출력이 로그에 있는지** |
 
