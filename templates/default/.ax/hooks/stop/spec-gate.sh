@@ -8,7 +8,7 @@
 #
 # 무엇을 하나 — 차단이 아니라 **한 턴 더** 주는 거예요. 세 가지 중 하나를 하고 끝내라고 해요:
 #   (1) 남은 task 를 마저   (2) 의도적 보류면 `- [~] … 보류: <사유>`   (3) 여기서 멈추는 거면 인계 노트
-# (3) 이 적혀 있으면(current-task.json `handoff.now` 에 spec 이름 + `now_at` 이 24시간 안) 다시 안 잡아요 —
+# (3) 이 적혀 있으면(current-task.json `handoff.now` 에 spec ID 또는 전체 이름 + `now_at` 이 24시간 안) 다시 안 잡아요 —
 #     멈추는 게 의도인 거니까요. 시각을 보는 이유는 옛 노트 한 줄이 새 세션의 게이트를
 #     영구히 꺼 버리면 안 되기 때문이에요 (status-note.sh --set now 가 `now_at` 에 시각을 적어요).
 #
@@ -49,14 +49,35 @@ case "$PHASE" in implementing|review) ;; *) exit 0 ;; esac
 SPEC_DIR=$(jq -r '.spec_dir // empty' "$TASK_FILE" 2>/dev/null || true)
 [ -n "$SPEC_DIR" ] || exit 0
 SPEC=$(basename "$SPEC_DIR")
+# spec ID — 새 형식은 `YYYY-MM-DD-<4hex>`, 옛 형식은 순번 `NNN`. 다른 스크립트의 --spec 이 이 ID 접두로 찾으니
+# 인계 노트도 ID 로 적으면 인정해요. 예전엔 디렉터리 전체 이름만 grep 해서 "spec 2026-10-03-1b92 implementing"
+# 이라고 적어도 게이트가 한 번 더 막았어요 (실측). 형식 판별은 common.sh 의 goax_doc_key 하나로 해요.
+SPEC_ID=""
+type goax_doc_key >/dev/null 2>&1 && SPEC_ID=$(printf '%s\n' "$SPEC" | goax_doc_key 2>/dev/null)
+[ -n "$SPEC_ID" ] || SPEC_ID="$SPEC"
 
 # 인계 노트에 이미 적혀 있으면 멈추는 게 의도예요 — 다시 안 잡아요.
 # 단 **24시간 안에 찍힌 노트만** 인정해요. 예전엔 "지금 상태" 에 spec 이름이 있기만 하면
 # 통과라서, 몇 주 전 노트 한 줄이 새 세션의 게이트를 영구히 꺼 버렸어요 (다른 session_id 로
 # 몇 번을 불러도 빈 출력). `status-note.sh --set now` 가 `handoff.now_at` 에 시각을 적어요 —
 # 시각이 없는 노트는 인정하지 않아요. 인계 노트는 이미 열어 둔 current-task.json 안에 있어요.
+# 매칭은 전체 이름(부분 문자열) 또는 ID(앞뒤가 ASCII 영숫자가 아닐 때만 — 옛 순번 `014` 가 `T0140`·`2014` 에
+# 걸리지 않게). 경계를 [[:alnum:]] 로 안 보는 건 UTF-8 로케일의 awk 가 한글도 alnum 으로 봐서 "1b92에서" 를 놓치기 때문이에요.
 NOW_SEC=$(jq -r '(.handoff.now // []) | join("\n")' "$TASK_FILE" 2>/dev/null || true)
-if [ -n "$NOW_SEC" ] && printf '%s' "$NOW_SEC" | grep -qF "$SPEC"; then
+note_names_spec() {
+    printf '%s' "$NOW_SEC" | grep -qF "$SPEC" && return 0
+    printf '%s\n' "$NOW_SEC" | awk -v id="$SPEC_ID" '
+        BEGIN { an = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" }
+        function word(c) { return c != "" && index(an, c) > 0 }
+        { s = $0
+          while ((i = index(s, id)) > 0) {
+              pre = (i > 1) ? substr(s, i - 1, 1) : ""; post = substr(s, i + length(id), 1)
+              if (!word(pre) && !word(post)) { found = 1; exit }
+              s = substr(s, i + 1)
+          } }
+        END { exit found ? 0 : 1 }'
+}
+if [ -n "$NOW_SEC" ] && note_names_spec; then
     NOTE_TS=$(jq -r '.handoff.now_at // empty' "$TASK_FILE" 2>/dev/null || true)
     if [ -n "$NOTE_TS" ]; then
         NOTE_E=$(date -j -u -f '%Y-%m-%dT%H:%MZ' "$NOTE_TS" +%s 2>/dev/null \
@@ -108,9 +129,9 @@ REASON="[goax] spec ${SPEC} 가 ${PHASE} 인데 완료 게이트 미통과 — $
  (1) 남은 task 를 마저 진행 (spec-implement)
  (2) 의도적 보류면 tasks.md 에 \`- [~] T0NN … 보류: <사유>\` 로 표기
  (3) 여기서 멈추는 거면 인계 노트에 적고 끝내세요 — 다음 세션이 대화가 아니라 파일에서 읽어요:
-     bash .ax/scripts/bash/status-note.sh --set now \"spec ${SPEC} ${PHASE} 에서 멈춤 — <어디까지 · 왜>\"
+     bash .ax/scripts/bash/status-note.sh --set now \"spec ${SPEC_ID} ${PHASE} 에서 멈춤 — <어디까지 · 왜>\"
      bash .ax/scripts/bash/status-note.sh --add next \"<다음 세션이 처음 할 일>\"
-인계 노트의 '지금 상태' 에 ${SPEC} 가 **24시간 안에** 적혀 있으면 이 게이트는 다시 잡지 않아요 (시각은 status-note.sh 가 \`now_at\` 에 적어요). (세션당 최대 ${CAP}회 · $((COUNT + 1))/${CAP} · sensors.mode=off 면 통과)"
+인계 노트의 '지금 상태' 에 spec ID(${SPEC_ID}) 나 전체 이름이 **24시간 안에** 적혀 있으면 이 게이트는 다시 잡지 않아요 (시각은 status-note.sh 가 \`now_at\` 에 적어요). (세션당 최대 ${CAP}회 · $((COUNT + 1))/${CAP} · sensors.mode=off 면 통과)"
 
 jq -nc --arg r "$REASON" '{decision:"block", reason:$r}'
 exit 0
