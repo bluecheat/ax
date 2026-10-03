@@ -61,7 +61,9 @@ goax_cap_context() {
     tail="… ${n}바이트·${lines}줄 생략${where:+ — $where}"
     k=$(( max - $(printf '%s' "$tail" | LC_ALL=C wc -c | tr -d ' ') - 1 ))
     [ "$k" -lt 0 ] && k=0
-    cut=$(printf '%s' "$s" | LC_ALL=C head -c "$k")
+    # 파이프(`printf | head -c`)로 자르면 큰 입력에서 printf 가 SIGPIPE 로 "Broken pipe" 를 stderr 에 찍어요 —
+    # C 로케일 서브셸의 바이트 단위 부분 문자열로 잘라요
+    cut=$(LC_ALL=C; printf '%s' "${s:0:$k}")
     cn=$(printf '%s' "$cut" | LC_ALL=C wc -c | tr -d ' ')
     pre="${cut%$'\n'*}"
     if [ "$pre" != "$cut" ]; then
@@ -84,7 +86,7 @@ goax_cap_context() {
     done
     if [ "$drop" -gt 0 ]; then
         cn=$((cn - drop))
-        cut=$(printf '%s' "$cut" | LC_ALL=C head -c "$cn")
+        cut=$(LC_ALL=C; printf '%s' "${cut:0:$cn}")
     fi
     om=$((n - cn))
     ol=$(( lines - $(printf '%s\n' "$cut" | wc -l | tr -d ' ') ))
