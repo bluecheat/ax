@@ -3322,7 +3322,7 @@ else
     SEC_ERR=$(CLAUDE_PROJECT_DIR="$SEC" bash .ax/hooks/pre-commit/critical-rule-grep.sh 2>&1 >/dev/null)
     printf '%s' "$SEC_ERR" | grep -q 'AKIAIOSFODNN7EXAMPLE' \
         && fail "critical-rule-grep — 매칭 줄을 그대로 출력 (시크릿이 컨텍스트·로그로 새요)" \
-        || pass "critical-rule-grep — 파일 이름만 보고, 매칭 줄은 안 찍음"
+        || pass "critical-rule-grep — 위치(file:line)만 보고, 매칭 줄은 안 찍음"
 
     # kv-detect 는 키 이름 뒤 `:` 를 값의 시작으로 읽어서 TS 타입 자리까지 시크릿으로 잡았어요.
     # 실측(one-tenth): `token: string,` · `messageFor?(target: UserTarget, token: string, platform: Platform)`
@@ -4942,6 +4942,64 @@ mt --task "T009, T008,T010,T008" --json | jq -e '.result.changed==true and .resu
     && pass "mark-task --task T009,T008,T010 — 미완료만 켜고 이미 켜진 건 unchanged, 중복 ID 는 한 번" \
     || fail "mark-task 다중 ID: $(tr '\n' '|' < "$MTF")"
 rm -rf "$MT"
+
+# ───────────────────────────────────────────────────────────
+section "60. 위반 위치 — 어느 모드든 경고마다 file:line 과 걸린 규칙, 요약 줄에도"
+# ───────────────────────────────────────────────────────────
+# 실측(one-tenth): 한 커밋은 파일 이름이 나왔고, 다른 커밋은 "⚠ CRITICAL 위반 1건 — 경고만 (mode=warning)"
+# 한 줄만 보여서 위치를 diff 에서 손으로 찾았어요. 시크릿은 줄 없이 파일 이름만 찍었고, 요약 줄엔 위치가
+# 없어서 출력이 잘리거나 섞이면 위치가 사라졌어요. 이제 위반마다 `file:line — 규칙` 이고, 요약 줄도 위치를 담아요.
+VL=$(mktemp -d)
+pushd "$VL" >/dev/null || fail "VL pushd 실패"
+git init -q . >/dev/null 2>&1
+mkdir -p .ax/scripts/bash .ax/hooks/pre-commit .ax/spirit/rules .ax/mistakes src
+cp "$REPO/templates/default/.ax/scripts/bash/common.sh" .ax/scripts/bash/
+cp "$REPO/templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh" .ax/hooks/pre-commit/
+cp "$REPO/templates/default/.ax/hooks/pre-commit/check-mistake-secrets.sh" .ax/hooks/pre-commit/
+printf '# C\n' > CLAUDE.md
+cat > .ax/spirit/rules/vl.md <<'EOF'
+---
+category: vl
+severity: critical
+paths:
+  - "src/**"
+---
+## SP-VL-001: console.log 금지
+<!-- 검출 패턴: console\.log\( -->
+EOF
+printf 'const a = 1;\nconst b = 2;\nconsole.log(a);\n' > src/log.ts
+printf 'export const x = 1;\nexport const password = "%s";\n' hunter2xyz99 > src/cfg.ts
+printf 'line one\nline two\npg_key=%s\n' abcdefgh12345678 > .ax/mistakes/2026-10-01-secrets.md
+git add -f src/log.ts src/cfg.ts .ax/mistakes/2026-10-01-secrets.md >/dev/null 2>&1
+for vm in warning fail; do
+    printf 'sensors:\n  mode: %s\n' "$vm" > .ax/config.yml
+    VL_ERR=$(CLAUDE_PROJECT_DIR="$VL" bash .ax/hooks/pre-commit/critical-rule-grep.sh 2>&1 >/dev/null)
+    VL_LAST=$(printf '%s\n' "$VL_ERR" | tail -1)
+    { printf '%s' "$VL_ERR" | grep -q 'src/cfg.ts:2 — secrets:kv-detect' \
+        && printf '%s' "$VL_ERR" | grep -q 'src/log.ts:3 — SP-VL-001'; } \
+        && pass "critical-rule-grep (mode=$vm) — 위반마다 file:line — 규칙 (시크릿도 줄까지, 내용은 안 찍음)" \
+        || fail "critical-rule-grep (mode=$vm) — 위반 줄에 file:line·규칙 없음: $VL_ERR"
+    { printf '%s' "$VL_LAST" | grep -q 'src/cfg.ts:2' && printf '%s' "$VL_LAST" | grep -q 'src/log.ts:3'; } \
+        && pass "critical-rule-grep (mode=$vm) — 요약 줄 하나만 보여도 위치가 있어요" \
+        || fail "critical-rule-grep (mode=$vm) — 요약 줄에 위치 없음: $VL_LAST"
+    printf '%s' "$VL_ERR" | grep -q 'hunter2xyz99' \
+        && fail "critical-rule-grep (mode=$vm) — 시크릿 값이 출력에 샘" || true
+    VM_ERR=$(CLAUDE_PROJECT_DIR="$VL" bash .ax/hooks/pre-commit/check-mistake-secrets.sh 2>&1 >/dev/null)
+    { printf '%s' "$VM_ERR" | grep -q '\.ax/mistakes/2026-10-01-secrets\.md:3' \
+        && printf '%s\n' "$VM_ERR" | tail -1 | grep -q '2026-10-01-secrets\.md:3'; } \
+        && pass "check-mistake-secrets (mode=$vm) — file:line 을 목록과 요약 줄에" \
+        || fail "check-mistake-secrets (mode=$vm) — 줄 번호 없음: $VM_ERR"
+done
+# 위치가 많으면 요약 줄은 앞 3개 + "외 N건" 으로 줄여요 (요약이 화면을 덮지 않게)
+printf 'console.log(1);\nconsole.log(2);\nconsole.log(3);\nconsole.log(4);\nconsole.log(5);\n' > src/many.ts
+git reset -q >/dev/null 2>&1; git add -f src/many.ts >/dev/null 2>&1
+VL_MANY=$(CLAUDE_PROJECT_DIR="$VL" bash .ax/hooks/pre-commit/critical-rule-grep.sh 2>&1 >/dev/null | tail -1)
+{ printf '%s' "$VL_MANY" | grep -q 'src/many.ts:3' && printf '%s' "$VL_MANY" | grep -q '외 2건' \
+    && ! printf '%s' "$VL_MANY" | grep -q 'src/many.ts:4'; } \
+    && pass "critical-rule-grep — 요약 줄은 앞 3곳 + 외 N건" \
+    || fail "critical-rule-grep — 요약 줄 축약 실패: $VL_MANY"
+popd >/dev/null || true
+rm -rf "$VL"
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"

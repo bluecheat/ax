@@ -92,8 +92,9 @@ spec 은 ID(`2026-10-03-1b92`, 옛 순번 `014`)로 적어도 되고 디렉터�
 마스킹 행이 키 목록 조각을 공유해요. `${GITHUB_TOKEN}`·`<from env>` 같은 참조 표기와 `secret: null`·
 `token_count = 0` 은 값 첫 글자와 최소 길이로 걸러요. TS·Kotlin·Swift 타입 자리(`token: string,` ·
 `apiKey?: Foo` · `(token: string, …)`)는 `key=value` 를 보기 전에 줄에서 지워요 — 같은 줄의 값 대입은 그대로
-남아 걸려요. 검출되면 **파일 이름만** 찍어요 — 매칭된 줄을
-stderr 로 흘리면 검출한 의미가 없어요.
+남아 걸려요. 검출되면 **`file:line — secrets:<라벨>` 만** 찍어요 — 매칭된
+줄 내용을 stderr 로 흘리면 검출한 의미가 없어요. 위반 요약 줄(`CRITICAL 위반 N건 …`)도 앞 3곳의 위치를 담아요 —
+출력이 잘려 요약 한 줄만 보여도 어디를 고칠지 알 수 있게요.
 
 `common.sh` 가 없으면 검출할 패턴 자체가 없어요. 그때는 조용히 통과하지 않고
 `[goax] common.sh 없음 — secrets 안전망 비활성 (.ax/scripts/bash/common.sh 복구 필요)` 를 stderr 에

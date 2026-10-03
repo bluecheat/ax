@@ -51,10 +51,14 @@ while IFS= read -r rel; do
     ORIG=$(cat "$f")
     RED=$(printf '%s' "$ORIG" | redact_secrets)
     if [ "$ORIG" != "$RED" ]; then
-        LEAK_FILES="${LEAK_FILES}${rel}\n"
+        # 어느 줄인지까지 — redact_secrets 는 sed 라 줄 수가 같아요. 원본과 다른 줄 번호만 뽑아요 (내용은 안 찍어요)
+        LINES=$(redact_secrets < "$f" | awk 'NR==FNR { r[FNR] = $0; next } r[FNR] != $0 { printf "%s%d", (n++ ? "," : ""), FNR }' - "$f")
+        LEAK_FILES="${LEAK_FILES}${rel}${LINES:+:$LINES}\n"
         LEAK_COUNT=$((LEAK_COUNT + 1))
     fi
 done <<< "$STAGED"
+# 요약 줄에도 위치를 실어요 — 출력이 잘려 요약 한 줄만 보여도 어디인지 알 수 있게 (앞 3곳 + 외 N건)
+LEAK_TAIL=$(printf '%b' "$LEAK_FILES" | awk 'NF { if (++n <= 3) printf "%s%s", (n > 1 ? ", " : " — "), $0 } END { if (n > 3) printf " 외 %d건", n - 3 }')
 
 if [ "$LEAK_COUNT" -gt 0 ]; then
     printf '\033[31m[goax pre-commit]\033[0m mistake 파일에 시크릿 추정 패턴이 남아있어요 (%d건):\n' "$LEAK_COUNT" >&2
@@ -64,10 +68,10 @@ if [ "$LEAK_COUNT" -gt 0 ]; then
     printf '       (탐지 패턴: %skey=value≥12자)\n' \
         "$(goax_secret_rules | awk -F'\t' '($1=="both"||$1=="mask") && $2!="kv-mask" && !seen[$2]++ {printf "%s·", $2}')" >&2
     if [ "$SENSOR_MODE" = "fail" ]; then
-        printf '[goax] ✗ mistake secrets %d건 — 차단 (mode=fail)\n' "$LEAK_COUNT" >&2
+        printf '[goax] ✗ mistake secrets %d건 — 차단 (mode=fail)%s\n' "$LEAK_COUNT" "$LEAK_TAIL" >&2
         exit 2
     fi
-    printf '[goax] ⚠ mistake secrets %d건 — 경고만 (mode=%s)\n' "$LEAK_COUNT" "$SENSOR_MODE" >&2
+    printf '[goax] ⚠ mistake secrets %d건 — 경고만 (mode=%s)%s\n' "$LEAK_COUNT" "$SENSOR_MODE" "$LEAK_TAIL" >&2
     exit 0
 fi
 
