@@ -228,6 +228,7 @@ TASK_ID="$COMPLETED_TASK_ID"     # 예: T013
 # 인라인 sed(`.*T013`)는 본문에 다른 task 를 언급한 줄("T009 가 해소")까지 켰어요.
 bash .ax/scripts/bash/mark-task.sh --spec "$SPEC" --task "$TASK_ID" --json
 # 의도적 보류는 --state '~' (사유는 task 줄에 `보류: <사유>` 로 적어요)
+# 레인 보고로 여러 task 가 한꺼번에 검증을 통과했으면 --task T010,T011 — 하나라도 없으면 아무것도 안 켜요
 ```
 
 각 task 완료 후 1줄 보고 (대화 [y/n] X):

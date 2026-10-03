@@ -193,6 +193,8 @@ bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --assign "T010=A,T011=A,T
 
 `result.lane_file_conflicts` 가 비어야 해요 — 같은 파일을 두 레인이 갖고 있으면 나중에
 `--dispatch` 가 거부돼요. 레인 이름은 짧게(A·B·C 또는 역할명), task 하나는 레인 하나예요.
+디스패치는 `spec-implement` 가 라운드마다 해요 — `--dispatch T010,T011` 로 그 라운드에 실제로 맡긴
+task 만 적고(같은 레인이어야 해요), `--dispatch A` 는 레인의 미완료 전부를 한 번에 맡길 때만 써요.
 옮기려면 `--force`. 배정하지 않은 task 는 코디네이터가 직접 하는 일이에요 — 떼어낸 배럴
 task(정책 B)가 보통 여기예요.
 

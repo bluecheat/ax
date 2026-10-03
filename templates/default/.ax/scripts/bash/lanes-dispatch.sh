@@ -4,7 +4,7 @@
 # Usage:
 #   bash lanes-dispatch.sh [--spec <id-slug>] [--status] [--json]
 #   bash lanes-dispatch.sh [--spec <id-slug>] --assign "T010=A,T011=A,T020=B" [--force] [--dry-run] [--json]
-#   bash lanes-dispatch.sh [--spec <id-slug>] --dispatch <lane> [--force] [--dry-run] [--json]
+#   bash lanes-dispatch.sh [--spec <id-slug>] --dispatch <lane | T010,T011> [--force] [--dry-run] [--json]
 #   bash lanes-dispatch.sh [--spec <id-slug>] --report <lane | T010,T011> [--dry-run] [--json]
 #
 # 왜 필요한가 — 코디네이터의 기억은 컨텍스트 창 안에만 있어요. 어떤 task 를 어느 레인에
@@ -30,6 +30,12 @@
 # --dispatch 는 기본적으로 **아직 보고를 못 받은** 미완료 task 만 보내요. 이미 보고까지
 # 받은 task 를 다시 보내려면 --force (그때만 그 task 의 `보고:` 를 지워요).
 # --dispatch 는 그 레인이 lane_file_conflicts 에 걸려 있으면 거부해요 (exit 1, --force 로 우회).
+# --dispatch T010,T011 처럼 task 목록을 주면 **그 task 들만** 보내요 — 라운드마다 레인의 일부만
+# 워커에 맡길 때예요. 레인 이름으로 보내면 그 레인의 미완료 전부에 시각이 찍혀서, 아무도 안 맡은
+# task 가 "보고 안 받은 디스패치" 로 세져 경보가 흐려졌어요 (실측: 레인 하나의 8 task 가 실제
+# 기동보다 77분 먼저 찍히고, 안 맡긴 4 task 가 경보에 섞임). 목록은 전부 미완료여야 하고 같은
+# 레인에 배정돼 있어야 해요 (아니면 exit 1, 파일 무변경). 이미 디스패치된 task 를 다시 지정하면
+# 시각을 갱신하고 `보고:` 를 지운 뒤 warnings 에 적어요 — 이름을 직접 댄 것 자체가 재전송 의사예요.
 # 소유자는 정하지 않아요 — 배정은 판단이고 lane skill 이 사람과 해요. 여기선 기록과 검사만.
 #
 # `files:` 경로는 비교 전에 정규화해요 (`./` 제거 · 중복 `/` · 끝 `/`) — `src/a.ts` 와
@@ -265,16 +271,46 @@ case "$MODE" in
     IFS="$oldIFS"
     ;;
   dispatch)
-    [ -n "$LANE" ] || fail "--dispatch 에 레인 이름이 필요해요"
-    OPEN_IN_LANE=$(printf '%s\n' "$LEDGER" | awk -F'|' -v l="$LANE" '$2=="open" && $4==l{print $1}')
-    [ -n "$OPEN_IN_LANE" ] || fail "레인 '$LANE' 에 미완료 task 가 없어요 — --assign 으로 먼저 배정하세요"
-    if [ "$FORCE" = true ]; then
-        TARGETS=$(printf '%s\n' "$OPEN_IN_LANE" | paste -sd, - || true)
+    [ -n "$LANE" ] || fail "--dispatch 에 레인 이름 또는 task ID 목록(T010,T011)이 필요해요"
+    IS_LANE=$(printf '%s\n' "$LEDGER" | awk -F'|' -v l="$LANE" '$4==l{f=1} END{print f?1:0}')
+    if [ "$IS_LANE" != "1" ] && printf '%s' "$LANE" | tr -d ' ' | grep -Eq '^T[0-9]+(,T[0-9]+)*,?$'; then
+        # task 목록 — 전부 검증한 뒤에만 써요 (--assign 과 같은 트랜잭션: 반쯤 찍힌 원장은 더 나빠요)
+        TARGETS=$(printf '%s' "$LANE" | tr -d ' ' | tr ',' '\n' | awk 'NF && !seen[$0]++' | paste -sd, -)
+        MISSING=""; NOTOPEN=""; NOLANE=""; LANES_SEEN=""; REDISP=""
+        oldIFS="$IFS"; IFS=','
+        for tid in $TARGETS; do
+            [ -z "$tid" ] && continue
+            has_id "$tid" || { MISSING="$MISSING$tid "; continue; }
+            row=$(printf '%s\n' "$LEDGER" | awk -F'|' -v id="$tid" '$1==id{print; exit}')
+            st=$(printf '%s' "$row" | cut -d'|' -f2)
+            ln=$(printf '%s' "$row" | cut -d'|' -f4)
+            dp=$(printf '%s' "$row" | cut -d'|' -f5)
+            [ "$st" = "open" ] || NOTOPEN="$NOTOPEN$tid($st) "
+            if [ -z "$ln" ]; then NOLANE="$NOLANE$tid "
+            else case " $LANES_SEEN " in *" $ln "*) ;; *) LANES_SEEN="${LANES_SEEN:+$LANES_SEEN }$ln" ;; esac
+            fi
+            [ -n "$dp" ] && REDISP="$REDISP$tid "
+        done
+        IFS="$oldIFS"
+        [ -n "$MISSING" ] && fail "tasks.md 에 없는 task: ${MISSING% }"
+        [ -n "$NOTOPEN" ] && fail "미완료가 아닌 task 는 디스패치하지 않아요: ${NOTOPEN% }"
+        [ -n "$NOLANE" ] && fail "레인이 배정되지 않은 task: ${NOLANE% } — --assign 으로 먼저 배정하세요"
+        case "$LANES_SEEN" in
+            *" "*) fail "task 목록이 여러 레인에 걸쳐 있어요 (${LANES_SEEN}) — 디스패치는 레인 하나씩이에요" ;;
+        esac
+        LANE="$LANES_SEEN"
+        [ -n "$REDISP" ] && WARN="이미 디스패치된 task 를 다시 보냈어요: ${REDISP% } — 디스패치 시각을 갱신하고 보고 기록을 지웠어요"
     else
-        # 기본 대상 = 디스패치 기록이 없거나 보고를 못 받은 것. 보고까지 받은 task 는 건드리지 않아요
-        TARGETS=$(printf '%s\n' "$LEDGER" | awk -F'|' -v l="$LANE" '$2=="open" && $4==l && ($5=="" || $6==""){print $1}' | paste -sd, - || true)
-        SKIPPED=$(printf '%s\n' "$LEDGER" | awk -F'|' -v l="$LANE" '$2=="open" && $4==l && $5!="" && $6!=""{print $1}' | paste -sd, - || true)
-        [ -n "$TARGETS" ] || fail "레인 '$LANE' 의 미완료 task 는 전부 디스패치 후 보고까지 받았어요 (${SKIPPED}) — 그래도 다시 보내려면 --force"
+        OPEN_IN_LANE=$(printf '%s\n' "$LEDGER" | awk -F'|' -v l="$LANE" '$2=="open" && $4==l{print $1}')
+        [ -n "$OPEN_IN_LANE" ] || fail "레인 '$LANE' 에 미완료 task 가 없어요 — --assign 으로 먼저 배정하세요"
+        if [ "$FORCE" = true ]; then
+            TARGETS=$(printf '%s\n' "$OPEN_IN_LANE" | paste -sd, - || true)
+        else
+            # 기본 대상 = 디스패치 기록이 없거나 보고를 못 받은 것. 보고까지 받은 task 는 건드리지 않아요
+            TARGETS=$(printf '%s\n' "$LEDGER" | awk -F'|' -v l="$LANE" '$2=="open" && $4==l && ($5=="" || $6==""){print $1}' | paste -sd, - || true)
+            SKIPPED=$(printf '%s\n' "$LEDGER" | awk -F'|' -v l="$LANE" '$2=="open" && $4==l && $5!="" && $6!=""{print $1}' | paste -sd, - || true)
+            [ -n "$TARGETS" ] || fail "레인 '$LANE' 의 미완료 task 는 전부 디스패치 후 보고까지 받았어요 (${SKIPPED}) — 그래도 다시 보내려면 --force"
+        fi
     fi
     ;;
   report)

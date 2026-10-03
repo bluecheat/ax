@@ -2902,6 +2902,40 @@ LGEOF
         || fail "lanes-dispatch --dispatch — 보고된 task 를 재전송하거나 보고를 지움"
     lg --dispatch A --force --json | jq -e '.result.changed==3' >/dev/null 2>&1 \
         && pass "lanes-dispatch --dispatch --force — 보고된 것까지 재전송" || fail "lanes-dispatch --force — 재전송 안 함"
+
+    # task 목록 디스패치 — 라운드에 실제로 맡긴 task 만 적어요. 레인 이름으로 보내면 안 맡긴 task 까지
+    # "보고 안 받은 디스패치" 에 섞였어요 (실측 4건)
+    cat > "$LT" <<'LGEOF'
+- [ ] T001 [AC1] a — files: src/a.ts
+      레인: A
+- [ ] T002 [AC1] b — files: src/b.ts
+      레인: A
+- [ ] T003 [AC2] c — files: src/c.ts
+      레인: A
+- [x] T004 [AC2] d — files: src/d.ts
+      레인: A
+- [ ] T005 [AC3] e — files: src/e.ts
+      레인: B
+- [ ] T006 [AC3] f — files: src/f.ts
+LGEOF
+    lg --dispatch T001,T002 --json | jq -e '.status=="ok" and .result.changed==2 and .result.dispatched_unreported==["T001","T002"]
+        and .warnings==[] and (.next_step|test("레인 .A."))' >/dev/null 2>&1 \
+        && [ "$(grep -c '^      디스패치:' "$LT")" = 2 ] \
+        && pass "lanes-dispatch --dispatch T001,T002 — 목록의 task 만 디스패치 (T003 은 그대로)" \
+        || fail "lanes-dispatch --dispatch <task 목록> — 목록 밖 task 에도 시각을 찍거나 거부함"
+    cp "$LT" "$LDG/before.md"; LG_BAD=""
+    for bad in T001,T005 T004 T006 T999; do
+        lg --dispatch "$bad" --json >/dev/null 2>&1 && LG_BAD="$LG_BAD $bad(exit0)"
+    done
+    [ -z "$LG_BAD" ] && cmp -s "$LT" "$LDG/before.md" \
+        && pass "lanes-dispatch --dispatch <task 목록> — 여러 레인 · 완료 · 레인 없음 · 없는 ID 는 exit 1 + 파일 무변경" \
+        || fail "lanes-dispatch --dispatch <task 목록> — 잘못된 목록을 받아들임:${LG_BAD:- (파일 변경)}"
+    lg --report T001 --json >/dev/null 2>&1
+    lg --dispatch "T001, T003,T003" --json | jq -e '.result.changed==2 and (.warnings|length)==1 and (.warnings[0]|test("T001"))
+        and (.warnings[0]|test("T003")|not)' >/dev/null 2>&1 \
+        && ! grep -q '^      보고:' "$LT" \
+        && pass "lanes-dispatch --dispatch <task 목록> — 재디스패치는 시각 갱신 · 보고 지움 · warnings (중복 ID 는 한 번)" \
+        || fail "lanes-dispatch --dispatch <task 목록> — 재디스패치가 경고 없이 지나가거나 보고를 남김"
     rm -rf "$LDG"
 fi
 
@@ -4794,6 +4828,17 @@ mt --task T0091 --state '~' --json >/dev/null
     && pass "mark-task — 줄 앞 ID 만 켜고 본문 언급·펜스 예시·T0091 은 그대로, 재실행은 변화 없음, --next 는 펜스 밖, 락 해제" \
     || fail "mark-task: next=$N1 rc=$R1 $(cat "$MTF" | tr '\n' '|')"
 mt --task T404 --json >/dev/null; [ $? = 1 ] && pass "mark-task — 없는 ID 는 exit 1 (조용히 성공하지 않아요)" || fail "mark-task 없는 ID 가 성공했어요"
+# 여러 ID — 트랜잭션: 하나라도 없으면 아무것도 안 켜고, 이미 켜진 것은 건너뛰어요
+cp "$MTF" "$MT/before"
+mt --task T008,T404 --json >/dev/null; MR=$?
+[ "$MR" = 1 ] && cmp -s "$MTF" "$MT/before" \
+    && pass "mark-task --task T008,T404 — 하나라도 없으면 exit 1 + 파일 무변경" || fail "mark-task 다중 ID 가 부분 적용됨 (rc=$MR)"
+mt --task "T009, T008,T010,T008" --json | jq -e '.result.changed==true and .result.changed_tasks==["T008","T010"]
+    and .result.unchanged_tasks==["T009"] and (.result.done_after - .result.done_before)==2' >/dev/null 2>&1 \
+    && grep -qxF -- '- [x] T008 T005 의 상수와 맞춤' "$MTF" && grep -qxF -- '- [x] T010 T009 가 셋 다 해소' "$MTF" \
+    && grep -qxF -- '- [~] T0091 다른 것' "$MTF" && [ ! -e "$MTF.lock" ] \
+    && pass "mark-task --task T009,T008,T010 — 미완료만 켜고 이미 켜진 건 unchanged, 중복 ID 는 한 번" \
+    || fail "mark-task 다중 ID: $(tr '\n' '|' < "$MTF")"
 rm -rf "$MT"
 
 # ───────────────────────────────────────────────────────────
