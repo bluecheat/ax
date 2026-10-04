@@ -1,0 +1,17 @@
+schema_version: "1.1"
+name: trigger-screen-copy
+description: "UX 라이팅 — screen"
+tags: [trigger, screen]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: "에러 토스트가 '결제에 실패했습니다' 로 나가는데 문구 다듬어줘"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: fires-screen
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?screen"'
+    min: 1

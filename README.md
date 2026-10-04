@@ -123,6 +123,8 @@ The `spec` skill doesn't generate every artifact upfront. The triage result deci
                                   tasks carry lane assignments (lanes-dispatch.sh ledger)
                                   → completion gate G1–G6 (+ fresh-context evaluator for L / M×L3)
 "split into lanes"              → lane — first asks whether the work can be split at all
+"build this screen"             → screen — spec tables first → screen-designer (fresh context) builds,
+                                  renders, measures (screen-measure.sh) and fixes before showing
 # Design decisions go to ADR (.ax/docs/adr/<id>-*.md)
 ```
 
@@ -147,6 +149,7 @@ Natural-language tier overrides: `"simple"` / `"spec + tasks"` → standard · `
 | "split into lanes" / "run in parallel" | lane — decides first whether the work can be split at all |
 | "start implementation" / "run tasks" | spec-implement |
 | "validate spec" | spec-validate — NEEDS CLARIFICATION gating |
+| "build this screen" / "review this mockup" / `/screen` | screen — spec tables first (tokens · components · copy · exceptions), then the `screen-designer` agent builds, renders, measures in px and fixes (≤3) before showing; report starts with `verdict:`. Self-contained: all design knowledge ships in `skills/screen/references/`; MCPs · browsers · simulators are optional |
 | "plan the <task>" / "fix" / "refactor" | triage — Size × Risk classify in 30s |
 | "write ADR" / "record decision" | adr — new ADR file |
 | "spirit check" | doctor → `spirit-lint.sh` — header format · token duplicates · placeholders |

@@ -1,0 +1,24 @@
+schema_version: "1.1"
+name: trigger-screen-near-miss-spec
+description: "기능 spec — spec, screen 아님"
+tags: [trigger, screen, spec]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: "결제 개편 기능 spec 새로 만들어줘 — 화면 3개, API 2개짜리야"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: fires-spec
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?spec"'
+    min: 1
+  - name: not-screen
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?screen"'
+    min: 0
+    max: 0
+    arm: both

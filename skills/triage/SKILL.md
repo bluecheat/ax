@@ -169,6 +169,10 @@ M×L2 에서 사용자가 합의 리뷰를 켜면 `intent_notes.consensus_review
 `spec-validate` §2.5 가 `REQ=optional` 일 때 이 값을 읽어 architect·evaluator 리뷰를 자동으로 돌려요.
 켜는 주체가 없으면 `--consensus` 는 사용자가 그 단어를 직접 말했을 때만 발동해서 죽은 옵션이 돼요.
 
+**화면이 산출물이면 screen 으로 넘겨요.** 화면을 새로 만들거나 고치는 일, 시안·스크린샷 리뷰, UX 문구 다듬기는
+분류(Size×Risk)까지만 여기서 하고 권장 경로를 `screen` skill 로 적어요 — 스펙 표 · 구현 · 실측은 그쪽 몫이에요.
+기능 전체(화면 여럿 + API)라면 spec 이 먼저고, spec-implement 의 화면 task 가 screen 을 불러요.
+
 출력엔 분류(Size×Risk·도메인)·권장 경로·사전 검색 결과(관련 spec/ADR/mistakes/룰 토큰)·friction 모드를 담아요. 형식 예 (모호 영역):
 
 ```
