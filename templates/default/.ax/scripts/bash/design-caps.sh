@@ -61,7 +61,8 @@ elif [ -n "$(first find . -maxdepth 3 -name pubspec.yaml -not -path '*/node_modu
 elif [ -n "$(first find . -maxdepth 3 -name '*.xcodeproj')" ] && [ -z "$(pkg_has react)" ]; then STACK=swiftui
 elif [ -n "$(first find . -maxdepth 3 \( -name build.gradle -o -name build.gradle.kts \) -not -path '*/node_modules/*')" ] \
      && [ -z "$(pkg_has react)" ]; then STACK=android
-elif [ -n "$(pkg_has 'next|react|vue|svelte|astro|solid-js')" ]; then STACK=web
+elif [ -n "$(pkg_has '(next|react|vue|svelte|astro|solid-js)')" ]; then STACK=web
+elif [ -n "$(first find . -maxdepth 2 -name index.html -not -path '*/node_modules/*')" ]; then STACK=web   # 빌드 없는 정적 페이지
 fi
 
 # ── tokens · components: 프로젝트 파일 ──
@@ -87,18 +88,17 @@ MCP_NAMES=$( {
     find "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins" -maxdepth 6 -name .mcp.json -not -path '*/.trash/*' 2>/dev/null \
         | while IFS= read -r m; do jq -r '(.mcpServers // .) | keys[]' "$m" 2>/dev/null; done
 } | tr '[:upper:]' '[:lower:]' | sort -u ) || true   # 플러그인 디렉토리가 없으면 find 가 1 — 이름이 없을 뿐이에요
+# 한 서버가 여러 슬롯에 들 수 있어요 (디자인 시스템 MCP 가 Figma 노드도 읽는 경우) — case 를 따로 걸어요
 while IFS= read -r n; do
     [ -n "$n" ] || continue
-    case "$n" in
-        *seed*|*chakra*|*storybook*|*mantine*|*mui*) add components "mcp:$n" "디자인 시스템 문서·컴포넌트"
-                                       add tokens "mcp:$n" "디자인 시스템 토큰 이름" ;;
-        *figma*)                       add tokens "mcp:$n" "get_variable_defs · search_design_system (Figma 파일 키 필요)"
-                                       add reference "mcp:$n" "get_screenshot" ;;
-        *shadcn*|*magic*|*21st*)       add components "mcp:$n" "레지스트리 검색·설치" ;;
-        *mobbin*|*uibowl*|*refero*|*lazyweb*) add reference "mcp:$n" "화면·패턴 레퍼런스" ;;
-        *playwright*|*chrome-devtools*) add render "mcp:$n" "브라우저 렌더·evaluate" ;;
-        *ios-simulator*|*xcodebuild*|*mcp-connect*) add render "mcp:$n" "시뮬레이터 캡처" ;;
-    esac
+    case "$n" in *seed*|*chakra*|*storybook*|*mantine*|*mui*|*design-system*)
+        add components "mcp:$n" "디자인 시스템 문서·컴포넌트"; add tokens "mcp:$n" "디자인 시스템 토큰 이름" ;; esac
+    case "$n" in *shadcn*|*magic*|*21st*) add components "mcp:$n" "레지스트리 검색·설치" ;; esac
+    case "$n" in *figma*)
+        add tokens "mcp:$n" "get_variable_defs · search_design_system (Figma 파일 키 필요)"; add reference "mcp:$n" "노드 스크린샷" ;; esac
+    case "$n" in *mobbin*|*uibowl*|*refero*|*lazyweb*) add reference "mcp:$n" "화면·패턴 레퍼런스" ;; esac
+    case "$n" in *playwright*|*chrome-devtools*) add render "mcp:$n" "브라우저 렌더·evaluate" ;; esac
+    case "$n" in *ios-simulator*|*xcodebuild*|*simulator*) add render "mcp:$n" "시뮬레이터 캡처" ;; esac
 done <<< "$MCP_NAMES"
 
 # ── render · measure: 명령 ──
@@ -113,7 +113,8 @@ RESULT=$(printf '%s' "$ROWS" | jq -Rn --arg stack "$STACK" --arg spec "$SPEC" '
     [inputs | select(length > 0) | split("\t") | {slot: .[0], provider: .[1], detail: .[2]}] as $r
     | ["tokens","components","reference","render","measure"] as $slots
     | {stack: $stack,
-       slots: (reduce $slots[] as $s ({}; .[$s] = [$r[] | select(.slot == $s) | {provider, detail}])),
+       slots: (reduce $slots[] as $s ({}; .[$s] = ([$r[] | select(.slot == $s) | {provider, detail}]
+              | reduce .[] as $x ([]; if any(.[]; .provider == $x.provider and (.provider != "file" or .detail == $x.detail)) then . else . + [$x] end)))),   # 순서를 지키며 같은 제공자 중복 제거 (파일은 경로별)
        spec: (if $spec == "" then null else $spec end),
        empty: [$slots[] as $s | select(([$r[] | select(.slot == $s)] | length) == 0) | $s]}')
 

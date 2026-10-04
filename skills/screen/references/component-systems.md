@@ -4,7 +4,7 @@
 
 - 숫자마다 출처 키(`[키]`)를 달았어요. URL 은 맨 아래 **출처**. 직접 확인하지 못한 값은 **(미확인)** 이에요.
 - 출처 없이 "(관행)" 이라 적힌 규칙은 여러 실무 팀에서 반복되지만 위 공개 문서엔 명시가 없는 것이에요.
-- 조사일 2026-10-04. `components.md`(16종 규격)가 "어떻게 그리나" 라면, 이 파일은 "시스템들은 몇으로 정했고 어디서 갈리나" 예요.
+- `components.md`(16종 규격)가 "어떻게 그리나" 라면, 이 파일은 "시스템들은 몇으로 정했고 어디서 갈리나" 예요.
 
 단위 메모
 - shadcn·Chakra 는 Tailwind/Panda 스페이싱이에요. 1단위 = 4px(0.25rem) — `h-9` = 36px, `size-4` = 16px, Chakra `h: "10"` = 40px.
@@ -623,6 +623,8 @@
 ---
 
 ## 출처
+
+조사일 2026-10-04 — 버전은 각 링크에 적힌 것(shadcn/ui registry new-york-v4 · material-web 토큰 v0_192 · Chakra UI v3 main)이에요. 값이 바뀌었을 수 있으니 숫자를 옮기기 전에 링크를 다시 확인해요.
 
 shadcn/ui (registry new-york-v4)
 - [SH-button] https://ui.shadcn.com/r/styles/new-york-v4/button.json

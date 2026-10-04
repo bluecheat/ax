@@ -136,6 +136,10 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 
 ## 3. Task 실행 흐름
 
+**화면이 산출물인 task**(화면·부품·문구를 만들거나 고치는 task)는 `screen` skill 절차로 돌려요 — 스펙 표를 먼저
+채우고 screen-designer 가 구현·렌더·실측한 뒤 `screen-report-check.sh` 로 리포트를 판정해요. task 의 `검증:` 은
+그 판정(`verdict: 통과`, 렌더 도구가 없으면 `실측 아님` + 미해결 확인)으로 대신해요.
+
 ### 3.1 Silent 진행 (autopilot / phase_gate 의 phase 내부)
 
 ```

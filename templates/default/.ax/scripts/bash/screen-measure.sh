@@ -41,6 +41,9 @@ done
 if [ "$SHOW_HELP" = true ]; then goax_help "${BASH_SOURCE[0]}"; exit "$EXIT_OK"; fi
 fail() { [ "$JSON_MODE" = true ] && json_error "$1"; goax_error "$1"; exit "$EXIT_ERROR"; }
 
+if ! command -v jq >/dev/null 2>&1; then
+    goax_warn "jq 가 필요해요 — brew install jq 또는 apt-get install jq"; exit "$EXIT_SKIPPED"
+fi
 if ! goax_py_ok || ! python3 -c 'import PIL' >/dev/null 2>&1; then
     MSG="python3 와 Pillow 가 있어야 재요 — pip install pillow. 없으면 스크린샷을 눈으로 보고 리포트에 \"실측 아님\" 으로 적어요"
     [ "$JSON_MODE" = true ] && json_skip "$MSG"

@@ -1,0 +1,17 @@
+schema_version: "1.1"
+name: trigger-screen-build
+description: "새 화면 설계 — screen"
+tags: [trigger, screen]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: "Expo 앱에 예약 확인 화면 새로 만들어줘. 토큰 파일은 아직 없어"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: fires-screen
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?screen"'
+    min: 1

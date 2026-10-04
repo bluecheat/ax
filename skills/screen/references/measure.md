@@ -4,7 +4,7 @@
 
 ## 목차
 
-1. 화면 얻기 — 플랫폼별 캡처·이동 · 2. 배율 규칙 · 3. 재는 법 — `screen-measure.sh` 스캔라인 · 4. 무엇을 재나 — 체크리스트 · 5. 전후 픽셀 비교 · 6. 지적을 쓰는 법 · 7. 렌더링을 못 할 때 — "실측 아님" · 8. 정리
+1. 화면 얻기 — 플랫폼별 캡처·이동 (웹 뷰포트·배율 명령 포함) · 2. 배율 규칙 · 3. 재는 법 — `screen-measure.sh` 스캔라인 · 3.1 측정 출처 — 무엇이 실측인가 · 4. 무엇을 재나 — 체크리스트 · 5. 전후 픽셀 비교 · 6. 지적을 쓰는 법 · 7. 렌더링을 못 할 때 — "실측 아님" · 8. 정리
 
 ---
 
@@ -18,6 +18,26 @@
 | Android 에뮬레이터 | `adb exec-out screencap -p > out.png` | `adb shell am start -d "scheme://route"` · `adb shell input tap x y` | 밀도(dp↔px)는 `adb shell wm density` (dpi ÷ 160 = 배율) |
 | 웹 · 웹뷰 | 브라우저 자동화(CLI 또는 MCP)의 screenshot | URL | 뷰포트를 **375 · 390 · 430** 폭으로 각각, 데스크톱 웹이면 **1280** 추가. 320 은 예외 케이스 확인용으로 한 장 |
 | 시각 회귀가 이미 있는 웹 프로젝트 | Playwright `toHaveScreenshot` 등 프로젝트 테스트 | 테스트 라우트 | 프로젝트 기준선을 쓰고 새로 만들지 않아요 |
+
+**웹 뷰포트 · 배율을 고정하는 명령** — 배율(deviceScaleFactor)을 정해 놓지 않으면 §2 의 계산이 틀어져요.
+
+```bash
+# 브라우저 자동화 CLI (agent-browser) — viewport <폭> <높이> [배율]
+agent-browser open http://localhost:3000/booking/confirm
+agent-browser set viewport 390 844 3          # 390 폭 · 3배 → 스크린샷 1170px
+agent-browser set media light                 # 다크면 dark
+agent-browser screenshot after-confirm-390.png
+agent-browser screenshot --full after-confirm-390-full.png   # 맨 아래까지 (하단 고정 CTA 여백)
+agent-browser get box "[data-testid=cta]"     # DOM rect — x · y · width · height (CSS px)
+agent-browser get styles "h1"                 # computed style — font-size · line-height
+agent-browser eval "getComputedStyle(document.querySelector('h1')).fontSize"
+
+# Playwright CLI — 배율 옵션이 없어 기기 프리셋으로 (iPhone 15 = 393 · 3배)
+npx playwright screenshot --device "iPhone 15" --color-scheme light http://localhost:3000/booking/confirm after-confirm-393.png
+npx playwright screenshot --viewport-size "390,844" http://localhost:3000/booking/confirm after-confirm-390@1x.png   # 1배
+```
+
+Playwright 로 폭과 배율을 따로 정하려면 스크립트에서 `browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 })` 로 열고, `page.evaluate(() => getComputedStyle(document.querySelector('h1')).fontSize)` · `locator.boundingBox()` 로 computed style 과 DOM rect 를 읽어요.
 
 - 로그인·온보딩이 막는 화면은 개발 빌드 전용 진입 경로(예: 온보딩을 기록하고 홈으로 보내는 `/dev` 라우트)를 두면 반복 측정이 쉬워요.
 - 다크 테마 · 큰 글씨 설정이 있는 앱이면 그 상태로도 한 장씩 (`principles.md` C7). iOS `xcrun simctl ui <udid> appearance dark` · `content_size extra-extra-large`, Android `adb shell cmd uimode night yes` · `settings put system font_scale 1.3`, 웹 `prefers-color-scheme` 에뮬레이션.
@@ -43,6 +63,7 @@ bash .ax/scripts/bash/screen-measure.sh --image after-home-393.png --logical-wid
 bash .ax/scripts/bash/screen-measure.sh --image after-home-393.png --logical-width 393 --y 720 --json
 
 # 짧은 구간(안티에일리어싱)을 더 버리려면 --min 3
+# 1px(1pt) 구분선까지 남기려면 --min 1 — 기본값 2(pt)는 1pt 선을 버려요
 ```
 
 출력의 `lines[].segments[]` 가 `{start, length, rgb}` (pt) 예요. 예: x=60 에서 `{"start": 700.0, "length": 52.0, "rgb": [37,99,235]}` 면 그 자리에 높이 52pt 포인트색 면(주 버튼)이 있어요.
@@ -51,6 +72,20 @@ bash .ax/scripts/bash/screen-measure.sh --image after-home-393.png --logical-wid
 - 색은 6 단위로 양자화해 비교해요 — 그래도 그림자·그라디언트 위에선 구간이 여러 개로 나와요. 그럴 땐 선을 면 안쪽으로 옮겨요.
 - 같은 역할 부품은 **다른 화면에서도** 같은 x 에서 재요. 화면 하나만 재고 통과시키지 않아요.
 - 스크립트가 exit 2 로 끝나면 python3 이나 Pillow 가 없는 거예요 (`pip install pillow`). 설치할 수 없으면 §7.
+
+## 3.1 측정 출처 — 무엇이 실측인가
+
+게이트 표의 측정값 칸에는 **값과 출처를 같이** 적어요. 출처가 없으면 그 칸은 빈 칸이에요.
+
+| 출처 | 무엇을 재나 | 칸에 적는 모양 |
+|---|---|---|
+| 스크린샷 px (`screen-measure.sh`) | 높이 · 폭 · 여백 · 간격 · 면 명도 | `52 (px·390)` — 논리 폭 390 스크린샷에서 잰 52pt |
+| computed style · DOM rect (브라우저 eval · `get styles` · `get box`) | 글자 크기 · 행간 · 굵기 · 색 · 요소 박스 | `28÷16=1.75 (computed)` · `44×44 (rect)` |
+| 시뮬레이터 접근성 트리 (요소 frame) | 네이티브 앱의 요소 크기 · 터치 영역 | `48 (a11y)` |
+
+- **글자 크기는 스캔라인으로 재지 못해요** — 글자 위를 지나는 선은 잘게 쪼개지기만 해요. 글자 게이트(가장 큰 글자 ÷ 본문)는 computed style 이나 접근성 트리를 출처로 써요. 스크린샷은 캡 높이 비율로 교차 확인만 해요.
+- **코드 상수(토큰 파일 · 스타일 시트의 값)는 실측이 아니에요.** 그 값만 있으면 칸에 `코드값 52 (실측 아님)` 으로 적고, 그 행은 실측으로 치지 않아요. 코드값과 렌더 결과가 다른 게 이 skill 이 잡으려는 결함이에요.
+- 터치 영역은 스크린샷에 안 보여요 — DOM rect(웹 padding 포함) · 접근성 트리 frame · 코드의 hitSlop 을 같이 적어요. hitSlop 만 있으면 `코드값 (실측 아님)` 이에요.
 
 ## 4. 무엇을 재나 — 체크리스트
 
@@ -62,7 +97,7 @@ bash .ax/scripts/bash/screen-measure.sh --image after-home-393.png --logical-wid
 | 화면 좌우 여백 | 한 값 | 한 탭만 16, 나머지 20 |
 | 카드 안쪽 여백 | 한 값 | 같은 화면 두 카드가 16·20 |
 | 그룹 사이 간격 | 스케일 안 한 값, 안 여백 < 바깥 여백 | 같은 화면에 16 과 24 섞임, 안이 바깥보다 넓음 |
-| 가장 큰 글자 ÷ 본문 | ≥ 1.75 | 글자 높이는 스캔으로 정확히 안 나와요 — 코드의 fontSize 와 대조하고, 스크린샷은 캡 높이 비율로 교차 확인 |
+| 가장 큰 글자 ÷ 본문 | ≥ 1.75 | 글자 크기는 스캔으로 안 나와요 — 출처는 computed style(웹) · 접근성 트리(네이티브) (§3.1). 스크린샷은 캡 높이 비율로 교차 확인만 |
 | **면 명도 단계 (다크)** | 배경 → 카드 → 보조 버튼이 눈으로 갈려야 함 (인접 층 RGB 차 10~16 이상) | RGB 로 8 안팎씩만 올라가 활성 보조 버튼과 비활성 버튼이 같아 보임 |
 | 하단 고정 CTA | 뒤에 배경 페이드 + 스크롤 하단 여백 = CTA 높이 + 하단 여백 + 안전 영역 | 마지막 카드가 CTA 밑으로 잘려 보임 — 맨 아래까지 스크롤한 스크린샷으로 확인 |
 | 같은 행동의 버튼 수 | 화면당 하나 | 같은 라벨 버튼 둘 (채움 + 보조) |
@@ -94,7 +129,7 @@ bash .ax/scripts/bash/screen-measure.sh --diff before-home-393.png after-home-39
 
 1. 이유를 한 줄로 적어요 ("render 슬롯 비어 있음 — design-caps.sh").
 2. 코드 정적 검사로 게이트를 대신 돌려요 — 토큰 파일 값 · 부품 size prop · 화면 파일의 매직 넘버 grep · 문구 파일 금지어 grep.
-3. 리포트 첫 줄을 `verdict: 실측 아님` 으로 써요. 게이트 표의 측정값 열엔 "코드값 52 (실측 아님)" 처럼 출처를 붙여요.
+3. 리포트 첫 줄을 `verdict: 실측 아님` 으로 써요. 게이트 표의 측정값 열엔 "코드값 52 (실측 아님)" 처럼 출처를 붙여요 (§3.1). 남은 ❌ 는 리포트 "### 미해결" 에 출처(코드값)와 함께 옮겨요.
 4. **"확인했다" · "검증했다" 고 쓰지 않아요.** 스크린샷 경로와 px 숫자가 없으면 확인한 게 아니에요.
 5. 사용자가 직접 띄울 수 있게 다음 행동을 적어요 ("`npx expo start` 후 iPhone 15 에서 홈 → 결제 순서로 캡처 두 장이면 재측정할 수 있어요").
 

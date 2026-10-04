@@ -8,7 +8,7 @@ bash .ax/scripts/bash/design-caps.sh --json
 
 `result.stack` (web · react-native · expo · lynx · flutter · swiftui · android · unknown), `result.slots.<슬롯>[]` (`provider` = `file` · `mcp:<서버>` · `cli:<명령>` · `python:pillow`), `result.spec` (지금 있는 design-spec 경로), `result.empty` (비어 있는 슬롯)를 읽어요.
 
-MCP 는 설정 파일에 **등록된 이름**만 보여요. 이 세션에 실제로 떠 있는지는 자기 도구 목록(`mcp` 접두어가 붙은 그 서버 이름의 도구)으로 한 번 더 확인하고, 없으면 그 provider 는 없는 것으로 쳐요.
+MCP 는 설정 파일에 **등록된 이름**만 보여요. 이 세션에 실제로 떠 있는지는 자기 도구 목록에 `mcp__<서버>__` 로 시작하는 도구가 있는지로 한 번 더 확인해요 — 설정에만 있고 도구가 없으면 그 provider 는 빈 슬롯으로 쳐요.
 
 ## 목차
 
@@ -20,7 +20,7 @@ MCP 는 설정 파일에 **등록된 이름**만 보여요. 이 세션에 실제
 
 | 슬롯 | 찾으면 (provider 예) | 무엇에 쓰나 | 없으면 (대체 수단) | 리포트 표기 |
 |---|---|---|---|---|
-| **tokens** | `file`: tokens.* · theme.* · tailwind.config.* · colors.xml · design-system 문서 / `mcp:`: 디자인 시스템 MCP · Figma MCP (변수 정의) | 표 0 의 진실 원천. 이름·값을 그대로 가져와요 | `color-type.md` §6~§11 기본 세트를 토큰 파일로 새로 만들어요 (§12 스택별 파일) | "tokens: src/theme/tokens.ts" / "tokens: 없음 → 기본 세트로 신설" |
+| **tokens** | `file`: tokens.* · theme.* · tailwind.config.* · colors.xml · design-system 문서 / `mcp:`: 디자인 시스템 MCP · Figma MCP (변수 정의) | 표 0 의 진실 원천. 이름·값을 그대로 가져와요 | `color-type.md` §6~§11 기본 세트를 토큰 파일로 새로 만들어요 (§12 토큰 파일로 옮기는 법) | "tokens: src/theme/tokens.ts" / "tokens: 없음 → 기본 세트로 신설" |
 | **components** | `file`: components.json(레지스트리) · .storybook · components/ui · design-system 디렉터리 / `mcp:`: 디자인 시스템 · 레지스트리 MCP | 이미 있는 부품을 재사용 — 새로 만들기 전에 찾아요 | `components.md` 16종 규격 + `component-systems.md` §12 기본값으로 공용 부품을 만들어요 (Button · Row · Chip … 하나씩, size prop) | "components: Storybook 18종 재사용" / "components: 없음 → Button·Row 신설" |
 | **reference** | `mcp:`: 화면 레퍼런스 갤러리 MCP · Figma MCP (스크린샷) | 처음 나오는 화면 유형에서 같은 업종 화면 3~5개의 "왜" 를 봐요 | `screens.md` 의 정보 순서·핵심 정보 + 사용자가 준 스크린샷·URL + (있으면) 웹 검색. 레퍼런스 단계를 건너뛰어도 게이트는 그대로예요 | "reference: N건 — 가져온 이유 2~3줄" / "reference: 건너뜀 (슬롯 비어 있음, screens.md §N 기준)" |
 | **render** | `cli:` 브라우저 자동화 CLI · playwright · simctl · adb / `mcp:` 브라우저 자동화 · 시뮬레이터 MCP | 스크린샷을 찍어요 (`measure.md` §1) | 사용자가 직접 띄워 캡처를 주도록 다음 행동을 적고, 코드 정적 검사로 게이트를 대신 돌려요 | 리포트 첫 줄 `verdict: 실측 아님` |

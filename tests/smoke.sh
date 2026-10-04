@@ -586,7 +586,7 @@ for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
          check-rule-enforcement check-sensor-liveness \
          build-memory spirit-lint rules-index doctor-scan status-note update-task update-state constitution-apply \
          tasks-plan tasks-gate lanes-hotfiles lanes-dispatch spec-review \
-         zero-init zero-probe zero-verify zero-domain-risk design-caps screen-measure; do
+         zero-init zero-probe zero-verify zero-domain-risk design-caps screen-measure screen-report-check; do
     f="$SCRIPTS_DIR/$s.sh"
     if [ -f "$f" ]; then
         # bash -n 통과
@@ -633,7 +633,8 @@ for cmd in \
     "update-task.sh --phase spec --dry-run --json" \
     "update-task.sh --phase --json" \
     "design-caps.sh --json" \
-    "screen-measure.sh --json --image nope.png --logical-width 390 --x 10"; do
+    "screen-measure.sh --json --image nope.png --logical-width 390 --x 10" \
+    "screen-report-check.sh --json"; do
     out=$(bash "$REPO/templates/default/.ax/scripts/bash/"$cmd 2>/dev/null) || true
     if echo "$out" | jq -e '.status' >/dev/null 2>&1; then
         pass "$cmd → valid JSON"
@@ -5263,7 +5264,35 @@ else
     GOAX_PROJECT_DIR="$DC" bash "$DC/.ax/scripts/bash/screen-measure.sh" --image x.png --logical-width 390 --x 1 >/dev/null 2>&1
     [ $? -eq 2 ] && pass "screen-measure — Pillow 없으면 exit 2 (skipped — \"실측 아님\")" || fail "screen-measure — Pillow 없는데 skip 이 아니에요"
 fi
+
+# 리포트 판정 — 첫 줄 verdict 만 믿지 않아요: 통과면 실제 스크린샷 · 측정값 빈 칸 0 · ❌ 0
+mkdir -p "$DC/docs/design/reports" "$DC/shots"; : > "$DC/shots/after-390.png"
+cp "$REPO/templates/default/.ax/scripts/bash/screen-report-check.sh" "$DC/.ax/scripts/bash/"
+src_report() {   # $1 verdict · $2 스크린샷 경로 · $3 측정값 · $4 결과
+    printf '%s\n' "verdict: $1" "## 화면 리포트 — x" "### 스크린샷" "- 후: \`$2\`" "### 게이트" \
+        "| 항목 | 측정값 | 기준 | 결과 |" "|---|---|---|---|" "| G1 주 버튼 높이 | $3 | ≥ 44 | $4 |" "### 미해결" "- 없음" \
+        > "$DC/docs/design/reports/r.md"
+    GOAX_PROJECT_DIR="$DC" bash "$DC/.ax/scripts/bash/screen-report-check.sh" --json 2>/dev/null | jq -c '[.result.valid, .result.verdict]'
+}
+SRC_OK=$(src_report 통과 shots/after-390.png "52 (px·390)" ✅); SRC_NOSHOT=$(src_report 통과 shots/none.png "52 (px·390)" ✅)
+SRC_EMPTY=$(src_report 통과 shots/after-390.png "" ✅); SRC_FAILPASS=$(src_report 통과 shots/after-390.png "40 (px·390)" ❌)
+SRC_NA=$(src_report "실측 아님" none.png "40 (코드)" ❌)
+SRC_CODE=$(src_report 통과 shots/after-390.png "코드값 52 (실측 아님)" ✅)
+printf 'hello\n' > "$DC/docs/design/reports/r.md"
+SRC_BAD=$(GOAX_PROJECT_DIR="$DC" bash "$DC/.ax/scripts/bash/screen-report-check.sh" --json 2>/dev/null | jq -c '[.result.valid, .result.verdict]')
+{ [ "$SRC_OK" = '[true,"통과"]' ] && [ "$SRC_NOSHOT" = '[false,"통과"]' ] && [ "$SRC_EMPTY" = '[false,"통과"]' ] \
+  && [ "$SRC_FAILPASS" = '[false,"통과"]' ] && [ "$SRC_NA" = '[true,"실측 아님"]' ] && [ "$SRC_CODE" = '[false,"통과"]' ] && [ "$SRC_BAD" = '[false,null]' ]; } \
+    && pass "screen-report-check — 통과는 실제 스크린샷·측정값·❌0·코드값 0 이어야, 실측 아님은 미해결과 함께, 첫 줄 형식 검사" \
+    || fail "screen-report-check 판정 불일치: ok=$SRC_OK noshot=$SRC_NOSHOT empty=$SRC_EMPTY failpass=$SRC_FAILPASS na=$SRC_NA code=$SRC_CODE bad=$SRC_BAD"
 rm -rf "$DC"
+
+# 게이트 목록은 하나예요 — SKILL.md · screen-designer · spec-template 표 7 의 G 번호 집합이 같아야 해요
+gate_ids() { grep -oE '\bG[0-9]{1,2}\b' "$1" 2>/dev/null | sort -u -t G -k2 -n | paste -sd, -; }
+G_SKILL=$(gate_ids "$REPO/skills/screen/SKILL.md"); G_AGENT=$(gate_ids "$REPO/agents/screen-designer.md")
+G_TPL=$(gate_ids "$REPO/skills/screen/references/spec-template.md")
+{ [ -n "$G_SKILL" ] && [ "$G_SKILL" = "$G_AGENT" ] && [ "$G_SKILL" = "$G_TPL" ]; } \
+    && pass "screen 게이트 — SKILL · screen-designer · spec-template 표 7 이 같은 목록 ($(printf '%s' "$G_SKILL" | tr ',' '\n' | grep -c .)개)" \
+    || fail "screen 게이트 목록이 갈려요 — SKILL[$G_SKILL] agent[$G_AGENT] template[$G_TPL]"
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"
