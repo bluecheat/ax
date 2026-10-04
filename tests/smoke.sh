@@ -586,7 +586,7 @@ for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
          check-rule-enforcement check-sensor-liveness \
          build-memory spirit-lint rules-index doctor-scan status-note update-task update-state constitution-apply \
          tasks-plan tasks-gate lanes-hotfiles lanes-dispatch spec-review \
-         zero-init zero-probe zero-verify zero-domain-risk; do
+         zero-init zero-probe zero-verify zero-domain-risk design-caps screen-measure; do
     f="$SCRIPTS_DIR/$s.sh"
     if [ -f "$f" ]; then
         # bash -n 통과
@@ -631,7 +631,9 @@ for cmd in \
     "doctor-scan.sh --json --plugin-dir $REPO" \
     "status-note.sh --show --json" \
     "update-task.sh --phase spec --dry-run --json" \
-    "update-task.sh --phase --json"; do
+    "update-task.sh --phase --json" \
+    "design-caps.sh --json" \
+    "screen-measure.sh --json --image nope.png --logical-width 390 --x 10"; do
     out=$(bash "$REPO/templates/default/.ax/scripts/bash/"$cmd 2>/dev/null) || true
     if echo "$out" | jq -e '.status' >/dev/null 2>&1; then
         pass "$cmd → valid JSON"
@@ -5206,6 +5208,62 @@ for h in "$REPO"/templates/default/.ax/hooks/*/*.sh; do
 done
 [ -z "$OB_MISS" ] && pass "additionalContext 를 내는 훅 전부 goax_cap_context 를 거쳐요" \
     || fail "goax_cap_context 없이 additionalContext 를 내는 훅:$OB_MISS"
+
+# ───────────────────────────────────────────────────────────
+section "63. screen — 외부 의존 없는 화면 skill · screen-designer · design-caps · screen-measure"
+# ───────────────────────────────────────────────────────────
+# 지식은 skill 안에 다 있어야 해요 — 개인 경로·특정 외부 스킬·특정 MCP·특정 디자인 시스템 이름이 새면 다른 머신에서 깨져요
+SC_LEAK=$(grep -rnE '~/\.claude|ui-ux-pro-max|taste-skill|frontend-design|uibowl|mcp-connect|mcp__[[:alnum:]_-]+__|\bSeed\b|\bSEED\b|토스([^트]|$)|당근' \
+          "$REPO/skills/screen" "$REPO/agents/screen-designer.md" 2>/dev/null || true)
+[ -z "$SC_LEAK" ] && pass "screen · screen-designer — 개인 경로·외부 스킬·특정 MCP·디자인 시스템 이름 0건 (자립)" \
+    || fail "screen — 외부 의존이 새요:
+$(printf '%s' "$SC_LEAK" | head -5)"
+grep -q '시작 전 필수' "$REPO/agents/screen-designer.md" && grep -q '시작 전 필수' "$REPO/skills/screen/SKILL.md" \
+    && pass "screen · screen-designer — 시작 전 필수 (spirit 로드)" || fail "screen — 시작 전 필수 누락"
+{ grep -q 'verdict:' "$REPO/agents/screen-designer.md" && grep -q 'verdict:' "$REPO/skills/screen/SKILL.md" \
+  && grep -q '실측 아님' "$REPO/agents/screen-designer.md"; } \
+    && pass "screen — 리포트 첫 줄 verdict 계약 · 실측 못 하면 \"실측 아님\" (skill · agent 양쪽)" || fail "screen — verdict 계약 누락"
+{ grep -q 'design-caps.sh' "$REPO/skills/screen/SKILL.md" && grep -q 'screen-measure.sh' "$REPO/agents/screen-designer.md"; } \
+    && pass "screen — 진입은 design-caps.sh, 실측은 screen-measure.sh (결정론 경계)" || fail "screen — 스크립트 연결 누락"
+! grep -qE '^model:' "$REPO/agents/screen-designer.md" && pass "screen-designer — 모델을 고정하지 않아요" || fail "screen-designer — model: 고정"
+
+DC=$(mktemp -d)
+mkdir -p "$DC/.ax/scripts/bash" "$DC/src/theme" "$DC/.storybook"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,design-caps,screen-measure}.sh "$DC/.ax/scripts/bash/"
+echo '{"dependencies":{"react":"18","next":"14"}}' > "$DC/package.json"
+echo ':root{--brand:#f60}' > "$DC/src/theme/tokens.css"; echo '{}' > "$DC/components.json"
+echo '{"mcpServers":{"figma":{"type":"http","url":"https://x","headers":{"Authorization":"Bearer SECRET-SHOULD-NOT-LEAK"}},"mobbin":{"type":"http"},"shadcn":{"command":"npx"}}}' > "$DC/.mcp.json"
+DCJ=$(cd "$DC" && HOME="$DC" GOAX_PROJECT_DIR="$DC" bash "$DC/.ax/scripts/bash/design-caps.sh" --json 2>/dev/null)
+printf '%s' "$DCJ" | jq -e '.result.stack == "web"
+    and (.result.slots.tokens[0] | .provider == "file" and .detail == "src/theme/tokens.css")
+    and ([.result.slots.tokens[].provider] | index("mcp:figma")) != null
+    and ([.result.slots.reference[].provider] | index("mcp:mobbin")) != null
+    and ([.result.slots.components[].provider] | (index("file") != null and index("mcp:shadcn") != null))' >/dev/null \
+    && pass "design-caps — 스택 · 프로젝트 토큰 파일이 먼저 · MCP 이름을 슬롯에 (figma→tokens, mobbin→reference, shadcn→components)" \
+    || fail "design-caps — 슬롯 판정 불일치: $(printf '%s' "$DCJ" | jq -c '.result' 2>/dev/null | head -c 300)"
+printf '%s' "$DCJ" | grep -q 'SECRET-SHOULD-NOT-LEAK' && fail "design-caps — MCP 설정의 비밀값이 출력에 샜어요" \
+    || pass "design-caps — MCP 는 서버 이름만, 비밀값은 출력하지 않아요"
+if python3 -c 'import PIL' >/dev/null 2>&1; then
+    python3 - "$DC" <<'PYM'
+import sys
+from PIL import Image, ImageDraw
+d = sys.argv[1]
+im = Image.new("RGB", (1170, 600), (255, 255, 255)); ImageDraw.Draw(im).rectangle([60, 300, 1109, 455], fill=(255, 111, 15)); im.save(d + "/a.png")
+ImageDraw.Draw(im).rectangle([60, 300, 1109, 455], fill=(0, 0, 0)); im.save(d + "/b.png")
+PYM
+    SMJ=$(GOAX_PROJECT_DIR="$DC" bash "$DC/.ax/scripts/bash/screen-measure.sh" --image "$DC/a.png" --logical-width 390 --x 195 --json 2>/dev/null)
+    printf '%s' "$SMJ" | jq -e '.result.scale == 3 and ([.result.lines[0].segments[] | select(.rgb == [255,111,15])][0] | .start == 100 and .length == 52)' >/dev/null \
+        && pass "screen-measure — 3배 스크린샷의 버튼을 y 100 · 높이 52pt 로 재요" || fail "screen-measure — 스캔 불일치: $(printf '%s' "$SMJ" | head -c 300)"
+    SMD=$(GOAX_PROJECT_DIR="$DC" bash "$DC/.ax/scripts/bash/screen-measure.sh" --diff "$DC/a.png" "$DC/b.png" --json 2>/dev/null)
+    SMS=$(GOAX_PROJECT_DIR="$DC" bash "$DC/.ax/scripts/bash/screen-measure.sh" --diff "$DC/a.png" "$DC/a.png" --crop-top 10 --json 2>/dev/null)
+    { printf '%s' "$SMD" | jq -e '.result.same == false and .result.bbox == [60,300,1110,456]' >/dev/null \
+      && printf '%s' "$SMS" | jq -e '.result.same == true and .result.bbox == null' >/dev/null; } \
+        && pass "screen-measure --diff — 바뀐 영역 bbox · 같으면 same" || fail "screen-measure --diff 불일치: $SMD / $SMS"
+else
+    GOAX_PROJECT_DIR="$DC" bash "$DC/.ax/scripts/bash/screen-measure.sh" --image x.png --logical-width 390 --x 1 >/dev/null 2>&1
+    [ $? -eq 2 ] && pass "screen-measure — Pillow 없으면 exit 2 (skipped — \"실측 아님\")" || fail "screen-measure — Pillow 없는데 skip 이 아니에요"
+fi
+rm -rf "$DC"
 
 # ───────────────────────────────────────────────────────────
 section "✨ 결과"

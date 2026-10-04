@@ -23,6 +23,7 @@ goax 의 모든 기능은 **자연어 트리거** 로 호출돼요 (thin wrapper
   "병렬로 돌리자" / "레인 나눠줘"     — lane (가를 수 있는 일인지부터 판정)
   "구현 시작" / "tasks 실행"         — tasks.md 실행 (레인 배정 있으면 코디네이터 모드) + 완료 게이트·evaluator
   "spec 확인" / "합의 리뷰"           — NEEDS CLARIFICATION 게이팅 + L/XL 은 architect → evaluator 합의 리뷰
+  "화면 만들어줘" / "시안 봐줘"        — screen (스펙 표 먼저 → screen-designer 가 구현·실측·수정 → verdict)
 
 ▸ 결정·회고
   "ADR 작성" / "결정 기록"           — ADR 새 파일
