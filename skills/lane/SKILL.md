@@ -236,7 +236,7 @@ bash .ax/scripts/bash/tasks-plan.sh --spec "$SPEC" --json
 
 ---
 
-## 10. 위임 브리프 — 이 다섯 줄은 빼지 마세요
+## 10. 위임 브리프 — 어느 절도 빼지 마세요
 
 레인마다 브리프를 쓸 때 아래를 그대로 넣어요. 하나하나가 실제 사고에서 나왔어요.
 
@@ -251,6 +251,9 @@ bash .ax/scripts/bash/tasks-plan.sh --spec "$SPEC" --json
 - 포매터·린터 쓰기: 소유 파일 경로만 인자로 (디렉토리·글롭 금지)
 - 브라우저 세션 이름: <lane-이름> — `close --all`·전역 kill 금지
 - 빌드 출력 경로: <코디네이터가 정한 한 경로, 예: <scratchpad>/DerivedData> · 디스크 여유 기준: <예: 10GB>
+
+## 외부 쓰기 허용 — 기본 "없음"
+<허락한 것만 한 줄씩. 예: "없음" · "staging 의 /api/seed 에 POST 1회">
 
 ## 규율
 - **커밋하지 않아요.** 워킹 트리에 변경만 남기세요. `git add -A` 는 특히 금지 —
@@ -267,9 +270,17 @@ bash .ax/scripts/bash/tasks-plan.sh --spec "$SPEC" --json
     최종 응답은 "보고를 SendMessage 로 보냈어요 — task N건, 검증 exit 0" 한 줄만. 전문을 또
     담지 마세요 — idle 통지에서 잘리고 같은 보고가 두 번 와요.
 - 보고가 길면 **나눠서 여러 번 보내세요.** 한 번에 밀면 잘려요.
+- **워킹 트리 밖은 바꾸지 마세요.** push · 배포 · 원격 API 쓰기(POST·PUT·PATCH·DELETE) · 외부 서비스
+  설정 · 메시지 · 메일 발송은 위 "외부 쓰기 허용" 에 적힌 것만 해요. 없으면 하지 말고 보고의
+  "안 한 것" 에 `필요함 — <무엇을, 왜>` 로 적으세요. 읽기(조회·GET)는 괜찮아요.
+- **종료 요청을 받으면 응답만 하세요.** `type` 이 `shutdown_request` 인 메시지가 오면:
+  1. 보고를 아직 안 보냈으면 보고부터 보내요 (다른 도구는 부르지 않아요)
+  2. `SendMessage` 의 `message` 에 **객체**를 넣어 승인해요 — 문자열로 감싸면 거부돼요:
+     `{"type": "shutdown_response", "request_id": "<받은 request_id 그대로>", "approve": true}`
+  3. 그 사이 새 작업 · 파일 편집 · 외부 쓰기는 하지 않아요
 ```
 
-다섯 줄이 각각 어떤 사고에서 나왔는지, 정량 주장이 왜 문서에 적히는 순간 위험한지는
+각 절이 어떤 사고에서 나왔는지, 정량 주장이 왜 문서에 적히는 순간 위험한지는
 `references/incidents.md` 에 있어요. 규율을 빼거나 바꾸려 할 때 읽어요.
 
 ## 11. 산출물 수신 확인 — idle 은 완료가 아니에요
@@ -290,6 +301,20 @@ result 가 `[result truncated]` 로 끝나도 SendMessage 로 온 전문이 있�
 보고가 잘렸으면 (문장이 중간에 끊겼거나 섹션이 비었으면) **잘린 지점을 지목해서**
 이어 보내달라고 해요 — "T3 섹션 3번째 항목부터 다시 보내주세요". "다시 보내주세요"
 만 하면 앞부분이 또 오고 또 잘려요. 오늘 세션에서 서브에이전트 보고가 6번 잘렸어요.
+
+## 11.5 레인 정리 — 받고 검증했으면 종료
+
+팀원(teammate)으로 띄운 레인은 보고 뒤에도 idle 로 남아요. 종료하지 않으면 하루에 수십 개가 쌓여 어느 레인이
+살아 있는지 헷갈려요. `Agent` 도구로 띄운 서브에이전트는 최종 응답과 함께 끝나서 정리할 게 없어요.
+절차는 `spec-implement` 레인 모드 문서의 §3.5 "레인 정리" 가 SSOT 예요. 요점만:
+
+- **이름 규칙** — 띄울 때 실행 레인은 `lane-<레인>`, 조사 레인은 `scout-<주제>` 로 이름을 줘요. 정리는
+  `ListAgents` 목록에서 이 접두사를 거르는 일이 돼요 (원장 밖에서 띄운 레인도 잡혀요)
+- **언제** — 그 레인의 보고를 다 받았고 (`--report`) 코디네이터가 검증을 다시 돌려 통과했을 때. 판단 없이 매번 종료해요
+- **어떻게** — `TaskStop` 에 레인 이름. `shutdown_request` 로 묻지 않아요 — 응답을 기다리는 사이 레인이 한
+  턴을 더 얻고, 그 턴에 시키지 않은 외부 쓰기를 한 적이 있어요
+- **다시 일이 생기면** — 종료한 레인도 이름으로 `SendMessage` 하면 transcript 에서 이어져요. 안 이어지면 같은
+  브리프로 새로 띄워요
 
 ## 12. 완료 판정 — 체크박스 **그리고** 통합 검증
 
@@ -353,6 +378,8 @@ bash .ax/scripts/bash/status-note.sh --show --json | jq -r '.result.sections.ren
 - **cross-cutting refactor 를 파일 수로 쪼개기** — 경계가 파일이 아니라 한 덩어리 결정이에요
 - **violations 가 남은 채로 레인 띄우기** — 게이트는 통과 의례가 아니에요
 - **레인 idle 을 완료로 읽기** — 완료는 `tasks-gate.sh` 의 `complete` + 통합 검증
+- **보고·검증이 끝난 팀원 레인을 살려 둔 채 넘어가기** — §11.5. 완료 게이트 전 `ListAgents` 에 `lane-`·`scout-` 가 0개
+- **레인에 외부 쓰기를 열어 두기** — 브리프의 "외부 쓰기 허용" 은 기본 "없음". 필요한 것만 한 줄씩
 - **통합 검증 없이 완료 선언** — 파일이 안 겹친 건 물리적 충돌이 없었다는 뜻뿐이에요
 - **핫 파일 표를 대화에만 남기기** — 다음 세션이 못 봐요. `tasks.md` 에 박아요
 - **레인 배정을 원장 없이 두기** — `--assign` 을 안 거치면 `spec-implement` 는 단일 레인으로 돌아요.
@@ -381,7 +408,8 @@ bash .ax/scripts/bash/status-note.sh --show --json | jq -r '.result.sections.ren
   2. tasks-plan.sh 재실행 → violations 0 확인
   3. lanes-dispatch.sh --assign "T010=A,…" → lane_file_conflicts 0 확인 (원장 기록)
   4. 실행은 "/spec-implement" — 원장을 보고 레인 모드로 돌아요 (브리프·디스패치·보고 기록은 거기서)
-  5. 레인 전원 종료 후 통합 검증 1회 (§12.2) + evaluator (size 에 따라) — 여기까지가 완료
+  5. 레인 정리 (§11.5 — 보고·검증 끝난 레인부터 TaskStop, 완료 전 ListAgents 0개)
+  6. 통합 검증 1회 (§12.2) + evaluator (size 에 따라) — 여기까지가 완료
 ```
 
 ## state.json 갱신
@@ -392,7 +420,7 @@ bash .ax/scripts/bash/update-state.sh --skill lane   # canonical(derived·hud �
 
 ## 관련
 
-- `references/incidents.md` — 이 규율이 나온 사고 다섯 + 정량 주장·통합 검증의 근거
+- `references/incidents.md` — 이 규율이 나온 사고들 + 정량 주장·통합 검증의 근거
 
 - `skills/spec-tasks/SKILL.md` — 분해 단계. `[P]` 를 붙이는 규칙이 여기 있어요
 - `skills/spec-implement/SKILL.md` — 실행 단계. 레인이 통과한 뒤에 와요
