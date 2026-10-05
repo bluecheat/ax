@@ -5295,6 +5295,31 @@ G_TPL=$(gate_ids "$REPO/skills/screen/references/spec-template.md")
     || fail "screen 게이트 목록이 갈려요 — SKILL[$G_SKILL] agent[$G_AGENT] template[$G_TPL]"
 
 # ───────────────────────────────────────────────────────────
+section "64. 레인 정리 — 보고·검증 뒤 TaskStop, 묻지 않음, 외부 쓰기는 브리프 허용분만"
+
+# 레인은 보고 뒤에도 idle 로 남아요 (실측: 하루 46개). 규칙이 문서에서 빠지면 다시 쌓여요.
+LM="$REPO/skills/spec-implement/references/lane-mode.md"; LS="$REPO/skills/lane/SKILL.md"
+{ grep -q '3.5 레인 정리' "$LM" && grep -q 'TaskStop' "$LM" && grep -q '한 번만' "$LM" \
+  && grep -q 'shutdown_request` 를 보내지 않아요' "$LM"; } \
+    && pass "lane-mode §3.5 — 검증 통과 뒤 TaskStop, 재시도 한 번 상한, shutdown_request 로 묻지 않음" \
+    || fail "lane-mode §3.5 레인 정리 절차가 빠졌어요 (TaskStop · 재시도 상한 · 묻지 않음)"
+awk '/^\*\*5\. 종료 조건/,/^\*\*6\./' "$LM" | grep -q 'ListAgents' \
+    && pass "lane-mode §5 — 종료 조건에 살아 있는 레인 0개 (ListAgents)" \
+    || fail "lane-mode §5 종료 조건에 ListAgents 대조가 없어요 — 원장 밖 레인을 못 잡아요"
+{ grep -q 'lane-<레인>' "$LM" && grep -q 'scout-<주제>' "$LM"; } \
+    && pass "lane-mode — 레인 이름 접두사(lane-·scout-) 규칙 — 정리가 목록 거르기로 끝나요" \
+    || fail "lane-mode — 레인 이름 규칙이 없어요"
+{ grep -q '^## 외부 쓰기 허용' "$LS" && grep -q '"type": "shutdown_response"' "$LS"; } \
+    && pass "lane §10 브리프 — 외부 쓰기 허용(기본 없음) · 종료 응답 객체 형식이 브리프에 실려요" \
+    || fail "lane §10 브리프에 외부 쓰기 허용 절이나 종료 응답 형식이 없어요"
+for ag in lane-worker lane-scout; do
+    f="$REPO/agents/$ag.md"
+    { grep -q 'PATCH' "$f" && grep -q '"message": {"type": "shutdown_response"' "$f" \
+      && ! grep -qE '"message": "\{' "$f"; } \
+        && pass "$ag — 외부 쓰기 금지 · 종료 응답은 객체 (문자열 예시 없음)" \
+        || fail "$ag — 외부 쓰기 금지나 객체 형식 종료 응답이 빠졌어요"
+done
+
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────
 if [ "$fail_count" -eq 0 ]; then
