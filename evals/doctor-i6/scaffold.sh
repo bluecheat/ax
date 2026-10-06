@@ -25,7 +25,8 @@ python3 - <<'PY'
 import re
 p='AGENTS.md'; s=open(p).read()
 start=s.index('🔴 **`AX:CRITICAL:001`**')
-end=s.index('> ⚠ hook 파일을 아직 못 만들었으면')
+# 안내 줄의 이모지는 바뀌어요(⚠ → ❗) — 문구로 찾고 그 줄 처음부터 잘라요
+end=s.rindex('\n', 0, s.index('hook 파일을 아직 못 만들었으면')) + 1
 rule=('🔴 **`EVL:CRITICAL:001`** 사용자 노출 카피 안전선을 어기지 않는다\n'
       '- enforced_by: external:vitest\n'
       '- enforced_kind: test\n\n')
