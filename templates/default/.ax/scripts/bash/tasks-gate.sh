@@ -10,13 +10,15 @@
 # 구분하지 못했어요. 실사용 리포에서 spec 21개 중 14개가 미완료 task 를 남긴 채
 # 끝나 있었는데, 아무도 그걸 알려주지 않았어요.
 #
-# 검사 6종:
+# 검사 7종:
 #   G1 미완료  `- [ ]` 가 남아 있나 (`- [~]` 보류는 제외 — 의도적 보류는 정상)
 #   G2 커버리지 spec.md §3 의 AC 중 대응 task 가 없는 것 (spec-kit /analyze 의 coverage gap)
 #   G3 orphan  어떤 AC 도 참조하지 않는 task
 #   G4 유실    task 총 수가 봉인값보다 줄었나 — "미완료를 지워서 통과" 방어
 #   G5 원장    디스패치됐는데 보고가 없는 task · 보고 없이 [x] 가 된 task (lanes-dispatch.sh 필드)
 #   G6 검증자  review.md **첫 줄**의 `verdict:` — 필수(size L 이상 · M×L3)인데 없거나 `진행` 이 아니면 미완료
+#   G7 룰 대조 review-rules.md **첫 줄**의 `verdict:` — 필수 여부는 G6 과 같아요. rules-auditor 가 새 컨텍스트로
+#             변경 파일마다 걸린 룰(rules-audit-scope.sh)과 새 심볼의 이웃 관례를 대조해 써요
 #
 # G2/G3 는 spec.md 에 `AC<n>` ID 가 있을 때만 검사해요 (없는 기존 spec 은 생략).
 # G4 는 `.ax/state.json` 의 spec별 봉인값과 비교해요. 봉인값이 없으면 현재 수를 기록만
@@ -32,12 +34,15 @@
 #
 # 왜 G5·G6 인가 — 체크박스를 채우는 쪽과 검사받는 쪽이 같으면 게이트가 아니라 자기보고예요.
 # G5 는 "보고를 받았는가" 를, G6 은 "다른 컨텍스트가 봤는가" 를 파일에서 확인해요.
+# 왜 G7 인가 — 편집 훅은 룰 경로를 알려주고 rule-read-gate.sh 는 읽었는지만 봐요. 읽은 룰을 지켰는지, 새 파일이
+# 이웃 관례를 따랐는지는 G6(evaluator — spec·ADR 적합성)의 범위가 아니라 아무도 안 봤어요. 그래서 따로 받아요.
 #
 # Output (--json):
 #   {"status":"ok|warning","result":{"spec":"012-x","total":12,"done":9,"open":2,
 #     "paused":1,"ac_total":3,"ac_uncovered":["AC3"],"orphan_tasks":["T007"],
 #     "task_count_drop":0,"dispatched_unreported":["T011"],"done_without_report":[],
-#     "review_required":true,"review_verdict":"진행","complete":false},...}
+#     "review_required":true,"review_verdict":"진행","rules_review_required":true,"rules_review_verdict":null,
+#     "complete":false},...}
 #   --all 이면 result 는 {"specs":[위 객체 …],"spec_count":3,"total":…,"done":…,"open":…,
 #     "complete":false,"violations":5} — 첫 spec 의 숫자에 전체 합계를 섞지 않아요.
 #
@@ -97,11 +102,11 @@ fi
 # 펜스 밖 본문만 — 형식 설명 블록의 예시 task 를 실 task 로 세지 않도록
 strip_fences() { awk '/^[[:space:]]*```/{f=!f; next} f{next} {print}' "$1" 2>/dev/null || true; }
 
-# ── 한 spec 검사 → "spec|total|done|open|paused|ac_total|uncovered|orphans|drop|unreported|noreport|verdict|required" ──
+# ── 한 spec 검사 → "spec|total|done|open|paused|ac_total|uncovered|orphans|drop|unreported|noreport|verdict|required|rverdict" ──
 check_spec() {
     local dir="$1" name; name=$(basename "$dir")
     local tasks="$dir/tasks.md" spec="$dir/spec.md"
-    [ -f "$tasks" ] || { printf '%s|0|0|0|0|0|||0|||%s|false\n' "$name" ""; return 0; }
+    [ -f "$tasks" ] || { printf '%s|0|0|0|0|0|||0|||%s|false|\n' "$name" ""; return 0; }
 
     local total done_n open_n paused
     IFS='|' read -r total done_n open_n paused <<EOF
@@ -194,6 +199,12 @@ EOF
         verdict=$(head -1 "$dir/review.md" 2>/dev/null \
                   | sed -n 's/^verdict:[[:space:]]*//p' | sed -E 's/[[:space:]]+$//' || true)
     fi
+    # G7 룰 대조 — review-rules.md **첫 줄**. 쓰는 쪽은 rules-auditor 예요 (G6 과 같은 규칙)
+    local rverdict=""
+    if [ -f "$dir/review-rules.md" ]; then
+        rverdict=$(head -1 "$dir/review-rules.md" 2>/dev/null \
+                   | sed -n 's/^verdict:[[:space:]]*//p' | sed -E 's/[[:space:]]+$//' || true)
+    fi
     # size×risk 는 이 spec 을 맡은 작업에서 읽어요 — 지금 작업(current-task.json)이든 병렬 작업(.ax/tasks/*.json)이든.
     # 지금 작업만 보면 다른 세션이 새 작업을 여는 순간 이 spec 의 evaluator 필수 조건이 사라져요.
     if command -v jq >/dev/null 2>&1; then
@@ -213,9 +224,9 @@ EOF
         fi
     fi
 
-    printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+    printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
         "$name" "$total" "$done_n" "$open_n" "$paused" "$ac_total" \
-        "${uncovered% }" "${orphans% }" "$drop" "${unreported% }" "${noreport% }" "$verdict" "$required"
+        "${uncovered% }" "${orphans% }" "$drop" "${unreported% }" "${noreport% }" "$verdict" "$required" "$rverdict"
 }
 
 TARGETS=""
@@ -243,7 +254,7 @@ $TARGETS
 EOF
 
 # 집계 + 보고
-# verdict 가 게이트를 막는가 — 필수인데 없거나, 무엇이든 `진행` 이 아니면 막아요
+# verdict 가 게이트를 막는가 — 필수인데 없거나, 무엇이든 `진행` 이 아니면 막아요 (G6 · G7 같은 규칙)
 review_blocks() {   # $1 verdict · $2 required
     if [ "$2" = "true" ]; then
         [ "$1" = "진행" ] && return 1 || return 0
@@ -254,9 +265,9 @@ review_blocks() {   # $1 verdict · $2 required
 
 FIRST=""; ROWS_X=""; SPEC_N=0
 SUM_TOTAL=0; SUM_DONE=0; SUM_OPEN=0; SUM_PAUSED=0; ALL_COMPLETE=true
-while IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans drop unreported noreport verdict required; do
+while IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans drop unreported noreport verdict required rverdict; do
     [ -z "$name" ] && continue
-    [ -z "$FIRST" ] && FIRST="$name|$total|$done_n|$open_n|$paused|$ac_total|$uncovered|$orphans|$drop|$unreported|$noreport|$verdict|$required"
+    [ -z "$FIRST" ] && FIRST="$name|$total|$done_n|$open_n|$paused|$ac_total|$uncovered|$orphans|$drop|$unreported|$noreport|$verdict|$required|$rverdict"
     SPEC_N=$((SPEC_N + 1))
     SUM_TOTAL=$((SUM_TOTAL + total)); SUM_DONE=$((SUM_DONE + done_n))
     SUM_OPEN=$((SUM_OPEN + open_n));  SUM_PAUSED=$((SUM_PAUSED + paused))
@@ -268,9 +279,10 @@ while IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans
     [ -n "$unreported" ] && V=$((V + 1))
     [ -n "$noreport" ] && V=$((V + 1))
     review_blocks "$verdict" "$required" && V=$((V + 1))
+    review_blocks "$rverdict" "$required" && V=$((V + 1))
     VIOLATIONS=$((VIOLATIONS + V))
     C=true; [ "$V" -gt 0 ] && { C=false; ALL_COMPLETE=false; }
-    ROWS_X="${ROWS_X}${name}|${total}|${done_n}|${open_n}|${paused}|${ac_total}|${uncovered}|${orphans}|${drop}|${unreported}|${noreport}|${verdict}|${required}|${V}|${C}"$'\n'
+    ROWS_X="${ROWS_X}${name}|${total}|${done_n}|${open_n}|${paused}|${ac_total}|${uncovered}|${orphans}|${drop}|${unreported}|${noreport}|${verdict}|${required}|${V}|${C}|${rverdict}"$'\n'
 
     if [ "$JSON_MODE" != true ]; then
         printf '%s: %s/%s 완료' "$name" "$done_n" "$total"
@@ -284,6 +296,10 @@ while IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans
         if review_blocks "$verdict" "$required"; then
             [ -z "$verdict" ] && printf '  ⚠ evaluator 리뷰 필수 — review.md 첫 줄에 verdict 없음' \
                               || printf '  ⚠ evaluator verdict: %s' "$verdict"
+        fi
+        if review_blocks "$rverdict" "$required"; then
+            [ -z "$rverdict" ] && printf '  ⚠ 룰 대조 필수 — review-rules.md 첫 줄에 verdict 없음' \
+                               || printf '  ⚠ 룰 대조 verdict: %s' "$rverdict"
         fi
         printf '\n'
     fi
@@ -302,7 +318,9 @@ row_to_json() {   # stdin: 확장 row(|구분) → JSON 객체 배열
         done_without_report: (if .[10]=="" then [] else (.[10]|split(" ")) end),
         review_verdict: (if .[11]=="" then null else .[11] end),
         review_required: (.[12]=="true"),
-        violations: (.[13]|tonumber), complete: (.[14]=="true") }]'
+        violations: (.[13]|tonumber), complete: (.[14]=="true"),
+        rules_review_verdict: (if (.[15] // "")=="" then null else .[15] end),
+        rules_review_required: (.[12]=="true") }]'
 }
 
 if [ "$JSON_MODE" = true ]; then
@@ -318,27 +336,32 @@ if [ "$JSON_MODE" = true ]; then
             json_output "ok" "$RESULT" "spec ${SPEC_N}개 전부 완료 조건 충족"
         fi
     else
-        IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans drop unreported noreport verdict required <<EOF
+        IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans drop unreported noreport verdict required rverdict <<EOF
 $FIRST
 EOF
-        UNC_J="[]"; ORP_J="[]"; UNR_J="[]"; NOR_J="[]"; VER_J="null"
+        UNC_J="[]"; ORP_J="[]"; UNR_J="[]"; NOR_J="[]"; VER_J="null"; RVER_J="null"
         if command -v jq >/dev/null 2>&1; then
             [ -n "$uncovered" ]  && UNC_J=$(printf '%s' "$uncovered"  | tr ' ' '\n' | jq -Rn '[inputs|select(length>0)]')
             [ -n "$orphans" ]    && ORP_J=$(printf '%s' "$orphans"    | tr ' ' '\n' | jq -Rn '[inputs|select(length>0)]')
             [ -n "$unreported" ] && UNR_J=$(printf '%s' "$unreported" | tr ' ' '\n' | jq -Rn '[inputs|select(length>0)]')
             [ -n "$noreport" ]   && NOR_J=$(printf '%s' "$noreport"   | tr ' ' '\n' | jq -Rn '[inputs|select(length>0)]')
             [ -n "$verdict" ]    && VER_J=$(jq -n --arg v "$verdict" '$v')
+            [ -n "$rverdict" ]   && RVER_J=$(jq -n --arg v "$rverdict" '$v')
         fi
         COMPLETE=false
         [ "$VIOLATIONS" -eq 0 ] && COMPLETE=true
-        RESULT=$(printf '{"spec":"%s","total":%s,"done":%s,"open":%s,"paused":%s,"ac_total":%s,"ac_uncovered":%s,"orphan_tasks":%s,"task_count_drop":%s,"dispatched_unreported":%s,"done_without_report":%s,"review_required":%s,"review_verdict":%s,"complete":%s,"violations":%s}' \
+        RESULT=$(printf '{"spec":"%s","total":%s,"done":%s,"open":%s,"paused":%s,"ac_total":%s,"ac_uncovered":%s,"orphan_tasks":%s,"task_count_drop":%s,"dispatched_unreported":%s,"done_without_report":%s,"review_required":%s,"review_verdict":%s,"rules_review_required":%s,"rules_review_verdict":%s,"complete":%s,"violations":%s}' \
             "${name:-}" "${total:-0}" "${done_n:-0}" "${open_n:-0}" "${paused:-0}" "${ac_total:-0}" \
-            "$UNC_J" "$ORP_J" "${drop:-0}" "$UNR_J" "$NOR_J" "${required:-false}" "$VER_J" "$COMPLETE" "$VIOLATIONS")
+            "$UNC_J" "$ORP_J" "${drop:-0}" "$UNR_J" "$NOR_J" "${required:-false}" "$VER_J" "${required:-false}" "$RVER_J" "$COMPLETE" "$VIOLATIONS")
         if [ "$VIOLATIONS" -gt 0 ]; then
             if review_blocks "$verdict" "$required" && [ "${open_n:-0}" -eq 0 ]; then
                 [ -z "$verdict" ] \
                     && json_output "warning" "$RESULT" "task 는 끝났지만 evaluator 리뷰가 필수예요 — 새 컨텍스트로 evaluator 를 띄워 review.md 첫 줄에 verdict 를 받으세요" \
                     || json_output "warning" "$RESULT" "evaluator verdict '${verdict}' — 지적을 task 로 옮겨 처리하거나 재논의하세요"
+            elif review_blocks "$rverdict" "$required" && [ "${open_n:-0}" -eq 0 ]; then
+                [ -z "$rverdict" ] \
+                    && json_output "warning" "$RESULT" "task 는 끝났지만 룰 대조가 필수예요 — rules-audit-scope.sh 로 범위를 뽑고 새 컨텍스트로 rules-auditor 를 띄워 review-rules.md 첫 줄에 verdict 를 받으세요" \
+                    || json_output "warning" "$RESULT" "룰 대조 verdict '${rverdict}' — review-rules.md 의 위반을 task 로 옮겨 고치고 rules-auditor 를 다시 띄우세요"
             elif [ -n "$unreported" ] || [ -n "$noreport" ]; then
                 json_output "warning" "$RESULT" "레인 원장 불일치 — 산출물을 받고 lanes-dispatch.sh --report 로 기록한 뒤에만 체크박스를 켜세요"
             else

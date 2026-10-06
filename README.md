@@ -121,7 +121,7 @@ The `spec` skill doesn't generate every artifact upfront. The triage result deci
 "break into tasks"              → tasks breakdown ([P] parallel marker); L/XL re-reviews with --stage tasks (cap 2)
 "start implementation"          → run tasks.md: sequential, or as lane coordinator when
                                   tasks carry lane assignments (lanes-dispatch.sh ledger)
-                                  → completion gate G1–G6 (+ fresh-context evaluator for L / M×L3)
+                                  → completion gate G1–G7 (+ fresh-context evaluator and rules-auditor for L / M×L3)
 "split into lanes"              → lane — first asks whether the work can be split at all
 "build this screen"             → screen — spec tables first → screen-designer (fresh context) builds,
                                   renders, measures (screen-measure.sh) and fixes before showing

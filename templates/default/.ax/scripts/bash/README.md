@@ -7,11 +7,11 @@
 
 | 스크립트 | 용도 | 호출하는 skill |
 |---|---|---|
-| `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log, `goax_inject_fresh` 세션 내 중복 주입 제거, `goax_lock`/`goax_unlock`/`goax_unlock_all` 원장 락, `goax_mktemp` 폴백 임시 파일, `goax_git_hook_path` git 없이도 도는 훅 경로, `goax_resolve_spec` `--spec` 축약 해석, `goax_secret_rules`/`goax_secret_patterns`/`goax_secret_scan_file`/`redact_secrets` 시크릿 패턴 SSOT — 검출과 마스킹이 같은 표에서 나와요 (검출은 kv-detect 전에 TS·Kotlin·Swift 타입 자리를 지워요), `goax_hook_enabled`/`goax_hook_profile` 훅 끄기·프로필, `goax_session_mark`/`goax_session_marked`/`goax_session_count` 세션 마커, `goax_shell_scan` 따옴표·heredoc 을 셸처럼 읽는 명령 판정(bypass·destructive), `goax_module_rules_matching`·`goax_imported_paths` 주입 훅과 게이트가 공유하는 룰 매칭, `goax_doc_id`/`goax_doc_key`/`goax_doc_sort` spec·ADR ID) | (sourced by all) |
+| `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log, `goax_inject_fresh` 세션 내 중복 주입 제거, `goax_lock`/`goax_unlock`/`goax_unlock_all` 원장 락, `goax_mktemp` 폴백 임시 파일, `goax_git_hook_path` git 없이도 도는 훅 경로, `goax_resolve_spec` `--spec` 축약 해석, `goax_tasks_parse` tasks.md 실행 그래프(`의존:` 포함 — tasks-plan·mark-task --next 공용), `goax_secret_rules`/`goax_secret_patterns`/`goax_secret_scan_file`/`redact_secrets` 시크릿 패턴 SSOT — 검출과 마스킹이 같은 표에서 나와요 (검출은 kv-detect 전에 TS·Kotlin·Swift 타입 자리를 지워요), `goax_hook_enabled`/`goax_hook_profile` 훅 끄기·프로필, `goax_session_mark`/`goax_session_marked`/`goax_session_count` 세션 마커, `goax_shell_scan` 따옴표·heredoc 을 셸처럼 읽는 명령 판정(bypass·destructive), `goax_module_rules_matching`·`goax_imported_paths` 주입 훅과 게이트가 공유하는 룰 매칭, `goax_doc_id`/`goax_doc_key`/`goax_doc_sort` spec·ADR ID) | (sourced by all) |
 | `detect-model.sh` | 지금 돌고 있는 모델 식별 — override → `$GOAX_MODEL` → transcript 스캔 → unknown | (진단·로깅용) |
 | `next-spec-num.sh` | 새 spec/ADR ID 발급 — `YYYY-MM-DD-<4hex>` (`--kind spec\|adr`, `--reserve --slug` 로 실물까지 O_EXCL 생성). 순번이 아니라 브랜치끼리 안 겹쳐요. `--check-duplicates` 는 옛 순번(`NNN`/`NNNN`) 중복 진단 | `spec`, `adr`, `doctor` |
 | `tier-from-state.sh` | current-task.json + config.yml → tier 결정 + evaluator 필수 여부 + spec_review 필수 여부(Size 축만) (`--reset` 는 `reset-task.sh` 경유) | `spec`, `tasks-gate.sh`, `spec-review.sh`, `update-state.sh` |
-| `update-task.sh` | `current-task.json` 의 task 필드를 **락 안에서 in-place** 갱신 — 작업별 원본은 `.ax/tasks/<task_id>.json` (`--task <id>` 면 그 작업만 · 지금 작업이 아니면 current-task.json 은 그대로 · `--activate` 로 지금 작업 전환) — `--phase <p>` · `--set task_id\|description\|size\|risk\|domain\|spec_id\|spec_dir\|spec_tier\|friction\|plan_doc=<v>` (`plan_doc` = 외부 계획 문서 경로 — spec 의 "원 계획") · `--blocked-by '<json>'` · `--merge-intent '<json>'` · `--start`. enum(size·risk·spec_tier·phase) 검증 실패면 아무것도 안 씀. SKILL.md 의 인라인 jq 를 대체 — 인라인은 무락이라 `handoff` 를 잃어요 | `triage`, `spec`, `spec-validate`, `spec-tasks`, `spec-implement` |
+| `update-task.sh` | `current-task.json` 의 task 필드를 **락 안에서 in-place** 갱신 — 작업별 원본은 `.ax/tasks/<task_id>.json` (`--task <id>` 면 그 작업만 · 지금 작업이 아니면 current-task.json 은 그대로 · `--activate` 로 지금 작업 전환 · `--start --follow-up <spec>` 로 끝난 spec 의 후속 작업을 spec_* 이어받아 열기) — `--phase <p>` · `--set task_id\|description\|size\|risk\|domain\|spec_id\|spec_dir\|spec_tier\|friction\|plan_doc=<v>` (`plan_doc` = 외부 계획 문서 경로 — spec 의 "원 계획") · `--blocked-by '<json>'` · `--merge-intent '<json>'` · `--start`. enum(size·risk·spec_tier·phase) 검증 실패면 아무것도 안 씀. SKILL.md 의 인라인 jq 를 대체 — 인라인은 무락이라 `handoff` 를 잃어요 | `triage`, `spec`, `spec-validate`, `spec-tasks`, `spec-implement` |
 | `init-spec-dir.sh` | tier별 selective spec 디렉토리 생성 | `spec` |
 | `add-spec-files.sh` | 기존 spec에 tasks/research 등 점진 추가 | `spec-tasks`, `spec --add` |
 | `slug-from-text.sh` | 영문 텍스트 → kebab-case 정규화·검증 | `spec` |
@@ -35,11 +35,12 @@
 | `doctor-scan.sh` | doctor 의 인라인 진단 셋 — 마이그레이션 잔재(`.ax/docs/STATUS.md` 잔재 통지 포함) · template 기준 hook 등록(파일 + **이벤트 키**) · 문서↔실제 메커니즘 · **도달 지도**(룰 소스별 배관 생사) · **인계 노트 기한**(`current-task.json` `handoff` `- [ ] YYYY-MM-DD`, I3 규칙) | `doctor` |
 | `constitution-apply.sh` | onboarding Q5 의 Constitution 블록 적용 — `--block` prepend(기존 본문 `---` 아래 보존) · `--scan-duplicates` · `--drop-exact`(사용자 [a] 뒤에만) · `--append-index` | `onboarding` |
 | `tasks-plan.sh` | tasks.md → ready / blocked / parallel + `[P]` 파일 겹침 violations. 항목별 승격 — wave(배리어) 없음, 자동 실행 없음 | `lane`, `spec-implement` |
-| `tasks-gate.sh` | spec 완료 게이트 G1~G6 — 미완료 · AC 커버리지 · orphan · 유실 · 레인 원장 · evaluator verdict(`review.md`) | `spec-implement`, `lane`, pre-commit hook |
+| `tasks-gate.sh` | spec 완료 게이트 G1~G7 — 미완료 · AC 커버리지 · orphan · 유실 · 레인 원장 · evaluator verdict(`review.md`) · 룰 대조 verdict(`review-rules.md`) | `spec-implement`, `lane`, pre-commit hook |
 | `lanes-hotfiles.sh` | tasks.md 에서 핫 파일(여러 미완료 task 가 쓰는 파일) + `files:` 누락 task 추출 | `lane` |
-| `spec-review.sh` | spec 합의 리뷰 원장 — `--snapshot`(sha 고정·라운드) / `--status`(리뷰어별 `review-spec.{architect,evaluator}.md` 의 verdict·sha 집계 → pass) / `--merge`(합본). 필수 여부는 Size 축만 | `spec-validate` |
+| `spec-review.sh` | spec 합의 리뷰 원장 — `--snapshot`(sha 고정·라운드) / `--status`(리뷰어별 `review-spec.{architect,evaluator}.md` 의 verdict·sha 집계 → pass) / `--merge`(합본) / `--override --reason`(상한 도달 뒤 사용자 승인을 지금 sha 에 기록 — `review-override.md`). 필수 여부는 Size 축만 | `spec-validate` |
+| `rules-audit-scope.sh` | 룰 대조(G7) 범위 — 변경 파일마다 걸린 spirit·모듈 룰(편집 훅과 같은 매칭 함수) · 상시 룰(Constitution · `paths:` 없는 spirit 룰) · 새 파일. rules-auditor 브리프의 입력 | `spec-implement` |
 | `lanes-dispatch.sh` | 레인 디스패치 원장 — `--assign / --dispatch <레인 \| T010,T011> / --report <레인 \| T010,T011> / --status`. tasks.md 의 `레인:`·`디스패치:`·`보고:` 필드를 쓰고, 파일 소유 충돌이면 dispatch 거부 | `lane`, `spec-implement` |
-| `mark-task.sh` | tasks.md 체크박스를 켜요 — `--task T013[,T014] [--state x\|~]` · `--next`(펜스 밖 첫 미완료). 줄 **앞** ID 만 매칭(본문 언급 무시), 코드 펜스 건너뜀, `tasks.md.lock`, 쓰기 전후 `[x]` 개수 검증. 여러 ID 는 트랜잭션(하나라도 없으면 무변경) | `spec-implement` |
+| `mark-task.sh` | tasks.md 체크박스를 켜요 — `--task T013[,T014] [--state x\|~]` · `--next`(펜스 밖에서 `의존:` 이 전부 `[x]`·`[~]` 인 첫 미완료 — 전부 막혔으면 warning + `blocked_tasks`). 줄 **앞** ID 만 매칭(본문 언급 무시), 코드 펜스 건너뜀, `tasks.md.lock`, 쓰기 전후 `[x]` 개수 검증. 여러 ID 는 트랜잭션(하나라도 없으면 무변경) | `spec-implement` |
 | `zero-init.sh` | 0→1 첫날 팩 설치 (룰은 라이브 `spirit/rules/`, 템플릿은 `_templates/zero/`) — 덮어쓰지 않고 SP 토큰 충돌만 경고 | `zero` |
 | `zero-domain-risk.sh` | `config.yml` 의 `domain_risk` 블록 통째 교체 (`--show/--set/--default`) — 출고 예시 키가 남으면 triage 가 영원히 default_risk 로 흘러요 | `zero` |
 | `zero-probe.sh` | 네거티브 프로브 — 일부러 위반을 만들어 차단이 실제로 도는지 확인 | `zero` |
@@ -94,7 +95,7 @@
 달리 **exit code 는 `0`** 이에요 — caller 가 exit 만 보고 넘어가면 이 신호를 놓쳐요, `status` 를
 같이 봐야 해요. `warning` 을 emit 하는 스크립트: `check-manifest-install.sh`, `check-rule-enforcement.sh`,
 `check-sensor-liveness.sh`, `constitution-apply.sh`, `doctor-scan.sh`, `lanes-dispatch.sh`,
-`lanes-hotfiles.sh`, `rules-index.sh`, `spec-review.sh`, `spirit-lint.sh`, `status-note.sh`,
+`lanes-hotfiles.sh`, `mark-task.sh`(`--next` 전부 의존에 막힘), `rules-index.sh`, `spec-review.sh`, `spirit-lint.sh`, `status-note.sh`,
 `tasks-gate.sh`, `tasks-plan.sh`, `zero-ablation.sh`.
 
 예외: `update-state.sh --json` 은 이 envelope 을 따르지 않아요 — 호출자가 `.status`/`.result` 를

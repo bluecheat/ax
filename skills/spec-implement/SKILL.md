@@ -28,8 +28,14 @@ done
 
 # 다음 미완료 task 찾기 — 없으면 끝난 게 아니라 §8 완료 게이트로 가요 (게이트가 완료를 판정해요)
 # 맨 grep 은 템플릿 펜스 안의 예시(`- [ ] T001 [P] [AC2] <한 줄 설명>`)를 집어요 — mark-task.sh --next 는 펜스 밖만 봐요.
-NEXT_TASK=$(bash .ax/scripts/bash/mark-task.sh --spec "$SPEC" --next --json | jq -r '.result.task // empty')
-[ -z "$NEXT_TASK" ] && echo "미완료 task 없음 → §8 완료 게이트로"
+# 의존(`의존:` 줄)이 전부 [x]·[~] 인 첫 미완료 task 를 골라요 — tasks-plan.sh 와 같은 파서예요.
+NEXT_JSON=$(bash .ax/scripts/bash/mark-task.sh --spec "$SPEC" --next --json)
+NEXT_TASK=$(echo "$NEXT_JSON" | jq -r '.result.task // empty')
+if [ "$(echo "$NEXT_JSON" | jq -r '.result.blocked // false')" = true ]; then
+ echo "$NEXT_JSON" | jq -r '.next_step'     # 미완료는 있는데 전부 의존에 막혔어요 — 끝난 게 아니에요. §6 처럼 halt
+elif [ -z "$NEXT_TASK" ]; then
+ echo "미완료 task 없음 → §8 완료 게이트로"
+fi
 ```
 
 context로 로드:
@@ -184,6 +190,19 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 
 `[n]` 시 halt + 사용자 결정 대기.
 
+### 3.3 단일 레인에서 task 를 위임할 때 — 브리프에 넣을 것
+
+이 세션이 task 하나를 서브에이전트(executor 등)에게 맡기면, 브리프에 그 task 의 `files:` 목록과 함께 이 줄을 넣어요:
+
+```
+files: 목록과 레포 관례(새 파일 위치·분리)가 충돌하면 — 예: 새 타입의 이웃 관례는 같은 레이어 projection/·vo/·dto/
+같은 별도 파일인데 그 경로가 목록에 없으면 — 목록 안 파일에 끼워 넣지 말고 멈추고 보고하세요
+(`관례 충돌 — <새 타입>, 이웃 관례 <경로 2개>, 필요한 파일 <경로>`).
+```
+
+보고가 오면 tasks.md 의 `files:` 를 관례 경로로 고치고 다시 맡겨요. 목록을 지키려고 관례를 어긴 코드는 G7(§8.1.5)에서
+다시 잡혀 되돌아와요.
+
 ### 3.5 레인 모드 — 코디네이터 루프
 
 `LANE_N > 0` 이면 이 세션은 **코디네이터**예요 — 코드를 직접 고치지 않고 `lanes-dispatch.sh --dispatch` 로
@@ -315,11 +334,14 @@ fi
 
 | `REVIEW_REQ` | `VERDICT` | 할 것 |
 |---|---|---|
-| true | 없음 | **§8.1 evaluator 호출** — 필수예요 (size L 이상 · M×L3) |
+| true | 없음 | **§8.1 evaluator 호출** — 필수예요 (size L 이상 · M×L3). §8.1.5 룰 대조와 한 메시지에 같이 띄워요 |
 | false | 없음 | `EFFECTIVE_MODE = autopilot` 이면 생략, 그 외엔 한 번만 제안: "evaluator 리뷰 돌릴까요?" |
 | * | `진행` | §8.2 완료 |
 | * | `보강 필요` | review.md 의 지적 하나하나를 task 로 옮겨요 (`- [ ] T1NN [ACn] <지적> — files: …`), §3 으로 돌아가요. 끝나면 evaluator 를 **다시** 띄워요 — review.md 는 evaluator 가 덮어써요 |
 | * | `재논의 필요` | halt. 사용자 결정 — spec 자체를 다시 봐야 한다는 뜻이에요 |
+
+룰 대조(G7 — `review-rules.md`)도 같은 표예요: 필수 여부는 `REVIEW_REQ` 와 같고, `RULES_VERDICT=$(echo "$GATE" | jq -r
+'.result.rules_review_verdict // ""')` 가 없으면 §8.1.5, `보강 필요` 면 위반을 task 로 옮겨 §3 으로 갔다가 rules-auditor 를 다시 띄워요.
 
 `재논의 필요`·`보강 필요` 로 이 턴이 그냥 끝나면 `stop/spec-gate.sh` 가 한 번 더 잡아요 —
 phase 가 `implementing`/`review` 인데 `tasks-gate.sh` 가 아직 실패면, §6 의 인계 노트(24시간 이내)가
@@ -348,12 +370,29 @@ evaluator 가 파일을 직접 써요. 코디네이터는 결과를 받아 적�
 쪽이 검사 기록을 쓰게 돼요. 돌아오면 `tasks-gate.sh` 를 다시 돌려요. G6 이 review.md 의 첫 줄을
 읽어 판정해요. `보강 필요` 로 §3 에 돌아갈 땐 phase 를 다시 `implementing` 으로 되돌려요.
 
+### 8.1.5 룰 대조 — rules-auditor, 새 컨텍스트로 (G7)
+
+편집 훅은 룰 경로를 알려주고 `rule-read-gate.sh` 는 읽었는지만 봐요 — 지켰는지, 새 파일이 이웃 관례(위치·이름·분리)를
+따랐는지는 evaluator 의 범위도 아니에요. 그래서 완료 전에 따로 대조해요. 범위는 스크립트가 정해요:
+
+```bash
+SCOPE=$(bash .ax/scripts/bash/rules-audit-scope.sh --spec "$SPEC" --json)   # 변경 파일마다 걸린 룰 · 상시 룰 · 새 파일
+echo "$SCOPE" | jq -r '.next_step'
+```
+
+`Agent` 도구로 `goax:rules-auditor` 를 띄워요 (vendor 설치면 `rules-auditor`) — evaluator 와 **한 메시지에 같이**, 서로의
+파일은 브리프에 넣지 않아요. 브리프는 `SCOPE` 의 result(JSON 그대로) · diff 범위(§8.1 과 같은 base) · 산출물 경로
+(`result.review_file`, 첫 줄 `verdict: 진행 | 보강 필요`) 뿐이에요. 이 대화는 넘기지 않아요. 파일은 rules-auditor 가 직접
+써요 — 코디네이터가 받아 적지 않아요. 돌아오면 `tasks-gate.sh` 를 다시 돌려요. `SCOPE` 가 skipped(변경 0)면 브리프 대신
+`review-rules.md` 를 rules-auditor 에게 "변경 0 — 진행" 으로 쓰게 해요.
+
 ### 8.2 완료
 
 ```bash
 if [ "$COMPLETE" = "true" ]; then
  echo "✅ spec $SPEC 구현 완료."
  [ -f "$SPEC_DIR/review.md" ] && echo "  ✅ evaluator verdict: $(head -1 "$SPEC_DIR/review.md")"
+ [ -f "$SPEC_DIR/review-rules.md" ] && echo "  ✅ 룰 대조 verdict: $(head -1 "$SPEC_DIR/review-rules.md")"
  bash .ax/scripts/bash/reset-task.sh ${WORK_ID:+--task "$WORK_ID"} >/dev/null 2>&1 || true
  echo "  ✅ current-task.json reset → phase=idle"
  bash .ax/scripts/bash/status-note.sh --set now "" --json >/dev/null 2>&1 || true    # 끝난 항목은 지워요 — SSOT 는 git log · ADR
@@ -410,6 +449,8 @@ fi
 - **레인 보고를 받고 검증 명령 없이 마킹** — "테스트 통과했어요" 는 주장이고, 코디네이터가 돌린 명령의 exit 0 이 근거예요
 - **코디네이터가 review.md 를 쓰기** — evaluator 의 출력을 받아 적는 순간 검사받는 쪽이 검사 기록을 쓰는 거예요
 - **evaluator 에 이 대화를 넘기기** — 새 컨텍스트가 성립 조건이에요 (`agents/evaluator.md` §성립 조건)
+- **코디네이터가 review-rules.md 를 쓰기 · 룰 대조를 evaluator 에 얹기** — G7 은 rules-auditor 가 새 컨텍스트로 써요. evaluator 는 이름·패키지 관례를 보지 않아요
+- **files: 목록을 지키려고 새 타입을 목록 안 파일에 끼워 넣기** — 관례와 충돌하면 멈추고 tasks.md 를 고쳐요 (§3.3)
 - **`review_required = true` 인데 evaluator 생략** — G6 이 막지만, 막히기 전에 안 하는 게 맞아요
 - 실패 / 범위이탈 / elevated 시 자동 우회
 - 완료 task 를 다시 - [ ] 로 되돌리기

@@ -91,7 +91,7 @@ task 가 있으면 그건 spec 에 없는 일을 하고 있다는 신호예요.
 | `[P]` | **병렬 가능** — 미완료 의존 없음 + 다른 `[P]` task 와 파일 안 겹침, 둘 다 만족할 때만 |
 | `[AC2]` | 이 task 가 충족하는 spec.md §3 의 수용 기준 |
 | `files:` | 건드리는 파일. **모든 task 에 필수** — 빠지면 겹침 검사가 그 task 엔 안 닿아서 "위반 없음"이 "검사 안 함"이 돼요 |
-| `의존:` | 앞선 task ID. 없으면 `없음`·`none`·`-` 중 하나만 인정돼요 (`deps:`·`depends:` 는 안 읽혀요) |
+| `의존:` | 앞선 task ID. 없으면 `없음`·`none`·`-` 중 하나만 인정돼요 (`deps:`·`depends:` 는 안 읽혀요). `tasks-plan.sh` 와 `mark-task.sh --next` 가 이 줄로 다음 task 를 골라요 — 의존이 `[x]`·`[~]` 가 돼야 풀려요 |
 
 체크박스는 셋 — `[ ]` 미완료 · `[x]` 완료 · `[~]` 의도적 보류(사유 병기).
 
@@ -130,6 +130,10 @@ task 가 있으면 그건 spec 에 없는 일을 하고 있다는 신호예요.
 
 규칙:
 - **모든 task 에 `files:` 필수** — 겹침 검사가 이 값으로만 성립해요 (`lanes-hotfiles.sh` 의 `tasks_missing_files` 로 사각지대 확인)
+- **새 파일을 만드는 task 는 `files:` 를 적기 전에 같은 레이어 이웃을 grep 해요** — 이웃이 같은 종류를
+  `projection/`·`vo/`·`dto/` 같은 하위 디렉토리에 따로 두면 새 파일 경로도 거기로 정해요. `files:` 는 구현자에겐
+  "이 밖은 손대지 마" 라서, 관례 위치가 빠진 목록을 받은 구현자는 새 타입을 목록 안 파일에 끼워 넣어요 (commerce 실측).
+  예: `ls $(dirname <비슷한 기존 파일>)/` · `grep -rl "interface .*Projection" <모듈>/` 으로 이웃 2개 이상을 확인
 - Phase 순서: setup → foundational → user stories(priority순) → polish
 - TaskID는 sortable (T001, T010, T100)
 - `[P]` 는 기본값이 아니라 증명될 때만 — 판단이 서지 않으면 붙이지 않아요

@@ -17,7 +17,7 @@
 #   L     × L3      → full     (+ research/data-model/quickstart + ADR)
 #   XL    × *       → full
 #
-# evaluator (완료 시 새 컨텍스트 리뷰 — spec-implement 가 tasks-gate G6 으로 강제):
+# evaluator (완료 시 새 컨텍스트 리뷰 — spec-implement 가 tasks-gate G6 으로 강제, 룰 대조 G7 도 같은 필수 여부):
 #   S × * · M × L0~L2 → optional
 #   M × L3 · L × * · XL × * → required
 #

@@ -146,10 +146,19 @@ for m in "${MATCHED[@]}"; do
 done
 [ ${#FRESH[@]} -eq 0 ] && exit 0
 
-# additionalContext 생성 (룰 파일 경로 알림 — Claude가 필요 시 Read)
+# additionalContext 생성 — 룰 파일 경로 + 그 파일의 룰 제목(`## SP-…: 제목`, 펜스 밖, 파일당 15줄)
+# 경로만 주면 모델이 "무슨 룰인지" 를 Read 해야만 알아요 — rule-read-gate.sh 가 Read 는 강제하지만, 제목이 함께
+# 보이면 편집하는 그 줄을 어느 룰에 비춰 볼지 바로 떠올라요. 세션당 처음 매칭될 때만(goax_inject_fresh) 붙으니
+# 비용은 룰 파일 하나에 제목 몇 줄이에요. 본문은 넣지 않아요 (B-pointer — 본문은 Read 로).
+rule_titles() {
+    awk '/^[[:space:]]*```/{f=!f; next} f{next}
+         /^## SP-[[:alnum:]]+-[0-9]+:/ { sub(/^## /, ""); if (++n <= 15) print "    " $0; else if (n == 16) print "    …" }' "$1" 2>/dev/null || true
+}
 LIST=""
 for m in "${FRESH[@]}"; do
     LIST+="- $m"$'\n'
+    T=$(rule_titles "$PROJECT_ROOT/$m")
+    [ -n "$T" ] && LIST+="$T"$'\n'
 done
 CTX="📋 Path-scoped spirit rules apply to ${TARGET_REL} — Read these before editing if not yet:"$'\n'"$LIST"
 # 룰 파일이 많아도 10,000자 상한(넘으면 파일로 빠져요) 아래로

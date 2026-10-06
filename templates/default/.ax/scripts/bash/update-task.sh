@@ -17,6 +17,10 @@
 #   --task <id>     이 작업만 갱신해요 (.ax/tasks/<id>.json). 지금 작업(current-task.json 의 task_id)이 아니면
 #                   current-task.json 은 그대로예요 — 병렬 작업이 서로 덮지 않아요. 없으면 지금 작업이 대상
 #   --activate      --task 의 작업을 지금 작업으로 (current-task.json 의 task 필드를 그 작업 것으로 바꿔요)
+#   --follow-up <spec>  --start 와 같이 — 이미 끝난(reset-task.sh 로 닫힌) spec 에 후속 작업을 새 작업으로 열어요.
+#                   spec_id · spec_dir · spec_tier 를 그 spec 디렉토리(.tier)에서 이어받고 intent_notes.follow_up_of 에
+#                   spec 이름을 적어요. 같은 키를 --set 으로 주면 --set 이 이겨요. 닫힌 작업 파일은 reset 이 지워서
+#                   --activate 로는 못 돌아가요 — 무엇을 했는지는 git log · spec 이 원본이고, 이어 열 건 spec 이에요
 #
 # 작업별 상태: task_id 가 있는 작업은 .ax/tasks/<task_id>.json 이 원본이고 current-task.json 은 지금 작업의
 #   사본 + handoff 예요. --start 로 다른 작업을 열면 앞 작업은 자기 파일에 남아요 (--task <id> --activate 로 돌아가요).
@@ -44,13 +48,13 @@ SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 JSON_MODE=false; SHOW_HELP=false; DRY_RUN=false
-PHASE=""; SETS='{}'; SET_KV=(); BLOCKED=""; INTENT=""; START=false; ACTIVATE=false; TASK_OPT=""; NARGS=0; EMPTY_OPT=""; opt=""
+PHASE=""; SETS='{}'; SET_KV=(); BLOCKED=""; INTENT=""; START=false; ACTIVATE=false; TASK_OPT=""; FOLLOW=""; NARGS=0; EMPTY_OPT=""; opt=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --json)    JSON_MODE=true ;;
         --dry-run) DRY_RUN=true ;;
         --help|-h) SHOW_HELP=true ;;
-        --phase|--set|--blocked-by|--merge-intent|--task)
+        --phase|--set|--blocked-by|--merge-intent|--task|--follow-up)
             opt="$1"
             # 값이 비었거나 다음 토큰이 옵션(--…)이면 값을 삼키지 않고 오류로 — 예전엔 빈 값을 "안 준 것" 으로 접어
             # updated_at 만 조용히 쓰고 ok 였고 (spec-validate 가 BLOCKED 를 비워 보내면 phase 만 spec_blocked 로
@@ -65,6 +69,7 @@ while [ $# -gt 0 ]; do
                     --blocked-by)   BLOCKED="$1" ;;
                     --merge-intent) INTENT="$1" ;;
                     --task)         TASK_OPT="$1"; NARGS=$((NARGS - 1)) ;;   # 대상만 고르고 바꿀 건 아니에요
+                    --follow-up)    FOLLOW="$1" ;;
                 esac
             fi
             NARGS=$((NARGS + 1)) ;;
@@ -88,6 +93,7 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 [ "$NARGS" -gt 0 ] || fail "바꿀 것이 없어요 — --phase · --set · --blocked-by · --merge-intent · --start · --activate 중 하나는 줘요"
 [ "$ACTIVATE" = false ] || [ -n "$TASK_OPT" ] || fail "--activate 는 --task <id> 와 같이 줘요 — 어느 작업을 지금 작업으로 할지요"
+[ -z "$FOLLOW" ] || [ "$START" = true ] || fail "--follow-up 은 --start 와 같이 줘요 — 끝난 spec 의 후속은 새 작업이에요 (--set task_id=<새 id>)"
 # 작업 id 는 파일 이름이 돼요 — 고치지 않고 거부해요 (`a/b` 와 `a_b` 가 같은 파일로 가면 안 돼요)
 valid_id() { printf '%s' "$1" | grep -Eq '^[[:alnum:]_][[:alnum:]_.-]*$'; }
 [ -z "$TASK_OPT" ] || valid_id "$TASK_OPT" || fail "작업 id 는 영숫자·_·.·- 만 써요 (받은 값: '${TASK_OPT}')"
@@ -131,6 +137,21 @@ fi
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
 FILE="$PROJECT_ROOT/.ax/current-task.json"; REL=".ax/current-task.json"
 [ -f "$FILE" ] || fail "$REL 이 없어요 — /up 으로 설치를 마쳐요"
+
+# --follow-up — 끝난 spec 의 spec_* 를 이어받아요. 디렉토리가 SSOT 예요 (닫힌 작업 파일은 reset 이 지웠어요)
+if [ -n "$FOLLOW" ]; then
+    FSPEC=$(goax_resolve_spec "$FOLLOW" "$PROJECT_ROOT/.ax/docs/spec") && FRC=0 || FRC=$?
+    [ "$FRC" -ne 2 ] || fail "--follow-up '$FOLLOW' 이 여러 spec 에 걸려요: ${GOAX_SPEC_CANDIDATES} — 하나를 정확히 적어요"
+    [ "$FRC" -eq 0 ] && [ -f "$PROJECT_ROOT/.ax/docs/spec/$FSPEC/spec.md" ] \
+        || fail "--follow-up '$FOLLOW' 의 spec 을 찾을 수 없어요 (.ax/docs/spec/<id-slug>/spec.md)"
+    FTIER=$(awk -F: '/^[[:space:]]*tier:/{v=$2; gsub(/[[:space:]]/,"",v); print v; exit}' "$PROJECT_ROOT/.ax/docs/spec/$FSPEC/.tier" 2>/dev/null || true)
+    case "$FTIER" in standard|full) ;; *) FTIER="" ;; esac
+    FID=$(printf '%s\n' "$FSPEC" | goax_doc_key)
+    SETS=$(jq -nc --argjson o "$SETS" --arg id "$FID" --arg dir ".ax/docs/spec/$FSPEC" --arg t "$FTIER" \
+        '{spec_id: $id, spec_dir: $dir} + (if $t != "" then {spec_tier: $t} else {} end) + $o')   # --set 이 이겨요
+    [ "$INTENT" = null ] && INTENT='{}'
+    INTENT=$(jq -nc --argjson o "$INTENT" --arg s "$FSPEC" '{follow_up_of: $s} + $o')
+fi
 
 # 바뀌는 키 목록 — 출력용. updated_at 은 항상.
 CHANGED=$(jq -nc --arg p "$PHASE" --argjson s "$SETS" --argjson bb "$BLOCKED" --argjson it "$INTENT" --argjson st "$START" \
@@ -178,7 +199,7 @@ resolve_target() {
         ERRMSG="작업 ${TARGET} 이 이미 있어요 ($TASK_REL) — 이어서 하려면 --task ${TARGET} (--activate), 새 작업이면 새 id 로 --start"; return 1
     fi
     if [ ! -f "$TF" ] && [ "$TARGET" != "$ACTIVE" ] && [ "$START" != true ]; then
-        ERRMSG="작업 ${TARGET} 이 없어요 ($TASK_REL) — 새 작업은 triage 가 --start 로 열어요"; return 1
+        ERRMSG="작업 ${TARGET} 이 없어요 ($TASK_REL) — 새 작업은 triage 가 --start 로 열어요. reset-task.sh 로 끝낸 작업의 spec 에 후속을 이으려면 --start --follow-up <spec> --set task_id=<새 id>"; return 1
     fi
     return 0
 }

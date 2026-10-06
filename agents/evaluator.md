@@ -42,6 +42,12 @@ Generator/Evaluator 모델 — Generator의 self-praise bias 제거.
 - 컨텍스트 drift (거부된 패턴 재출현)
 - 사용자가 명시 안 했지만 도메인이 요구하는 것
 
+## 하지 않는 것 — 구현 리뷰
+
+- **이름·패키지 관례 대조** — 변경 파일에 걸린 spirit·모듈 룰과 새 파일의 위치(`projection/`·`vo/`·`dto/` 같은
+  이웃 디렉토리)·이름 꼴·분리를 이웃과 맞춰 보는 건 `rules-auditor` 의 범위예요 (G7, `review-rules.md`).
+  여기서도 하면 같은 지적이 두 파일에 와요. 보이면 `### 종합` 에 "룰 대조 범위" 로 한 줄만 적어요
+
 ## 호출 시점
 
 - **`spec-implement` §8** — `tasks-gate.sh` 가 task 0건 남았다고 판정한 직후. size L 이상 ·

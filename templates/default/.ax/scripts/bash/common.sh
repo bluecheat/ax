@@ -1510,6 +1510,69 @@ goax_resolve_spec() {
     return 1
 }
 
+# goax_tasks_parse <tasks.md>
+#   tasks.md 를 실행 그래프 한 줄씩으로 읽어요 — tasks-plan.sh · mark-task.sh --next 가 같은 파서를 써요
+#   (둘이 다르게 읽으면 plan 은 blocked 라는데 --next 는 그 task 를 집어요).
+#   출력: "ID|state|P|files(,)|deps(,)|line"   state = open|done|paused · P = 0|1 · line = task 줄 번호
+#   - ``` 코드펜스 안은 건너뛰어요 (템플릿의 형식 설명 예시가 실 task 로 세지 않게)
+#   - files: 경로는 정규화해요 (`./` 제거 · 중복 `/` · 끝 `/`) — 표기 차이로 겹침 검사를 빠져나갈 수 없어요
+#   - deps 는 task 다음 들여쓰기 `의존:` 줄의 T-ID 만 뽑아요 — `없음`·`none`·`-` 은 빈 값,
+#     `T001 (스키마)` 처럼 설명이 붙어도 T001 만 남아요. T-ID 가 하나도 없는 다른 표기는 원문 그대로 남겨
+#     (없는 task 에 의존한 것처럼) 풀리지 않게 해요 — 오타가 "의존 없음" 으로 조용히 통과하지 않게요
+goax_tasks_parse() {
+    awk '
+        function norm(p) {
+            gsub(/\/+/, "/", p)
+            while (sub(/^\.\//, "", p)) ;
+            while (sub(/\/\.\//, "/", p)) ;
+            sub(/\/+$/, "", p)
+            return p
+        }
+        function normlist(s,   n, a, i, v, out) {
+            if (s == "") return ""
+            n = split(s, a, ",")
+            out = ""
+            for (i = 1; i <= n; i++) { v = norm(a[i]); if (v != "") out = (out == "" ? v : out "," v) }
+            return out
+        }
+        function flush() {
+            if (id != "") printf "%s|%s|%s|%s|%s|%s\n", id, st, par, files, deps, ln
+            id=""; st=""; par="0"; files=""; deps=""; ln=""
+        }
+        /^[[:space:]]*```/ { fence = !fence; next }
+        fence { next }
+        /^- \[[ x~X]\] / {
+            flush()
+            line = $0; ln = NR
+            st = "open"
+            if (line ~ /^- \[[xX]\]/) st = "done"
+            else if (line ~ /^- \[~\]/) st = "paused"
+            if (match(line, /\[P\]/)) par = "1"
+            if (match(line, /T[0-9][0-9][0-9]+/)) id = substr(line, RSTART, RLENGTH)
+            f = line
+            if (match(f, /files:[ ]*/)) {
+                f = substr(f, RSTART + RLENGTH)
+                gsub(/[ ]*,[ ]*/, ",", f); gsub(/^[ ]+|[ ]+$/, "", f)
+                files = normlist(f)
+            }
+            next
+        }
+        id != "" && /^[ \t]+의존:/ {
+            d = $0; sub(/^[ \t]*의존:[ ]*/, "", d); raw = d
+            while (match(d, /T[0-9]+/)) {
+                v = substr(d, RSTART, RLENGTH); d = substr(d, RSTART + RLENGTH)
+                deps = (deps == "" ? v : deps "," v)
+            }
+            # T-ID 가 없는데 없음/none/- 도 아니면 읽을 수 없는 의존 — 조용히 "의존 없음" 으로 풀지 않고
+            # 그대로 남겨요 (tasks.md 에 없는 ID 처럼 영원히 안 풀려서 눈에 띄어요)
+            gsub(/^[ \t]+|[ \t]+$/, "", raw)
+            if (deps == "" && raw !~ /^(없음|none|-)?$/) { gsub(/[|,]/, ";", raw); deps = raw }
+            next
+        }
+        END { flush() }
+    ' "$1"
+}
+
 # Find project root — fallback chain:
 #   1) $GOAX_PROJECT_DIR  — CLI-agnostic override. Claude Code 외 환경 (직접 호출, CI,
 #      다른 AI CLI 의 어댑터) 에서 결정론 스크립트를 standalone 으로 부를 때 사용.

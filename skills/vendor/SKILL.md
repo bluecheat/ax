@@ -74,10 +74,10 @@ bash .ax/scripts/bash/vendor-skills.sh --plugin-dir "$PLUGIN_ROOT" --dry-run --j
   프로젝트 루트  commerce-monorepo/projects/commerce/  (.ax/ 가 여기)
   → 둘이 달라요. .goax-root 포인터를 만들게요.
 
- 📂 동봉 대상 — 20개
+ 📂 동봉 대상 — 22개
   .claude/skills/    15개  (up, onboarding, zero, triage, spec, lane, adr, …)
   .claude/commands/   1개  (goax)
-  .claude/agents/     4개  (architect, evaluator, lane-scout, lane-worker)
+  .claude/agents/     6개  (architect, evaluator, lane-scout, lane-worker, rules-auditor, screen-designer)
 
  ❗ 기존 파일
   같은 이름의 goax 자산만 덮어써요. 직접 만드신 스킬은 건드리지 않아요.
