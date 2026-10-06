@@ -131,9 +131,9 @@ task 가 있으면 그건 spec 에 없는 일을 하고 있다는 신호예요.
 규칙:
 - **모든 task 에 `files:` 필수** — 겹침 검사가 이 값으로만 성립해요 (`lanes-hotfiles.sh` 의 `tasks_missing_files` 로 사각지대 확인)
 - **새 파일을 만드는 task 는 `files:` 를 적기 전에 같은 레이어 이웃을 grep 해요** — 이웃이 같은 종류를
-  `projection/`·`vo/`·`dto/` 같은 하위 디렉토리에 따로 두면 새 파일 경로도 거기로 정해요. `files:` 는 구현자에겐
-  "이 밖은 손대지 마" 라서, 관례 위치가 빠진 목록을 받은 구현자는 새 타입을 목록 안 파일에 끼워 넣어요 (commerce 실측).
-  예: `ls $(dirname <비슷한 기존 파일>)/` · `grep -rl "interface .*Projection" <모듈>/` 으로 이웃 2개 이상을 확인
+  별도 하위 디렉토리에 따로 두면 새 파일 경로도 거기로 정해요. `files:` 는 구현자에겐
+  "이 밖은 손대지 마" 라서, 관례 위치가 빠진 목록을 받은 구현자는 새 타입을 목록 안 파일에 끼워 넣어요.
+  예: `ls $(dirname <비슷한 기존 파일>)/` · `grep -rl "<같은 종류의 이름 꼴>" <모듈>/` 으로 이웃 2개 이상을 확인
 - Phase 순서: setup → foundational → user stories(priority순) → polish
 - TaskID는 sortable (T001, T010, T100)
 - `[P]` 는 기본값이 아니라 증명될 때만 — 판단이 서지 않으면 붙이지 않아요

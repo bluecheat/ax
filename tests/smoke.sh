@@ -5321,7 +5321,7 @@ for ag in lane-worker lane-scout; do
         || fail "$ag — 외부 쓰기 금지나 객체 형식 종료 응답이 빠졌어요"
 done
 
-section "65. commerce 마찰 다섯 — --next 의존 · 관례 위치 · 룰 대조 G7 · 후속 작업 · 합의 리뷰 승인"
+section "65. 실사용 마찰 다섯 — --next 의존 · 관례 위치 · 룰 대조 G7 · 후속 작업 · 합의 리뷰 승인"
 # ───────────────────────────────────────────────────────────
 SB="$REPO/templates/default/.ax/scripts/bash"
 # (1) mark-task --next 는 `의존:` 을 봐요 — tasks-plan 과 같은 파서(goax_tasks_parse)

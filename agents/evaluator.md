@@ -44,7 +44,7 @@ Generator/Evaluator 모델 — Generator의 self-praise bias 제거.
 
 ## 하지 않는 것 — 구현 리뷰
 
-- **이름·패키지 관례 대조** — 변경 파일에 걸린 spirit·모듈 룰과 새 파일의 위치(`projection/`·`vo/`·`dto/` 같은
+- **이름·패키지 관례 대조** — 변경 파일에 걸린 spirit·모듈 룰과 새 파일의 위치(같은 레이어
   이웃 디렉토리)·이름 꼴·분리를 이웃과 맞춰 보는 건 `rules-auditor` 의 범위예요 (G7, `review-rules.md`).
   여기서도 하면 같은 지적이 두 파일에 와요. 보이면 `### 종합` 에 "룰 대조 범위" 로 한 줄만 적어요
 
