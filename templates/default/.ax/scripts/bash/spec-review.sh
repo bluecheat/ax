@@ -8,6 +8,8 @@
 #   bash spec-review.sh [--spec <id-slug>] --delta             [--json]   # 리뷰어가 본 본문 → 지금 본문 diff (재리뷰 브리프용)
 #   bash spec-review.sh [--spec <id-slug>] --fixup   [--dry-run] [--json] # 통과 뒤의 오타·문구 수정을 리뷰 없이 받아들여요
 #   bash spec-review.sh [--spec <id-slug>] --merge   [--dry-run] [--json] # review-spec.md 합본 생성 (사람이 읽는 용)
+#   bash spec-review.sh [--spec <id-slug>] --override --reason "<사용자 결정>" [--dry-run] [--json]
+#                                                                   # 상한에 닿은 뒤 사용자가 "이대로 진행" 을 정했을 때 — 지금 sha 에 승인 기록
 #
 # 왜 필요한가 — 계획의 품질은 diff 시점이 아니라 계획 시점에 리뷰해야 올라가요. 그런데 리뷰어
 # 둘(architect · evaluator)이 한 파일에 쓰면 (a) 첫 줄 verdict 하나로 "둘 다 진행" 을 표현할 수
@@ -20,6 +22,7 @@
 #   <spec>/review-spec.architect.md   architect 가 직접 씀 — 1줄 `verdict: 진행|보강 필요|재논의 필요` · 2줄 `sha: <12자>`
 #   <spec>/review-spec.evaluator.md   evaluator 가 직접 씀 — 같은 형식
 #   <spec>/review-spec.md             --merge 가 생성 (합본)
+#   <spec>/review-override.md         --override 가 씀 — sha · by · at · stage/round · 두 verdict · reason (커밋해요 — 사용자 결정의 기록)
 #
 # sha 는 **spec.md + tasks.md 합산**이에요. spec.md 만 보면 리뷰 뒤에 tasks.md 를 통째로
 # 갈아끼워도 pass 가 유지돼서, "L/XL 은 evaluator 가 tasks.md 까지 본다" 가 no-op 이 돼요.
@@ -40,6 +43,7 @@
 #   required=none (size S)        → pass. 리뷰 대상이 아니에요
 #   required=optional (size M)    → 파일이 하나도 없으면 pass (선택). 하나라도 있으면 아래 규칙
 #   required=required (size L/XL) → 두 파일 모두 있고, 둘 다 `진행`, 둘 다 sha 가 현재(또는 fixup 으로 받아들인 것)와 같아야 pass
+#   review-override.md 의 sha 가 지금 sha 와 같으면 → pass (사용자 승인 — reason 에 by·at·사유)
 #   sha 불일치 = 리뷰 뒤에 spec/tasks 가 바뀜 = 그쪽만 다시 받아요 (어느 파일인지 알려줘요)
 #
 # 필수 여부의 SSOT 는 tier-from-state.sh 의 `spec_review` 필드예요 (Size 축만: L/XL 필수 · M 선택 · S 없음).
@@ -47,6 +51,11 @@
 # (full → required · standard → optional · 값이 없으면 required). 판정 못 한 걸 optional 로
 # 열어 두면 가장 큰 spec 이 가장 조용히 통과해요 — 그래서 모르면 닫는 쪽이에요.
 # 근거는 result 의 `required_source` 에 적어요.
+#
+# --override 는 **라운드가 상한에 닿은 뒤**에만 돼요 (지금 단계의 라운드 ≥ 상한). 남은 차단이 기계적 수정뿐이라
+# 사용자가 "이대로 진행" 을 정했는데 리뷰를 한 바퀴 더 돌릴 수 없을 때, 그 결정을 **지금 sha** 에 묶어 파일로 남겨요.
+# 예전엔 intent_notes 에 손으로 적었고 --status 는 그걸 몰라 pass=false 가 남았어요. 기록 뒤 본문이 바뀌면(sha 불일치)
+# 승인은 더 이상 안 먹혀요 — 사용자가 본 본문이 아니니까요. 누가(git user.name · 없으면 $USER) · 언제 · 왜 를 적어요.
 #
 # --dry-run 은 아무 파일도 안 써요 (--snapshot 의 .review-round · .review-snapshot, --fixup 의 .review-round, --merge 의 review-spec.md).
 # 라운드가 상한을 넘으면 status: warning 으로 알려요. 차단은 안 해요 —
@@ -65,15 +74,17 @@
 #                base=reviewed 는 리뷰어가 본 본문 대비, base=snapshot 은 아직 아무도 안 본 스냅샷 대비예요
 #                (재리뷰 브리프에 붙일 것은 reviewed 쪽이에요 — snapshot 대비는 "리뷰 전에 더 고쳤다" 는 뜻)
 #   --fixup     {"status":"ok","result":{"reviewed_sha":"…","accepted_sha":"…","changed_lines":3,…}}
+#   --override  {"status":"ok","result":{"sha":"…","by":"…","at":"…","reason":"…","stage":"spec","round":4,"max_rounds":3,"file":"…"}}
+#   --status 의 result 엔 "override":{"applied":bool,"sha":…,"by":…,"at":…,"reason":…} 가 붙어요
 #
-# Exit: 0 ok (pass 여부와 무관 — 판단은 caller) · 1 error (spec.md 없음 · --spec 모호 · --fixup 조건 미달) · 2 skipped (jq 없음)
+# Exit: 0 ok (pass 여부와 무관 — 판단은 caller) · 1 error (spec.md 없음 · --spec 모호 · --fixup/--override 조건 미달) · 2 skipped (jq 없음)
 
 set -euo pipefail
 SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 source "$SCRIPT_DIR/common.sh"
 
-JSON_MODE=false; SHOW_HELP=false; DRY_RUN=false; MODE=""; SPEC=""; MAX_ROUNDS=""; STAGE_ARG=""
+JSON_MODE=false; SHOW_HELP=false; DRY_RUN=false; MODE=""; SPEC=""; MAX_ROUNDS=""; STAGE_ARG=""; REASON_ARG=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -84,6 +95,8 @@ while [ $# -gt 0 ]; do
         --merge)    MODE="merge" ;;
         --delta)    MODE="delta" ;;
         --fixup)    MODE="fixup" ;;
+        --override) MODE="override" ;;
+        --reason)   shift; REASON_ARG="${1:-}" ;;
         --spec)     shift; SPEC="${1:-}" ;;
         --stage)    shift; STAGE_ARG="${1:-}" ;;
         --max-rounds) shift; MAX_ROUNDS="${1:-}" ;;
@@ -138,6 +151,7 @@ E_FILE="$SPEC_DIR/review-spec.evaluator.md"
 ROUND_FILE="$SPEC_DIR/.review-round"
 SNAP_DIR="$SPEC_DIR/.review-snapshot"
 DELTA_FILE="$SNAP_DIR/delta.diff"
+OVR_FILE="$SPEC_DIR/review-override.md"
 
 sha_file() {
     [ -f "$1" ] || { printf ''; return 0; }
@@ -209,6 +223,12 @@ IFS='|' read -r E_P E_V E_S <<EOF
 $(parse_review "$E_FILE")
 EOF
 
+# 사용자 승인 기록 — "key: value" 줄 (sha · by · at · reason). 지금 sha 와 같아야 먹혀요
+ovr_get() { [ -f "$OVR_FILE" ] && sed -n "s/^$1:[[:space:]]*//p" "$OVR_FILE" 2>/dev/null | head -1 | sed -E 's/[[:space:]]+$//' || true; }
+O_SHA=$(ovr_get sha); O_BY=$(ovr_get by); O_AT=$(ovr_get at); O_REASON=$(ovr_get reason)
+OVR_APPLIED=false
+[ -n "$O_SHA" ] && [ "$O_SHA" = "$SHA" ] && OVR_APPLIED=true
+
 # "이 sha 를 누가 봤나" — 리뷰 파일 중 하나라도 그 sha 를 달고 있으면 본 거예요
 reviewed_by_anyone() { [ -n "$1" ] && { [ "$A_S" = "$1" ] || [ "$E_S" = "$1" ]; }; }
 # "이 sha 를 둘 다 진행으로 봤나" — fixup 의 전제
@@ -275,7 +295,7 @@ case "$MODE" in
     OVER=false; WARN='[]'; WARN_MSG=""
     if [ "$ROUND" -gt "$MAX_ROUNDS" ]; then
         OVER=true
-        WARN_MSG="${NEW_STAGE} 단계 라운드 ${ROUND} — 상한 ${MAX_ROUNDS} 을 넘었어요. 리뷰를 더 돌리기보다 spec 을 다시 정의하거나 사용자 결정을 받으세요"
+        WARN_MSG="${NEW_STAGE} 단계 라운드 ${ROUND} — 상한 ${MAX_ROUNDS} 을 넘었어요. 리뷰를 더 돌리기보다 spec 을 다시 정의하거나 사용자 결정을 받으세요 (사용자가 이대로 진행을 정하면 --override --reason \"<결정>\")"
         command -v jq >/dev/null 2>&1 && WARN=$(_goax_json_array "$WARN_MSG")
     fi
     NOTE=""
@@ -364,6 +384,39 @@ case "$MODE" in
         [ "$DRY_RUN" = true ] && printf '  (dry-run — .review-round 는 그대로예요)\n'
     fi
     ;;
+  override)
+    if [ "$REQUIRED" = none ]; then fail "합의 리뷰 대상이 아니에요 (${REQ_SRC}) — 승인할 리뷰가 없어요"; fi
+    REASON_ONE=$(printf '%s' "$REASON_ARG" | tr '\n\r' '  ' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
+    [ -n "$REASON_ONE" ] || fail "--reason \"<사용자 결정>\" 이 필요해요 — 무엇을 왜 받아들였는지 한 줄 (예: \"남은 차단 2건은 오타·링크 — 사용자가 진행 결정\")"
+    [ "$ROUND" -gt 0 ] || fail "스냅샷이 없어요 — 리뷰를 한 번도 안 받았으면 승인할 게 없어요 (--snapshot 부터)"
+    OMAX="$MAX_ROUNDS"; if [ -z "$OMAX" ]; then if [ "$STAGE" = tasks ]; then OMAX=2; else OMAX=3; fi; fi
+    [ "$ROUND" -ge "$OMAX" ] || fail "${STAGE} 단계 라운드 ${ROUND}/${OMAX} — 상한 전에는 승인으로 넘기지 않아요. 지적을 반영하고 --snapshot 으로 다음 라운드를 받으세요"
+    BY=$(git -C "$PROJECT_ROOT" config user.name 2>/dev/null || true); BY="${BY:-${USER:-unknown}}"
+    AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    if [ "$DRY_RUN" != true ]; then
+        {
+            printf 'sha: %s\n' "$SHA"
+            printf 'by: %s\n' "$BY"
+            printf 'at: %s\n' "$AT"
+            printf 'stage: %s\n' "$STAGE"
+            printf 'round: %s/%s\n' "$ROUND" "$OMAX"
+            printf 'architect: %s (sha %s)\n' "${A_V:-없음}" "${A_S:-없음}"
+            printf 'evaluator: %s (sha %s)\n' "${E_V:-없음}" "${E_S:-없음}"
+            printf 'reason: %s\n' "$REASON_ONE"
+        } > "$OVR_FILE"
+    fi
+    NEXT="지금 sha ${SHA} 에 사용자 승인을 남겼어요 — --status 가 pass 예요. 본문을 또 고치면 승인은 풀려요 (사용자가 본 본문이 아니에요)"
+    if [ "$JSON_MODE" = true ]; then
+        RESULT=$(jq -nc --arg spec "$SPEC" --arg sha "$SHA" --arg by "$BY" --arg at "$AT" --arg r "$REASON_ONE" \
+            --arg stage "$STAGE" --argjson round "$ROUND" --argjson maxr "$OMAX" --arg f "$OVR_FILE" --argjson dry "$DRY_RUN" \
+            '{spec:$spec, sha:$sha, by:$by, at:$at, reason:$r, stage:$stage, round:$round, max_rounds:$maxr,
+              file:(if $dry then null else $f end), dry_run:$dry}')
+        json_output "ok" "$RESULT" "$NEXT"
+    else
+        printf 'spec %s — override: sha %s · %s · %s\n  reason: %s\n' "$SPEC" "$SHA" "$BY" "$AT" "$REASON_ONE"
+        [ "$DRY_RUN" = true ] && printf '  (dry-run — %s 를 쓰지 않았어요)\n' "$OVR_FILE"
+    fi
+    ;;
   status|merge)
     FIXUP_APPLIED=false
     [ -n "$FIXUP_SHA" ] && [ "$FIXUP_SHA" = "$SHA" ] && FIXUP_APPLIED=true
@@ -378,6 +431,8 @@ case "$MODE" in
     PASS=false; REASON=""
     if [ "$REQUIRED" = "none" ]; then
         PASS=true; REASON="합의 리뷰 대상이 아니에요 (${REQ_SRC})"
+    elif [ "$OVR_APPLIED" = true ]; then
+        PASS=true; REASON="사용자 승인 (override · ${O_BY:-?} · ${O_AT:-?}) — ${O_REASON:-사유 없음}. 리뷰 verdict: architect '${A_V:-없음}' · evaluator '${E_V:-없음}'"
     elif [ "$REQUIRED" = "optional" ] && [ "$A_P" = false ] && [ "$E_P" = false ]; then
         PASS=true; REASON="합의 리뷰는 선택이에요 (${REQ_SRC}) — 리뷰 없이 통과. --consensus 로 강제할 수 있어요"
     elif [ "$A_P" = false ] || [ "$E_P" = false ]; then
@@ -401,6 +456,9 @@ case "$MODE" in
         {
             printf '# review-spec — %s (%s 단계 round %s · sha %s · %s)\n\n' "$SPEC" "$STAGE" "$ROUND" "$SHA" "$REQUIRED"
             printf 'pass: %s — %s\n\n' "$PASS" "$REASON"
+            if [ "$OVR_APPLIED" = true ]; then
+                printf '## 사용자 승인 (override)\n\n'; cat "$OVR_FILE"; printf '\n'
+            fi
             for who in architect evaluator; do
                 f="$SPEC_DIR/review-spec.$who.md"
                 printf '## %s\n\n' "$who"
@@ -419,6 +477,7 @@ case "$MODE" in
             --argjson ep "$E_P" --arg ev "$E_V" --arg es "$E_S" --argjson em "$E_M" --arg ef "$E_FILE" \
             --argjson pass "$PASS" --arg reason "$REASON" --arg mode "$MODE" --argjson dry "$DRY_RUN" \
             --arg merged "${OUT:-}" \
+            --argjson oa "$OVR_APPLIED" --arg os "$O_SHA" --arg ob "$O_BY" --arg oat "$O_AT" --arg orz "$O_REASON" \
             '{spec:$spec, sha:$sha, spec_sha:$ssha, tasks_sha:(if $tsha=="" then null else $tsha end),
               snapshot_sha:(if $snap=="" then null else $snap end), stage:$stage,
               fixup:{applied:$fx, sha:(if $fxs=="" then null else $fxs end)},
@@ -427,6 +486,8 @@ case "$MODE" in
               changed_files:$ch,
               architect:{present:$ap, verdict:(if $av=="" then null else $av end), sha:(if $as=="" then null else $as end), sha_match:$am, file:$af},
               evaluator:{present:$ep, verdict:(if $ev=="" then null else $ev end), sha:(if $es=="" then null else $es end), sha_match:$em, file:$ef},
+              override:{applied:$oa, sha:(if $os=="" then null else $os end), by:(if $ob=="" then null else $ob end),
+                        at:(if $oat=="" then null else $oat end), reason:(if $orz=="" then null else $orz end)},
               pass:$pass, reason:$reason}')
         if [ "$PASS" = true ]; then json_output "ok" "$RESULT" "$REASON"; else json_output "warning" "$RESULT" "$REASON"; fi
     else
@@ -435,6 +496,7 @@ case "$MODE" in
         printf '  evaluator  %s\n' "$([ "$E_P" = true ] && printf '%s (sha %s%s)' "${E_V:-?}" "$E_S" "$([ "$E_M" = true ] && echo ' ✓' || echo ' ✗')" || echo '없음')"
         [ -n "$CHANGED_FILES" ] && printf '  스냅샷 이후 변경: %s\n' "$CHANGED_FILES"
         [ "$FIXUP_APPLIED" = true ] && printf '  fixup: %s 를 리뷰된 %s 와 같은 것으로 받아들였어요\n' "$SHA" "$SNAP_SHA"
+        [ -n "$O_SHA" ] && [ "$OVR_APPLIED" != true ] && printf '  override 기록(sha %s)은 지금 본문과 달라 안 먹혀요 — 사용자에게 다시 확인받아요\n' "$O_SHA"
         printf '  pass: %s — %s\n' "$PASS" "$REASON"
         [ "$MODE" = "merge" ] && [ "$DRY_RUN" != true ] && printf '  합본: %s\n' "$SPEC_DIR/review-spec.md"
         [ "$MODE" = "merge" ] && [ "$DRY_RUN" = true ] && printf '  (dry-run — 합본을 만들지 않았어요)\n'

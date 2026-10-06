@@ -226,6 +226,8 @@ bash .ax/scripts/bash/update-task.sh --start --phase triaged \
 작업마다 `.ax/tasks/<task_id>.json` 에 남고, current-task.json 은 지금 작업의 사본이에요. 앞 작업으로 돌아갈 땐
 `update-task.sh --task <id> --activate`, 다른 세션의 작업을 건드리지 않고 내 작업만 고칠 땐 `--task <id>` 를 붙여요.
 같은 작업을 이어 하는 거면 `--start` 하지 않아요 (같은 id 로 `--start` 하면 거부돼요).
+**이미 끝난 spec 의 후속 작업**이면 (`reset-task.sh` 로 닫혀 `--activate` 가 "작업이 없어요" 로 실패해요) 새 id 로
+`update-task.sh --start --follow-up <spec> --set task_id=$TASK_ID …` — spec_id · spec_dir · spec_tier 를 그 spec 에서 이어받아요.
 **작업 id 를 사용자에게 한 번 보여주고 이 대화 내내 기억해요** — spec · spec-tasks · spec-validate · spec-implement 가
 `--task <id>` 로 넘겨요. 병렬 작업이 있는데 `--task` 가 없으면 update-task 가 덮지 않고 되물어요.
 

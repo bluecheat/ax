@@ -125,6 +125,16 @@ printf '%s\n' "$REVIEW" | jq -r '"architect \(.result.architect.verdict // "없�
    사용자 결정으로 halt. **라운드가 상한을 넘으면 지적을 더 반영하려 하지 말고 그 자체로 halt** —
    라운드를 더 돌리는 건 리뷰가 아니라 spec 정의가 문제라는 신호예요. `--snapshot` 응답의
    `warnings[]` 가 상한 경고를 줘요.
+   상한에 닿은 뒤 남은 차단이 기계적 수정(오타·링크·이름 맞춤)뿐이라 사용자가 **이대로 진행**을 정하면, 고친 뒤
+   그 결정을 지금 sha 에 기록해요 — intent_notes 에 손으로 적지 않아요 (`--status` 가 못 읽어요):
+
+```bash
+bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --override --reason "<사용자 결정 한 줄 — 무엇을 왜 받아들였나>" --json
+```
+
+   `review-override.md`(커밋해요)에 sha · 누가(git user.name) · 언제 · 두 verdict · 사유가 남고, `--status` 는 그 sha 일
+   때만 pass 로 봐요. 상한 전(라운드 < 상한)에는 거부돼요. 사용자에게 묻지 않고 이 세션이 정해서 쓰지 않아요 —
+   `--reason` 은 사용자가 한 말이에요. 기록 뒤 본문을 또 고치면 승인이 풀려요.
 5. `pass=true` 면 합본을 남기고 §3 으로:
 
 ```bash

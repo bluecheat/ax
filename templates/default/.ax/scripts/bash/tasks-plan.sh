@@ -5,7 +5,7 @@
 #   bash tasks-plan.sh [--spec <id-slug>] [--json] [--help]
 #
 # 하는 일:
-#   ready       지금 바로 시작 가능한 task (미완료 + 의존이 전부 완료)
+#   ready       지금 바로 시작 가능한 task (미완료 + 의존이 전부 완료 [x] 또는 보류 [~])
 #   parallel    그중 `[P]` 가 붙었고 서로 파일이 안 겹치는 것
 #   violations  `[P]` 인데 다른 `[P]` 와 파일이 겹치는 것 — 주장 검증
 #
@@ -73,58 +73,17 @@ if [ ! -f "$TASKS" ]; then
     goax_error "$NO_TASKS"; exit "$EXIT_ERROR"
 fi
 
-# 파싱 — awk 한 번에. task 줄 + 뒤따르는 `의존:` 들여쓰기 줄을 같이 읽어요.
-# 출력: "ID|state|P|files(,)|deps(,)"
-PARSED=$(awk '
-    function norm(p) {
-        gsub(/\/+/, "/", p)
-        while (sub(/^\.\//, "", p)) ;
-        while (sub(/\/\.\//, "/", p)) ;
-        sub(/\/+$/, "", p)
-        return p
-    }
-    function normlist(s,   n, a, i, v, out) {
-        if (s == "") return ""
-        n = split(s, a, ",")
-        out = ""
-        for (i = 1; i <= n; i++) { v = norm(a[i]); if (v != "") out = (out == "" ? v : out "," v) }
-        return out
-    }
-    function flush() {
-        if (id != "") printf "%s|%s|%s|%s|%s\n", id, st, par, files, deps
-        id=""; st=""; par="0"; files=""; deps=""
-    }
-    /^[[:space:]]*```/ { fence = !fence; next }
-    fence { next }
-    /^- \[[ x~X]\] / {
-        flush()
-        line = $0
-        st = "open"
-        if (line ~ /^- \[[xX]\]/) st = "done"
-        else if (line ~ /^- \[~\]/) st = "paused"
-        if (match(line, /\[P\]/)) par = "1"
-        if (match(line, /T[0-9][0-9][0-9]+/)) id = substr(line, RSTART, RLENGTH)
-        f = line
-        if (match(f, /files:[ ]*/)) {
-            f = substr(f, RSTART + RLENGTH)
-            gsub(/[ ]*,[ ]*/, ",", f); gsub(/^[ ]+|[ ]+$/, "", f)
-            files = normlist(f)
-        }
-        next
-    }
-    /^[ \t]+의존:/ {
-        d = $0; sub(/^[ \t]*의존:[ ]*/, "", d)
-        if (d !~ /없음|none|-$/) { gsub(/[ ]*,[ ]*/, ",", d); gsub(/^[ ]+|[ ]+$/, "", d); deps = d }
-        next
-    }
-    END { flush() }
-' "$TASKS")
+# 파싱 — common.sh 의 goax_tasks_parse (mark-task.sh --next 와 같은 파서). task 줄 + 뒤따르는 `의존:` 줄.
+# 출력: "ID|state|P|files(,)|deps(,)|line"
+PARSED=$(goax_tasks_parse "$TASKS")
 
-DONE_IDS=$(printf '%s\n' "$PARSED" | awk -F'|' '$2=="done"{print $1}')
+# 의존이 풀린 것 = [x] 완료 또는 [~] 의도적 보류 — mark-task.sh --next 와 같은 기준이에요.
+# 보류를 안 풀린 걸로 세면 보류 task 에 기대는 task 가 영원히 blocked 인데, 완료 게이트(G1)는 보류를 정상으로 봐요.
+DONE_IDS=$(printf '%s\n' "$PARSED" | awk -F'|' '$2=="done" || $2=="paused"{print $1}')
 is_done() { printf '%s\n' "$DONE_IDS" | grep -qx "$1"; }
 
 READY=""; BLOCKED=""; PCAND=""
-while IFS='|' read -r id st par files deps; do
+while IFS='|' read -r id st par files deps _ln; do
     [ -z "$id" ] && continue
     [ "$st" = "open" ] || continue
     ok=true

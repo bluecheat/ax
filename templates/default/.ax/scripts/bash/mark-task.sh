@@ -11,14 +11,20 @@
 #   쓰기 전후 [x] 개수가 바꾼 줄 수만큼만 늘었는지(이미 켜져 있으면 0) 확인.
 # --task T013,T014 — 쉼표로 여러 개. 트랜잭션이에요: 하나라도 없거나 중복이면 아무것도 안 켜요.
 #   이미 켜진 것은 건너뛰고 unchanged_tasks 에 적어요.
-# --next 는 읽기만 해요 — 펜스 밖 첫 미완료 task (템플릿 펜스 안의 예시 줄을 집지 않게).
+# --next 는 읽기만 해요 — 펜스 밖에서 **의존(`의존:` 줄)이 전부 [x] 또는 [~] 인** 첫 미완료 task 예요
+#   (템플릿 펜스 안의 예시 줄을 집지 않게). 파서는 tasks-plan.sh 와 같은 goax_tasks_parse 예요.
+#   미완료는 있는데 전부 의존에 막혔으면 status warning · result.blocked=true · blocked_tasks 에 막힌 task 와
+#   풀리지 않은 의존(unresolved — tasks.md 에 없는 ID 는 missing 에도)을 돌려줘요. 끝난 게 아니라 완료 게이트로 가면 안 돼요.
 #
 # Output (--json):
 #   --task: {"status":"ok","result":{"spec":"…","task":"T013","tasks":["T013"],"state":"x","line":57,"lines":[57],
 #            "changed":true,"changed_tasks":["T013"],"unchanged_tasks":[],"done_before":11,"done_after":12}}
 #            (여러 개면 task 는 "T013,T014", line 은 첫 task 의 줄)
-#   --next: {"status":"ok","result":{"spec":"…","task":"T014","line":63,"text":"- [ ] T014 …"}}  · 없으면 status skipped
-# Exit: 0 ok · 1 error (task 없음 · ID 중복 · 락 실패 · 검증 불일치) · 2 skipped (--next 에서 미완료 없음)
+#   --next: {"status":"ok","result":{"spec":"…","task":"T014","line":63,"text":"- [ ] T014 …","deps":["T013"],"blocked":false}}
+#           · 미완료 없음 → status skipped (exit 2)
+#           · 전부 막힘 → {"status":"warning","result":{"spec":"…","task":null,"blocked":true,
+#                         "blocked_tasks":[{"task":"T014","line":63,"text":"…","unresolved":["T013"],"missing":[]}]}} (exit 0)
+# Exit: 0 ok (--next 의 전부 막힘 warning 포함) · 1 error (task 없음 · ID 중복 · 락 실패 · 검증 불일치) · 2 skipped (--next 에서 미완료 없음)
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -82,16 +88,56 @@ outside_fences() {
 }
 
 if [ "$MODE" = "next" ]; then
-    HIT=$(outside_fences | grep -m1 -E $'\t''- \[ \] ' || true)
-    if [ -z "$HIT" ]; then
+    # 그래프는 tasks-plan.sh 와 같은 파서(goax_tasks_parse)로 읽어요 — 둘이 다르게 읽으면 plan 은 blocked 라는데
+    # --next 는 그 task 를 집어요. 의존이 전부 [x] 또는 [~] 인 첫 미완료 task 가 다음이에요.
+    PARSED=$(goax_tasks_parse "$TASKS")
+    if ! printf '%s\n' "$PARSED" | awk -F'|' '$2=="open"{f=1} END{exit !f}'; then
         if [ "$JSON_MODE" = true ]; then json_skip "미완료 task 없음 — §8 완료 게이트로"; fi
         goax_log "미완료 task 없음 — §8 완료 게이트로"; exit "$EXIT_SKIPPED"
     fi
-    LINE=${HIT%%$'\t'*}; TEXT=${HIT#*$'\t'}
-    ID=$(printf '%s' "$TEXT" | sed -E 's/^- \[ \] (\*\*|\[)?(T[0-9]+).*/\2/')
+    # 각 미완료 task → "ID|line|unresolved(,)|missing(,)" — unresolved 는 아직 [ ] 이거나 tasks.md 에 없는 의존
+    GRAPH=$(printf '%s\n' "$PARSED" | awk -F'|' '
+        NF { id[NR] = $1; st[NR] = $2; dp[NR] = $5; ln[NR] = $6; state[$1] = $2; n = NR }
+        END {
+            for (i = 1; i <= n; i++) {
+                if (st[i] != "open") continue
+                un = ""; ms = ""
+                k = split(dp[i], d, ",")
+                for (j = 1; j <= k; j++) {
+                    if (d[j] == "") continue
+                    if (!(d[j] in state)) { un = un (un == "" ? "" : ",") d[j]; ms = ms (ms == "" ? "" : ",") d[j] }
+                    else if (state[d[j]] == "open") un = un (un == "" ? "" : ",") d[j]
+                }
+                printf "%s|%s|%s|%s\n", id[i], ln[i], un, ms
+            }
+        }')
+    HIT=$(printf '%s\n' "$GRAPH" | awk -F'|' 'NF && $3 == "" {print; exit}')
+    if [ -z "$HIT" ]; then
+        # 미완료는 있는데 전부 의존이 안 풀렸어요 — 끝난 게 아니라 막힌 거예요 (완료 게이트로 가면 안 돼요)
+        if [ "$JSON_MODE" = true ]; then
+            BLK=$(printf '%s\n' "$GRAPH" | while IFS='|' read -r bid bln bun bms; do
+                    [ -n "$bid" ] || continue
+                    btx=$(sed -n "${bln}p" "$TASKS")
+                    jq -nc --arg t "$bid" --argjson l "$bln" --arg x "$btx" --arg u "$bun" --arg m "$bms" \
+                        'def l: split(",") | map(select(length > 0)); {task:$t, line:$l, text:$x, unresolved:($u|l), missing:($m|l)}'
+                  done | jq -sc .)
+            RESULT=$(jq -nc --arg spec "$SPEC" --argjson b "$BLK" '{spec:$spec, task:null, blocked:true, blocked_tasks:$b}')
+            MSG="미완료 task 가 전부 의존에 막혀 있어요 — $(printf '%s' "$BLK" | jq -r 'map("\(.task)←\(.unresolved|join(","))") | join(" · ")'). 의존 task 를 먼저 끝내거나, tasks.md 에 없는 의존(missing)은 고치세요"
+            json_output "warning" "$RESULT" "$MSG" "$(_goax_json_array "$MSG")"
+        else
+            goax_warn "미완료 task 가 전부 의존에 막혀 있어요:"
+            printf '%s\n' "$GRAPH" | awk -F'|' 'NF{printf "  %s ← %s%s\n", $1, $3, ($4 != "" ? " (tasks.md 에 없음: " $4 ")" : "")}' >&2
+        fi
+        exit "$EXIT_OK"
+    fi
+    IFS='|' read -r ID LINE _UN _MS <<EOF
+$HIT
+EOF
+    TEXT=$(sed -n "${LINE}p" "$TASKS")
+    DEPS=$(printf '%s\n' "$PARSED" | awk -F'|' -v id="$ID" '$1==id{print $5; exit}')
     if [ "$JSON_MODE" = true ]; then
-        RESULT=$(jq -nc --arg spec "$SPEC" --arg task "$ID" --argjson line "$LINE" --arg text "$TEXT" \
-            '{spec:$spec, task:$task, line:$line, text:$text}')
+        RESULT=$(jq -nc --arg spec "$SPEC" --arg task "$ID" --argjson line "$LINE" --arg text "$TEXT" --arg deps "$DEPS" \
+            '{spec:$spec, task:$task, line:$line, text:$text, deps:($deps | split(",") | map(select(length > 0))), blocked:false}')
         json_output "ok" "$RESULT" "다음 task: $ID"
     else
         printf '%s\n' "$TEXT"

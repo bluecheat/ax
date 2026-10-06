@@ -263,6 +263,10 @@ bash .ax/scripts/bash/tasks-plan.sh --spec "$SPEC" --json
   `grep` 하고 결과를 보고에 포함하세요.
 - **공유 이름을 바꾸면 즉시 보고하세요.** props 이름·타입 축·토큰 이름을 바꾸는 건
   파일 안의 일이 아니라 레인 밖의 일이에요.
+- **소유 목록과 레포 관례가 충돌하면 멈추고 보고하세요.** 새 타입의 이웃 관례가 별도 파일·별도
+  위치(같은 레이어의 하위 디렉토리 등)인데 그 경로가 목록에 없으면, 목록 안 파일에
+  끼워 넣지 말고 `관례 충돌 — <새 타입>, 이웃 관례 <경로 2개>, 필요한 파일 <경로>` 로 보고해요.
+  목록은 코디네이터가 늘려요.
 - **보고는 한 번, 한 경로로.** 도구 목록에 `SendMessage` 가 있는지로 경로가 정해져요.
   - 없으면(서브에이전트): **결과를 최종 메시지에 전부 담으세요.** 최종 응답이 유일한 산출물
     경로예요. 파일을 다 만들고 idle 이 되는 건 완료가 아니에요.
@@ -336,7 +340,7 @@ bash .ax/scripts/bash/tasks-gate.sh --spec "$SPEC" --json
 레인 모드에선 원장도 봐요 — `dispatched_unreported`(보고 안 받은 디스패치)와
 `done_without_report`(보고 없이 켜진 체크박스)가 비어야 해요. 레인이 자기 체크박스를 켜면
 여기서 잡혀요. 그리고 size L 이상 · M×L3 이면 새 컨텍스트 evaluator 의 `review.md`
-첫 줄이 `verdict: 진행` 이어야 `complete` 예요 (G6). 체크박스를 채운 세션이 검사까지
+첫 줄이 `verdict: 진행` 이어야 `complete` 예요 (G6). 룰 대조 `review-rules.md`(rules-auditor)도 같아요 (G7). 체크박스를 채운 세션이 검사까지
 하면 게이트가 아니라 자기보고라서요.
 
 ### 12.2 통합 검증 — 파일이 안 겹쳤다고 합쳐서 도는 건 아니에요
@@ -358,7 +362,7 @@ bash .ax/scripts/bash/status-note.sh --show --json | jq -r '.result.sections.ren
 
 ## 13. 알려진 제약 — 이걸 모르면 게이트가 조용히 헛돌아요
 
-- **`tasks-plan.sh` 는 의존 키워드를 한글 `의존:` 로 하드코딩해요** (`tasks-plan.sh:83`).
+- **`tasks-plan.sh` 는 의존 키워드를 한글 `의존:` 로 하드코딩해요** (`common.sh` 의 `goax_tasks_parse`).
   `deps:`·`depends:` 는 안 읽혀요. "의존 없음"으로 인정되는 값은 `없음`·`none`·`-`
   뿐이에요. 다른 표기는 그 이름의 task 에 의존하는 걸로 읽혀서 영원히 blocked 가 돼요.
 - **파일 겹침 검출은 task 줄에 파일 경로가 실제로 적혀 있어야 성립해요.** `files:` 가

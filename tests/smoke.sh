@@ -585,7 +585,7 @@ for s in common next-spec-num tier-from-state init-spec-dir add-spec-files \
          check-spec-clarity slug-from-text check-templates-drift check-manifest-install promote-mistake \
          check-rule-enforcement check-sensor-liveness \
          build-memory spirit-lint rules-index doctor-scan status-note update-task update-state constitution-apply \
-         tasks-plan tasks-gate lanes-hotfiles lanes-dispatch spec-review \
+         tasks-plan tasks-gate lanes-hotfiles lanes-dispatch spec-review rules-audit-scope \
          zero-init zero-probe zero-verify zero-domain-risk design-caps screen-measure screen-report-check; do
     f="$SCRIPTS_DIR/$s.sh"
     if [ -f "$f" ]; then
@@ -1631,6 +1631,7 @@ echo '{"phase":"implementing","spec_dir":".ax/docs/spec/012-x","size":"L","risk"
 tg | jq -e '.result.review_required == true and .result.review_verdict == null and .result.complete == false' >/dev/null 2>&1 \
     && pass "tasks-gate G6 — L×L1 은 evaluator 필수, review.md 없으면 미완료" || fail "tasks-gate G6 — 필수 리뷰 부재를 통과시킴"
 printf 'verdict: 진행\n\n## Evaluator Review\n발견 0건\n' > "$TG/.ax/docs/spec/012-x/review.md"
+printf 'verdict: 진행\n' > "$TG/.ax/docs/spec/012-x/review-rules.md"   # G7 도 같은 필수 여부 — §65 가 따로 봐요
 tg | jq -e '.result.review_verdict == "진행" and .result.complete == true' >/dev/null 2>&1 \
     && pass "tasks-gate G6 — verdict 진행 → complete" || fail "tasks-gate G6 — verdict 진행을 못 읽음"
 printf 'verdict: 보강 필요\n' > "$TG/.ax/docs/spec/012-x/review.md"
@@ -5319,6 +5320,142 @@ for ag in lane-worker lane-scout; do
         && pass "$ag — 외부 쓰기 금지 · 종료 응답은 객체 (문자열 예시 없음)" \
         || fail "$ag — 외부 쓰기 금지나 객체 형식 종료 응답이 빠졌어요"
 done
+
+section "65. 실사용 마찰 다섯 — --next 의존 · 관례 위치 · 룰 대조 G7 · 후속 작업 · 합의 리뷰 승인"
+# ───────────────────────────────────────────────────────────
+SB="$REPO/templates/default/.ax/scripts/bash"
+# (1) mark-task --next 는 `의존:` 을 봐요 — tasks-plan 과 같은 파서(goax_tasks_parse)
+NX=$(mktemp -d); mkdir -p "$NX/.ax/scripts/bash" "$NX/.ax/docs/spec/2026-09-25-ab12-x"
+cp "$SB/"{common,mark-task,tasks-plan}.sh "$NX/.ax/scripts/bash/"
+NXF="$NX/.ax/docs/spec/2026-09-25-ab12-x/tasks.md"
+cat > "$NXF" <<'NXE'
+```
+- [ ] T001 예시
+```
+- [x] T001 a
+- [ ] T002 b
+      의존: T003
+- [~] T004 보류
+- [ ] T003 c
+      의존: T001, T041 (아직 없는 task)
+- [ ] T005 d
+      의존: T004 (보류)
+NXE
+nx() { (cd "$NX" && bash .ax/scripts/bash/mark-task.sh --spec 2026-09-25-ab12-x "$@" 2>/dev/null); }
+nxp() { (cd "$NX" && bash .ax/scripts/bash/tasks-plan.sh --spec 2026-09-25-ab12-x --json 2>/dev/null); }
+NX1=$(nx --next --json)
+{ [ "$(printf '%s' "$NX1" | jq -r '.result.task')" = T005 ] && [ "$(printf '%s' "$NX1" | jq -c '.result.deps')" = '["T004"]' ] \
+  && nxp | jq -e '.result.ready == ["T005"] and .result.blocked == ["T002","T003"]' >/dev/null; } \
+    && pass "mark-task --next — 의존이 [ ] 인 T002·T003 을 건너뛰고 [~] 의존인 T005 를 골라요 (tasks-plan 과 같은 답)" \
+    || fail "mark-task --next 의존 무시: $NX1 / plan $(nxp | jq -c .result)"
+sed -i.bak 's/^- \[ \] T005/- [x] T005/' "$NXF" && rm -f "$NXF.bak"
+NX2=$(nx --next --json); NXR=$?
+{ [ "$NXR" = 0 ] && printf '%s' "$NX2" | jq -e '.status == "warning" and .result.task == null and .result.blocked == true
+    and (.result.blocked_tasks | map(.task)) == ["T002","T003"]
+    and (.result.blocked_tasks[1].unresolved == ["T041"]) and (.result.blocked_tasks[1].missing == ["T041"])' >/dev/null; } \
+    && pass "mark-task --next — 미완료가 전부 막히면 warning · blocked_tasks · 풀리지 않은 의존(없는 ID 는 missing) — 완료로 안 읽혀요" \
+    || fail "mark-task --next 전부 막힘 판정: rc=$NXR $NX2"
+printf -- '- [ ] T009 e\n      의존: 결제 배포\n' >> "$NXF"
+nxp | jq -e '.result.blocked | index("T009")' >/dev/null \
+    && pass "goax_tasks_parse — T-ID 없는 의존 표기는 '의존 없음' 으로 풀리지 않아요" || fail "T-ID 없는 의존이 ready 로 풀렸어요"
+printf -- '- [ ] T010 f\n      의존: 없음 (첫 task)\n- [ ] T011 g\n      의존: none — 독립\n- [ ] T012 h\n      의존: -\n' >> "$NXF"
+nxp | jq -e '(.result.ready | index("T010") and index("T011") and index("T012")) and (.result.blocked | index("T009"))' >/dev/null \
+    && pass "goax_tasks_parse — '없음 (설명)' · 'none — 설명' · '-' 은 의존 없음 (T-ID 없는 다른 표기만 막혀요)" \
+    || fail "설명이 붙은 '없음' 이 막혔어요: $(nxp | jq -c .result)"
+grep -q 'files: 목록과 레포 관례' "$REPO/skills/spec-implement/SKILL.md" && grep -q '같은 레이어 이웃을 grep' "$REPO/skills/spec-tasks/SKILL.md" \
+  && grep -q '소유 목록과 레포 관례가 충돌' "$REPO/agents/lane-worker.md" && grep -q '소유 목록과 레포 관례가 충돌' "$REPO/skills/lane/SKILL.md" \
+    && pass "관례 위치 — spec-tasks 이웃 grep · spec-implement 위임 브리프 · lane 브리프 · lane-worker 가 충돌 시 멈추고 보고" \
+    || fail "files: 와 관례 위치 충돌 규칙이 spec-tasks · spec-implement · lane · lane-worker 중 어딘가에 없어요"
+rm -rf "$NX"
+
+# (3) 룰 대조 — rules-audit-scope 는 편집 훅과 같은 매칭, G7 은 G6 과 같은 필수 여부
+RA=$(mktemp -d); mkdir -p "$RA/.ax/scripts/bash" "$RA/.ax/spirit/rules" "$RA/.ax/docs/spec/2026-09-25-cd34-y" "$RA/src/domain"
+cp "$SB/"{common,rules-audit-scope,tasks-gate,tier-from-state}.sh "$RA/.ax/scripts/bash/"
+printf -- '---\npaths:\n  - "**/*.kt"\n---\n## SP-NAME-001: 이름\n' > "$RA/.ax/spirit/rules/naming.md"
+printf -- '---\npaths:\n  - "**/domain/**"\n---\n## SP-DOM-001: 도메인\n' > "$RA/.ax/spirit/rules/domain.md"
+printf -- '---\ncategory: ops\n---\n## SP-OPS-001: 상시\n' > "$RA/.ax/spirit/rules/ops.md"
+echo '# c' > "$RA/AGENTS.md"
+git -C "$RA" init -q 2>/dev/null; git -C "$RA" add -A 2>/dev/null
+git -C "$RA" -c user.email=a@b -c user.name=a commit -qm init 2>/dev/null
+echo x > "$RA/src/domain/OrderProjection.kt"; echo y > "$RA/.ax/docs/spec/2026-09-25-cd34-y/note.md"
+RAJ=$(GOAX_PROJECT_DIR="$RA" bash "$RA/.ax/scripts/bash/rules-audit-scope.sh" --spec cd34 --json 2>/dev/null)
+printf '%s' "$RAJ" | jq -e '.result.files == [{"path":"src/domain/OrderProjection.kt","new":true,"rules":[".ax/spirit/rules/domain.md",".ax/spirit/rules/naming.md"]}]
+    and .result.always == ["AGENTS.md",".ax/spirit/rules/ops.md"] and .result.new_files == ["src/domain/OrderProjection.kt"]
+    and (.result.review_file | endswith("2026-09-25-cd34-y/review-rules.md"))' >/dev/null 2>&1 \
+    && pass "rules-audit-scope — 변경 파일마다 걸린 룰 · 상시 룰(Constitution · paths 없는 룰) · 새 파일, .ax/** 는 빼요" \
+    || fail "rules-audit-scope 범위: $RAJ"
+cp "$REPO/templates/default/.ax/current-task.json.template" "$RA/.ax/current-task.json"; echo '{}' > "$RA/.ax/state.json"
+jq '.task_id="W"|.phase="implementing"|.spec_dir=".ax/docs/spec/2026-09-25-cd34-y"|.size="L"|.risk="L2"' "$RA/.ax/current-task.json" > "$RA/ct" && mv "$RA/ct" "$RA/.ax/current-task.json"
+RD="$RA/.ax/docs/spec/2026-09-25-cd34-y"
+printf '## 3.\n- **AC1** a\n' > "$RD/spec.md"; printf -- '- [x] T001 [AC1] a — files: src/domain/OrderProjection.kt\n' > "$RD/tasks.md"
+echo 'verdict: 진행' > "$RD/review.md"
+rg() { GOAX_PROJECT_DIR="$RA" bash "$RA/.ax/scripts/bash/tasks-gate.sh" --spec cd34 --json 2>/dev/null; }
+G7A=$(rg | jq -c '[.result.complete, .result.rules_review_required, .result.rules_review_verdict]')
+echo 'verdict: 보강 필요' > "$RD/review-rules.md"; G7B=$(rg | jq -c '[.result.complete, .result.rules_review_verdict]')
+echo 'verdict: 진행' > "$RD/review-rules.md"; G7C=$(rg | jq -c '[.result.complete]')
+{ [ "$G7A" = '[false,true,null]' ] && [ "$G7B" = '[false,"보강 필요"]' ] && [ "$G7C" = '[true]' ]; } \
+    && pass "tasks-gate G7 — 필수(L×L2)인데 review-rules.md 없거나 보강 필요면 미완료, 진행이면 완료" \
+    || fail "tasks-gate G7: 없음=$G7A 보강=$G7B 진행=$G7C"
+{ grep -q 'review-rules.md' "$REPO/agents/rules-auditor.md" && grep -q '^verdict: 진행 | 보강 필요' "$REPO/agents/rules-auditor.md" \
+  && grep -q '시작 전 필수' "$REPO/agents/rules-auditor.md" && grep -q 'rules-auditor' "$REPO/agents/evaluator.md" \
+  && grep -q '8.1.5 룰 대조' "$REPO/skills/spec-implement/SKILL.md" && grep -q 'rules-audit-scope.sh' "$REPO/skills/spec-implement/SKILL.md" \
+  && grep -q 'rules-auditor' "$REPO/templates/default/.ax/hooks/subagent-start/harness-pointer.sh"; } \
+    && pass "rules-auditor — review-rules.md 첫 줄 verdict · evaluator 는 관례 대조를 넘겨요 · spec-implement §8.1.5 · 포인터 훅 제외" \
+    || fail "rules-auditor 배선이 빠졌어요 (agent · evaluator 하지 않는 것 · spec-implement §8.1.5 · harness-pointer)"
+# 편집 훅은 경로와 함께 룰 제목도 줘요 (세션당 처음 매칭될 때만)
+mkdir -p "$RA/.ax/hooks/pre-edit"; cp "$REPO/templates/default/.ax/hooks/pre-edit/spirit-rules-inject.sh" "$RA/.ax/hooks/pre-edit/"
+RI=$(echo "{\"tool_input\":{\"file_path\":\"$RA/src/domain/OrderProjection.kt\"},\"session_id\":\"s65\"}" \
+     | CLAUDE_PROJECT_DIR="$RA" bash "$RA/.ax/hooks/pre-edit/spirit-rules-inject.sh" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext')
+printf '%s' "$RI" | grep -q 'SP-DOM-001: 도메인' && printf '%s' "$RI" | grep -q 'SP-NAME-001: 이름' \
+    && pass "spirit-rules-inject — 룰 파일 경로와 함께 룰 제목(SP-…: …)을 줘요" || fail "spirit-rules-inject 제목 누락: $RI"
+rm -rf "$RA"
+
+# (4) 끝난 spec 의 후속 작업 — --start --follow-up 이 spec_* 를 이어받아요
+FU=$(mktemp -d); mkdir -p "$FU/.ax/scripts/bash" "$FU/.ax/docs/spec/2026-09-25-ef56-pay"
+cp "$SB/"{common,update-task,tier-from-state,reset-task}.sh "$FU/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/current-task.json.template" "$FU/.ax/current-task.json"
+echo s > "$FU/.ax/docs/spec/2026-09-25-ef56-pay/spec.md"; printf 'tier: full\n' > "$FU/.ax/docs/spec/2026-09-25-ef56-pay/.tier"
+fu() { GOAX_PROJECT_DIR="$FU" bash "$FU/.ax/scripts/bash/update-task.sh" "$@" --json 2>/dev/null; }
+fu --start --phase implementing --set task_id=A --set spec_dir=.ax/docs/spec/2026-09-25-ef56-pay >/dev/null
+GOAX_PROJECT_DIR="$FU" bash "$FU/.ax/scripts/bash/reset-task.sh" --json >/dev/null 2>&1
+FUA=$(fu --task A --activate | jq -r '.errors[0] // ""')
+FUB=$(fu --follow-up ef56 --phase tasks | jq -r .status)
+fu --start --follow-up ef56 --phase tasks --set task_id=B >/dev/null
+{ printf '%s' "$FUA" | grep -q -- '--follow-up' && [ "$FUB" = error ] \
+  && [ "$(jq -c '[.task_id,.phase,.spec_id,.spec_dir,.spec_tier,.intent_notes.follow_up_of]' "$FU/.ax/current-task.json")" \
+       = '["B","tasks","2026-09-25-ef56",".ax/docs/spec/2026-09-25-ef56-pay","full","2026-09-25-ef56-pay"]' ] \
+  && [ -f "$FU/.ax/tasks/B.json" ] && [ "$(fu --start --follow-up nope --set task_id=C | jq -r .status)" = error ]; } \
+    && pass "update-task --start --follow-up — 닫힌 작업 대신 새 작업이 spec_id·spec_dir·spec_tier·follow_up_of 를 이어받아요 (--start 없이·없는 spec 은 거부)" \
+    || fail "update-task --follow-up: activate=$FUA nostart=$FUB ct=$(jq -c . "$FU/.ax/current-task.json")"
+grep -q -- '--follow-up' "$REPO/skills/triage/SKILL.md" && pass "triage — 끝난 spec 후속 작업 사용법 한 줄" || fail "triage 에 --follow-up 안내 없음"
+rm -rf "$FU"
+
+# (5) 합의 리뷰 상한 도달 뒤 사용자 승인 — --override 는 지금 sha 에 기록, --status 가 인정
+OV=$(mktemp -d); mkdir -p "$OV/.ax/scripts/bash" "$OV/.ax/docs/spec/2026-09-25-aa11-z"
+cp "$SB/"{common,spec-review,tier-from-state}.sh "$OV/.ax/scripts/bash/"
+OD="$OV/.ax/docs/spec/2026-09-25-aa11-z"; echo 'v1' > "$OD/spec.md"; printf 'tier: full\n' > "$OD/.tier"
+git -C "$OV" init -q 2>/dev/null; git -C "$OV" config user.name tester65
+ov() { GOAX_PROJECT_DIR="$OV" bash "$OV/.ax/scripts/bash/spec-review.sh" --spec aa11 "$@" --json 2>/dev/null; }
+ov_round() {   # 스냅샷 → 두 리뷰어 파일 (architect 보강 필요)
+    local sha; sha=$(ov --snapshot | jq -r .result.sha)
+    printf 'verdict: 보강 필요\nsha: %s\n' "$sha" > "$OD/review-spec.architect.md"
+    printf 'verdict: 진행\nsha: %s\n' "$sha" > "$OD/review-spec.evaluator.md"
+}
+ov_round; echo v2 > "$OD/spec.md"; ov_round
+OVE=$(ov --override --reason "x" | jq -r .status)      # 라운드 2/3 — 상한 전
+echo v3 > "$OD/spec.md"; ov_round
+OVN=$(ov --override | jq -r .status)                   # --reason 없음
+echo 'v3 오타' > "$OD/spec.md"
+ov --override --reason "남은 지적은 오타 — 사용자 진행 결정" --dry-run >/dev/null; OVDRY=$([ -f "$OD/review-override.md" ] && echo wrote || echo none)
+ov --override --reason "남은 지적은 오타 — 사용자 진행 결정" >/dev/null
+OVS=$(ov --status | jq -c '[.result.pass, .result.override.applied, .result.override.by]')
+echo v4 > "$OD/spec.md"; OVS2=$(ov --status | jq -c '[.result.pass, .result.override.applied]')
+{ [ "$OVE" = error ] && [ "$OVN" = error ] && [ "$OVDRY" = none ] && [ "$OVS" = '[true,true,"tester65"]' ] && [ "$OVS2" = '[false,false]' ] \
+  && grep -q '^reason: 남은 지적은 오타' "$OD/review-override.md" && grep -q '^at: ' "$OD/review-override.md"; } \
+    && pass "spec-review --override — 상한 전·사유 없음은 거부, dry-run 무기록, 지금 sha 에만 pass (누가·언제·사유), 본문이 바뀌면 풀려요" \
+    || fail "spec-review --override: 상한전=$OVE 사유없음=$OVN dry=$OVDRY status=$OVS 변경후=$OVS2"
+grep -q -- '--override --reason' "$REPO/skills/spec-validate/SKILL.md" && pass "spec-validate — 상한 절에 --override 사용법" || fail "spec-validate 상한 절에 --override 없음"
+rm -rf "$OV"
 
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────

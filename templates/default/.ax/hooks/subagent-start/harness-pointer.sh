@@ -28,7 +28,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 INPUT="$(cat 2>/dev/null || true)"
 AGENT=$(printf '%s' "$INPUT" | jq -r '.agent_type // ""' 2>/dev/null || true)
 case "$AGENT" in
-    goax:*|evaluator|architect|lane-scout|lane-worker) exit 0 ;;   # 자기 에이전트 — 이미 spirit 를 선언해요
+    goax:*|evaluator|architect|lane-scout|lane-worker|rules-auditor) exit 0 ;;   # 자기 에이전트 — 이미 spirit 를 선언해요
 esac
 
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"

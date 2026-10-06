@@ -59,9 +59,10 @@ task 는 다른 task 와 같은 파일을 써도 violation 이 안 나와요 —
 이라고 말하는데 검사가 안 된 거예요. **없는 것과 확인 안 한 것은 달라요.**
 사각지대 목록은 `lanes-hotfiles.sh` 의 `tasks_missing_files` 로 확인해요.
 
-`의존:` 도 표기가 고정이에요 (`tasks-plan.sh`). `deps:`·`depends:` 는 안 읽히고,
-"의존 없음"으로 인정되는 값은 `없음`·`none`·`-` 뿐이에요. 다른 표기는 그 이름의
-task 에 의존하는 걸로 읽혀서 영원히 blocked 가 돼요.
+`의존:` 도 표기가 고정이에요 (`tasks-plan.sh` · `mark-task.sh --next` 가 같은 파서로 읽어요).
+`deps:`·`depends:` 는 안 읽히고, 줄에서 읽는 건 T-ID 예요 (`T001, T041 (스키마)` → T001·T041).
+"의존 없음"으로 인정되는 값은 `없음`·`none`·`-` 뿐이에요. T-ID 가 없는 다른 표기는 없는 task 에
+의존하는 걸로 읽혀서 영원히 blocked 가 돼요. 의존 task 가 `[x]` 이거나 `[~]` 면 풀린 거예요.
 
 ### Phase 1: <이름>
 
@@ -99,11 +100,11 @@ bash .ax/scripts/bash/tasks-gate.sh --spec <id-slug> --json
 ```
 
 `[ ]` 미완료 수, AC 커버리지 간극, 매핑 없는 orphan task, 원장 불일치(보고 안 받은 디스패치 ·
-보고 없이 켜진 체크박스), evaluator verdict 를 한 번에 알려줘요.
+보고 없이 켜진 체크박스), evaluator verdict, 룰 대조 verdict 를 한 번에 알려줘요.
 
 완료는 `complete: true` 하나예요. size L 이상 · M×L3 이면 새 컨텍스트 evaluator 가
-`review.md` 첫 줄에 `verdict: 진행` 을 써야 거기 도달해요 — 체크박스를 채운 세션이
-검사까지 하면 게이트가 아니에요.
+`review.md` 첫 줄에, 새 컨텍스트 rules-auditor 가 `review-rules.md` 첫 줄에 `verdict: 진행` 을 써야
+거기 도달해요 — 체크박스를 채운 세션이 검사까지 하면 게이트가 아니에요.
 
 > 워크플로우 안내 (다음 단계) 는 `/spec-implement` skill 출력의 `📍 다음` 으로 제공돼요.
 > 환경 검증·배포는 이 문서 범위 밖 — 별도 운영 채널.
