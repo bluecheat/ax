@@ -1516,7 +1516,7 @@ goax_resolve_spec() {
 #   출력: "ID|state|P|files(,)|deps(,)|line"   state = open|done|paused · P = 0|1 · line = task 줄 번호
 #   - ``` 코드펜스 안은 건너뛰어요 (템플릿의 형식 설명 예시가 실 task 로 세지 않게)
 #   - files: 경로는 정규화해요 (`./` 제거 · 중복 `/` · 끝 `/`) — 표기 차이로 겹침 검사를 빠져나갈 수 없어요
-#   - deps 는 task 다음 들여쓰기 `의존:` 줄의 T-ID 만 뽑아요 — `없음`·`none`·`-` 은 빈 값,
+#   - deps 는 task 다음 들여쓰기 `의존:` 줄의 T-ID 만 뽑아요 — `없음`·`none`·`-` 은 빈 값(뒤에 설명이 붙어도),
 #     `T001 (스키마)` 처럼 설명이 붙어도 T001 만 남아요. T-ID 가 하나도 없는 다른 표기는 원문 그대로 남겨
 #     (없는 task 에 의존한 것처럼) 풀리지 않게 해요 — 오타가 "의존 없음" 으로 조용히 통과하지 않게요
 goax_tasks_parse() {
@@ -1564,9 +1564,10 @@ goax_tasks_parse() {
                 deps = (deps == "" ? v : deps "," v)
             }
             # T-ID 가 없는데 없음/none/- 도 아니면 읽을 수 없는 의존 — 조용히 "의존 없음" 으로 풀지 않고
-            # 그대로 남겨요 (tasks.md 에 없는 ID 처럼 영원히 안 풀려서 눈에 띄어요)
+            # 그대로 남겨요 (tasks.md 에 없는 ID 처럼 영원히 안 풀려서 눈에 띄어요).
+            # `없음 (첫 task)` · `none — 독립` 처럼 값 뒤에 설명을 붙인 건 의존 없음이에요 (예전 파서도 그렇게 읽었어요)
             gsub(/^[ \t]+|[ \t]+$/, "", raw)
-            if (deps == "" && raw !~ /^(없음|none|-)?$/) { gsub(/[|,]/, ";", raw); deps = raw }
+            if (deps == "" && raw !~ /^((없음|none|-)([[:space:](].*)?)?$/) { gsub(/[|,]/, ";", raw); deps = raw }
             next
         }
         END { flush() }

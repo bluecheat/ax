@@ -362,7 +362,7 @@ bash .ax/scripts/bash/status-note.sh --show --json | jq -r '.result.sections.ren
 
 ## 13. 알려진 제약 — 이걸 모르면 게이트가 조용히 헛돌아요
 
-- **`tasks-plan.sh` 는 의존 키워드를 한글 `의존:` 로 하드코딩해요** (`tasks-plan.sh:83`).
+- **`tasks-plan.sh` 는 의존 키워드를 한글 `의존:` 로 하드코딩해요** (`common.sh` 의 `goax_tasks_parse`).
   `deps:`·`depends:` 는 안 읽혀요. "의존 없음"으로 인정되는 값은 `없음`·`none`·`-`
   뿐이에요. 다른 표기는 그 이름의 task 에 의존하는 걸로 읽혀서 영원히 blocked 가 돼요.
 - **파일 겹침 검출은 task 줄에 파일 경로가 실제로 적혀 있어야 성립해요.** `files:` 가

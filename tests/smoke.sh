@@ -5358,6 +5358,10 @@ NX2=$(nx --next --json); NXR=$?
 printf -- '- [ ] T009 e\n      의존: 결제 배포\n' >> "$NXF"
 nxp | jq -e '.result.blocked | index("T009")' >/dev/null \
     && pass "goax_tasks_parse — T-ID 없는 의존 표기는 '의존 없음' 으로 풀리지 않아요" || fail "T-ID 없는 의존이 ready 로 풀렸어요"
+printf -- '- [ ] T010 f\n      의존: 없음 (첫 task)\n- [ ] T011 g\n      의존: none — 독립\n- [ ] T012 h\n      의존: -\n' >> "$NXF"
+nxp | jq -e '(.result.ready | index("T010") and index("T011") and index("T012")) and (.result.blocked | index("T009"))' >/dev/null \
+    && pass "goax_tasks_parse — '없음 (설명)' · 'none — 설명' · '-' 은 의존 없음 (T-ID 없는 다른 표기만 막혀요)" \
+    || fail "설명이 붙은 '없음' 이 막혔어요: $(nxp | jq -c .result)"
 grep -q 'files: 목록과 레포 관례' "$REPO/skills/spec-implement/SKILL.md" && grep -q '같은 레이어 이웃을 grep' "$REPO/skills/spec-tasks/SKILL.md" \
   && grep -q '소유 목록과 레포 관례가 충돌' "$REPO/agents/lane-worker.md" && grep -q '소유 목록과 레포 관례가 충돌' "$REPO/skills/lane/SKILL.md" \
     && pass "관례 위치 — spec-tasks 이웃 grep · spec-implement 위임 브리프 · lane 브리프 · lane-worker 가 충돌 시 멈추고 보고" \
