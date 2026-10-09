@@ -60,12 +60,12 @@ RESULT=$(bash .ax/scripts/bash/init-mistake-file.sh \
     ${CONTEXT_LINK:+--context-link "$CONTEXT_LINK"} \
     --one-line "$ONE_LINE")
 
-STATUS=$(echo "$RESULT" | jq -r '.status')
-ACTION=$(echo "$RESULT" | jq -r '.result.action')   # created | appended
-FILE=$(echo "$RESULT"   | jq -r '.result.file_path')
+STATUS=$(printf '%s\n' "$RESULT" | jq -r '.status')
+ACTION=$(printf '%s\n' "$RESULT" | jq -r '.result.action')   # created | appended
+FILE=$(printf '%s\n' "$RESULT" | jq -r '.result.file_path')
 
 if [ "$STATUS" != "ok" ]; then
-    echo "$RESULT" | jq -r '.errors | join("\n")'
+    printf '%s\n' "$RESULT" | jq -r '.errors | join("\n")'
     # 사용자에게 에러 보고
     exit 1
 fi

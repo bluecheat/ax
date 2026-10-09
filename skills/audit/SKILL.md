@@ -40,8 +40,8 @@ audit 은 **누적된 mistakes 회고·승격 전용**. 새 mistake 캡처는 `m
 # 후보 조회 (dry-run 기본 — 변경 없음). threshold 는 config.yml promotion_threshold (기본 3) 사용
 RESULT=$(bash .ax/scripts/bash/promote-mistake.sh --json)
 
-CANDIDATES=$(echo "$RESULT" | jq -r '.result.candidates')
-TOTAL=$(echo "$RESULT" | jq -r '.result.total_categories')
+CANDIDATES=$(printf '%s\n' "$RESULT" | jq -r '.result.candidates')
+TOTAL=$(printf '%s\n' "$RESULT" | jq -r '.result.total_categories')
 ```
 
 추가 통계가 필요하면 (큰 프로젝트):
@@ -136,7 +136,7 @@ find .ax/mistakes -name "*.md" -mtime -7 2>/dev/null | sort # 최근 7일
 RESULT=$(bash .ax/scripts/bash/promote-mistake.sh --apply --json \
    --token SP-SEC-001 \
    --category security)
-MARKED=$(echo "$RESULT" | jq -r '.result.marked_count')
+MARKED=$(printf '%s\n' "$RESULT" | jq -r '.result.marked_count')
 ```
 
 스크립트가 하는 일 — **mistake 파일 frontmatter 에 `promoted_to: <token>` 추가만**.
@@ -217,7 +217,7 @@ before / after 예시:
 
 ```bash
 PROBE=$(bash .ax/scripts/bash/zero-probe.sh --only pattern-rules --json)
-echo "$PROBE" | jq -r '.result.probes[] | select(.name=="pattern-rules") | .tail_lines[]'
+printf '%s\n' "$PROBE" | jq -r '.result.probes[] | select(.name=="pattern-rules") | .tail_lines[]'
 ```
 
 `FAIL SP-SEC-001 — ❌ 예시가 패턴에 안 걸려요` 가 나오면 패턴이나 예시를 고친 뒤 재실행. `skip … ❌ 예시가 없어` 면
@@ -229,7 +229,7 @@ echo "$PROBE" | jq -r '.result.probes[] | select(.name=="pattern-rules") | .tail
 
 ```bash
 RESULT=$(bash .ax/scripts/bash/promote-mistake.sh --archive --json --token SP-SEC-001)
-ARCHIVED=$(echo "$RESULT" | jq -r '.result.archived_count')
+ARCHIVED=$(printf '%s\n' "$RESULT" | jq -r '.result.archived_count')
 ```
 
 스크립트가 하는 일 — `promoted_to: <token>` 마킹된 mistake 를 `.ax/mistakes/_archive/<YYYY>/<MM>/` 로 mv. 사전 검증 — SP 토큰이 `spirit/rules/*.md` 에 `## <token>` 헤딩으로 존재해야만 진행 (없으면 `SP token not found` 에러).

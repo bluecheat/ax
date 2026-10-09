@@ -6,6 +6,8 @@
 ## Schema (canonical)
 
 `templates/default/.ax/hud/state.json.template`가 정본.
+
+두 런타임 상태 파일(`state.json` · `current-task.json`)은 gitignore 대상이라 체크아웃(워크트리·클론)마다 따로 있어요. `/up` 이 설치 때 한 번 seed 하지만, 새 워크트리처럼 없을 때는 **처음 쓰는 스크립트가** 설치본의 템플릿(`.ax/hud/state.json.template` · `.ax/current-task.json.template`)으로 만들어요 (`common.sh` `goax_runtime_seed`). 읽는 쪽은 파일이 없으면 idle 로 봐요 — 워크트리마다 `/up` 을 다시 돌리지 않아요.
 schema 변경 시 반드시 `statusline.sh`가 읽는 path와 이 문서를 같이 갱신 (3-way sync).
 
 ## Ownership 표

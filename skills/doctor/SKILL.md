@@ -34,7 +34,7 @@ ROOT=$(pwd)   # 또는 감지한 PROJECT_ROOT
 
 ```bash
 SL_PRE=$(bash "$ROOT/.ax/scripts/bash/spirit-lint.sh" --json 2>/dev/null)
-echo "Spirit rules: $(echo "$SL_PRE" | jq -r '.result.rules_files // 0') 카테고리"
+echo "Spirit rules: $(printf '%s\n' "$SL_PRE" | jq -r '.result.rules_files // 0') 카테고리"
 echo "ADR: $(ls "$ROOT"/.ax/docs/adr/*.md 2>/dev/null | wc -l) · Spec: $(ls -d "$ROOT"/.ax/docs/spec/[0-9]*/ 2>/dev/null | wc -l) · Mistakes: $(ls "$ROOT"/.ax/mistakes/*.md 2>/dev/null | grep -v README | wc -l)"
 bash "$ROOT/.ax/scripts/bash/promote-mistake.sh" --json 2>/dev/null \
  | jq -r '.result.candidates[]? | "\(.category): \(.count)건"'   # 미승격 mistakes 카테고리 분포 (threshold 이상만)
@@ -75,14 +75,14 @@ PLUGIN_V=""; [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/VERSION" ] && PLUGIN_V=
 VERSION_DRIFT=false; [ -n "$PLUGIN_V" ] && [ "$INSTALLED_V" != "$PLUGIN_V" ] && VERSION_DRIFT=true
 
 RESULT_T=$(bash "$ROOT/.ax/scripts/bash/check-templates-drift.sh" --json ${PLUGIN_ROOT:+--plugin-dir "$PLUGIN_ROOT"} 2>/dev/null)
-PLUGIN_UPD=$(echo "$RESULT_T" | jq -r '.result.plugin_updated // false')
-USER_MOD=$(echo "$RESULT_T" | jq -r '.result.user_modified // false')
-DRIFT_FILES=$(echo "$RESULT_T" | jq -r '.result.drift_files // [] | join(", ")')
+PLUGIN_UPD=$(printf '%s\n' "$RESULT_T" | jq -r '.result.plugin_updated // false')
+USER_MOD=$(printf '%s\n' "$RESULT_T" | jq -r '.result.user_modified // false')
+DRIFT_FILES=$(printf '%s\n' "$RESULT_T" | jq -r '.result.drift_files // [] | join(", ")')
 
 RESULT_M=$(bash "$ROOT/.ax/scripts/bash/check-manifest-install.sh" --json ${PLUGIN_ROOT:+--plugin-dir "$PLUGIN_ROOT"} 2>/dev/null)
-MI_STATUS=$(echo "$RESULT_M" | jq -r '.status // "skipped"')
-MI_MISSING_N=$(echo "$RESULT_M" | jq -r '.result.missing // [] | length')
-MI_DRIFT_N=$(echo "$RESULT_M" | jq -r '.result.drift // [] | length')
+MI_STATUS=$(printf '%s\n' "$RESULT_M" | jq -r '.status // "skipped"')
+MI_MISSING_N=$(printf '%s\n' "$RESULT_M" | jq -r '.result.missing // [] | length')
+MI_DRIFT_N=$(printf '%s\n' "$RESULT_M" | jq -r '.result.drift // [] | length')
 
 NEEDS_REINSTALL=false
 { [ "$VERSION_DRIFT" = true ] || [ "$PLUGIN_UPD" = true ] || [ "$MI_MISSING_N" -gt 0 ] || [ "$MI_DRIFT_N" -gt 0 ]; } && NEEDS_REINSTALL=true
@@ -121,20 +121,20 @@ fi
 
 ```bash
 SCAN=$(bash "$ROOT/.ax/scripts/bash/doctor-scan.sh" --json ${PLUGIN_ROOT:+--plugin-dir "$PLUGIN_ROOT"} 2>/dev/null)
-S_FIND=$(echo "$SCAN" | jq -r '.result.findings // 0')
-S_GI=$(echo "$SCAN" | jq -r '.result.migration.gitignore_missing | join(", ")')
-S_OS=$(echo "$SCAN" | jq -r '.result.migration.stale_output_style')
-S_SM=$(echo "$SCAN" | jq -r '.result.migration.stale_status_md')
-S_SG=$(echo "$SCAN" | jq -r '.result.migration.suggested | join(", ")')
-S_SR=$(echo "$SCAN" | jq -r '.result.migration.spec_readme_stale | length')
-S_SE=$(echo "$SCAN" | jq -r '.result.migration.spec_empty_dirs | length')
-H_CHK=$(echo "$SCAN" | jq -r '.result.hooks.checked')
-H_TOT=$(echo "$SCAN" | jq -r '.result.hooks.total'); H_REG=$(echo "$SCAN" | jq -r '.result.hooks.registered_n')
-H_MISS=$(echo "$SCAN" | jq -r '.result.hooks.missing | join("\n")'); H_MF=$(echo "$SCAN" | jq -r '.result.hooks.missing_files | join("\n")')
-D_MM=$(echo "$SCAN" | jq -r '.result.doc_actual.mismatches | join("\n")')
-R_BAD=$(echo "$SCAN" | jq -r '.result.reach[] | select(.reached==false) | "\(.source) (\(.count)) — \(.reason)"')
-E_MISS=$(echo "$SCAN" | jq -r '.result.hooks.events.missing | join(", ")')
-D_BAD=$(echo "$SCAN" | jq -r '.result.handoff.deadlines[] | select(.status!="ok") | "\(.status) \(.date) (\(.days_left)일) — \(.text)"')
+S_FIND=$(printf '%s\n' "$SCAN" | jq -r '.result.findings // 0')
+S_GI=$(printf '%s\n' "$SCAN" | jq -r '.result.migration.gitignore_missing | join(", ")')
+S_OS=$(printf '%s\n' "$SCAN" | jq -r '.result.migration.stale_output_style')
+S_SM=$(printf '%s\n' "$SCAN" | jq -r '.result.migration.stale_status_md')
+S_SG=$(printf '%s\n' "$SCAN" | jq -r '.result.migration.suggested | join(", ")')
+S_SR=$(printf '%s\n' "$SCAN" | jq -r '.result.migration.spec_readme_stale | length')
+S_SE=$(printf '%s\n' "$SCAN" | jq -r '.result.migration.spec_empty_dirs | length')
+H_CHK=$(printf '%s\n' "$SCAN" | jq -r '.result.hooks.checked')
+H_TOT=$(printf '%s\n' "$SCAN" | jq -r '.result.hooks.total'); H_REG=$(printf '%s\n' "$SCAN" | jq -r '.result.hooks.registered_n')
+H_MISS=$(printf '%s\n' "$SCAN" | jq -r '.result.hooks.missing | join("\n")'); H_MF=$(printf '%s\n' "$SCAN" | jq -r '.result.hooks.missing_files | join("\n")')
+D_MM=$(printf '%s\n' "$SCAN" | jq -r '.result.doc_actual.mismatches | join("\n")')
+R_BAD=$(printf '%s\n' "$SCAN" | jq -r '.result.reach[] | select(.reached==false) | "\(.source) (\(.count)) — \(.reason)"')
+E_MISS=$(printf '%s\n' "$SCAN" | jq -r '.result.hooks.events.missing | join(", ")')
+D_BAD=$(printf '%s\n' "$SCAN" | jq -r '.result.handoff.deadlines[] | select(.status!="ok") | "\(.status) \(.date) (\(.days_left)일) — \(.text)"')
 ```
 
 **3.6 마이그레이션 잔재** (0건이면 생략):
@@ -186,13 +186,13 @@ D_BAD=$(echo "$SCAN" | jq -r '.result.handoff.deadlines[] | select(.status!="ok"
 
 ```bash
 SL=$(bash "$ROOT/.ax/scripts/bash/spirit-lint.sh" --json 2>/dev/null)
-SL_OK=$(echo "$SL" | jq -r '.result.ok'); SL_N=$(echo "$SL" | jq -r '.result.findings')
-SL_RC=$(echo "$SL" | jq -r '.result.rules_files'); SL_TK=$(echo "$SL" | jq -r '.result.rules_count')
-SL_BAD=$(echo "$SL" | jq -r '.result.bad_headers[] | "\(.file):\(.line) — \(.text)"')
-SL_DUP=$(echo "$SL" | jq -r '.result.duplicates[] | "\(.token) — \(.files | join(", "))"')
-SL_MISS=$(echo "$SL" | jq -r '.result.missing_files + .result.missing_frontmatter | join(", ")')
-SL_PH=$(echo "$SL" | jq -r '.result.placeholders[] | "\(.file):\(.line)"')
-SL_CON=$(echo "$SL" | jq -r '.result.contracts[] | "\(.file) — 없는 테스트 \(.missing | join(", ")) · 계약 없는 룰 \(.uncovered | join(", "))"')
+SL_OK=$(printf '%s\n' "$SL" | jq -r '.result.ok'); SL_N=$(printf '%s\n' "$SL" | jq -r '.result.findings')
+SL_RC=$(printf '%s\n' "$SL" | jq -r '.result.rules_files'); SL_TK=$(printf '%s\n' "$SL" | jq -r '.result.rules_count')
+SL_BAD=$(printf '%s\n' "$SL" | jq -r '.result.bad_headers[] | "\(.file):\(.line) — \(.text)"')
+SL_DUP=$(printf '%s\n' "$SL" | jq -r '.result.duplicates[] | "\(.token) — \(.files | join(", "))"')
+SL_MISS=$(printf '%s\n' "$SL" | jq -r '.result.missing_files + .result.missing_frontmatter | join(", ")')
+SL_PH=$(printf '%s\n' "$SL" | jq -r '.result.placeholders[] | "\(.file):\(.line)"')
+SL_CON=$(printf '%s\n' "$SL" | jq -r '.result.contracts[] | "\(.file) — 없는 테스트 \(.missing | join(", ")) · 계약 없는 룰 \(.uncovered | join(", "))"')
 ```
 
 헤더 형식 `## SP-<CAT>-<NNN>: 제목` 의 SSOT 는 `.ax/docs/reference/rules-tokens.md`. 0건이면 본 표 `◆ Cross-cut — Spirit` 줄의 ✅ 만:
@@ -210,11 +210,11 @@ SL_CON=$(echo "$SL" | jq -r '.result.contracts[] | "\(.file) — 없는 테스�
 
 ```bash
 RESULT=$(bash "$ROOT/.ax/scripts/bash/check-rule-enforcement.sh" --json 2>/dev/null)
-RE_I1=$(echo "$RESULT" | jq -r '.result.i1_violations | length'); RE_I2=$(echo "$RESULT" | jq -r '.result.i2_violations | length')
-RE_I3IM=$(echo "$RESULT" | jq -r '.result.i3_imminent | length'); RE_I3OD=$(echo "$RESULT" | jq -r '.result.i3_overdue | length')
-RE_I5F=$(echo "$RESULT" | jq -r '.result.i5_file_missing | length'); RE_I5R=$(echo "$RESULT" | jq -r '.result.i5_not_registered | length')
-RE_I6=$(echo "$RESULT" | jq -r '.result.i6_no_trigger | length')
-RE_I7P=$(echo "$RESULT" | jq -r '.result.i7_grep_without_pattern | length'); RE_I7H=$(echo "$RESULT" | jq -r '.result.i7_pattern_without_paths | length')
+RE_I1=$(printf '%s\n' "$RESULT" | jq -r '.result.i1_violations | length'); RE_I2=$(printf '%s\n' "$RESULT" | jq -r '.result.i2_violations | length')
+RE_I3IM=$(printf '%s\n' "$RESULT" | jq -r '.result.i3_imminent | length'); RE_I3OD=$(printf '%s\n' "$RESULT" | jq -r '.result.i3_overdue | length')
+RE_I5F=$(printf '%s\n' "$RESULT" | jq -r '.result.i5_file_missing | length'); RE_I5R=$(printf '%s\n' "$RESULT" | jq -r '.result.i5_not_registered | length')
+RE_I6=$(printf '%s\n' "$RESULT" | jq -r '.result.i6_no_trigger | length')
+RE_I7P=$(printf '%s\n' "$RESULT" | jq -r '.result.i7_grep_without_pattern | length'); RE_I7H=$(printf '%s\n' "$RESULT" | jq -r '.result.i7_pattern_without_paths | length')
 ```
 
 - **I1** 🔴 의 `enforced_by` 는 `hook:*`/`external:*` 만 · **I2** `TODO:*` 는 deadline 필수 · **I3** 임박(≤7일)/초과 · **I5** hook 파일 존재 + settings 등록 · **I6** `external:*` 면 자동 트리거(CI workflow / git pre-commit / husky / lefthook)가 실재 — goax wrapper 만 있는 pre-commit 은 트리거로 안 쳐요 · **I7** grep 류 룰(`enforced_kind: grep` 또는 `critical-rule-grep.sh` 를 가리키는 파일)은 룰마다 `<!-- 검출 패턴: -->` 이 있어야 하고, 패턴이 있으면 `paths:` 가 비면 안 돼요 — 둘 다 "적혀 있지만 아무것도 막지 않는" 상태예요. 본문: `.ax/docs/reference/rule-enforcement.md`.
@@ -237,8 +237,8 @@ RE_I7P=$(echo "$RESULT" | jq -r '.result.i7_grep_without_pattern | length'); RE_
 
 ```bash
 RESULT_L=$(bash "$ROOT/.ax/scripts/bash/check-sensor-liveness.sh" --json 2>/dev/null)
-L_SCAFFOLD=$(echo "$RESULT_L" | jq -r '.result.grep_scaffold_unfilled'); L_PATTERNS=$(echo "$RESULT_L" | jq -r '.result.pattern_rules // 0'); L_GITHOOK=$(echo "$RESULT_L" | jq -r '.result.git_precommit_installed')
-L_BZ=$(echo "$RESULT_L" | jq -r '.result.blocking_zero'); L_RM=$(echo "$RESULT_L" | jq -r '.result.session_root_mismatch'); L_ROOT=$(echo "$RESULT_L" | jq -r '.result.project_root')
+L_SCAFFOLD=$(printf '%s\n' "$RESULT_L" | jq -r '.result.grep_scaffold_unfilled'); L_PATTERNS=$(printf '%s\n' "$RESULT_L" | jq -r '.result.pattern_rules // 0'); L_GITHOOK=$(printf '%s\n' "$RESULT_L" | jq -r '.result.git_precommit_installed')
+L_BZ=$(printf '%s\n' "$RESULT_L" | jq -r '.result.blocking_zero'); L_RM=$(printf '%s\n' "$RESULT_L" | jq -r '.result.session_root_mismatch'); L_ROOT=$(printf '%s\n' "$RESULT_L" | jq -r '.result.project_root')
 ```
 ```
 ◆  Sensors — Liveness
@@ -261,7 +261,7 @@ N_ADR=$(bash "$ROOT/.ax/scripts/bash/next-spec-num.sh" --kind adr --check-duplic
 
 ```bash
 VEN=$(bash "$ROOT/.ax/scripts/bash/vendor-skills.sh" --check --plugin-dir "$PLUGIN_ROOT" --json 2>/dev/null)
-V_ON=$(echo "$VEN" | jq -r '.result.vendored // false'); V_STALE=$(echo "$VEN" | jq -r '.result.stale // false'); V_SPLIT=$(echo "$VEN" | jq -r '.result.split // false')
+V_ON=$(printf '%s\n' "$VEN" | jq -r '.result.vendored // false'); V_STALE=$(printf '%s\n' "$VEN" | jq -r '.result.stale // false'); V_SPLIT=$(printf '%s\n' "$VEN" | jq -r '.result.split // false')
 ```
 `vendored=false` 면 생략. `◆ 동봉본 — ❗ 동봉 v<X> ↔ plugin v<Y>: /vendor 재실행 후 커밋 · ❌ ADE 루트 ≠ 프로젝트 루트인데 .goax-root 없음`.
 
@@ -274,7 +274,7 @@ bash "$ROOT/.ax/scripts/bash/rules-index.sh"                            # 인덱
 bash "$ROOT/.ax/scripts/bash/rules-index.sh" --level critical           # "CRITICAL 룰만"
 bash "$ROOT/.ax/scripts/bash/rules-index.sh" --source spirit --category security
 bash "$ROOT/.ax/scripts/bash/rules-index.sh" --find AX:CRITICAL:001     # 토큰 정확 매칭
-RI=$(bash "$ROOT/.ax/scripts/bash/rules-index.sh" --json 2>/dev/null); RI_C=$(echo "$RI" | jq -r '.result.counts.critical'); RI_M=$(echo "$RI" | jq -r '.result.counts.mandatory'); RI_V=$(echo "$RI" | jq -r '.result.counts.convention')
+RI=$(bash "$ROOT/.ax/scripts/bash/rules-index.sh" --json 2>/dev/null); RI_C=$(printf '%s\n' "$RI" | jq -r '.result.counts.critical'); RI_M=$(printf '%s\n' "$RI" | jq -r '.result.counts.mandatory'); RI_V=$(printf '%s\n' "$RI" | jq -r '.result.counts.convention')
 ```
 
 전체 진단에선 `◆ Layer 1` 줄에 카운트만 써요: `✅ AGENTS.md (시그널 🔴×$RI_C / 🟡×$RI_M / 🔵×$RI_V, 4계층 인덱스 ✅)`. 룰은 외워서 적용하지 않아요 — 매번 이 스크립트로 다시 읽어요.
@@ -283,7 +283,7 @@ RI=$(bash "$ROOT/.ax/scripts/bash/rules-index.sh" --json 2>/dev/null); RI_C=$(ec
 
 ```bash
 ADE=$(bash "$ROOT/.ax/scripts/bash/ade-settings.sh" --check --plugin-dir "$PLUGIN_ROOT" --json 2>/dev/null); ADE_RC=$?
-ADE_MISS=$(echo "$ADE" | jq -r '.result.missing // [] | length'); ADE_STALE=$(echo "$ADE" | jq -r '.result.stale // [] | length')
+ADE_MISS=$(printf '%s\n' "$ADE" | jq -r '.result.missing // [] | length'); ADE_STALE=$(printf '%s\n' "$ADE" | jq -r '.result.stale // [] | length')
 ```
 `ADE_RC=2`(jq·템플릿 없음) 또는 `.result.project_rel == ""`(단일 저장소 — §3.7 이 이미 봐요)면 생략. 세션을 저장소 루트에서 열면 훅은 **루트의** `.claude/settings.json` 에서만
 등록돼요 — 여기서 빠진 훅은 프로젝트 settings 에 있어도 발화하지 않아요. `◆ 모노레포 훅 — ✅ 템플릿과 일치 · ❗ 누락 N · 잔재 M:

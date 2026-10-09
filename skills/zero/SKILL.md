@@ -193,7 +193,7 @@ cp .ax/_templates/zero/prd-v0.1.md .ax/docs/prd/PRD-v0.1.md
 
 ```bash
 RESULT=$(bash .ax/scripts/bash/next-spec-num.sh --kind adr --reserve --slug "pricing-and-free-limit" --json)
-ADR_PATH=$(echo "$RESULT" | jq -r '.result.path')
+ADR_PATH=$(printf '%s\n' "$RESULT" | jq -r '.result.path')
 cp .ax/_templates/adr/0000-template.md "$ADR_PATH"
 ```
 

@@ -1259,6 +1259,34 @@ GOAX_TASK_FIELDS='["task_id","description","size","risk","domain","spec_id","spe
 goax_task_key() { printf '%s' "${1:-}" | tr -c '[:alnum:]_.-' '_'; }
 goax_task_path() { printf '%s/.ax/tasks/%s.json' "${1:-.}" "$(goax_task_key "${2:-}")"; }
 
+# ─── 런타임 상태 파일 — .ax/current-task.json · .ax/state.json ─────────────
+# 둘 다 gitignore 대상이라 새 워크트리·클론엔 없어요. 워크트리마다 /up 을 다시 돌리게 하지 않고, 쓰는 쪽이
+# 처음 쓸 때 설치본에 같이 들어 있는 템플릿을 복사해요. /up 의 seed(MANIFEST `->`)와 같은 원본이라 누가
+# 먼저 만들어도 내용이 같아요.
+#   goax_runtime_template <file>  그 파일의 템플릿 경로 (런타임 파일이 아니면 1)
+#   goax_runtime_seed <file>      없으면 템플릿으로 만들어요 — 0 있음·만듦 · 1 템플릿 없음·복사 실패.
+#                                 `ln` 으로 붙여서 이미 생긴 파일(다른 세션이 먼저 만든 것)은 덮지 않아요.
+goax_runtime_template() {
+    case "${1:-}" in
+        *.ax/current-task.json) printf '%s\n' "${1%current-task.json}current-task.json.template" ;;
+        *.ax/state.json)        printf '%s\n' "${1%state.json}hud/state.json.template" ;;
+        *) return 1 ;;
+    esac
+}
+goax_runtime_seed() {
+    local f="${1:-}" tpl tmp
+    [ -f "$f" ] && return 0
+    tpl=$(goax_runtime_template "$f") && [ -f "$tpl" ] || return 1
+    tmp="$f.seed.$$"
+    cp "$tpl" "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
+    # 하드링크를 막는 파일 시스템이면 mv 로 — 그 사이 다른 세션이 만들었으면 건드리지 않아요
+    if ln "$tmp" "$f" 2>/dev/null || { [ ! -f "$f" ] && mv "$tmp" "$f" 2>/dev/null; }; then
+        goax_warn ".ax/${f##*.ax/} 이 없어 템플릿으로 만들었어요 (새 워크트리·클론)"
+    fi
+    rm -f "$tmp"
+    [ -f "$f" ]
+}
+
 # goax_glob_owners <path>
 #   stdin `<label>\t<glob>` 줄 중 glob 이 path 에 맞는 label 을 처음 나온 순서대로 한 번씩 출력.
 #   goax_glob_filter 의 반대 방향(경로 하나 × 글롭 여럿)이고 규칙은 goax_glob_match 와 같아요.

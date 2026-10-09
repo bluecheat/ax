@@ -128,10 +128,10 @@ fi
 
 RESULT=$(bash "$PLUGIN_ROOT/scripts/provision.sh" --json)
 
-echo "$RESULT" | jq -r '"✅ 복사 \(.result.copied)건 · seed 유지 \(.result.seeded_kept)건 · reference \(.result.reference_files)개 · git hook \(.result.git_hooks)"'
-echo "$RESULT" | jq -r '.warnings[]? | "❗ \(.)"'
-echo "$RESULT" | jq -r '.result.suggested[]? | "  · \(.) — 기존 파일 보존, plugin 최신본은 .suggested 로 옆에"'
-echo "$RESULT" | jq -r '.result.preserved[]? | "  · _templates/\(.) 수정본 보존"'
+printf '%s\n' "$RESULT" | jq -r '"✅ 복사 \(.result.copied)건 · seed 유지 \(.result.seeded_kept)건 · reference \(.result.reference_files)개 · git hook \(.result.git_hooks)"'
+printf '%s\n' "$RESULT" | jq -r '.warnings[]? | "❗ \(.)"'
+printf '%s\n' "$RESULT" | jq -r '.result.suggested[]? | "  · \(.) — 기존 파일 보존, plugin 최신본은 .suggested 로 옆에"'
+printf '%s\n' "$RESULT" | jq -r '.result.preserved[]? | "  · _templates/\(.) 수정본 보존"'
 ```
 
 설치 규칙은 3층이고 스크립트가 강제해요:

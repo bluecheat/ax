@@ -1,6 +1,7 @@
 ---
 name: evaluator
 description: "PR 이전 인페런셜 리뷰 sub-agent. docs/specs/ADR만 읽고 변경에 비평. CodeRabbit과 영역 분리 — evaluator는 아키텍처 적합성·누락 케이스, CodeRabbit은 코드 품질·도메인 룰. spec 모드에서는 spec-validate 의 합의 리뷰(spec 리뷰)를 architect 와 병렬·독립으로 맡아요 — 검토 범위는 AC 검증 가능성·코드 현실·누락 엣지·tasks 분해. 트리거: 'evaluator', '인페런셜 리뷰', 'architectural review', 'PR 검토', '합의 리뷰', 'spec 리뷰'."
+model: sonnet
 ---
 
 # Evaluator Agent

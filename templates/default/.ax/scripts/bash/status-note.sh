@@ -16,8 +16,8 @@
 #
 # 저장소는 `.ax/current-task.json` 의 `handoff` 객체예요 — {now:[], now_at, next:[], open:[], renamed:[]}.
 # 상태 파일은 state.json · current-task.json 둘뿐이라 새 파일을 만들지 않아요. handoff 는 task 를
-# 넘어 살아요 (reset-task.sh 가 안 지워요). 파일이 없으면 변이 모드는 거절해요 — `/up` 으로 설치를
-# 마쳐요 (여기서 최소 파일을 만들면 설치가 정본 템플릿을 영영 못 깔아요).
+# 넘어 살아요 (reset-task.sh 가 안 지워요). 파일이 없으면(새 워크트리·클론) 변이 모드가 락 안에서 설치본
+# 템플릿으로 만들어요 — goax_runtime_seed. 템플릿까지 없을 때만 거절해요.
 #
 # `--set now` 은 `now_at` 에 현재 UTC 분(YYYY-MM-DDTHH:MMZ)을 적어요. Stop 게이트
 # (`.ax/hooks/stop/spec-gate.sh`) 가 "인계 노트에 적혀 있으니 의도된 halt" 로 인정하는 건
@@ -113,7 +113,7 @@ emit_show() {
     local empty='{"now":[],"next":[],"open":[],"renamed":[]}' zero='{"now":0,"next":0,"open":0,"renamed":0}'
     if ! has_handoff; then
         local why
-        if [ -f "$FILE" ]; then why='첫 인계는 --add next "…" 로 시작해요'; else why="$REL 이 없어요 (/up)"; fi
+        if [ -f "$FILE" ]; then why='첫 인계는 --add next "…" 로 시작해요'; else why="$REL 이 아직 없어요 — 첫 --add 가 만들어요"; fi
         if [ "$JSON_MODE" = true ]; then
             json_output "ok" '{"path":"'"$REL"'","exists":false,"items":0,"over_cap":false,"now_at":null,"sections":'"$empty"',"counts":'"$zero"'}' "인계 노트 없음 — $why"
         else
@@ -149,12 +149,14 @@ emit_show() {
 # --add 의 중복 판정도 읽고 나서 쓰는 자리라 락 밖이면 두 세션이 서로를 덮어써요.
 # dry-run 은 아무것도 안 쓰니까 락도 안 잡아요 (락 디렉토리 자체가 부작용이에요).
 # 락 단위는 파일 — tier-from-state.sh --reset 도 같은 문자열을 잡아요.
-# 파일 부재는 dry-run 도 알려야 해요 — 최소 파일을 만들어 주지 않아요 (설치 seed 가 막혀요).
+# 파일이 없으면 락 안에서 템플릿으로 만들어요. dry-run 은 만들지 않고, 템플릿이 있는지만 봐요.
 LOCK="$(goax_normalize_path "$PROJECT_ROOT/.ax/current-task.json" "$PROJECT_ROOT").lock"
 if [ "$MODE" != show ]; then
-    [ -f "$FILE" ] || fail "$REL 이 없어요 — /up 으로 설치를 마쳐요"
+    [ -f "$FILE" ] || [ -f "$(goax_runtime_template "$FILE")" ] \
+        || fail "$REL 도 템플릿(.ax/current-task.json.template)도 없어요 — /up 으로 설치본을 맞춰요"
     if [ "$DRY_RUN" != true ]; then
         goax_lock "$LOCK" "${GOAX_LOCK_TIMEOUT:-10}" || fail "다른 프로세스가 $REL 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
+        goax_runtime_seed "$FILE" || fail "$REL 을 템플릿으로 만들지 못했어요 — .ax/ 쓰기 권한을 봐요"
     fi
 fi
 

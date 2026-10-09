@@ -38,8 +38,8 @@ template 구조 (요약):
 # 도메인어 2~4개. **한글 그대로 넣으세요.** 직접 grep 하면 랭킹도 스니펫도 없어요.
 KEYWORDS="환불 정산 refund"
 SEARCH=$(bash .ax/scripts/bash/triage-search.sh --keywords "$KEYWORDS" --json)
-echo "$SEARCH" | jq -r '.result.adrs[]  | "adr  \(.score)\t\(.path)"'
-echo "$SEARCH" | jq -r '.result.specs[] | "spec \(.score)\t\(.path)"'
+printf '%s\n' "$SEARCH" | jq -r '.result.adrs[]  | "adr  \(.score)\t\(.path)"'
+printf '%s\n' "$SEARCH" | jq -r '.result.specs[] | "spec \(.score)\t\(.path)"'
 
 # ID 는 날짜+난수(YYYY-MM-DD-<4hex>)라 미리 볼 게 없어요 — §3 의 --reserve 가 뽑아요.
 # 순번이 아니라서 다른 브랜치의 ADR 과 겹치지 않아요 (옛 NNNN 순번 ADR 은 그대로 읽어요).
@@ -85,9 +85,9 @@ grep -lE "^\| 상태 \|.*폐기|superseded" .ax/docs/adr/*.md 2>/dev/null
 # ID 를 뽑아 실물까지 원자적으로 생성해요 — **반환된 ID·경로를 써야 해요**.
 SLUG="payment-refund-strategy"
 RES=$(bash .ax/scripts/bash/next-spec-num.sh --kind adr --reserve --slug "$SLUG" --json)
-[ "$(echo "$RES" | jq -r '.status')" = "ok" ] || { echo "$RES" | jq -r '.errors|join("\n")'; exit 1; }
-NUM=$(echo "$RES" | jq -r '.result.next')
-DEST=$(echo "$RES" | jq -r '.result.path')
+[ "$(printf '%s\n' "$RES" | jq -r '.status')" = "ok" ] || { printf '%s\n' "$RES" | jq -r '.errors|join("\n")'; exit 1; }
+NUM=$(printf '%s\n' "$RES" | jq -r '.result.next')
+DEST=$(printf '%s\n' "$RES" | jq -r '.result.path')
 
 cp .ax/_templates/adr/0000-template.md "$DEST"
 

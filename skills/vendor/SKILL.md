@@ -53,7 +53,7 @@ commerce-monorepo/          ← ADE 루트 (.claude/ 가 여기)
 ```bash
 PLUGIN_ROOT="${CLAUDE_SKILL_DIR}/../.."
 RES=$(bash .ax/scripts/bash/vendor-skills.sh --check --plugin-dir "$PLUGIN_ROOT" --json)
-echo "$RES" | jq -r '.result | "vendored=\(.vendored) v\(.vendored_version) plugin=v\(.plugin_version) stale=\(.stale) split=\(.split)"'
+printf '%s\n' "$RES" | jq -r '.result | "vendored=\(.vendored) v\(.vendored_version) plugin=v\(.plugin_version) stale=\(.stale) split=\(.split)"'
 ```
 
 ## 2. 무엇을 할지 보여주기 — `--dry-run`
@@ -89,8 +89,8 @@ bash .ax/scripts/bash/vendor-skills.sh --plugin-dir "$PLUGIN_ROOT" --dry-run --j
 
 ```bash
 RESULT=$(bash .ax/scripts/bash/vendor-skills.sh --plugin-dir "$PLUGIN_ROOT" --json)
-[ "$(echo "$RESULT" | jq -r '.status')" = "ok" ] || { echo "$RESULT" | jq -r '.errors|join("\n")'; exit 1; }
-echo "$RESULT" | jq -r '.result | "\(.count)개 동봉 (v\(.version)), 포인터=\(.pointer_written)"'
+[ "$(printf '%s\n' "$RESULT" | jq -r '.status')" = "ok" ] || { printf '%s\n' "$RESULT" | jq -r '.errors|join("\n")'; exit 1; }
+printf '%s\n' "$RESULT" | jq -r '.result | "\(.count)개 동봉 (v\(.version)), 포인터=\(.pointer_written)"'
 ```
 
 ADE 루트 ≠ 프로젝트 루트(모노레포)면 훅 배선도 같이 맞춰요 — 스킬만 동봉하고 훅을 안 걸면 루트에서 연 세션엔 게이트가 하나도 안 돌아요:

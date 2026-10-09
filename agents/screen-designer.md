@@ -1,6 +1,7 @@
 ---
 name: screen-designer
 description: "screen skill 이 브리프(references 절대경로 REFS 포함)를 넣어 새 컨텍스트로 띄우는 화면 실행 sub-agent 예요. 화면 하나(또는 한 흐름)를 맡아 리포트(첫 줄 verdict)까지 혼자 끝내요. 직접 부르지 않아요 — 화면 작업은 screen skill 을 거쳐요."
+model: inherit
 ---
 
 # screen-designer — 화면 실행 sub-agent

@@ -39,6 +39,10 @@
 
 # ─── .ax/ 단일 파일 ───
 .ax/hud/statusline.sh
+# 런타임 상태 템플릿 — 설치본에도 둬요. 새 워크트리·클론엔 gitignore 된 상태 파일이 없어서, 쓰는 스크립트가
+# 처음 쓸 때 이걸 복사해요 (common.sh goax_runtime_seed). 워크트리마다 /up 을 다시 돌리지 않게요.
+.ax/current-task.json.template
+.ax/hud/state.json.template
 
 # ─── .template suffix → 실제 이름으로 rename 복사 ───
 .ax/current-task.json.template -> .ax/current-task.json

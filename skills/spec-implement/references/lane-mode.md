@@ -12,9 +12,9 @@
 **1. 준비된 task 를 레인별로 묶어요.**
 
 ```bash
-echo "$PLAN"   | jq -r '.result.ready | join(" ")'                                   # 지금 시작 가능
-echo "$LEDGER" | jq -r '.result.lanes[] | "\(.lane): \(.tasks | join(","))"'          # 레인 → task
-echo "$LEDGER" | jq -r '.result.unassigned_open | join(" ")'                         # 레인 없는 task
+printf '%s\n' "$PLAN" | jq -r '.result.ready | join(" ")'                                   # 지금 시작 가능
+printf '%s\n' "$LEDGER" | jq -r '.result.lanes[] | "\(.lane): \(.tasks | join(","))"'          # 레인 → task
+printf '%s\n' "$LEDGER" | jq -r '.result.unassigned_open | join(" ")'                         # 레인 없는 task
 ```
 
 - ready ∩ 레인 A 의 task → 레인 A 의 이번 브리프

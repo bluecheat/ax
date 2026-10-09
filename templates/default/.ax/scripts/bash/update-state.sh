@@ -68,14 +68,10 @@ fi
 command -v jq >/dev/null || { goax_error "jq 필요 (brew install jq)"; exit 1; }
 # state.json 은 런타임 파일이라 gitignore 대상이에요 — 새 워크트리·클론엔 없어요. 그때마다 installer 를
 # 다시 돌리라고 하면 skill 들의 `update-state.sh … || true` 가 조용히 삼켜서 HUD 가 영영 죽은 채로 남아요.
-# 템플릿이 있으면 그걸로 seed 하고 진행해요 (installer 의 MANIFEST `->` seed 와 같은 원본).
+# 템플릿이 있으면 그걸로 seed 하고 진행해요 (installer 의 MANIFEST `->` seed 와 같은 원본 — goax_runtime_seed).
 if [ ! -f "$S" ]; then
-    TPL="$WS/.ax/hud/state.json.template"
-    if [ -f "$TPL" ] && [ "$MODE" = update ]; then
-        mkdir -p "$(dirname "$S")" && cp "$TPL" "$S" \
-            && goax_warn "state.json 이 없어 템플릿으로 만들었어요 ($S)"
-    else
-        goax_error "state.json 없음 ($S) — installer 먼저 실행"
+    if [ "$MODE" != update ] || ! goax_runtime_seed "$S"; then
+        goax_error "state.json 없음 ($S) — 템플릿(.ax/hud/state.json.template)도 없으면 /up 으로 설치본을 맞춰요"
         exit 1
     fi
 fi

@@ -1,6 +1,7 @@
 ---
 name: rules-auditor
 description: "완료 직전 룰 대조 sub-agent — spec-implement §8 이 새 컨텍스트로 띄워요. 변경 파일마다 걸린 룰(rules-audit-scope.sh 결과)과 새로 생긴 심볼의 이웃 관례(위치·이름·분리)를 대조해 review-rules.md 첫 줄에 verdict 를 써요. 코드는 고치지 않아요. 트리거: '룰 대조', 'rules audit', '룰 리뷰', '관례 대조'."
+model: sonnet
 ---
 
 # rules-auditor — 룰 대조 sub-agent
