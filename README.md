@@ -202,7 +202,7 @@ your-project/
 │   │   ├── adr/0000-template.md
 │   │   └── spec/{spec, tasks, ...}.md  + .origin (drift sha)
 │   ├── current-task.json                  # task-context SSOT
-│   ├── config.yml                         # domain risk + sensors.{mode, hook_profile, disabled_hooks}
+│   ├── config.yml                         # domain risk + sensors.{mode, hook_profile, disabled_hooks} + agent_models
 │   ├── mistakes/                          # Cross-cut Mistake Loop
 │   ├── version
 │   └── docs/

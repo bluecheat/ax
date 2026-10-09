@@ -9,6 +9,7 @@
 |---|---|---|
 | `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log, `goax_inject_fresh` 세션 내 중복 주입 제거, `goax_lock`/`goax_unlock`/`goax_unlock_all` 원장 락, `goax_mktemp` 폴백 임시 파일, `goax_git_hook_path` git 없이도 도는 훅 경로, `goax_resolve_spec` `--spec` 축약 해석, `goax_tasks_parse` tasks.md 실행 그래프(`의존:` 포함 — tasks-plan·mark-task --next 공용), `goax_secret_rules`/`goax_secret_patterns`/`goax_secret_scan_file`/`redact_secrets` 시크릿 패턴 SSOT — 검출과 마스킹이 같은 표에서 나와요 (검출은 kv-detect 전에 TS·Kotlin·Swift 타입 자리를 지워요), `goax_hook_enabled`/`goax_hook_profile` 훅 끄기·프로필, `goax_session_mark`/`goax_session_marked`/`goax_session_count` 세션 마커, `goax_shell_scan` 따옴표·heredoc 을 셸처럼 읽는 명령 판정(bypass·destructive), `goax_module_rules_matching`·`goax_imported_paths` 주입 훅과 게이트가 공유하는 룰 매칭, `goax_doc_id`/`goax_doc_key`/`goax_doc_sort` spec·ADR ID, `goax_runtime_seed`/`goax_runtime_template` 런타임 상태 파일이 없으면(새 워크트리·클론) 설치본 템플릿으로 만들기) | (sourced by all) |
 | `detect-model.sh` | 지금 돌고 있는 모델 식별 — override → `$GOAX_MODEL` → transcript 스캔 → unknown | (진단·로깅용) |
+| `agent-model.sh` | goax 서브에이전트를 띄울 때 넘길 `model` — `config.yml` 의 `agent_models` 를 읽어 값이 있으면 그 모델, 없으면 null(넘기지 않음 → 에이전트 정의 기본값). 모를 값(`inherit` 포함)·모를 이름·한 줄 `{…}` 형식은 경고 후 무시 | `spec-validate`, `spec-implement`, `screen` |
 | `next-spec-num.sh` | 새 spec/ADR ID 발급 — `YYYY-MM-DD-<4hex>` (`--kind spec\|adr`, `--reserve --slug` 로 실물까지 O_EXCL 생성). 순번이 아니라 브랜치끼리 안 겹쳐요. `--check-duplicates` 는 옛 순번(`NNN`/`NNNN`) 중복 진단 | `spec`, `adr`, `doctor` |
 | `tier-from-state.sh` | current-task.json + config.yml → tier 결정 + evaluator 필수 여부 + spec_review 필수 여부(Size 축만) (`--reset` 는 `reset-task.sh` 경유) | `spec`, `tasks-gate.sh`, `spec-review.sh`, `update-state.sh` |
 | `update-task.sh` | `current-task.json` 의 task 필드를 **락 안에서 in-place** 갱신 — 작업별 원본은 `.ax/tasks/<task_id>.json` (`--task <id>` 면 그 작업만 · 지금 작업이 아니면 current-task.json 은 그대로 · `--activate` 로 지금 작업 전환 · `--start --follow-up <spec>` 로 끝난 spec 의 후속 작업을 spec_* 이어받아 열기) — `--phase <p>` · `--set task_id\|description\|size\|risk\|domain\|spec_id\|spec_dir\|spec_tier\|friction\|plan_doc=<v>` (`plan_doc` = 외부 계획 문서 경로 — spec 의 "원 계획") · `--blocked-by '<json>'` · `--merge-intent '<json>'` · `--start`. enum(size·risk·spec_tier·phase) 검증 실패면 아무것도 안 씀. SKILL.md 의 인라인 jq 를 대체 — 인라인은 무락이라 `handoff` 를 잃어요 | `triage`, `spec`, `spec-validate`, `spec-tasks`, `spec-implement` |
@@ -59,7 +60,7 @@
 
 - shebang: `#!/usr/bin/env bash`
 - `set -euo pipefail`
-- 옵션: `--json` (기계 출력), `--dry-run` (해당 시), `--help/-h` — `--help` 는 `goax_help "${BASH_SOURCE[0]}"` 로 헤더 주석 블록을 그대로 찍어요 (줄 번호 `sed -n '2,NNp'` 금지 — 헤더가 자라면 `Exit:` 계약이 잘려요, smoke 가 잡아요)
+- 옵션: `--json` (기계 출력), `--dry-run` (쓰는 스크립트는 무엇을 바꿀지만 보여주고, 읽기 전용은 no-op 으로 받아요), `--help/-h` — `--help` 는 `goax_help "${BASH_SOURCE[0]}"` 로 헤더 주석 블록을 그대로 찍어요 (줄 번호 `sed -n '2,NNp'` 금지 — 헤더가 자라면 `Exit:` 계약이 잘려요, smoke 가 잡아요)
 - stderr: `[goax]` prefix 로그·경고
 - stdout: `--json` 시 JSON, 아니면 사용자 친화 텍스트
 - exit code: `0` ok(경고 있어도 ok), `1` error(`--strict` 위반 포함), `2` skipped (대상 없음 · graceful degradation)
@@ -98,8 +99,10 @@
 `lanes-hotfiles.sh`, `mark-task.sh`(`--next` 전부 의존에 막힘), `rules-index.sh`, `spec-review.sh`, `spirit-lint.sh`, `status-note.sh`,
 `tasks-gate.sh`, `tasks-plan.sh`, `zero-ablation.sh`.
 
-예외: `update-state.sh --json` 은 이 envelope 을 따르지 않아요 — 호출자가 `.status`/`.result` 를
-파싱하지 않고 그냥 실행만 하는 fire-and-forget 스크립트라서예요 (모든 SKILL.md 가 `>/dev/null 2>&1 || true` 로 호출).
+`--json` 의 stdout 은 **이 envelope 한 줄뿐**이에요 — 오류여도 같아요 (`goax_error` 가 `JSON_MODE=true` 거나 인자에 `--json` 이 있으면 envelope 으로
+찍어요 — 파서가 `--json` 에 닿기 전의 오류도요). 사람용 로그는 stderr 로. 라벨 같은 값엔 줄바꿈을 넣지 않아요(줄 배열로) — 보고에 그대로 붙이는 내용 필드
+(`zero-verify.sh` 의 `evidence`)만 예외예요. smoke 가 설치본에서 모든 스크립트를 `--json --dry-run` 으로 돌려 한 줄 ·
+유효한 JSON · 줄바꿈 든 문자열 없음 · 설치본 파일 불변을 확인해요.
 
 LLM(SKILL.md)이 이 JSON을 받아 사용자에게 ✓ 메시지 출력. 결정론 부분(번호, 경로, sha)은 LLM이 재해석하지 않음 — script가 SSOT.
 

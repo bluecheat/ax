@@ -10,6 +10,7 @@
 #
 #   # 2단계 (LLM 이 spirit/rules 룰 본문 작성한 후) — archive 로 이동
 #   bash promote-mistake.sh --archive --token AX:CRITICAL:003 [--json]
+#   --dry-run 은 --apply · --archive 가 무엇을 바꿀지만 보여주고 파일은 그대로 둬요
 #
 # 후보 모드: 카테고리당 N건 이상 mistake → 룰 승격 후보 출력
 # 적용 모드: mistake 에 promoted_to 마킹만. 룰 본문은 LLM 이 .ax/spirit/rules/<category>.md 에
@@ -24,6 +25,7 @@ SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 JSON_MODE=false
+DRY_RUN=false
 SHOW_HELP=false
 APPLY=false
 ARCHIVE=false
@@ -35,6 +37,7 @@ CATEGORY=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --json)      JSON_MODE=true ;;
+        --dry-run)   DRY_RUN=true ;;
         --help|-h)   SHOW_HELP=true ;;
         --apply)     APPLY=true ;;
         --archive)   ARCHIVE=true ;;
@@ -95,10 +98,12 @@ if [ "$APPLY" = true ]; then
         fi
         if grep -q "^category: $CATEGORY" "$f" 2>/dev/null; then
             # frontmatter 안에 promoted_to 추가 (--- 사이)
-            awk -v t="$TOKEN" '
-                /^---$/ { c++; if (c==2) print "promoted_to: " t; print; next }
-                { print }
-            ' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+            if [ "$DRY_RUN" != true ]; then
+                awk -v t="$TOKEN" '
+                    /^---$/ { c++; if (c==2) print "promoted_to: " t; print; next }
+                    { print }
+                ' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+            fi
             MARKED+=("$(basename "$f")")
         fi
     done < <(find "$MIST_DIR" -maxdepth 1 -name "*.md" ! -name "README.md")
@@ -106,8 +111,8 @@ if [ "$APPLY" = true ]; then
     if [ "$JSON_MODE" = true ]; then
         marked_json="[$(printf '"%s",' "${MARKED[@]:-}" | sed 's/,$//')]"
         [ "${#MARKED[@]}" -eq 0 ] && marked_json="[]"
-        RESULT=$(printf '{"token":"%s","category":"%s","marked_count":%s,"marked":%s}' \
-                        "$TOKEN" "$CATEGORY" "${#MARKED[@]}" "$marked_json")
+        RESULT=$(printf '{"token":"%s","category":"%s","marked_count":%s,"marked":%s,"dry_run":%s}' \
+                        "$TOKEN" "$CATEGORY" "${#MARKED[@]}" "$marked_json" "$DRY_RUN")
         json_output "ok" "$RESULT" "MANDATORY 2 steps remain: (1) Edit .ax/spirit/rules/<project>-${CATEGORY}.md — add ${TOKEN} with frontmatter paths/severity/enforced_by (new file or append); grep 으로 잡히는 룰이면 룰 아래 <!-- 검출 패턴: <ERE> --> 한 줄 (critical-rule-grep.sh 가 실제로 돌려요 — zero-probe.sh --only pattern-rules 로 검증). (2) bash .ax/scripts/bash/promote-mistake.sh --archive --token ${TOKEN} — moves marked mistakes to _archive/YYYY/MM/. Skill must NOT report success until both done — mistake 가 .ax/mistakes/ root 에 promoted_to 마킹된 채 남아 있으면 미완료."
     else
         goax_log "✓ marked ${#MARKED[@]} mistake(s) with promoted_to=$TOKEN — MANDATORY: (1) edit spirit/rules/<project>-${CATEGORY}.md add ${TOKEN}, (2) run --archive --token ${TOKEN}"
@@ -132,12 +137,12 @@ if [ "$ARCHIVE" = true ]; then
     YEAR=$(date +%Y)
     MONTH=$(date +%m)
     ARCHIVE_DIR="$MIST_DIR/_archive/$YEAR/$MONTH"
-    mkdir -p "$ARCHIVE_DIR"
+    [ "$DRY_RUN" = true ] || mkdir -p "$ARCHIVE_DIR"
 
     MOVED=()
     while IFS= read -r f; do
         if grep -qE "^promoted_to: ${TOKEN}([[:space:]]|$)" "$f" 2>/dev/null; then
-            mv "$f" "$ARCHIVE_DIR/"
+            [ "$DRY_RUN" = true ] || mv "$f" "$ARCHIVE_DIR/"
             MOVED+=("$(basename "$f")")
         fi
     done < <(find "$MIST_DIR" -maxdepth 1 -name "*.md" ! -name "README.md")
@@ -146,8 +151,8 @@ if [ "$ARCHIVE" = true ]; then
         moved_json="[$(printf '"%s",' "${MOVED[@]:-}" | sed 's/,$//')]"
         [ "${#MOVED[@]}" -eq 0 ] && moved_json="[]"
         REL_ARCHIVE="${ARCHIVE_DIR#$PROJECT_ROOT/}"
-        RESULT=$(printf '{"token":"%s","archived_count":%s,"archived":%s,"archive_dir":"%s"}' \
-                        "$TOKEN" "${#MOVED[@]}" "$moved_json" "$REL_ARCHIVE")
+        RESULT=$(printf '{"token":"%s","archived_count":%s,"archived":%s,"archive_dir":"%s","dry_run":%s}' \
+                        "$TOKEN" "${#MOVED[@]}" "$moved_json" "$REL_ARCHIVE" "$DRY_RUN")
         json_output "ok" "$RESULT" "archived ${#MOVED[@]} mistake(s) to ${REL_ARCHIVE} — audit candidate 검색에서 자동 제외"
     else
         goax_log "✓ archived ${#MOVED[@]} mistake(s) → ${ARCHIVE_DIR#$PROJECT_ROOT/}"

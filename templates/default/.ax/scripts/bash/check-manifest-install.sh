@@ -49,6 +49,7 @@ PLUGIN_DIR=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --json)        JSON_MODE=true ;;
+        --dry-run) : ;;                 # 읽기 전용이라 no-op (인터페이스 통일)
         --help|-h)     SHOW_HELP=true ;;
         --plugin-dir)  shift; PLUGIN_DIR="${1:-}" ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;

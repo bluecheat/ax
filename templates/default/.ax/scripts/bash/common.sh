@@ -101,13 +101,19 @@ EXIT_OK=0
 EXIT_ERROR=1
 EXIT_SKIPPED=2
 
+# 부른 스크립트의 인자에 --json 이 있었는지 — source 는 호출자의 "$@" 를 그대로 보여줘요.
+# 파서가 --json 에 닿기 전에 오류가 나도(`--bogus --json`) envelope 으로 답하려고요 (smoke §68).
+GOAX_ARGV_JSON=false
+for _goax_a in "$@"; do [ "$_goax_a" = --json ] && GOAX_ARGV_JSON=true; done
+unset _goax_a
+
 # Logging — stderr only ([goax] prefix)
-# JSON_MODE=true 면 goax_error 는 stdout 에 json_output error 한 줄을 emit.
+# JSON_MODE=true (또는 인자에 --json) 면 goax_error 는 stdout 에 json_output error 한 줄을 emit.
 # caller 의 exit 흐름은 보존 (이 함수는 exit 안 함). exit 까지 묶고 싶으면 'json_error'.
 goax_log()   { printf '[goax] %s\n' "$*" >&2; }
 goax_warn()  { printf '[goax] WARN: %s\n' "$*" >&2; }
 goax_error() {
-    if [ "${JSON_MODE:-false}" = "true" ]; then
+    if [ "${JSON_MODE:-false}" = "true" ] || [ "${GOAX_ARGV_JSON:-false}" = "true" ]; then
         local errs
         errs=$(_goax_json_array "$*")
         json_output "error" "{}" "" "[]" "$errs"

@@ -3,7 +3,7 @@
 #
 # Usage:
 #   bash tier-from-state.sh [--json] [--size S|M|L|XL] [--risk L0|L1|L2|L3] [--help]
-#   bash tier-from-state.sh --reset [--task <id>] [--json]   # 작업을 끝내요 — 그 작업의 .ax/tasks/<id>.json 을 지우고,
+#   bash tier-from-state.sh --reset [--task <id>] [--json] [--dry-run]   # 작업을 끝내요 — 그 작업의 .ax/tasks/<id>.json 을 지우고,
 #                                                            # 지금 작업이면 current-task.json 도 idle 로 (handoff 는 남겨요).
 #                                                            # --task 가 지금 작업이 아니면 current-task.json 은 그대로예요
 #
@@ -35,6 +35,7 @@ SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 JSON_MODE=false
+DRY_RUN=false
 SHOW_HELP=false
 SIZE_ARG=""
 RISK_ARG=""
@@ -45,6 +46,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --json)    JSON_MODE=true ;;
         --reset)   RESET=true ;;
+        --dry-run) DRY_RUN=true ;;   # 판정만 하는 기본 모드엔 no-op, --reset 이면 무엇을 지울지만 보여줘요
         --task)    # 다음 토큰이 옵션(--json 등)이면 삼키지 않아요 — 삼키면 오류가 JSON 봉투 없이 나가요
                    if [ $# -lt 2 ] || [ "${2#--}" != "$2" ] || [ -z "${2:-}" ]; then goax_error "--task 의 값이 비었어요 — 작업 id 를 줘요"; exit "$EXIT_ERROR"; fi
                    shift; TASK_OPT="$1" ;;
@@ -78,6 +80,26 @@ if [ "$RESET" = true ]; then
     if ! command -v jq >/dev/null 2>&1; then
         if [ "$JSON_MODE" = true ]; then json_skip "jq 가 필요해요 — current-task.json 은 JSON 이에요"; fi
         goax_warn "jq 가 없어 skip"; exit "$EXIT_SKIPPED"
+    fi
+    # --dry-run — 락도 seed 도 없이 무엇을 끝낼지만 알려줘요 (파일이 없으면 템플릿으로 따져요)
+    if [ "$DRY_RUN" = true ]; then
+        SRC="$TASK_FILE"; [ -f "$SRC" ] || SRC=$(goax_runtime_template "$TASK_FILE")
+        ACTIVE=$(jq -r '.task_id // empty' "$SRC" 2>/dev/null || true)
+        TARGET="${TASK_OPT:-$ACTIVE}"; DEL=""
+        if [ -n "$TARGET" ]; then TF=$(goax_task_path "$PROJECT_ROOT" "$TARGET"); [ -f "$TF" ] && DEL="${TF#"$PROJECT_ROOT"/}"; fi
+        if [ -n "$TASK_OPT" ] && [ "$TARGET" != "$ACTIVE" ] && [ -z "$DEL" ]; then
+            MSG="작업 ${TARGET} 이 없어요 — 진행 중 작업은 session-brief.sh 가 보여줘요"
+            if [ "$JSON_MODE" = true ]; then json_error "$MSG"; fi
+            goax_error "$MSG"; exit "$EXIT_ERROR"
+        fi
+        if [ "$JSON_MODE" = true ]; then
+            json_output "ok" "$(jq -nc --arg t "$TARGET" --arg a "$ACTIVE" --arg d "$DEL" \
+                '{reset:false, dry_run:true, task_id:(if $t=="" then null else $t end), active:($t==$a), would_delete:(if $d=="" then null else $d end)}')" \
+                "--dry-run 없이 다시 돌리면 끝내요"
+        else
+            echo "[goax] dry-run — 작업 ${TARGET:-없음} 을 끝낼 거예요${DEL:+ (지울 파일: $DEL)}"
+        fi
+        exit "$EXIT_OK"
     fi
     # status-note.sh · update-task.sh 와 같은 파일을 써요 — 락 단위는 파일이라 락 경로 문자열도 같아야 해요
     LOCK="$(goax_normalize_path "$PROJECT_ROOT/.ax/current-task.json" "$PROJECT_ROOT").lock"
