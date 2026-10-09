@@ -17,12 +17,14 @@
 #   bash .ax/scripts/bash/update-state.sh                     # in-place update (기본)
 #   bash .ax/scripts/bash/update-state.sh --skill <name>      # + last_skill=<name> · skill_calls+=1 (skill 마무리)
 #   bash .ax/scripts/bash/update-state.sh --skill mistake --last-mistake <file>   # + last_mistake_file
-#   bash .ax/scripts/bash/update-state.sh --json              # stdout JSON only (state.json은 안 건드림)
-#   bash .ax/scripts/bash/update-state.sh --dry               # 계산 결과 미리보기 (stderr)
+#   bash .ax/scripts/bash/update-state.sh --json              # 계산 결과를 envelope 한 줄로 (state.json 은 안 건드림)
+#   bash .ax/scripts/bash/update-state.sh --dry-run           # 계산 결과 미리보기 (stderr) — --dry 도 같아요
 #   bash .ax/scripts/bash/update-state.sh --help              # 사용법만 출력, 부작용 없음
 #
 # state.json 이 없으면(새 워크트리·클론 — gitignore 대상) .ax/hud/state.json.template 로 만들고 진행해요.
-# 템플릿까지 없으면 그때만 "installer 먼저" 로 exit 1.
+# 템플릿까지 없으면 그때만 "installer 먼저" 로 exit 1. --json · --dry-run 은 파일을 만들지 않고 템플릿으로 계산해요.
+#
+# Output (--json): {"status":"ok","result":{"state":{…계산된 state.json…},"written":false},…} 한 줄
 #
 # 의존: jq (필수), grep, find, awk, common.sh
 # 프로젝트 루트: $GOAX_PROJECT_DIR > $CLAUDE_PROJECT_DIR > ancestor 탐색 (common.sh find_project_root)
@@ -38,7 +40,9 @@ MODE="update"; SKILL=""; LAST_MISTAKE=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --help|-h) goax_help "${BASH_SOURCE[0]}"; exit "$EXIT_OK" ;;
-        update|--json|--dry) MODE="$1" ;;
+        --json)          MODE=--json; JSON_MODE=true ;;
+        --dry|--dry-run) [ "$MODE" = --json ] || MODE=--dry ;;
+        update)          MODE=update ;;
         --skill)
             shift
             # skill 이름 — 비었거나 공백·따옴표가 있으면 오타예요. 다음 토큰이 옵션(--…)이면 값이 빠진 거예요.
@@ -49,7 +53,7 @@ while [ $# -gt 0 ]; do
             case "${1:-}" in ''|--*) goax_error "--last-mistake <file> 이 필요해요"; exit "$EXIT_ERROR" ;; esac
             LAST_MISTAKE="$1" ;;
         *)
-            # 알 수 없는 옵션 — 호출자가 --json 을 안 줬으니 stderr 사람용 에러 (다른 스크립트와 동일)
+            # 알 수 없는 옵션 — --json 이면 goax_error 가 envelope 한 줄로, 아니면 stderr 로
             goax_error "unknown option: $1 (사용법: --help)"
             exit "$EXIT_ERROR"
             ;;
@@ -60,6 +64,7 @@ done
 # WS 검출 — GOAX_PROJECT_DIR > CLAUDE_PROJECT_DIR > ancestor 탐색
 WS=$(find_project_root) || exit "$EXIT_ERROR"
 S="$WS/.ax/state.json"
+SRC="$S"   # 계산의 바탕 — 출력 전용 모드에서 파일이 없으면 템플릿
 # --json/--dry 는 파일을 안 써요 (다른 스크립트의 --json 과 달리 "출력만" 모드) — --skill 을 같이 주면 조용히 안 찍히는 함정
 if [ "$MODE" != update ] && { [ -n "$SKILL" ] || [ -n "$LAST_MISTAKE" ]; }; then
     goax_warn "$MODE 는 state.json 을 안 써요 — --skill/--last-mistake 가 기록되지 않아요 (쓰려면 $MODE 를 빼요)"
@@ -69,8 +74,11 @@ command -v jq >/dev/null || { goax_error "jq 필요 (brew install jq)"; exit 1; 
 # state.json 은 런타임 파일이라 gitignore 대상이에요 — 새 워크트리·클론엔 없어요. 그때마다 installer 를
 # 다시 돌리라고 하면 skill 들의 `update-state.sh … || true` 가 조용히 삼켜서 HUD 가 영영 죽은 채로 남아요.
 # 템플릿이 있으면 그걸로 seed 하고 진행해요 (installer 의 MANIFEST `->` seed 와 같은 원본 — goax_runtime_seed).
-if [ ! -f "$S" ]; then
-    if [ "$MODE" != update ] || ! goax_runtime_seed "$S"; then
+if [ ! -f "$S" ] && [ "$MODE" != update ]; then
+    SRC=$(goax_runtime_template "$S")
+    [ -f "$SRC" ] || { goax_error "state.json 없음 ($S) — 템플릿(.ax/hud/state.json.template)도 없으면 /up 으로 설치본을 맞춰요"; exit 1; }
+elif [ ! -f "$S" ]; then
+    if ! goax_runtime_seed "$S"; then
         goax_error "state.json 없음 ($S) — 템플릿(.ax/hud/state.json.template)도 없으면 /up 으로 설치본을 맞춰요"
         exit 1
     fi
@@ -273,7 +281,11 @@ JQ_ARGS=(
 
 case "$MODE" in
     --json)
-        jq "${JQ_ARGS[@]}" "$JQ_FILTER" "$S"
+        if ST=$(jq -c "${JQ_ARGS[@]}" "$JQ_FILTER" "$SRC" 2>/dev/null); then
+            json_output "ok" "{\"state\":$ST,\"written\":false}" "쓰려면 --json 없이 다시 돌려요"
+        else
+            goax_error "jq 계산 실패 — $SRC"; exit 1
+        fi
         ;;
     --dry)
         goax_log "update-state dry-run:"

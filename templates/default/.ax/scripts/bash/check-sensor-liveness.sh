@@ -43,6 +43,7 @@ SHOW_HELP=false
 while [ $# -gt 0 ]; do
     case "$1" in
         --json)    JSON_MODE=true ;;
+        --dry-run) : ;;                 # 읽기 전용이라 no-op (인터페이스 통일)
         --strict)  STRICT=true ;;
         --help|-h) SHOW_HELP=true ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;

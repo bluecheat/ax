@@ -51,6 +51,7 @@ while [ $# -gt 0 ]; do
         --dir)     shift; PROBE_DIR="${1:-}" ;;
         --only)    shift; ONLY="${1:-}" ;;
         --list)    LIST_ONLY=true ;;
+        --dry-run) LIST_ONLY=true ;;   # 프로브는 프로젝트 코드를 돌려요 — dry-run 은 무엇을 돌릴지 목록만
         --help|-h) SHOW_HELP=true ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;
     esac

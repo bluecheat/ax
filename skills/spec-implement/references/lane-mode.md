@@ -58,6 +58,7 @@ bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --dispatch A --json      
 `Agent` 도구(또는 팀원)로 `goax:lane-worker` 를 띄워요 (vendor 설치면 `lane-worker`). 이름은 **`lane-<레인>`**
 (조사 레인은 `scout-<주제>`) 로 줘요 — §3.5 정리가 이 접두사로 거르기만 하면 되게요. 준비된 레인이
 여럿이면 **한 메시지에 같이** 띄워요 — 하나 띄우고 기다렸다 다음을 띄우는 건 병렬이 아니에요.
+**모델** — 띄우기 전에 `bash .ax/scripts/bash/agent-model.sh lane-worker lane-scout --json` 을 돌려 `result.models.<이름>` 이 null 이 아니면 그 값을 Agent 호출의 `model` 로 넘겨요. null 이면 넘기지 않아요 (에이전트 정의의 기본값 — 팀은 `.ax/config.yml` 의 `agent_models` 로 바꿔요).
 
 **격리** — 기본은 공유 워킹 트리예요. 파일 소유권이 물리적 충돌을 막고, 원장이 소유 겹침을
 거부해요. worktree 로 갈라야 하는 건 레인이 *같은 파일을 다른 방향으로* 바꿔야 할 때뿐이고,

@@ -104,6 +104,7 @@ DELTA=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --delta --json \
      "첫 줄 `verdict:` 둘째 줄 `sha: $SHA`" · **재리뷰면 `$DELTA` 경로와 "바뀐 곳만 보세요"**
    - architect 에는 **출력 파일 `$A_FILE`** 만, evaluator 에는 **출력 파일 `$E_FILE`** 만. 상대 파일은
      넣지 않아요. 이 대화도 넣지 않아요.
+   - **모델** — 띄우기 전에 `bash .ax/scripts/bash/agent-model.sh architect evaluator --json` 을 돌려 `result.models.<이름>` 이 null 이 아니면 그 값을 Agent 호출의 `model` 로 넘겨요. null 이면 넘기지 않아요 (에이전트 정의의 기본값 — 팀은 `.ax/config.yml` 의 `agent_models` 로 바꿔요).
    - **검증 예산**: spec 단계 리뷰어는 grep·read 로만 봐요. 빌드·테스트를 돌리지 않아요 — 그건 구현
      리뷰(`tasks-gate.sh` G6)가 맡고, 여기서 돌리면 리뷰 한 번이 구현 한 번만큼 비싸져요.
 2. 검토 범위가 달라요 — 같은 걸 두 번 지적받지 않게 각 agent 의 "하지 않는 것" 절로 나눠 뒀어요:

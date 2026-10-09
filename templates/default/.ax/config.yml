@@ -13,6 +13,18 @@
 model_tier: frontier
 
 # ───────────────────────────────────────────────────────────
+# 에이전트 모델 — goax 서브에이전트(architect · evaluator · lane-scout · lane-worker · rules-auditor ·
+# screen-designer)를 띄울 때 넘길 model. 적지 않은 에이전트는 정의(agents/*.md)의 기본값을 써요:
+#   architect opus · evaluator / lane-scout / lane-worker / rules-auditor sonnet · screen-designer 부모 세션 모델
+# 값: opus | sonnet | haiku | fable. 부모 세션 모델을 그대로 쓰는 값은 없어요 — 적지 않으면 위 기본값이에요.
+# skill 이 띄우기 전에 agent-model.sh 로 읽어요.
+# ───────────────────────────────────────────────────────────
+agent_models:
+  # architect: opus
+  # evaluator: sonnet
+  # lane-worker: sonnet
+
+# ───────────────────────────────────────────────────────────
 # 도메인 위험도 매트릭스 — /triage 가 키워드로 매칭
 # 키: 영문(kebab-case) 도메인 이름. 값: L0|L1|L2|L3
 #

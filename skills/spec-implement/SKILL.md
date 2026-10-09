@@ -352,7 +352,7 @@ phase 가 `implementing`/`review` 인데 `tasks-gate.sh` 가 아직 실패면, �
 
 `Agent` 도구로 `goax:evaluator` 를 띄워요 (vendor 설치면 `evaluator`). **이 대화를 넘기지
 않아요.** 구현 과정을 본 컨텍스트는 자기가 내린 결정의 근거를 이미 "맞다" 고 판단한 상태라
-같은 맹점을 그대로 가지고 검토해요. 브리프에 넣는 건 이 넷뿐이에요:
+같은 맹점을 그대로 가지고 검토해요. **모델** — 띄우기 전에 `bash .ax/scripts/bash/agent-model.sh evaluator rules-auditor --json` 을 돌려 `result.models.<이름>` 이 null 이 아니면 그 값을 Agent 호출의 `model` 로 넘겨요. null 이면 넘기지 않아요 (에이전트 정의의 기본값 — 팀은 `.ax/config.yml` 의 `agent_models` 로 바꿔요). 브리프에 넣는 건 이 넷뿐이에요:
 
 - spec — `$SPEC_DIR/spec.md`
 - ADR — spec.md §7.5 의 진입 ADR 경로들

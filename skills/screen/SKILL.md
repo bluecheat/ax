@@ -264,6 +264,7 @@ MCP 는 설정에 등록된 이름만 보여요 — 자기 도구 목록에 `mcp
 리뷰만 하고 끝나는 경우(정적 스크린샷 한 장 · 코드도 실행 환경도 없음)는 이 skill 이 §12 형식으로
 직접 리포트해요. **코드를 만들거나 고치거나, 돌아가는 화면을 재야 하면** `Agent` 도구로
 `goax:screen-designer` 를 띄워요 (vendor 설치면 `screen-designer`). **이 대화를 넘기지 않아요.**
+**모델** — 띄우기 전에 `bash .ax/scripts/bash/agent-model.sh screen-designer --json` 을 돌려 `result.models.<이름>` 이 null 이 아니면 그 값을 Agent 호출의 `model` 로 넘겨요. null 이면 넘기지 않아요 (에이전트 정의의 기본값 — 팀은 `.ax/config.yml` 의 `agent_models` 로 바꿔요).
 브리프에 넣는 건 이것뿐이에요:
 
 - **요청 한 줄** — 사용자가 원한 것 그대로
