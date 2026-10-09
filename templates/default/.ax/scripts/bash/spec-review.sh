@@ -313,7 +313,7 @@ case "$MODE" in
               reused:$reused, replaced:$replaced, stage_reset:$sreset,
               round_exceeded:$over, dry_run:$dry, spec_file:$s,
               architect_file:$a, evaluator_file:$e, note:(if $note=="" then null else $note end),
-              header:("verdict: 진행 | 보강 필요 | 재논의 필요\nsha: " + $sha)}')
+              header:["verdict: 진행 | 보강 필요 | 재논의 필요", ("sha: " + $sha)]}')
         NEXT="architect 와 evaluator 를 한 메시지에 같이 띄우세요 — 각자 자기 파일에만 쓰고, 상대 파일은 브리프에 넣지 않아요. 재리뷰면 --delta 를 브리프에 붙여요"
         if [ "$OVER" = true ]; then
             json_output "warning" "$RESULT" "$WARN_MSG" "$WARN"

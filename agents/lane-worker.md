@@ -1,6 +1,7 @@
 ---
 name: lane-worker
 description: "실행 레인 sub-agent — tasks.md 를 파일 소유권으로 갈랐을 때 한 레인을 맡아 코드를 고쳐요. 소유 파일 목록 밖은 건드리지 않고, 커밋하지 않고, 주장엔 명령과 출력을 인용해요. 트리거: '실행 레인', 'lane worker', '이 파일들 맡아서', '레인 A 진행'."
+model: sonnet
 ---
 
 # lane-worker — 실행 레인 sub-agent

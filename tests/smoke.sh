@@ -136,10 +136,12 @@ while IFS= read -r f; do
     agent="$(basename "$f" .md)"
     has_name=$(head -5 "$f" | grep -cE "^name: $agent\$" || true)
     has_desc=$(head -10 "$f" | grep -cE "^description:" || true)
-    if [ "$has_name" -ge 1 ] && [ "$has_desc" -ge 1 ]; then
-        pass "agents/$agent.md (frontmatter name+description OK)"
+    # model 이 없으면 부모 세션 모델을 상속해요 — 상위 모델 세션에선 리뷰어 라운드마다 그 모델로 돌아요 (#44)
+    has_model=$(awk 'NR==1{next} /^---/{exit} /^model: (opus|sonnet|haiku|fable|inherit)$/{n++} END{print n+0}' "$f")
+    if [ "$has_name" -ge 1 ] && [ "$has_desc" -ge 1 ] && [ "$has_model" -ge 1 ]; then
+        pass "agents/$agent.md (frontmatter name+description+model OK)"
     else
-        fail "agents/$agent.md frontmatter 누락 (name=$has_name, description=$has_desc)"
+        fail "agents/$agent.md frontmatter 누락 (name=$has_name, description=$has_desc, model=$has_model)"
     fi
 done < <(find "$REPO/agents" -name "*.md" | sort)
 [ "$agent_fm_count" -gt 0 ] || fail "agents/*.md 0개 — agents/ 구조 확인 필요"
@@ -2393,22 +2395,24 @@ grep -qE 'update-task\.sh .*--phase implementing' "$REPO/skills/spec-implement/S
 grep -q 'hud' "$REPO/templates/default/.ax/hud/state.json.template" && grep -q 'hud.plugin_version' "$REPO/docs/state-ownership.md" \
     && pass "state.json hud 캐시 — template · ownership 문서 동기화" || fail "state.json hud 캐시 3-way 동기화 누락"
 # state.json 은 gitignore 라 새 워크트리엔 없어요 — "installer 먼저" 로 죽으면 skill 의 `|| true` 가 삼켜 HUD 가 영영 죽어요.
-# 템플릿이 있으면 그걸로 만들고 진행해요. 템플릿도 없으면 그때만 exit 1.
+# 설치본에 같이 들어간 템플릿으로 만들고 진행해요. 템플릿도 없으면(옛 설치본) 그때만 exit 1.
+# fixture 는 provision.sh 로 깐 실제 설치본이에요 — 예전엔 템플릿을 손으로 .ax/hud/ 에 넣어 통과했는데,
+# MANIFEST 가 그 템플릿을 설치하지 않아서 실사용에선 이 경로가 한 번도 돌지 않았어요.
 if command -v jq >/dev/null 2>&1; then
-    US=$(mktemp -d); mkdir -p "$US/.ax/scripts/bash" "$US/.ax/hud"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,update-state}.sh "$US/.ax/scripts/bash/"
-    GOAX_PROJECT_DIR="$US" bash "$US/.ax/scripts/bash/update-state.sh" --skill triage >/dev/null 2>&1; us_rc=$?
-    [ "$us_rc" -eq 1 ] && [ ! -f "$US/.ax/state.json" ] \
-        && pass "update-state — state.json 도 템플릿도 없으면 exit 1 (파일 안 만듦)" || fail "update-state — 템플릿 없이 state.json 을 만들거나 exit=$us_rc"
-    cp "$REPO/templates/default/.ax/hud/state.json.template" "$US/.ax/hud/"
+    US=$(mktemp -d)
+    bash "$REPO/scripts/provision.sh" --target "$US" --json >/dev/null 2>&1
+    rm -f "$US/.ax/state.json"
     GOAX_PROJECT_DIR="$US" bash "$US/.ax/scripts/bash/update-state.sh" --skill triage >/dev/null 2>&1; us_rc=$?
     [ "$us_rc" -eq 0 ] && jq -e '.last_skill=="triage" and .skill_calls==1 and .layers.L0_triage.active==true' "$US/.ax/state.json" >/dev/null 2>&1 \
-        && pass "update-state — state.json 없으면 hud/state.json.template 로 만들고 진행 (새 워크트리 자가 복구)" || fail "update-state — 자가 복구 실패 (exit=$us_rc): $(jq -c '{last_skill,skill_calls}' "$US/.ax/state.json" 2>/dev/null)"
-    GOAX_PROJECT_DIR="$US" bash "$US/.ax/scripts/bash/update-state.sh" --json >/dev/null 2>&1
+        && pass "update-state — 설치본에서 state.json 이 없으면 템플릿으로 만들고 진행 (새 워크트리)" || fail "update-state — 설치본 자가 복구 실패 (exit=$us_rc): $(jq -c '{last_skill,skill_calls}' "$US/.ax/state.json" 2>/dev/null)"
     rm -f "$US/.ax/state.json"
     GOAX_PROJECT_DIR="$US" bash "$US/.ax/scripts/bash/update-state.sh" --json >/dev/null 2>&1; us_rc=$?
     [ "$us_rc" -eq 1 ] && [ ! -f "$US/.ax/state.json" ] \
         && pass "update-state --json — 출력 전용 모드는 seed 하지 않음 (exit 1)" || fail "update-state --json — 출력 전용인데 파일을 만듦 (exit=$us_rc)"
+    rm -f "$US/.ax/hud/state.json.template"
+    GOAX_PROJECT_DIR="$US" bash "$US/.ax/scripts/bash/update-state.sh" --skill triage >/dev/null 2>&1; us_rc=$?
+    [ "$us_rc" -eq 1 ] && [ ! -f "$US/.ax/state.json" ] \
+        && pass "update-state — state.json 도 템플릿도 없으면 exit 1 (파일 안 만듦)" || fail "update-state — 템플릿 없이 state.json 을 만들거나 exit=$us_rc"
     rm -rf "$US"
 fi
 
@@ -5227,7 +5231,7 @@ grep -q '시작 전 필수' "$REPO/agents/screen-designer.md" && grep -q '시작
     && pass "screen — 리포트 첫 줄 verdict 계약 · 실측 못 하면 \"실측 아님\" (skill · agent 양쪽)" || fail "screen — verdict 계약 누락"
 { grep -q 'design-caps.sh' "$REPO/skills/screen/SKILL.md" && grep -q 'screen-measure.sh' "$REPO/agents/screen-designer.md"; } \
     && pass "screen — 진입은 design-caps.sh, 실측은 screen-measure.sh (결정론 경계)" || fail "screen — 스크립트 연결 누락"
-! grep -qE '^model:' "$REPO/agents/screen-designer.md" && pass "screen-designer — 모델을 고정하지 않아요" || fail "screen-designer — model: 고정"
+[ "$(grep -E '^model:' "$REPO/agents/screen-designer.md")" = "model: inherit" ] && pass "screen-designer — 모델을 고정하지 않아요 (model: inherit)" || fail "screen-designer — model 이 inherit 가 아니에요"
 
 DC=$(mktemp -d)
 mkdir -p "$DC/.ax/scripts/bash" "$DC/src/theme" "$DC/.storybook"
@@ -5456,6 +5460,72 @@ echo v4 > "$OD/spec.md"; OVS2=$(ov --status | jq -c '[.result.pass, .result.over
     || fail "spec-review --override: 상한전=$OVE 사유없음=$OVN dry=$OVDRY status=$OVS 변경후=$OVS2"
 grep -q -- '--override --reason' "$REPO/skills/spec-validate/SKILL.md" && pass "spec-validate — 상한 절에 --override 사용법" || fail "spec-validate 상한 절에 --override 없음"
 rm -rf "$OV"
+
+section "66. 새 워크트리 — 실제 설치본에서 런타임 상태 파일 없이 흐름이 이어지고, --json 은 zsh echo 로 받아도 깨지지 않아요"
+# ───────────────────────────────────────────────────────────
+# current-task.json · state.json 은 gitignore 대상이라 git worktree 를 새로 뜨면 없어요. 예전엔 쓰는 스크립트가
+# "/up 으로 설치를 마쳐요" 로 거부해 워크트리마다 /up 이 필요했어요 (commerce 워크트리 3곳 실측, 2026-10-09).
+# fixture 는 provision.sh 로 깐 실제 설치본 — 손으로 만든 .ax/ 는 설치본과 달라 이 결함을 못 잡았어요.
+if command -v jq >/dev/null 2>&1; then
+    WT=$(mktemp -d)
+    bash "$REPO/scripts/provision.sh" --target "$WT" --json >/dev/null 2>&1
+    WB="$WT/.ax/scripts/bash"
+    wt_fresh() { rm -f "$WT/.ax/current-task.json" "$WT/.ax/state.json"; }
+    { [ -f "$WT/.ax/current-task.json.template" ] && [ -f "$WT/.ax/hud/state.json.template" ]; } \
+        && pass "설치본 — 런타임 상태 템플릿 두 개가 .ax/ 안에 있어요" || fail "설치본에 current-task.json.template · hud/state.json.template 이 없어요 (MANIFEST)"
+
+    wt_fresh
+    WTO=$(GOAX_PROJECT_DIR="$WT" bash "$WB/update-task.sh" --start --phase triaged --set task_id=t1 --set size=M --json 2>/dev/null | jq -r .status)
+    { [ "$WTO" = ok ] && jq -e '.task_id=="t1" and .phase=="triaged" and (.handoff|type)=="object"' "$WT/.ax/current-task.json" >/dev/null 2>&1 \
+      && [ -f "$WT/.ax/tasks/t1.json" ]; } \
+        && pass "update-task --start — current-task.json 이 없어도 템플릿으로 만들고 작업을 열어요" || fail "update-task --start 새 워크트리 실패: status=$WTO"
+
+    wt_fresh
+    WTO=$(GOAX_PROJECT_DIR="$WT" bash "$WB/status-note.sh" --add next "다음 할 일" --json 2>/dev/null | jq -r .status)
+    { [ "$WTO" = ok ] && jq -e '.handoff.next==["- 다음 할 일"] and .phase=="idle"' "$WT/.ax/current-task.json" >/dev/null 2>&1; } \
+        && pass "status-note --add — 파일이 없으면 템플릿 전체로 만들고 추가해요" || fail "status-note 새 워크트리 실패: status=$WTO"
+
+    wt_fresh
+    WTO=$(GOAX_PROJECT_DIR="$WT" bash "$WB/tier-from-state.sh" --reset --json 2>/dev/null | jq -r .status)
+    { [ "$WTO" = ok ] && jq -e '.phase=="idle"' "$WT/.ax/current-task.json" >/dev/null 2>&1; } \
+        && pass "tier-from-state --reset — 파일이 없어도 idle 로 끝나요" || fail "tier-from-state --reset 새 워크트리 실패: status=$WTO"
+
+    wt_fresh
+    WTO=$(GOAX_PROJECT_DIR="$WT" bash "$WB/update-task.sh" --phase spec --dry-run --json 2>/dev/null | jq -r .status)
+    { [ "$WTO" = ok ] && [ ! -f "$WT/.ax/current-task.json" ]; } \
+        && pass "update-task --dry-run — 파일이 없으면 템플릿으로 따지고 아무것도 안 만들어요" || fail "update-task --dry-run 새 워크트리: status=$WTO · 파일 생김=$([ -f "$WT/.ax/current-task.json" ] && echo yes || echo no)"
+
+    # 동시에 다섯 세션이 처음 쓸 때 — 누가 먼저 만들든 다른 쪽을 덮지 않아요
+    wt_fresh; rm -rf "$WT/.ax/tasks"
+    for n in 1 2 3 4 5; do
+        GOAX_PROJECT_DIR="$WT" bash "$WB/status-note.sh" --add open "질문 $n" --json >/dev/null 2>&1 &
+    done; wait
+    WTN=$(jq -r '.handoff.open | length' "$WT/.ax/current-task.json" 2>/dev/null)
+    [ "$WTN" = 5 ] && pass "동시 첫 쓰기 5개 — 파일 하나, 항목 5개 그대로 (seed 가 서로를 덮지 않아요)" || fail "동시 첫 쓰기 — open 항목 ${WTN:-?}/5"
+
+    wt_fresh; rm -f "$WT/.ax/current-task.json.template"
+    WTE=$(GOAX_PROJECT_DIR="$WT" bash "$WB/update-task.sh" --start --set task_id=t9 --json 2>/dev/null | jq -r '.errors[0] // ""')
+    { [ ! -f "$WT/.ax/current-task.json" ] && printf '%s' "$WTE" | grep -q '/up'; } \
+        && pass "템플릿까지 없는 옛 설치본 — 그때만 /up 을 안내하고 파일을 만들지 않아요" || fail "템플릿 없는 설치본: $WTE"
+
+    # --json 출력은 사용자 셸(zsh)의 echo 로 받아도 jq 가 읽어야 해요 — zsh echo 는 문자열 속 \n 을 진짜 줄바꿈으로 바꿔요
+    wt_fresh
+    SR=$(cd "$WT" && GOAX_PROJECT_DIR="$WT" bash "$WB/next-spec-num.sh" --reserve --slug zsh-echo --json 2>/dev/null | jq -r '.result.next')
+    cp "$WT/.ax/_templates/spec/spec.md" "$WT/.ax/docs/spec/$SR-zsh-echo/spec.md" 2>/dev/null
+    SNAP=$(cd "$WT" && GOAX_PROJECT_DIR="$WT" bash "$WB/spec-review.sh" --spec "$SR" --snapshot --json 2>/dev/null)
+    SNL=$(printf '%s\n' "$SNAP" | jq -r '[.. | strings | select(test("\n"))] | length' 2>/dev/null)
+    [ "$SNL" = 0 ] && pass "spec-review --snapshot — 응답 문자열에 줄바꿈이 없어요 (header 는 줄 배열)" || fail "spec-review --snapshot — 줄바꿈 든 문자열 ${SNL:-?}개"
+    if command -v zsh >/dev/null 2>&1; then
+        ZR=$(SNAP="$SNAP" zsh -c 'echo "$SNAP" | jq -r .result.round' 2>/dev/null)
+        [ "$ZR" = 1 ] && pass "spec-review --snapshot — zsh echo 로 넘겨도 jq 가 읽어요" || fail "spec-review --snapshot — zsh echo 를 거치면 jq 가 못 읽어요 (round=${ZR:-parse error})"
+    fi
+    unset -f wt_fresh
+    rm -rf "$WT"
+fi
+
+# 모델이 따라 쓰는 예시라 zsh 에서 깨지는 모양은 문서에도 두지 않아요 — printf '%s\n' "$X" | jq 로 써요
+ECHO_JQ=$(cd "$REPO" && grep -rnE 'echo "\$[A-Za-z_][A-Za-z_0-9]*" *\| *jq' skills agents commands docs 2>/dev/null | head -5)
+[ -z "$ECHO_JQ" ] && pass "skills·agents·commands·docs — echo \"\$X\" | jq 없음 (zsh 에서 \\n 이 풀려요)" || fail "echo \"\$X\" | jq 가 남아 있어요: $ECHO_JQ"
 
 section "✨ 결과"
 # ───────────────────────────────────────────────────────────

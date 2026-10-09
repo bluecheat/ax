@@ -1,6 +1,7 @@
 ---
 name: lane-scout
 description: "조사 레인 sub-agent — 한 라운드를 역할/도메인으로 갈랐을 때 한 갈래를 맡아요. 레퍼런스 분석·코드 인벤토리·갭 감사·후보 탐색처럼 **읽기만 하는** 조사에 씁니다. 편집·커밋하지 않아요. 트리거: '조사 레인', '전수조사', 'lane scout', '인벤토리 뽑아줘'."
+model: sonnet
 disallowedTools: Write, Edit, NotebookEdit
 ---
 

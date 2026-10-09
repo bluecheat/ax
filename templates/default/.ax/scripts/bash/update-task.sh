@@ -34,8 +34,8 @@
 #   흡수해요. 락 문자열은 셋이 바이트 동일해야 해요 (락 단위는 파일).
 #
 # 갱신은 in-place 예요 — 모르는 키(handoff · 다른 skill 의 필드)는 그대로 둬요. 객체를 통째로 다시
-#   만들지 않아요. 파일이 없으면 exit 1 — 여기서 최소 파일을 만들면 `/up` 의 seed(MANIFEST `->`)가
-#   영영 막혀요.
+#   만들지 않아요. 파일이 없으면(새 워크트리·클론) 락 안에서 설치본 템플릿으로 만들고 이어가요 —
+#   goax_runtime_seed. 템플릿까지 없을 때만 exit 1 이에요.
 #
 # Output (--json):
 #   {"status":"ok","result":{"path":".ax/current-task.json","phase":"<갱신 후>","changed":["phase","updated_at",…],
@@ -136,7 +136,8 @@ fi
 
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
 FILE="$PROJECT_ROOT/.ax/current-task.json"; REL=".ax/current-task.json"
-[ -f "$FILE" ] || fail "$REL 이 없어요 — /up 으로 설치를 마쳐요"
+TPL=$(goax_runtime_template "$FILE")
+[ -f "$FILE" ] || [ -f "$TPL" ] || fail "$REL 도 템플릿(.ax/current-task.json.template)도 없어요 — /up 으로 설치본을 맞춰요"
 
 # --follow-up — 끝난 spec 의 spec_* 를 이어받아요. 디렉토리가 SSOT 예요 (닫힌 작업 파일은 reset 이 지웠어요)
 if [ -n "$FOLLOW" ]; then
@@ -205,7 +206,9 @@ resolve_target() {
 }
 
 if [ "$DRY_RUN" = true ]; then
-    # 락도 파일도 안 건드려요 — 검증만 하고 "무엇이 바뀔지" 를 답해요 (JSON 이 깨졌으면 여기서도 알려요)
+    # 락도 파일도 안 건드려요 — 검증만 하고 "무엇이 바뀔지" 를 답해요 (JSON 이 깨졌으면 여기서도 알려요).
+    # 파일이 아직 없으면 만들어질 내용(템플릿)으로 따져요
+    [ -f "$FILE" ] || FILE="$TPL"
     jq -e . "$FILE" >/dev/null 2>&1 || fail "$REL 을 읽지 못했어요 — JSON 이 깨졌는지 봐요"
     resolve_target || fail "$ERRMSG"
     RES=$(jq -nc --arg p "$REL" --arg ph "$PHASE" --argjson ch "$CHANGED" --arg t "$TARGET" --arg tf "$TASK_REL" \
@@ -220,6 +223,7 @@ fi
 # tier-from-state.sh --reset 과 서로 기다리다 멈추지 않게 해요.
 LOCK="$(goax_normalize_path "$PROJECT_ROOT/.ax/current-task.json" "$PROJECT_ROOT").lock"
 goax_lock "$LOCK" "${GOAX_LOCK_TIMEOUT:-10}" || fail "다른 프로세스가 $REL 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
+goax_runtime_seed "$FILE" || { goax_unlock "$LOCK"; fail "$REL 을 템플릿으로 만들지 못했어요 — .ax/ 쓰기 권한을 봐요"; }
 jq -e . "$FILE" >/dev/null 2>&1 || { goax_unlock "$LOCK"; fail "$REL 을 읽지 못했어요 — JSON 이 깨졌는지 봐요 (원본은 그대로예요)"; }
 resolve_target || { goax_unlock "$LOCK"; fail "$ERRMSG"; }
 ARGS_JQ=(--arg p "$PHASE" --argjson sets "$SETS" --argjson bb "$BLOCKED" --argjson it "$INTENT" --argjson st "$START" --arg ts "$TS")

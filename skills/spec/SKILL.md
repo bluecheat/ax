@@ -49,7 +49,7 @@ add-spec-files.sh --spec <id-slug> --add contracts       # contracts/{api.yaml, 
 
 ```bash
 SLUG_RESULT=$(bash .ax/scripts/bash/slug-from-text.sh --json "payment refund policy change")
-SLUG=$(echo "$SLUG_RESULT" | jq -r '.result.slug')
+SLUG=$(printf '%s\n' "$SLUG_RESULT" | jq -r '.result.slug')
 ```
 
 ### 1.2 중복·관련 자료 확인 — `triage-search.sh` 위임
@@ -62,8 +62,8 @@ ls -d .ax/docs/spec/*-${SLUG} 2>/dev/null
 # 도메인어 2~4개. **한글 그대로 넣으세요** (본문이 한국어면 한글이 제일 잘 맞아요).
 KEYWORDS="환불 정산 refund"
 SEARCH=$(bash .ax/scripts/bash/triage-search.sh --keywords "$KEYWORDS" --json)
-echo "$SEARCH" | jq -r '.result.specs[] | "spec \(.score)\t\(.path)"'
-echo "$SEARCH" | jq -r '.result.adrs[]  | "adr  \(.score)\t\(.path)"'
+printf '%s\n' "$SEARCH" | jq -r '.result.specs[] | "spec \(.score)\t\(.path)"'
+printf '%s\n' "$SEARCH" | jq -r '.result.adrs[]  | "adr  \(.score)\t\(.path)"'
 ```
 
 직접 `grep` 하지 마세요 — 슬러그엔 없고 본문에만 있는 spec 을 놓쳐요.
@@ -80,8 +80,8 @@ spec ID 는 날짜+난수(`YYYY-MM-DD-<4hex>`)라 §3 의 `init-spec-dir.sh` 가
 
 ```bash
 TIER_RESULT=$(bash .ax/scripts/bash/tier-from-state.sh --json)
-TIER=$(echo "$TIER_RESULT" | jq -r '.result.tier')
-REASON=$(echo "$TIER_RESULT" | jq -r '.result.reason')
+TIER=$(printf '%s\n' "$TIER_RESULT" | jq -r '.result.tier')
+REASON=$(printf '%s\n' "$TIER_RESULT" | jq -r '.result.reason')
 ```
 
 사용자가 `--tier` 명시했으면 override:
@@ -122,16 +122,16 @@ RESULT=$(bash .ax/scripts/bash/init-spec-dir.sh \
    --json --tier "$TIER" --slug "$SLUG")
 
 # 검증
-STATUS=$(echo "$RESULT" | jq -r '.status')
+STATUS=$(printf '%s\n' "$RESULT" | jq -r '.status')
 if [ "$STATUS" != "ok" ]; then
- echo "$RESULT" | jq -r '.errors | join("\n")'
+ printf '%s\n' "$RESULT" | jq -r '.errors | join("\n")'
  exit 1
 fi
 
-SPEC_DIR=$(echo "$RESULT" | jq -r '.result.spec_dir')
-SPEC_ID=$(echo "$RESULT" | jq -r '.result.spec_id')
-FILES=$(echo "$RESULT" | jq -r '.result.files | join(", ")')
-NEXT_STEP=$(echo "$RESULT" | jq -r '.next_step')
+SPEC_DIR=$(printf '%s\n' "$RESULT" | jq -r '.result.spec_dir')
+SPEC_ID=$(printf '%s\n' "$RESULT" | jq -r '.result.spec_id')
+FILES=$(printf '%s\n' "$RESULT" | jq -r '.result.files | join(", ")')
+NEXT_STEP=$(printf '%s\n' "$RESULT" | jq -r '.next_step')
 ```
 
 `init-spec-dir.sh`가 알아서:

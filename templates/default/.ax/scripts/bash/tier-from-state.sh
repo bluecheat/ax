@@ -68,11 +68,10 @@ TASK_FILE="$PROJECT_ROOT/.ax/current-task.json"
 # 새 작업이 들어오면 triage가 다시 발동해야 하므로 size/risk/domain 등도 모두 null.
 # 필드를 하나씩 null 로 두는 이유 — 인계 노트(handoff: next·open·renamed)는 task 를 넘어 살아야 해요.
 # 객체를 통째로 다시 만들면 handoff 가 조용히 사라져요.
-# 파일이 없으면 만들지 않아요 — 설치본엔 `.ax/current-task.json.template` 이 없고(MANIFEST `->` 는 템플릿을
-# 옮기지 않아요), 여기서 최소 파일을 만들면 `/up` 의 seed 가 영영 막혀요. update-task.sh · status-note.sh 와 같은 답.
+# 파일이 없으면(새 워크트리·클론) 락 안에서 설치본 템플릿으로 만들어요 — update-task.sh · status-note.sh 와 같은 답.
 if [ "$RESET" = true ]; then
-    if [ ! -f "$TASK_FILE" ]; then
-        MSG=".ax/current-task.json 이 없어요 — /up 으로 설치를 마쳐요"
+    if [ ! -f "$TASK_FILE" ] && [ ! -f "$(goax_runtime_template "$TASK_FILE")" ]; then
+        MSG=".ax/current-task.json 도 템플릿(.ax/current-task.json.template)도 없어요 — /up 으로 설치본을 맞춰요"
         if [ "$JSON_MODE" = true ]; then json_error "$MSG"; fi
         goax_error "$MSG"; exit "$EXIT_ERROR"
     fi
@@ -84,6 +83,11 @@ if [ "$RESET" = true ]; then
     LOCK="$(goax_normalize_path "$PROJECT_ROOT/.ax/current-task.json" "$PROJECT_ROOT").lock"
     if ! goax_lock "$LOCK" "${GOAX_LOCK_TIMEOUT:-10}"; then
         MSG="다른 프로세스가 .ax/current-task.json 을 쓰는 중이에요 — 잠시 뒤 다시 해요"
+        if [ "$JSON_MODE" = true ]; then json_error "$MSG"; fi
+        goax_error "$MSG"; exit "$EXIT_ERROR"
+    fi
+    if ! goax_runtime_seed "$TASK_FILE"; then
+        goax_unlock "$LOCK"; MSG=".ax/current-task.json 을 템플릿으로 만들지 못했어요 — .ax/ 쓰기 권한을 봐요"
         if [ "$JSON_MODE" = true ]; then json_error "$MSG"; fi
         goax_error "$MSG"; exit "$EXIT_ERROR"
     fi

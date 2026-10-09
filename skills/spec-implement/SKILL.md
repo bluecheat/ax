@@ -30,9 +30,9 @@ done
 # 맨 grep 은 템플릿 펜스 안의 예시(`- [ ] T001 [P] [AC2] <한 줄 설명>`)를 집어요 — mark-task.sh --next 는 펜스 밖만 봐요.
 # 의존(`의존:` 줄)이 전부 [x]·[~] 인 첫 미완료 task 를 골라요 — tasks-plan.sh 와 같은 파서예요.
 NEXT_JSON=$(bash .ax/scripts/bash/mark-task.sh --spec "$SPEC" --next --json)
-NEXT_TASK=$(echo "$NEXT_JSON" | jq -r '.result.task // empty')
-if [ "$(echo "$NEXT_JSON" | jq -r '.result.blocked // false')" = true ]; then
- echo "$NEXT_JSON" | jq -r '.next_step'     # 미완료는 있는데 전부 의존에 막혔어요 — 끝난 게 아니에요. §6 처럼 halt
+NEXT_TASK=$(printf '%s\n' "$NEXT_JSON" | jq -r '.result.task // empty')
+if [ "$(printf '%s\n' "$NEXT_JSON" | jq -r '.result.blocked // false')" = true ]; then
+ printf '%s\n' "$NEXT_JSON" | jq -r '.next_step'     # 미완료는 있는데 전부 의존에 막혔어요 — 끝난 게 아니에요. §6 처럼 halt
 elif [ -z "$NEXT_TASK" ]; then
  echo "미완료 task 없음 → §8 완료 게이트로"
 fi
@@ -52,17 +52,17 @@ context로 로드:
 
 ```bash
 PLAN=$(bash .ax/scripts/bash/tasks-plan.sh --spec "$SPEC" --json)
-VIOL_N=$(echo "$PLAN" | jq '.result.violations | length')
+VIOL_N=$(printf '%s\n' "$PLAN" | jq '.result.violations | length')
 if [ "$VIOL_N" -gt 0 ]; then
- echo "$PLAN" | jq -r '.result.violations[] | "  \(.tasks | join("↔")) — \(.file)"'
+ printf '%s\n' "$PLAN" | jq -r '.result.violations[] | "  \(.tasks | join("↔")) — \(.file)"'
  echo "[P] 인데 파일이 겹치는 task 가 ${VIOL_N}쌍 — 진행 중단. tasks.md 를 먼저 고치세요 (/lane)"
  exit 1
 fi
 
 LEDGER=$(bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --status --json)
-LANE_N=$(echo "$LEDGER" | jq '.result.lanes | length')
-CONFLICT_N=$(echo "$LEDGER" | jq '.result.lane_file_conflicts | length')
-[ "$CONFLICT_N" -gt 0 ] && { echo "$LEDGER" | jq -r '.next_step'; exit 1; }
+LANE_N=$(printf '%s\n' "$LEDGER" | jq '.result.lanes | length')
+CONFLICT_N=$(printf '%s\n' "$LEDGER" | jq '.result.lane_file_conflicts | length')
+[ "$CONFLICT_N" -gt 0 ] && { printf '%s\n' "$LEDGER" | jq -r '.next_step'; exit 1; }
 ```
 
 | `LANE_N` | 모드 | 어디로 |
@@ -316,15 +316,15 @@ size×risk 가 높으면 다른 컨텍스트가 한 번 봐야 완료예요 (G6)
 
 ```bash
 GATE=$(bash .ax/scripts/bash/tasks-gate.sh --spec "$SPEC" --json)
-COMPLETE=$(echo "$GATE" | jq -r '.result.complete')
-OPEN=$(echo "$GATE" | jq -r '.result.open')
-REVIEW_REQ=$(echo "$GATE" | jq -r '.result.review_required')
-VERDICT=$(echo "$GATE" | jq -r '.result.review_verdict // ""')
+COMPLETE=$(printf '%s\n' "$GATE" | jq -r '.result.complete')
+OPEN=$(printf '%s\n' "$GATE" | jq -r '.result.open')
+REVIEW_REQ=$(printf '%s\n' "$GATE" | jq -r '.result.review_required')
+VERDICT=$(printf '%s\n' "$GATE" | jq -r '.result.review_verdict // ""')
 
-if [ "$OPEN" != "0" ] || [ "$(echo "$GATE" | jq -r '.result.task_count_drop')" != "0" ] \
-   || [ "$(echo "$GATE" | jq '.result.ac_uncovered | length')" != "0" ] \
-   || [ "$(echo "$GATE" | jq '.result.dispatched_unreported + .result.done_without_report | length')" != "0" ]; then
- echo "$GATE" | jq -r '.next_step'
+if [ "$OPEN" != "0" ] || [ "$(printf '%s\n' "$GATE" | jq -r '.result.task_count_drop')" != "0" ] \
+   || [ "$(printf '%s\n' "$GATE" | jq '.result.ac_uncovered | length')" != "0" ] \
+   || [ "$(printf '%s\n' "$GATE" | jq '.result.dispatched_unreported + .result.done_without_report | length')" != "0" ]; then
+ printf '%s\n' "$GATE" | jq -r '.next_step'
  echo "  → 남은 걸 끝내거나, 의도적 보류면 `- [~] T0NN … 보류: <사유>` 로 표기하세요."
  exit 0
 fi
@@ -340,7 +340,7 @@ fi
 | * | `보강 필요` | review.md 의 지적 하나하나를 task 로 옮겨요 (`- [ ] T1NN [ACn] <지적> — files: …`), §3 으로 돌아가요. 끝나면 evaluator 를 **다시** 띄워요 — review.md 는 evaluator 가 덮어써요 |
 | * | `재논의 필요` | halt. 사용자 결정 — spec 자체를 다시 봐야 한다는 뜻이에요 |
 
-룰 대조(G7 — `review-rules.md`)도 같은 표예요: 필수 여부는 `REVIEW_REQ` 와 같고, `RULES_VERDICT=$(echo "$GATE" | jq -r
+룰 대조(G7 — `review-rules.md`)도 같은 표예요: 필수 여부는 `REVIEW_REQ` 와 같고, `RULES_VERDICT=$(printf '%s\n' "$GATE" | jq -r
 '.result.rules_review_verdict // ""')` 가 없으면 §8.1.5, `보강 필요` 면 위반을 task 로 옮겨 §3 으로 갔다가 rules-auditor 를 다시 띄워요.
 
 `재논의 필요`·`보강 필요` 로 이 턴이 그냥 끝나면 `stop/spec-gate.sh` 가 한 번 더 잡아요 —
@@ -377,7 +377,7 @@ evaluator 가 파일을 직접 써요. 코디네이터는 결과를 받아 적�
 
 ```bash
 SCOPE=$(bash .ax/scripts/bash/rules-audit-scope.sh --spec "$SPEC" --json)   # 변경 파일마다 걸린 룰 · 상시 룰 · 새 파일
-echo "$SCOPE" | jq -r '.next_step'
+printf '%s\n' "$SCOPE" | jq -r '.next_step'
 ```
 
 `Agent` 도구로 `goax:rules-auditor` 를 띄워요 (vendor 설치면 `rules-auditor`) — evaluator 와 **한 메시지에 같이**, 서로의
