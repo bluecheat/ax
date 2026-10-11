@@ -54,6 +54,7 @@ else
     mkdir -p "$TS_T/.ax/scripts/bash" "$TS_T/.ax/docs/adr" "$TS_T/.ax/docs/spec/imported"
     cp "$REPO/templates/default/.ax/scripts/bash/common.sh" \
        "$REPO/templates/default/.ax/scripts/bash/triage-search.sh" "$TS_T/.ax/scripts/bash/" 2>/dev/null
+    cp -R "$GOAX_LIB_SRC" "$TS_T/.ax/scripts/bash/"
     : > "$TS_T/CLAUDE.md"
 
     mkdir -p "$TS_T/.ax/docs/spec/003-payment-coupon"      # 슬러그 매칭
@@ -99,7 +100,7 @@ section "32. lanes-dispatch — 디스패치 원장 (assign / dispatch / report 
 # 원장이 tasks.md 에 있어야 tasks-gate G5 가 읽고, dispatch 는 파일 소유 충돌을 거부해야 해요.
 LDX=$(mktemp -d)
 mkdir -p "$LDX"/.ax/scripts/bash "$LDX"/.ax/docs/spec/012-x
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,lanes-dispatch}.sh "$LDX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,lanes-dispatch}.sh "$LDX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$LDX/.ax/scripts/bash/"
 cat > "$LDX/.ax/docs/spec/012-x/tasks.md" <<'LDEOF'
 - [ ] T001 [AC1] 배럴 — files: ui/index.ts
       의존: 없음

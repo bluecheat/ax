@@ -80,4 +80,21 @@ else
     pass "§72 — jq 없음 또는 설치 실패, skip"
 fi
 
+# ───────────────────────────────────────────────────────────
+section "73. common.sh · lib/ — 스크립트는 common.sh 하나만 source 해요"
+# ───────────────────────────────────────────────────────────
+# 공통 함수는 lib/*.sh 에 기능별로 있고 common.sh 가 전부 불러요. 스크립트가 lib/ 를 직접 source 하면 로딩 순서가 둘이 돼요.
+LIB_DIRECT=$(grep -rlE '(source|\.)[[:space:]]+"?[^"]*lib/[[:alnum:]_-]+\.sh' "$SCRIPTS_DIR"/*.sh "$REPO/templates/default/.ax/hooks" 2>/dev/null | grep -v '/common.sh$' || true)
+[ -z "$LIB_DIRECT" ] && pass "lib/*.sh 를 직접 source 하는 스크립트·훅이 없어요" || fail "lib/ 를 직접 source 해요: $LIB_DIRECT"
+CM_N=$(wc -l < "$SCRIPTS_DIR/common.sh" | tr -d ' ')
+[ "$CM_N" -le 600 ] && pass "common.sh ${CM_N}줄 — 600줄 이하 (기능 함수는 lib/ 에)" || fail "common.sh 가 ${CM_N}줄 — 새 기능 함수는 lib/<기능>.sh 에 둬요"
+if fx_install NL; then
+    rm -rf "$NL/.ax/scripts/bash/lib"
+    NL_ERR=$(bash -c "source '$NL/.ax/scripts/bash/common.sh'" 2>&1 >/dev/null); NL_RC=$?
+    [ "$NL_RC" -ne 0 ] && printf '%s' "$NL_ERR" | grep -q '/up' \
+        && pass "lib/ 가 없으면 common.sh 가 실패하고 /up 을 안내해요 (조용히 함수가 빠지지 않아요)" \
+        || fail "lib/ 없이 common.sh 를 source 했는데 rc=$NL_RC: $NL_ERR"
+    rm -rf "$NL"
+fi
+
 smoke_done

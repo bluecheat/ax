@@ -15,7 +15,7 @@ else
     HX=$(mktemp -d)
     mkdir -p "$HX/.ax/scripts/bash" "$HX/.ax/hooks/stop" "$HX/.ax/hooks/subagent-start" "$HX/.ax/hooks/pre-edit" \
              "$HX/.ax/docs/spec/014-x" "$HX/.ax/spirit/rules" "$HX/.ax/modules/order" "$HX/.claude" "$HX/src"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate,tier-from-state,lanes-dispatch,status-note,doctor-scan,zero-ablation}.sh "$HX/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate,tier-from-state,lanes-dispatch,status-note,doctor-scan,zero-ablation}.sh "$HX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$HX/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/stop/spec-gate.sh" "$HX/.ax/hooks/stop/"
     cp "$REPO/templates/default/.ax/hooks/subagent-start/harness-pointer.sh" "$HX/.ax/hooks/subagent-start/"
     cp "$REPO/templates/default/.ax/hooks/pre-edit/"{spirit-rules-inject,module-rules-inject}.sh "$HX/.ax/hooks/pre-edit/"
@@ -149,7 +149,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     CC=$(mktemp -d)
     mkdir -p "$CC"/.ax/scripts/bash "$CC"/.ax/docs/spec/030-a "$CC"/.ax/docs/spec/031-b
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,lanes-dispatch,tasks-gate,tier-from-state}.sh "$CC/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,lanes-dispatch,tasks-gate,tier-from-state}.sh "$CC/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$CC/.ax/scripts/bash/"
     echo '{}' > "$CC/.ax/state.json"; echo '{"phase":"idle"}' > "$CC/.ax/current-task.json"
     printf '## 3. \n- [ ] **AC1** a\n' > "$CC/.ax/docs/spec/030-a/spec.md"
     printf '## 3. \n- [ ] **AC1** b\n' > "$CC/.ax/docs/spec/031-b/spec.md"
@@ -200,7 +200,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     TPL=$(mktemp -d)
     mkdir -p "$TPL"/.ax/scripts/bash "$TPL"/.ax/docs/spec/012-x
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate,tasks-plan,lanes-dispatch,lanes-hotfiles,check-spec-clarity,tier-from-state}.sh "$TPL/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate,tasks-plan,lanes-dispatch,lanes-hotfiles,check-spec-clarity,tier-from-state}.sh "$TPL/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$TPL/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/_templates/spec/tasks.md" "$TPL/.ax/docs/spec/012-x/tasks.md"
     cp "$REPO/templates/default/.ax/_templates/spec/spec.md"  "$TPL/.ax/docs/spec/012-x/spec.md"
     echo '{}' > "$TPL/.ax/state.json"; echo '{"phase":"idle"}' > "$TPL/.ax/current-task.json"

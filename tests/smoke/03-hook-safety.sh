@@ -14,7 +14,7 @@ section "15. PR #1085 review fixes — security/correctness/escape"
 # capture-mistake.sh 폐기 후 — block-destructive 가 더 이상 호출 안 함.
 BD_FX=$(mktemp -d)
 mkdir -p "$BD_FX/.ax/scripts/bash" "$BD_FX/.ax/hooks/pre-bash"
-cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$BD_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$BD_FX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$BD_FX/.ax/scripts/bash/"
 cp "$REPO/templates/default/.ax/hooks/pre-bash/block-destructive.sh" "$BD_FX/.ax/hooks/pre-bash/"
 
 assert_blocked() {
@@ -128,7 +128,7 @@ rm -rf "$BD_FX"
 # 15.1b check-protected-paths — 경로 정규화 + 경계 매칭 + YAML 파싱
 PP_FX=$(mktemp -d)
 mkdir -p "$PP_FX/.ax/scripts/bash" "$PP_FX/.ax/hooks/pre-edit"
-cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$PP_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$PP_FX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$PP_FX/.ax/scripts/bash/"
 cp "$REPO/templates/default/.ax/hooks/pre-edit/check-protected-paths.sh" "$PP_FX/.ax/hooks/pre-edit/"
 
 pp_config() { printf '%s' "$1" > "$PP_FX/.ax/config.yml"; }
@@ -193,7 +193,7 @@ fi
 # 15.2 common.sh _goax_json_array — special char escape
 COM_FX=$(mktemp -d)
 mkdir -p "$COM_FX/.ax/scripts/bash"
-cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$COM_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$COM_FX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$COM_FX/.ax/scripts/bash/"
 
 JSON_OUT=$(bash -c "
 source $COM_FX/.ax/scripts/bash/common.sh
@@ -221,7 +221,7 @@ rm -rf "$COM_FX"
 ID_RE='^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0123456789abcdef][0123456789abcdef][0123456789abcdef][0123456789abcdef]$'
 NS_FX=$(mktemp -d)
 mkdir -p "$NS_FX/.ax/scripts/bash" "$NS_FX/.ax/docs/spec/998-legacy"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_FX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$NS_FX/.ax/scripts/bash/"
 NEXT=$(CLAUDE_PROJECT_DIR=$NS_FX bash "$NS_FX/.ax/scripts/bash/next-spec-num.sh" 2>&1)
 printf '%s' "$NEXT" | grep -qE "$ID_RE" \
     && pass "next-spec-num — 새 ID 는 YYYY-MM-DD-<4hex> (옛 998 이 있어도 999 가 아니에요): $NEXT" \
@@ -248,7 +248,7 @@ OUT=$(CLAUDE_PROJECT_DIR=$NS_FX bash "$NS_FX/.ax/scripts/bash/next-spec-num.sh" 
 # 동시 예약 — 같은 ID 가 두 번 나오면 안 돼요 (예전 실사용 ADR 7 쌍 충돌의 회귀 테스트)
 NS_RACE=$(mktemp -d)
 mkdir -p "$NS_RACE/.ax/scripts/bash" "$NS_RACE/.ax/docs/spec"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_RACE/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_RACE/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$NS_RACE/.ax/scripts/bash/"
 for i in 1 2 3 4 5 6 7 8; do
     CLAUDE_PROJECT_DIR=$NS_RACE bash "$NS_RACE/.ax/scripts/bash/next-spec-num.sh" \
         --reserve --slug "feat$i" --json >/dev/null 2>&1 &
@@ -265,7 +265,7 @@ fi
 # --reserve 는 실물까지 만들고, --dry-run 은 만들지 않아야
 NS_DR=$(mktemp -d)
 mkdir -p "$NS_DR/.ax/scripts/bash" "$NS_DR/.ax/docs/adr"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_DR/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_DR/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$NS_DR/.ax/scripts/bash/"
 CLAUDE_PROJECT_DIR=$NS_DR bash "$NS_DR/.ax/scripts/bash/next-spec-num.sh" --kind adr \
     --reserve --slug ghost --dry-run --json >/dev/null 2>&1
 [ -z "$(ls "$NS_DR/.ax/docs/adr"/[0-9]*.md 2>/dev/null)" ] \
@@ -286,7 +286,7 @@ CLAUDE_PROJECT_DIR=$NS_DR bash "$NS_DR/.ax/scripts/bash/next-spec-num.sh" --rese
 # 옛 ADR `0008-x` 와 새 ID `2026-09-25-…` 는 둘 다 "숫자 4개 + 하이픈" 으로 시작해요.
 NS_DUP=$(mktemp -d)
 mkdir -p "$NS_DUP/.ax/scripts/bash" "$NS_DUP/.ax/docs/adr"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_DUP/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS_DUP/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$NS_DUP/.ax/scripts/bash/"
 : > "$NS_DUP/.ax/docs/adr/0001-a.md"; : > "$NS_DUP/.ax/docs/adr/0001-b.md"; : > "$NS_DUP/.ax/docs/adr/0003-c.md"
 : > "$NS_DUP/.ax/docs/adr/2026-09-25-aaaa-x.md"; : > "$NS_DUP/.ax/docs/adr/2026-09-25-bbbb-y.md"
 DUP_OUT=$(CLAUDE_PROJECT_DIR=$NS_DUP bash "$NS_DUP/.ax/scripts/bash/next-spec-num.sh" \
@@ -313,7 +313,7 @@ rm -rf "$NS_DUP"
 # build-memory 최신순 — `sub(/-.*/)` 로 번호를 뽑으면 새 ID 는 전부 "2026" 이 돼서 순서가 사라져요
 NS_BM=$(mktemp -d)
 mkdir -p "$NS_BM/.ax/docs/adr" "$NS_BM/.ax/scripts/bash"
-cp "$REPO/templates/default/.ax/scripts/bash/"*.sh "$NS_BM/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"*.sh "$NS_BM/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$NS_BM/.ax/scripts/bash/"
 for n in 0001-old 0042-bigger 2026-09-20-aaaa-new 2026-09-25-bbbb-newest; do printf '# ADR %s\n' "$n" > "$NS_BM/.ax/docs/adr/$n.md"; done
 BM_ORDER=$(GOAX_PROJECT_DIR="$NS_BM" bash "$NS_BM/.ax/scripts/bash/build-memory.sh" --dry-run --full 2>/dev/null \
     | sed -n '/최근 ADR/,/^$/p' | grep -oE 'adr/[^ ]+\.md' | sed 's|adr/||; s|\.md||' | tr '\n' ' ')
@@ -329,7 +329,7 @@ rm -rf "$NS_FX"
 # 15.4 init-spec-dir — mandatory templates 누락 시 fail
 IS_FX=$(mktemp -d)
 mkdir -p "$IS_FX/.ax/scripts/bash" "$IS_FX/.ax/_templates/spec/checklists" "$IS_FX/.ax/_templates/spec/contracts" "$IS_FX/.ax/docs/spec"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,init-spec-dir,slug-from-text}.sh "$IS_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,init-spec-dir,slug-from-text}.sh "$IS_FX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$IS_FX/.ax/scripts/bash/"
 # 의도적으로 template 안 채움 (standard 는 spec.md + tasks.md 필수)
 
 OUT=$(CLAUDE_PROJECT_DIR=$IS_FX bash "$IS_FX/.ax/scripts/bash/init-spec-dir.sh" \
@@ -348,7 +348,7 @@ rm -rf "$IS_FX"
 # init-spec-dir 의 "already exists" 가드가 자기 예약에 걸리는 버그가 여기서 나왔어요.
 ISR_FX=$(mktemp -d)
 mkdir -p "$ISR_FX/.ax/scripts/bash" "$ISR_FX/.ax/docs/spec"
-cp "$REPO/templates/default/.ax/scripts/bash/"*.sh "$ISR_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"*.sh "$ISR_FX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$ISR_FX/.ax/scripts/bash/"
 cp -R "$REPO/templates/default/.ax/_templates" "$ISR_FX/.ax/_templates"
 for i in 1 2 3 4 5 6; do
     CLAUDE_PROJECT_DIR=$ISR_FX bash "$ISR_FX/.ax/scripts/bash/init-spec-dir.sh" \
@@ -369,7 +369,7 @@ rm -rf "$ISR_FX"
 # 15.5 slug-from-text — JSON escape
 SL_FX=$(mktemp -d)
 mkdir -p "$SL_FX/.ax/scripts/bash"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,slug-from-text}.sh "$SL_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,slug-from-text}.sh "$SL_FX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$SL_FX/.ax/scripts/bash/"
 
 # 입력에 quote, backslash, newline 포함
 INPUT_TEXT='Order with "Refund" and \backslash and newline'

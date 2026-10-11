@@ -11,7 +11,7 @@ section "50. goax_shell_scan · block-hook-bypass — 에이전트가 git 훅을
 if command -v jq >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
     HB=$(mktemp -d)
     mkdir -p "$HB/.ax/scripts/bash" "$HB/.ax/hooks/pre-bash"
-    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$HB/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$HB/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$HB/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/pre-bash/block-hook-bypass.sh" "$HB/.ax/hooks/pre-bash/"
     hb_rc() { jq -nc --arg c "$1" --arg d "$HB" '{tool_input:{command:$c},session_id:"s",cwd:$d}' \
         | CLAUDE_PROJECT_DIR="$HB" bash "$HB/.ax/hooks/pre-bash/block-hook-bypass.sh" >/dev/null 2>&1; echo $?; }
@@ -53,7 +53,7 @@ section "51. destructive-facts — 프로젝트 안 되돌리기 어려운 명�
 if command -v jq >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
     DF=$(mktemp -d)
     mkdir -p "$DF/.ax/scripts/bash" "$DF/.ax/hooks/pre-bash" "$DF/src"
-    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$DF/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$DF/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$DF/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/pre-bash/destructive-facts.sh" "$DF/.ax/hooks/pre-bash/"
     df_rc() { jq -nc --arg c "$1" --arg s "${2:-s1}" --arg d "$DF" '{tool_input:{command:$c},session_id:$s,cwd:$d}' \
         | CLAUDE_PROJECT_DIR="$DF" bash "$DF/.ax/hooks/pre-bash/destructive-facts.sh" >/dev/null 2>&1; echo $?; }
@@ -107,7 +107,7 @@ section "52. rule-read-gate — 이 파일에 걸린 룰을 이번 세션에 Rea
 if command -v jq >/dev/null 2>&1; then
     RG=$(mktemp -d)
     mkdir -p "$RG/.ax/scripts/bash" "$RG/.ax/hooks/pre-edit" "$RG/.ax/spirit/rules" "$RG/.ax/modules/pay" "$RG/.ax/modules/rev" "$RG/src/pay"
-    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$RG/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$RG/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$RG/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/pre-edit/rule-read-gate.sh" "$RG/.ax/hooks/pre-edit/"
     printf -- '---\npaths:\n  - "src/**/*.kt"\n---\n## SP-APP-001: x\n' > "$RG/.ax/spirit/rules/app.md"
     printf -- '---\npaths: ["**/*.kt"]\n---\n## SP-UNI-001: x\n' > "$RG/.ax/spirit/rules/universal.md"
@@ -231,7 +231,7 @@ section "54. session-brief — 세션 첫머리 알림은 스크립트가 정하
 if command -v jq >/dev/null 2>&1; then
     SB=$(mktemp -d)
     mkdir -p "$SB/.ax/scripts/bash" "$SB/.ax/hooks/session-start" "$SB/.ax/mistakes" "$SB/home/plugins"
-    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$REPO/templates/default/.ax/scripts/bash/session-brief.sh" "$SB/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$REPO/templates/default/.ax/scripts/bash/session-brief.sh" "$SB/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$SB/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/session-start/session-brief.sh" "$SB/.ax/hooks/session-start/"
     cp "$REPO/templates/default/.ax/current-task.json.template" "$SB/.ax/current-task.json"
     sb_brief() { CLAUDE_CONFIG_DIR="$SB/home" GOAX_PROJECT_DIR="$SB" bash "$SB/.ax/scripts/bash/session-brief.sh" "$@"; }

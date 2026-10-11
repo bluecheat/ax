@@ -14,7 +14,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     ZD=$(mktemp -d)
     mkdir -p "$ZD/.ax/scripts/bash" "$ZD/.ax/spirit/rules" "$ZD/.ax/mistakes" "$ZD/.ax/docs"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,zero-domain-risk,zero-ablation,zero-verify,constitution-apply,init-mistake-file,detect-model}.sh "$ZD/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,zero-domain-risk,zero-ablation,zero-verify,constitution-apply,init-mistake-file,detect-model}.sh "$ZD/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$ZD/.ax/scripts/bash/"
     printf 'sensors:\n  mode: warning\ndomain_risk:\n  payment: L3\n  order: L2\n  product: L1\n  search: L0\ndefault_risk: L0\n' > "$ZD/.ax/config.yml"
     # macOS 면 /bin/bash (3.2) 로 불러요 — 이 회귀는 bash 3.2 × en_US collation 조합에서
     # 터졌고, `bash` 가 5.x 로 잡히는 환경에선 통과해 버려요.
@@ -74,7 +74,7 @@ else
     # 이 블록은 §42 의 jq 가드 안이라 따로 감싸지 않아요.
     ZVC=$(mktemp -d)
     mkdir -p "$ZVC/.ax/scripts/bash"
-    cp "$SCRIPTS_DIR/"{common,zero-verify}.sh "$ZVC/.ax/scripts/bash/"
+    cp "$SCRIPTS_DIR/"{common,zero-verify}.sh "$ZVC/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$ZVC/.ax/scripts/bash/"
 
     zvc_check() {
         local label="$1" key="$2" expect="$3" got

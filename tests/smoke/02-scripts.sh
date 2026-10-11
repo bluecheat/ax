@@ -92,7 +92,7 @@ done
 # (`bash -n` 은 §7 의 glob 이 이미 훑고 있었고요). 실행 계약까지 여기서 고정해요.
 TMP_Z=$(mktemp -d)
 mkdir -p "$TMP_Z/.ax/scripts/bash"
-cp "$SCRIPTS_DIR/"{common,zero-init,zero-probe,zero-verify,zero-domain-risk}.sh "$TMP_Z/.ax/scripts/bash/"
+cp "$SCRIPTS_DIR/"{common,zero-init,zero-probe,zero-verify,zero-domain-risk}.sh "$TMP_Z/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$TMP_Z/.ax/scripts/bash/"
 printf 'sensors:\n  mode: warning\ndomain_risk:\n  payment: L3\ndefault_risk: L0\n' > "$TMP_Z/.ax/config.yml"
 for zc in "zero-init.sh --json --dry-run" "zero-probe.sh --json" "zero-verify.sh --json" "zero-domain-risk.sh --show --json"; do
     zname="${zc%% *}"
@@ -253,7 +253,7 @@ bash -n "$REG_SCRIPT" 2>/dev/null && pass "register-spirit-hook.sh 문법 OK" \
 
 REG_FX=$(mktemp -d)
 mkdir -p "$REG_FX/.ax/scripts/bash" "$REG_FX/.claude"
-cp "$REG_SCRIPT" "$REPO/templates/default/.ax/scripts/bash/common.sh" "$REG_FX/.ax/scripts/bash/"
+cp "$REG_SCRIPT" "$REPO/templates/default/.ax/scripts/bash/common.sh" "$REG_FX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$REG_FX/.ax/scripts/bash/"
 
 # (1) PreToolUse 없는 settings.json — 신규 entry 추가
 echo '{"hooks":{"UserPromptSubmit":[]}}' > "$REG_FX/.claude/settings.json"
@@ -347,7 +347,7 @@ section "13. check-templates-drift.sh — 3-state coverage"
 # ───────────────────────────────────────────────────────────
 DR_FX=$(mktemp -d)
 mkdir -p "$DR_FX/.ax/_templates/spec/contracts" "$DR_FX/.ax/_templates/spec/checklists" "$DR_FX/.ax/scripts/bash"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,check-templates-drift.sh} "$DR_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,check-templates-drift.sh} "$DR_FX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$DR_FX/.ax/scripts/bash/"
 # 최소 _templates 파일들 (sha 비교 대상)
 cp -R "$REPO/templates/default/.ax/_templates/spec/." "$DR_FX/.ax/_templates/spec/" 2>/dev/null
 
@@ -388,7 +388,7 @@ section "14. promote-mistake.sh — candidate + --apply (CLAUDE.md 무수정)"
 # ───────────────────────────────────────────────────────────
 PM_FX=$(mktemp -d)
 mkdir -p "$PM_FX/.ax/mistakes" "$PM_FX/.ax/scripts/bash"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,promote-mistake.sh} "$PM_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,promote-mistake.sh} "$PM_FX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$PM_FX/.ax/scripts/bash/"
 cat > "$PM_FX/CLAUDE.md" <<'MD'
 # Test Constitution
 MD

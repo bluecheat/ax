@@ -15,7 +15,7 @@ bash -n "$IGH" 2>/dev/null && pass "install-git-hooks.sh 문법 OK" || fail "ins
 # E2E — 임시 fixture 에서 install / re-install (idempotent) / wrapper 검증
 IGH_FX=$(mktemp -d)
 mkdir -p "$IGH_FX/.ax/scripts/bash" "$IGH_FX/.ax/hooks/pre-commit"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,install-git-hooks.sh} "$IGH_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common.sh,install-git-hooks.sh} "$IGH_FX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$IGH_FX/.ax/scripts/bash/"
 ( cd "$IGH_FX" && git init -q && git config user.email t@l && git config user.name t )
 
 # (1) install — action=installed
@@ -55,7 +55,7 @@ section "17. next-spec-num.sh --kind adr|spec — ID 형식 회귀"
 # ───────────────────────────────────────────────────────────
 NS2_FX=$(mktemp -d)
 mkdir -p "$NS2_FX/.ax/scripts/bash" "$NS2_FX/.ax/docs/adr" "$NS2_FX/.ax/docs/spec"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS2_FX/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num}.sh "$NS2_FX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$NS2_FX/.ax/scripts/bash/"
 ID_RE='^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0123456789abcdef][0123456789abcdef][0123456789abcdef][0123456789abcdef]$'
 : > "$NS2_FX/.ax/docs/adr/0003-x.md"
 for k in adr spec ""; do
@@ -94,7 +94,7 @@ section "29. tasks-plan — ready 집합 + [P] 주장 검증"
 # 가장 느린 하나가 나머지를 붙잡아요.
 TP=$(mktemp -d)
 mkdir -p "$TP"/.ax/scripts/bash "$TP"/.ax/docs/spec/012-x
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-plan}.sh "$TP/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-plan}.sh "$TP/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$TP/.ax/scripts/bash/"
 cat > "$TP/.ax/docs/spec/012-x/tasks.md" <<'TPEOF'
 - [x] T001 [AC1] a — files: x/A.kt
 - [ ] T002 [P] [AC1] b — files: x/B.kt
@@ -136,7 +136,7 @@ section "28. tasks-gate — 완료 게이트 4종"
 # 통과 를 구분 못 해요. 실사용 spec 21개 중 14개가 미완료를 남긴 채 끝나 있었음.
 TG=$(mktemp -d)
 mkdir -p "$TG"/.ax/scripts/bash "$TG"/.ax/docs/spec/012-x
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate}.sh "$TG/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate}.sh "$TG/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$TG/.ax/scripts/bash/"
 echo '{}' > "$TG/.ax/state.json"
 printf '## 3. \n- [ ] **AC1** a\n- [ ] **AC2** b\n' > "$TG/.ax/docs/spec/012-x/spec.md"
 printf -- '- [x] T001 [AC1] a — files: a.kt\n- [ ] T002 [AC2] b — files: b.kt\n' > "$TG/.ax/docs/spec/012-x/tasks.md"
@@ -215,7 +215,7 @@ rm -rf "$TG"
 # pre-commit 훅 — 활성 spec 없으면 조용해야 (커밋마다 떠들면 우회 대상이 됨)
 TGH=$(mktemp -d)
 mkdir -p "$TGH"/.ax/scripts/bash "$TGH"/.ax/hooks/pre-commit
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate}.sh "$TGH/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate}.sh "$TGH/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$TGH/.ax/scripts/bash/"
 cp "$REPO/templates/default/.ax/hooks/pre-commit/spec-completion-gate.sh" "$TGH/.ax/hooks/pre-commit/"
 echo '{"phase":"idle"}' > "$TGH/.ax/current-task.json"
 OUT_H=$(CLAUDE_PROJECT_DIR=$TGH bash "$TGH/.ax/hooks/pre-commit/spec-completion-gate.sh" 2>&1)
@@ -261,6 +261,7 @@ DM_FX=$(mktemp -d)
 mkdir -p "$DM_FX"/.ax/scripts/bash "$DM_FX"/.ax/mistakes "$DM_FX"/.ax/_templates/mistakes
 cp "$REPO/templates/default/.ax/scripts/bash/"{common,init-mistake-file,detect-model,slug-from-text}.sh \
    "$DM_FX/.ax/scripts/bash/" 2>/dev/null || true
+cp -R "$GOAX_LIB_SRC" "$DM_FX/.ax/scripts/bash/"
 chmod +x "$DM_FX"/.ax/scripts/bash/*.sh
 cp "$REPO/templates/default/.ax/_templates/mistakes/mistake.md" "$DM_FX/.ax/_templates/mistakes/"
 
@@ -309,7 +310,7 @@ section "25. vendor — ADE 루트 ≠ 프로젝트 루트 (모노레포) 처리
 # 조상 탐색만으로는 하네스를 못 찾아요 (.ax 가 *하위* 에 있으니까).
 VN=$(mktemp -d)
 mkdir -p "$VN/.claude" "$VN/projects/app/.ax/scripts/bash"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,vendor-skills}.sh "$VN/projects/app/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,vendor-skills}.sh "$VN/projects/app/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$VN/projects/app/.ax/scripts/bash/"
 
 # 포인터 없으면 저장소 루트에서 못 찾아야 (문제 재현)
 if (cd "$VN" && GOAX_PROJECT_DIR= CLAUDE_PROJECT_DIR= bash -c \
@@ -356,7 +357,7 @@ rm -rf "$VN"
 # 단일 저장소면 포인터를 만들지 않아야 (불필요한 파일 금지)
 VS=$(mktemp -d)
 mkdir -p "$VS/.ax/scripts/bash"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,vendor-skills}.sh "$VS/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,vendor-skills}.sh "$VS/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$VS/.ax/scripts/bash/"
 (cd "$VS" && GOAX_PROJECT_DIR="$VS" bash .ax/scripts/bash/vendor-skills.sh \
     --plugin-dir "$REPO" --json >/dev/null 2>&1)
 [ ! -f "$VS/.goax-root" ] \
@@ -366,7 +367,7 @@ cp "$REPO/templates/default/.ax/scripts/bash/"{common,vendor-skills}.sh "$VS/.ax
 # --dry-run 은 아무것도 쓰지 않아야
 VD=$(mktemp -d)
 mkdir -p "$VD/.ax/scripts/bash"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,vendor-skills}.sh "$VD/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,vendor-skills}.sh "$VD/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$VD/.ax/scripts/bash/"
 (cd "$VD" && GOAX_PROJECT_DIR="$VD" bash .ax/scripts/bash/vendor-skills.sh \
     --plugin-dir "$REPO" --dry-run --json >/dev/null 2>&1)
 [ ! -d "$VD/.claude" ] \
@@ -382,7 +383,7 @@ section "24. Layer 2·3 자동 주입 (module-rules-inject)"
 L23=$(mktemp -d)
 mkdir -p "$L23"/.ax/hooks/pre-edit "$L23"/.ax/scripts/bash \
          "$L23"/.ax/modules/order "$L23"/.ax/docs/spec/012-x "$L23"/.ax/docs/adr
-cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$L23/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$L23/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$L23/.ax/scripts/bash/"
 cp "$REPO/templates/default/.ax/hooks/pre-edit/module-rules-inject.sh" "$L23/.ax/hooks/pre-edit/"
 printf -- '---\nmodule: order\npaths:\n  - "services/order/**"\n---\n# order\n' > "$L23/.ax/modules/order/rules.md"
 printf -- '# Spec\n.ax/docs/adr/0008-x.md 참고\n' > "$L23/.ax/docs/spec/012-x/spec.md"

@@ -10,7 +10,7 @@ section "58. 품질 설정 게이트 · 압축 스냅샷 · lint_file · detect-
 if command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
     S58="$REPO/templates/default/.ax"
     Q=$(mktemp -d); mkdir -p "$Q/.ax/scripts/bash" "$Q/.ax/hooks" "$Q/src" "$Q/.husky" "$Q/config/lint" "$Q/.ax/docs/spec/2026-09-25-ab12-x" "$Q/.ax/mistakes"
-    cp "$S58/scripts/bash/"*.sh "$Q/.ax/scripts/bash/"; cp -R "$S58/hooks/"* "$Q/.ax/hooks/"
+    cp "$S58/scripts/bash/"*.sh "$Q/.ax/scripts/bash/"; cp -R "$S58/scripts/bash/lib" "$Q/.ax/scripts/bash/"; cp -R "$S58/hooks/"* "$Q/.ax/hooks/"
     cp "$S58/config.yml" "$Q/.ax/config.yml"; cp "$S58/current-task.json.template" "$Q/.ax/current-task.json"
     git -C "$Q" init -q; git -C "$Q" -c user.email=a@b -c user.name=a commit -q --allow-empty -m init
     echo '{}' > "$Q/.eslintrc.json"; touch "$Q/src/a.ts" "$Q/.husky/pre-commit" "$Q/config/lint/x.xml"
@@ -111,7 +111,7 @@ section "59. mark-task — 체크박스는 줄 앞 ID 만, 펜스 밖에서만, 
 # ───────────────────────────────────────────────────────────
 # 인라인 sed(`.*T013`)는 본문에 다른 task 를 언급한 줄까지 켰어요 (실측 3건). 템플릿 펜스 안 예시는 --next 가 집었어요.
 MT=$(mktemp -d); mkdir -p "$MT/.ax/scripts/bash" "$MT/.ax/docs/spec/2026-09-25-ab12-x"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,mark-task}.sh "$MT/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,mark-task}.sh "$MT/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$MT/.ax/scripts/bash/"
 MTF="$MT/.ax/docs/spec/2026-09-25-ab12-x/tasks.md"
 cat > "$MTF" <<'MTE'
 ## 한 줄 형식
@@ -159,7 +159,7 @@ VL=$(mktemp -d)
 pushd "$VL" >/dev/null || fail "VL pushd 실패"
 git init -q . >/dev/null 2>&1
 mkdir -p .ax/scripts/bash .ax/hooks/pre-commit .ax/spirit/rules .ax/mistakes src
-cp "$REPO/templates/default/.ax/scripts/bash/common.sh" .ax/scripts/bash/
+cp "$REPO/templates/default/.ax/scripts/bash/common.sh" .ax/scripts/bash/ && cp -R "$GOAX_LIB_SRC" .ax/scripts/bash/
 cp "$REPO/templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh" .ax/hooks/pre-commit/
 cp "$REPO/templates/default/.ax/hooks/pre-commit/check-mistake-secrets.sh" .ax/hooks/pre-commit/
 printf '# C\n' > CLAUDE.md
@@ -212,7 +212,7 @@ section "61. 작업별 상태 — .ax/tasks/<id>.json, 병렬 작업이 서로 �
 # ───────────────────────────────────────────────────────────
 PT=$(mktemp -d)
 mkdir -p "$PT/.ax/scripts/bash" "$PT/.ax/hooks/pre-commit" "$PT/.ax/docs/spec/sa" "$PT/.ax/docs/spec/sb" "$PT/src"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,update-task,tier-from-state,reset-task,session-brief,tasks-gate}.sh "$PT/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,update-task,tier-from-state,reset-task,session-brief,tasks-gate}.sh "$PT/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$PT/.ax/scripts/bash/"
 cp "$REPO/templates/default/.ax/hooks/pre-commit/spec-completion-gate.sh" "$PT/.ax/hooks/pre-commit/"
 cp "$REPO/templates/default/.ax/current-task.json.template" "$PT/.ax/current-task.json"
 echo '{}' > "$PT/.ax/state.json"

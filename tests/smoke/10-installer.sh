@@ -28,7 +28,7 @@ else
     # C3/C4 — 상위 경로 rm 과 jq 부재
     HK=$(mktemp -d)
     mkdir -p "$HK/.ax/scripts/bash" "$HK/.ax/hooks/pre-bash" "$HK/.ax/hooks/pre-edit"
-    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$HK/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$HK/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$HK/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/pre-bash/block-destructive.sh" "$HK/.ax/hooks/pre-bash/"
     cp "$REPO/templates/default/.ax/hooks/pre-edit/check-protected-paths.sh" "$HK/.ax/hooks/pre-edit/"
     bd_err() { printf '{"tool_input":{"command":"%s"}}' "$1" \
@@ -61,7 +61,7 @@ else
     # C5/C6 — 인계 노트 24시간 · 훅을 다른 이벤트로 옮기면 missing
     ST=$(mktemp -d)
     mkdir -p "$ST/.ax/scripts/bash" "$ST/.ax/hooks/stop" "$ST/.ax/docs/spec/014-x" "$ST/.claude"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate,tier-from-state,status-note,doctor-scan}.sh "$ST/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,tasks-gate,tier-from-state,status-note,doctor-scan}.sh "$ST/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$ST/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/stop/spec-gate.sh" "$ST/.ax/hooks/stop/"
     printf '# S\n## 3.\n- [ ] **AC1** a\n' > "$ST/.ax/docs/spec/014-x/spec.md"
     printf -- '- [ ] T001 [AC1] a — files: a.kt\n' > "$ST/.ax/docs/spec/014-x/tasks.md"
@@ -119,7 +119,7 @@ else
     pushd "$SEC" >/dev/null || fail "SEC pushd 실패"
     git init -q . >/dev/null 2>&1
     mkdir -p .ax/scripts/bash .ax/hooks/pre-commit fx
-    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" .ax/scripts/bash/
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" .ax/scripts/bash/ && cp -R "$GOAX_LIB_SRC" .ax/scripts/bash/
     cp "$REPO/templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh" .ax/hooks/pre-commit/
     printf '# C\n' > CLAUDE.md; printf 'sensors:\n  mode: fail\n' > .ax/config.yml
     # 토큰 형태 픽스처는 소스에 리터럴로 두지 않고 실행 시점에 이어 붙여요 — GitHub push protection 이 이 파일을 시크릿으로 막아요
@@ -241,7 +241,7 @@ else
     pushd "$SSOT" >/dev/null || fail "SSOT pushd 실패"
     git init -q . >/dev/null 2>&1
     mkdir -p .ax/scripts/bash .ax/hooks/pre-commit fx
-    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" .ax/scripts/bash/
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" .ax/scripts/bash/ && cp -R "$GOAX_LIB_SRC" .ax/scripts/bash/
     cp "$REPO/templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh" .ax/hooks/pre-commit/
     printf '# C\n' > CLAUDE.md; printf 'sensors:\n  mode: fail\n' > .ax/config.yml
     # 픽스처는 소스에 리터럴로 두지 않고 실행 시점에 이어 붙여요 (GitHub push protection)
@@ -305,7 +305,7 @@ else
     MS=$(mktemp -d)
     mkdir -p "$MS/.ax/scripts/bash" "$MS/.ax/hooks/pre-commit" "$MS/.ax/mistakes"
     ( cd "$MS" && git init -q . >/dev/null 2>&1 )
-    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$MS/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$MS/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$MS/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/pre-commit/check-mistake-secrets.sh" "$MS/.ax/hooks/pre-commit/"
     printf 'sensors:\n  mode: fail\n' > "$MS/.ax/config.yml"
     { printf -- '---\ncategory: parser\nseverity: medium\n---\n\n# 무엇이 일어났나\n'

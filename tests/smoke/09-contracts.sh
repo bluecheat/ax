@@ -14,7 +14,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     LDG=$(mktemp -d)
     mkdir -p "$LDG"/.ax/scripts/bash "$LDG"/.ax/docs/spec/040-x
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,lanes-dispatch}.sh "$LDG/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,lanes-dispatch}.sh "$LDG/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$LDG/.ax/scripts/bash/"
     LT="$LDG/.ax/docs/spec/040-x/tasks.md"
     cat > "$LT" <<'LGEOF'
 - [ ] T001 [AC1] a — files: ./src/a.ts
@@ -100,7 +100,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     SRV=$(mktemp -d)
     mkdir -p "$SRV"/.ax/scripts/bash "$SRV"/.ax/docs/spec/020-a "$SRV"/.ax/docs/spec/021-b
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,spec-review,tasks-gate,tier-from-state}.sh "$SRV/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,spec-review,tasks-gate,tier-from-state}.sh "$SRV/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$SRV/.ax/scripts/bash/"
     printf '# S\n## 3.\n- [ ] **AC1** a\n' > "$SRV/.ax/docs/spec/020-a/spec.md"
     printf -- '- [ ] T001 [AC1] a — files: a.kt\n' > "$SRV/.ax/docs/spec/020-a/tasks.md"
     printf '# S\n## 3.\n- [ ] **AC1** b\n' > "$SRV/.ax/docs/spec/021-b/spec.md"
@@ -177,6 +177,7 @@ else
     mkdir -p "$ISD/.ax/scripts/bash" "$ISD/.ax/_templates/spec" "$ISD/.ax/docs/spec"
     cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num,init-spec-dir,slug-from-text}.sh \
        "$ISD/.ax/scripts/bash/" 2>/dev/null
+    cp -R "$GOAX_LIB_SRC" "$ISD/.ax/scripts/bash/"
     cp -R "$REPO/templates/default/.ax/_templates/spec/." "$ISD/.ax/_templates/spec/" 2>/dev/null
     CLAUDE_PROJECT_DIR="$ISD" bash "$ISD/.ax/scripts/bash/init-spec-dir.sh" \
         --slug ghost --tier standard --dry-run --json >/dev/null 2>&1
@@ -212,7 +213,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     RE=$(mktemp -d)
     mkdir -p "$RE/.ax/scripts/bash" "$RE/.ax/spirit/rules"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$RE/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$RE/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$RE/.ax/scripts/bash/"
     printf '# X\n' > "$RE/AGENTS.md"
     printf -- '---\ncategory: sec\nseverity: critical\nenforced_by: human:code-review\n---\n## SP-SEC-001: 시크릿 금지\n' > "$RE/.ax/spirit/rules/sec.md"
     GOAX_PROJECT_DIR="$RE" bash "$RE/.ax/scripts/bash/check-rule-enforcement.sh" --json 2>/dev/null \
@@ -241,7 +242,7 @@ else
     git -C "$I5T" init -q >/dev/null 2>&1
     mkdir -p "$I5T/.ax/scripts/bash" "$I5T/.ax/spirit/rules" "$I5T/.ax/hooks/pre-commit" \
              "$I5T/.ax/hooks/pre-edit" "$I5T/.claude"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$I5T/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$I5T/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$I5T/.ax/scripts/bash/"
     printf '# X\n' > "$I5T/AGENTS.md"
     printf '#!/usr/bin/env bash\n' > "$I5T/.ax/hooks/pre-commit/team-rules.sh"
     i5_rule "$I5T" ".ax/hooks/pre-commit/team-rules.sh"
