@@ -58,6 +58,22 @@ printf '%s\n' "$RES" | jq -r '.result | "vendored=\(.vendored) v\(.vendored_vers
 
 ## 2. 무엇을 할지 보여주기 — `--dry-run`
 
+### ADE 루트를 어떻게 정하나
+
+`vendor-skills.sh` 와 `ade-settings.sh` 는 같은 함수(`goax_ade_root`)로 ADE 루트를 정해요. 순서는 이래요.
+
+| 순서 | 값 | 언제 |
+|---|---|---|
+| 1 | `--ade-root <경로>` | 이번 실행만 다르게 할 때 |
+| 2 | `.ax/config.yml` 의 `ade_root:` (프로젝트 루트 기준 상대 경로) | 팀이 정해 커밋한 값 |
+| 3 | git 최상위 | 아무것도 정하지 않았을 때. 단일 저장소, 저장소 루트에서 세션을 여는 모노레포 |
+| 4 | 위로 가장 가까운 `.claude/`, 없으면 프로젝트 루트 | git 이 아닐 때 |
+
+git 최상위와 프로젝트 루트가 다르고(모노레포) `ade_root:` 가 비어 있으면, 이 skill 은 dry-run 전에 AskUserQuestion 으로 한 번 물어요.
+"세션을 저장소 루트에서 여나요, 이 프로젝트 폴더에서 여나요?" 프로젝트 폴더면 `bash .ax/scripts/bash/config-set.sh ade_root "." --json` 으로 적어요.
+저장소 루트면 비워 둬요. config.yml 에 `ade_root:` 줄이 없으면 먼저 `/up` 을 다시 돌려요 (빠진 키를 더해요).
+이유: 모노레포에서 세션을 어디서 여는지는 파일 구조로 알 수 없어요. 동봉본과 훅이 세션을 여는 곳에 있어야 발동해요.
+
 동봉은 저장소에 파일을 추가하는 일이라, 먼저 계획을 보여주고 동의를 받아요.
 
 ```bash
@@ -120,9 +136,8 @@ bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" --json
 
 낡았으면 §3 을 그대로 다시 돌리면 돼요 (idempotent). 모노레포면 `ade-settings.sh --apply` 도 같이 — 새 버전이 훅을 늘렸을 수 있어요.
 
-> 실제로 이게 방치되면 어떻게 되는지 사례가 있어요 — 어떤 프로젝트는 3개월 전
-> 버전의 복사본으로 돌고 있었어요. 그동안의 버그 수정이 하나도 닿지 않았고요.
-> 동봉을 고르면 **갱신은 사람의 일**이 돼요. doctor 를 주기적으로 도세요.
+동봉을 고르면 갱신은 사람의 일이 돼요. 이 저장소의 팀은 doctor 를 주기적으로 돌려요.
+이유: 낡은 사본으로 도는 동안에는 그 뒤의 버그 수정이 하나도 닿지 않아요.
 
 ## 5. plugin 과 동봉이 함께 있을 때
 

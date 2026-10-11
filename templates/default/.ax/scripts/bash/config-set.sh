@@ -5,6 +5,7 @@
 #
 # Usage:
 #   bash config-set.sh <섹션>.<키> <값>            [--json] [--dry-run]   # 스칼라 — `  키: "값"` 으로 바꿔요
+#   bash config-set.sh <최상위 키> <값>             [--json] [--dry-run]   # 최상위 스칼라 — `키: "값"` (예: ade_root ".")
 #   bash config-set.sh --add <섹션>.<키> <값>      [--json] [--dry-run]   # 블록 리스트에 한 줄 추가 (이미 있으면 그대로)
 #   bash config-set.sh --clear <섹션>.<키>         [--json] [--dry-run]   # 리스트를 `[]` 로
 #
@@ -37,8 +38,13 @@ if [ "$SHOW_HELP" = true ]; then goax_help "${BASH_SOURCE[0]}"; exit "$EXIT_OK";
 fail() { if [ "$JSON_MODE" = true ]; then json_error "$1"; fi; goax_error "$1"; exit "$EXIT_ERROR"; }
 
 KEYPATH="${POS[0]:-}"; VALUE="${POS[1]:-}"
-case "$KEYPATH" in *.*) ;; *) fail "<섹션>.<키> 가 필요해요 (예: commands.test)" ;; esac
-SEC="${KEYPATH%%.*}"; KEY="${KEYPATH#*.}"
+TOP=false
+case "$KEYPATH" in
+    *.*) ;;
+    "") fail "<섹션>.<키> 또는 최상위 키가 필요해요 (예: commands.test, ade_root)" ;;
+    *) [ "$OP" = set ] || fail "최상위 키는 값 바꾸기만 돼요 — --add · --clear 는 <섹션>.<키> 에 써요"; TOP=true ;;
+esac
+SEC="${KEYPATH%%.*}"; KEY="${KEYPATH#*.}"; KDISP="$KEYPATH"
 case "$SEC$KEY" in *[!0-9A-Za-z_]*) fail "섹션·키는 영문·숫자·_ 만 돼요: $KEYPATH" ;; esac
 if [ "$OP" != clear ]; then
     [ "${#POS[@]}" -ge 2 ] || fail "값이 필요해요"
@@ -58,13 +64,29 @@ if [ "$DRY_RUN" != true ]; then
 fi
 unlock() { [ -n "$LOCK" ] && goax_unlock "$LOCK"; LOCK=""; }
 
+# 최상위 스칼라 — `키: 값` 한 줄만 바꿔요. 아래에 들여쓴 줄이 있으면 섹션이라 거부해요
+if [ "$TOP" = true ]; then
+    OUT=$(CS_KEY="$KEYPATH" CS_QV="$QV" awk '
+        { L[++n] = $0 }
+        END {
+            key = ENVIRON["CS_KEY"]; k = 0
+            for (i = 1; i <= n; i++) if (L[i] ~ ("^" key ":([ \t]|$)")) { k = i; break }
+            if (!k) { print "MISSING"; exit }
+            if (k < n && L[k + 1] ~ /^  [^ \t#]/) { print "NOTSCALAR"; exit }
+            v = L[k]; sub("^" key ":[ \t]*", "", v); sub(/[ \t]+#.*$/, "", v); if (v ~ /^#/) v = ""
+            if (v == "") { print "NOTSCALAR"; exit }   # 값 없는 `키:` 는 섹션이에요 (아래가 주석뿐이어도)
+            printf "FOUND\t%s\n", v
+            for (i = 1; i <= n; i++) print (i == k ? key ": " ENVIRON["CS_QV"] : L[i])
+        }' "$CFG")
+fi
+
 # awk 한 번 — 파일을 다 읽고(END) `섹션.키` 줄의 형태부터 판정한 뒤 바꿔요.
 #   형태: scalar(값이 있는 줄) · flow(`[…]`) · block(키 뒤가 비고 아래에 `- ` 항목들 — 들여쓰기 2칸 이상 아무거나).
 #   set 은 scalar 에만, --add/--clear 는 리스트(flow·block·빈 값)에만 — 모양이 다르면 쓰지 않고 거부해요
 #   (리뷰 실측: 리스트 키에 set 하면 항목이 고아로 남아 disabled_hooks 가 조용히 비었어요).
 #   값은 awk -v 가 아니라 ENVIRON 으로 넘겨요 — -v 는 `\n` · `\d` 같은 백슬래시 이스케이프를 해석해서 config.yml 을 깨뜨렸어요.
 #   출력 첫 줄: "FOUND\t<before>" · "MISSING" · "FLOWLIST" · "NOTLIST" · "NOTSCALAR". 나머지는 새 파일 본문.
-OUT=$(CS_SEC="$SEC" CS_KEY="$KEY" CS_OP="$OP" CS_QV="${QV:-}" CS_RAW="${VALUE:-}" awk '
+[ "$TOP" = true ] || OUT=$(CS_SEC="$SEC" CS_KEY="$KEY" CS_OP="$OP" CS_QV="${QV:-}" CS_RAW="${VALUE:-}" awk '
     function strip(v,   q, e) {                          # goax_yaml_list 와 같은 규칙 — 따옴표 한 쌍 · 주석
         sub(/^[ \t]*-[ \t]*/, "", v); sub(/[ \t]+$/, "", v); q = substr(v, 1, 1)
         if (q == "\042" || q == "\047") { e = length(v); while (e > 1 && substr(v, e, 1) != q) e--; if (e > 1) v = substr(v, 2, e - 2) }
@@ -132,10 +154,10 @@ OUT=$(CS_SEC="$SEC" CS_KEY="$KEY" CS_OP="$OP" CS_QV="${QV:-}" CS_RAW="${VALUE:-}
     }' "$CFG")
 HEAD1="${OUT%%$'\n'*}"
 case "$HEAD1" in
-    MISSING)  unlock; fail "$SEC.$KEY 키가 config.yml 에 없어요 — 새 키는 만들지 않아요 (/up 으로 템플릿을 받아요)" ;;
-    FLOWLIST) unlock; fail "$SEC.$KEY 가 한 줄 리스트([a, b])예요 — 블록 리스트로 바꾼 뒤 --add 해요" ;;
-    NOTSCALAR) unlock; fail "$SEC.$KEY 는 리스트예요 — --add / --clear 로 다뤄요" ;;
-    NOTLIST)  unlock; fail "$SEC.$KEY 는 한 값(스칼라)이에요 — --add 가 아니라 값을 바로 줘요" ;;
+    MISSING)  unlock; fail "$KDISP 키가 config.yml 에 없어요 — 새 키는 만들지 않아요 (/up 으로 템플릿을 받아요)" ;;
+    FLOWLIST) unlock; fail "$KDISP 가 한 줄 리스트([a, b])예요 — 블록 리스트로 바꾼 뒤 --add 해요" ;;
+    NOTSCALAR) unlock; [ "$TOP" = true ] && fail "$KDISP 는 섹션이에요 — $KDISP.<키> 로 바꿔요"; fail "$KDISP 는 리스트예요 — --add / --clear 로 다뤄요" ;;
+    NOTLIST)  unlock; fail "$KDISP 는 한 값(스칼라)이에요 — --add 가 아니라 값을 바로 줘요" ;;
 esac
 BEFORE="${HEAD1#FOUND$'\t'}"
 NEW="${OUT#*$'\n'}"          # $(...) 가 끝 줄바꿈을 없애요 — 쓸 때 하나 붙여요
@@ -153,9 +175,9 @@ elif [ "$OP" = clear ]; then AFTER="[]"
 elif [ "$DRY_RUN" = true ]; then AFTER="${BEFORE:+$BEFORE | }$VALUE"
 else AFTER=$(goax_yaml_list "$CFG" "$KEY" 2>/dev/null | paste -sd '|' - | sed 's/|/ | /g'); fi
 if [ "$JSON_MODE" = true ]; then
-    json_output ok "$(jq -nc --arg k "$SEC.$KEY" --arg op "$OP" --argjson ch "$CHANGED" --arg b "$BEFORE" --arg a "$AFTER" \
+    json_output ok "$(jq -nc --arg k "$KDISP" --arg op "$OP" --argjson ch "$CHANGED" --arg b "$BEFORE" --arg a "$AFTER" \
         '{path:".ax/config.yml", key:$k, op:$op, changed:$ch, before:$b, after:$a}')" ""
 else
-    printf '%s.%s: %s → %s%s\n' "$SEC" "$KEY" "${BEFORE:-(빈 값)}" "$AFTER" "$([ "$CHANGED" = true ] || printf ' (변화 없음)')"
+    printf '%s: %s → %s%s\n' "$KDISP" "${BEFORE:-(빈 값)}" "$AFTER" "$([ "$CHANGED" = true ] || printf ' (변화 없음)')"
 fi
 exit "$EXIT_OK"

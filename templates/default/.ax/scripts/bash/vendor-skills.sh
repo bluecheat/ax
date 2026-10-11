@@ -2,8 +2,11 @@
 # .ax/scripts/bash/vendor-skills.sh — goax skill/command/agent 를 저장소에 동봉
 #
 # Usage:
-#   bash vendor-skills.sh --plugin-dir <path> [--json] [--dry-run] [--help]
-#   bash vendor-skills.sh --check [--json]        # 동봉본 ↔ plugin 버전 비교만
+#   bash vendor-skills.sh --plugin-dir <path> [--ade-root <path>] [--json] [--dry-run] [--help]
+#   bash vendor-skills.sh --check [--ade-root <path>] [--json]        # 동봉본 ↔ plugin 버전 비교만
+#
+# ADE 루트는 goax_ade_root 가 정해요 (ade-settings.sh 와 같은 함수예요):
+#   --ade-root → .ax/config.yml 의 ade_root → git 최상위 → (git 이 아니면) 가장 가까운 .claude/ → 프로젝트 루트.
 #
 # 왜 필요한가 — 두 개의 루트가 있어요:
 #
@@ -30,7 +33,7 @@ SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 source "$SCRIPT_DIR/common.sh"
 
-JSON_MODE=false; DRY_RUN=false; SHOW_HELP=false; CHECK_ONLY=false; PLUGIN_DIR=""
+JSON_MODE=false; DRY_RUN=false; SHOW_HELP=false; CHECK_ONLY=false; PLUGIN_DIR=""; ADE_ARG=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -38,6 +41,7 @@ while [ $# -gt 0 ]; do
         --dry-run)    DRY_RUN=true ;;
         --check)      CHECK_ONLY=true ;;
         --plugin-dir) shift; PLUGIN_DIR="${1:-}" ;;
+        --ade-root)   shift; ADE_ARG="${1:-}" ;;
         --help|-h)    SHOW_HELP=true ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;
     esac
@@ -50,12 +54,15 @@ if [ "$SHOW_HELP" = true ]; then
 fi
 
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
-ADE_ROOT=$(goax_ade_root "$PROJECT_ROOT")
+PROJECT_ROOT=$(CDPATH="" cd -P "$PROJECT_ROOT" && pwd -P)
+vfail() { if [ "$JSON_MODE" = true ]; then json_error "$1"; fi; goax_error "$1"; exit "$EXIT_ERROR"; }
+ADE_ROOT=$(goax_ade_root "$PROJECT_ROOT" "$ADE_ARG") \
+    || vfail "ADE 루트가 디렉토리가 아니에요 — --ade-root 나 .ax/config.yml 의 ade_root 를 확인해요"
 
-# ADE 루트가 프로젝트보다 위가 아니면(형제·무관) 프로젝트를 ADE 로 봐요
+# ADE 루트는 프로젝트 루트이거나 그 위여야 해요 — 스킬이 .ax/ 를 찾아가는 길이 위→아래 포인터(.goax-root) 하나라서요
 case "$PROJECT_ROOT" in
     "$ADE_ROOT"|"$ADE_ROOT"/*) ;;
-    *) ADE_ROOT="$PROJECT_ROOT" ;;
+    *) vfail "프로젝트($PROJECT_ROOT)가 ADE 루트($ADE_ROOT) 아래에 없어요" ;;
 esac
 
 SPLIT=false

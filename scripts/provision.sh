@@ -22,7 +22,7 @@
 #
 # Output (--json):
 #   {"status":"ok","result":{"target":"...","copied":N,"seeded_kept":N,
-#     "suggested":[...],"preserved":[...],"opencode":false,
+#     "suggested":[...],"preserved":[...],"config_added":["sensors.foreign_executors",...],"opencode":false,
 #     "git_hooks":"installed|skipped|no-git","reference_files":N,"version":"0.4.2"},
 #    "next_step":"...","warnings":[],"errors":[]}
 #
@@ -321,7 +321,20 @@ fi
 
 # ── 6.5 사용자 customize 자산 (MANIFEST 외 조건부) ──────────────────────
 mk .ax
+CFG_EXISTED=false; [ -f .ax/config.yml ] && CFG_EXISTED=true
 cond .ax/config.yml           .ax/config.yml            # domain_risk·commands·sensors
+# 이미 있던 config.yml 엔 새 버전 템플릿에만 있는 키를 기본값으로 더해요 (값은 건드리지 않아요)
+CONFIG_ADDED=""
+if [ "$CFG_EXISTED" = true ] && [ -f .ax/scripts/bash/config-merge.sh ]; then
+    CM_FLAGS=(--template "$TPL/.ax/config.yml" --json); [ "$DRY_RUN" = true ] && CM_FLAGS+=(--dry-run)
+    CM_OUT=$(GOAX_PROJECT_DIR="$PWD" bash .ax/scripts/bash/config-merge.sh "${CM_FLAGS[@]}" 2>/dev/null || true)
+    if command -v jq >/dev/null 2>&1 && printf '%s' "$CM_OUT" | jq -e '.status == "ok"' >/dev/null 2>&1; then
+        CONFIG_ADDED=$(printf '%s' "$CM_OUT" | jq -r '.result.added[]')
+        [ -n "$CONFIG_ADDED" ] && log "✓ .ax/config.yml: 새 키 $(printf '%s\n' "$CONFIG_ADDED" | grep -c .)개 추가 ($(printf '%s' "$CONFIG_ADDED" | tr '\n' ' '))"
+    else
+        warn "config.yml 새 키 병합을 건너뛰었어요 — bash .ax/scripts/bash/config-merge.sh --template <플러그인>/templates/default/.ax/config.yml"
+    fi
+fi
 cond .ax/search-aliases.yml   .ax/search-aliases.yml    # triage-search 도메인 동의어
 mk .ax/mistakes
 cond .ax/mistakes/README.md   .ax/mistakes/README.md    # 팀 캡처·심사 정책
@@ -388,12 +401,12 @@ if [ "$JSON_MODE" = true ]; then
     if command -v jq >/dev/null 2>&1; then
         jq -nc \
             --arg t "$PROJECT_DIR" --argjson c "$COPIED" --argjson sk "$SEEDED_KEPT" \
-            --argjson sg "$(jarr "$SUGGESTED")" --argjson pv "$(jarr "$PRESERVED")" \
+            --argjson sg "$(jarr "$SUGGESTED")" --argjson pv "$(jarr "$PRESERVED")" --argjson ca "$(jarr "$CONFIG_ADDED")" \
             --argjson oc "$HAS_OPENCODE" --arg gh "$GIT_HOOKS" --argjson rf "${REF_N:-0}" \
             --arg v "$GOAX_VER" --argjson gi "$GI_ADDED" --argjson dr "$DRY_RUN" \
             --argjson w "$(jarr "$WARNINGS")" --arg ns "$NEXT" \
             '{status:(if ($w|length)>0 then "warning" else "ok" end),
-              result:{target:$t,copied:$c,seeded_kept:$sk,suggested:$sg,preserved:$pv,
+              result:{target:$t,copied:$c,seeded_kept:$sk,suggested:$sg,preserved:$pv,config_added:$ca,
                       opencode:$oc,git_hooks:$gh,reference_files:$rf,gitignore_added:$gi,
                       dry_run:$dr,version:$v},
               next_step:$ns, warnings:$w, errors:[]}'

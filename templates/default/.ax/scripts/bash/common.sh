@@ -442,20 +442,6 @@ find_project_root() {
     return 1
 }
 
-# goax_ade_root [start]
-#   ADE 루트 — 에이전트가 스킬을 찾는 곳 (.claude/ 가 있는 곳, 없으면 git 루트).
-#   프로젝트 루트(.ax 가 있는 곳) 와 다를 수 있어요. 단일 저장소면 보통 같아요.
-goax_ade_root() {
-    local dir="${1:-$(pwd)}"
-    local scan="$dir"
-    while [ "$scan" != "/" ]; do
-        [ -d "$scan/.claude" ] && { printf '%s\n' "$scan"; return 0; }
-        scan="$(dirname "$scan")"
-    done
-    git -C "$dir" rev-parse --show-toplevel 2>/dev/null && return 0
-    printf '%s\n' "$dir"
-}
-
 # JSON output — uses jq if available, else manual escape
 # Usage: json_output ok '{"key":"value"}' "next step text"
 json_output() {
