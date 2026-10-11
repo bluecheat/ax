@@ -104,10 +104,12 @@ DELTA=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --delta --json \
    vendor 설치면 접두사 없이). 둘은 서로의 파일을 못 보니 동시에 띄워도 독립이에요 — 순차로 띄우면
    벽시계만 두 배예요. 브리프에 넣는 건 각자 이것뿐이에요:
    - 공통: `$SPEC_DIR/spec.md` 경로 · `$SHA` · §7.5 진입 ADR 경로들 · tasks.md 가 있으면 그 경로 ·
-     "첫 줄 `verdict:` 둘째 줄 `sha: $SHA`" · **재리뷰면 `$DELTA` 경로와 "바뀐 곳만 보세요"**
+     "첫 줄 `verdict:` 둘째 줄 `sha: $SHA` 셋째 줄 `model: <모델>`" · **재리뷰면 `$DELTA` 경로와 "바뀐 곳만 보세요"**
    - architect 에는 **출력 파일 `$A_FILE`** 만, evaluator 에는 **출력 파일 `$E_FILE`** 만. 상대 파일은
      넣지 않아요. 이 대화도 넣지 않아요.
    - **모델** — 띄우기 전에 `bash .ax/scripts/bash/agent-model.sh architect evaluator --json` 을 돌려 `result.models.<이름>` 이 null 이 아니면 그 값을 Agent 호출의 `model` 로 넘겨요. null 이면 넘기지 않아요 (에이전트 정의의 기본값 — 팀은 `.ax/config.yml` 의 `agent_models` 로 바꿔요).
+     브리프에도 같은 값을 `모델: <값>` 으로 적어요. null 이면 `모델: 에이전트 기본값` 이라고 적고, 리뷰어가 시스템 프롬프트의 자기 모델 이름을 써요.
+     이유: 리뷰 파일의 `model:` 줄로 어떤 모델이 이 리뷰를 썼는지 남겨요.
    - **검증 예산**: spec 단계 리뷰어는 grep·read 로만 봐요. 빌드·테스트를 돌리지 않아요 — 그건 구현
      리뷰(`tasks-gate.sh` G6)가 맡고, 여기서 돌리면 리뷰 한 번이 구현 한 번만큼 비싸져요.
 2. 검토 범위가 달라요 — 같은 걸 두 번 지적받지 않게 각 agent 의 "하지 않는 것" 절로 나눠 뒀어요:
@@ -190,6 +192,18 @@ tasks 단계 리뷰도 둘 다 띄우되 브리프가 짧아요: 공통으로 "s
 분해만 보세요". evaluator 는 컨텍스트 기준 분해인가 · `files:` 가 실제인가 · `[P]` 근거를, architect 는
 task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비싼 task 가 앞에 있는가만 봐요.
 
+evaluator 를 띄우기 전에, 이 세션은 두 스크립트를 돌려 결과를 evaluator 브리프에 넣어요:
+
+```bash
+SCOPE=$(bash .ax/scripts/bash/rules-audit-scope.sh --spec "$SPEC" --from-tasks --json)
+printf '%s\n' "$SCOPE" | jq -r '.result.rule_files[]?'          # 브리프: "룰·선례 대조 — 이 룰 파일을 읽어요"
+LINT=$(bash .ax/scripts/bash/tasks-plan.sh --spec "$SPEC" --lint --json)
+printf '%s\n' "$LINT" | jq -r '.result.lint[]? | "\(.task) — \(.reason)"'   # 브리프: "거부 경로가 없는 task"
+```
+
+이유: 계획 단계에서 task 가 만들 파일에 걸리는 룰을 아무도 대조하지 않으면, 구현이 끝난 뒤 G7 에서야 위반이 나와요.
+`SCOPE` 가 skipped(미완료 task 에 `files:` 없음)면 브리프에 "files: 가 없어 룰 대조 생략" 이라고 적어요.
+
 ### 왜 이 규칙인가
 
 - **리뷰어별 파일** — 한 파일에 둘이 쓰면 첫 줄 verdict 하나로 "둘 다 진행" 을 못 담고, 뒤에 쓰는
@@ -264,6 +278,16 @@ task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비�
 
  ▸ 답해주세요 [a] / [b] / [c]
 ```
+
+### 리뷰 지적을 사용자에게 올릴 때
+
+이 세션은 리뷰어 파일의 지적을 두 묶음으로 나눠 보여줘요.
+
+- **직접 확인함** — 이 세션이 grep, read, 명령으로 다시 확인한 지적. 확인한 명령이나 `파일:줄` 을 같이 적어요.
+- **리뷰어 주장** — 아직 확인하지 않은 지적. 리뷰어 이름을 붙여요.
+
+설정값이나 정책을 권고할 때는 그 값이 어느 호출처(온라인 요청, 배치, 관리자 화면 …)에 적용되는지 같이 적어요.
+이유: 리뷰어 주장을 확인 없이 사실처럼 옮기면 사용자는 어느 것을 믿을지 가릴 수 없어요. 호출처가 빠진 권고는 배치에 맞는 값이 온라인에 들어가요.
 
 ## 4. Triage 자동 게이팅 (참고)
 

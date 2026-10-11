@@ -2,7 +2,7 @@
 # .ax/scripts/bash/rules-audit-scope.sh — 룰 대조 리뷰(G7)의 범위: 변경 파일마다 걸린 룰 · 상시 룰 · 새 파일
 #
 # Usage:
-#   bash rules-audit-scope.sh [--spec <id-slug>] [--base <git ref>] [--files a,b,…] [--json] [--help]
+#   bash rules-audit-scope.sh [--spec <id-slug>] [--base <git ref>] [--files a,b,…] [--from-tasks] [--json] [--help]
 #
 # 왜 있나 — 편집 시점 훅은 룰 **경로**만 알려주고(spirit-rules-inject.sh · module-rules-inject.sh),
 #   rule-read-gate.sh 는 그 파일을 **읽었는지**만 봐요. 읽은 룰을 지켰는지, 새 파일이 이웃 관례(같은 레이어의
@@ -11,6 +11,8 @@
 #   완료 직전에 새 컨텍스트의 rules-auditor 가 대조하고, 그 범위를 여기서 기계적으로 정해요 —
 #   "어떤 룰이 어느 파일에 걸리나" 를 리뷰어가 직접 grep 하면 빠뜨린 룰은 아무도 몰라요.
 #
+# --from-tasks — 아직 구현 전인 spec 리뷰용이에요. 변경 파일 대신 tasks.md 의 미완료 task `files:` 를 써요
+#   (spec-validate 가 tasks 단계 합의 리뷰 브리프에 넣어요). 리뷰 파일은 review-spec.evaluator.md 예요.
 # 변경 파일 — --files 가 있으면 그것만. 없으면 git 에서:
 #   base(--base · 없으면 origin/HEAD → main → master 와의 merge-base)...HEAD + 워킹 트리(스테이징 포함) + 추적 안 되는 새 파일.
 #   `.ax/**` 는 빼요 (하네스 자신의 상태·문서예요 — 룰 파일의 ❌ 예시가 룰에 걸려요).
@@ -31,7 +33,7 @@ SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 source "$SCRIPT_DIR/common.sh"
 
-JSON_MODE=false; SHOW_HELP=false; SPEC=""; BASE_ARG=""; FILES_ARG=""
+JSON_MODE=false; SHOW_HELP=false; SPEC=""; BASE_ARG=""; FILES_ARG=""; FROM_TASKS=false
 while [ $# -gt 0 ]; do
     case "$1" in
         --json)    JSON_MODE=true ;;
@@ -39,6 +41,7 @@ while [ $# -gt 0 ]; do
         --spec)    shift; SPEC="${1:-}" ;;
         --base)    shift; BASE_ARG="${1:-}" ;;
         --files)   shift; FILES_ARG="${1:-}" ;;
+        --from-tasks) FROM_TASKS=true ;;
         --help|-h) SHOW_HELP=true ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;
     esac
@@ -64,6 +67,14 @@ if [ -n "$SPEC" ]; then
 fi
 [ -n "$SPEC" ] && [ -d "$PROJECT_ROOT/.ax/docs/spec/$SPEC" ] || fail "spec 을 찾을 수 없어요: .ax/docs/spec/${SPEC:-<없음>}"
 REVIEW_REL=".ax/docs/spec/$SPEC/review-rules.md"
+if [ "$FROM_TASKS" = true ]; then
+    [ -z "$FILES_ARG" ] || fail "--from-tasks 와 --files 는 같이 쓰지 않아요"
+    TASKS_MD="$PROJECT_ROOT/.ax/docs/spec/$SPEC/tasks.md"
+    [ -f "$TASKS_MD" ] || fail "tasks.md 가 없어요: .ax/docs/spec/$SPEC/tasks.md — spec-tasks 뒤에 불러요"
+    FILES_ARG=$(goax_tasks_parse "$TASKS_MD" | awk -F'|' '$2 == "open" && $4 != "" { print $4 }' | tr ',' '\n' | awk 'NF && !s[$0]++' | paste -sd, -)
+    REVIEW_REL=".ax/docs/spec/$SPEC/review-spec.evaluator.md"
+    [ -n "$FILES_ARG" ] || { if [ "$JSON_MODE" = true ]; then json_skip "미완료 task 에 files: 가 없어요"; fi; goax_log "미완료 task 에 files: 가 없어요"; exit "$EXIT_SKIPPED"; }
+fi
 
 # ── 변경 파일 · 새 파일 ─────────────────────────────────────────
 BASE=""; CHANGED=""; NEW=""
@@ -136,6 +147,7 @@ N_FILES=$(printf '%s' "$RESULT" | jq '.files | length')
 N_RULES=$(printf '%s' "$RESULT" | jq '.rule_files | length')
 N_NEW=$(printf '%s' "$RESULT" | jq '.new_files | length')
 NEXT="변경 ${N_FILES}개 · 대조할 룰 파일 ${N_RULES}개 · 새 파일 ${N_NEW}개 — 이 결과를 브리프로 rules-auditor 를 새 컨텍스트로 띄워 ${REVIEW_REL} 첫 줄에 verdict 를 받으세요"
+[ "$FROM_TASKS" = true ] && NEXT="계획 파일 ${N_FILES}개 · 걸리는 룰 파일 ${N_RULES}개 — rule_files 를 evaluator(spec 모드) 브리프의 '룰·선례 대조' 항목에 넣어요"
 if [ "$JSON_MODE" = true ]; then
     json_output "ok" "$RESULT" "$NEXT"
 else

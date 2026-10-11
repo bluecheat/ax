@@ -250,6 +250,7 @@ files: 목록과 레포 관례(새 파일 위치·분리)가 충돌하면 — �
 
 핵심: 이전 Phase 결과 요약 + 다음 Phase 파일 + 적용 룰 delta + 의존성 주의. *비판적 사고가 작동하도록* 정보 제공. `Phase N → Phase N+1` 전환 외에는 묻지 않음.
 
+끝난 Phase 를 evaluator 에게 따로 보일지(Phase 리뷰, 선택)는 `references/phase-review.md` 를 따라요. 입력을 거르는 task 가 있던 Phase 면 띄워요.
 경계에 설 때마다 §2 의 `TASK_FRICTION` 을 파일에서 다시 읽어요 — 도중에 사용자가 바꾼 값은 파일에만 있어요.
 `autopilot` 이면 이 박스를 찍지 않고 넘어가요 (사용자가 이미 준 답이에요). L3 override(C5) 는 그래도 우선해요.
 
@@ -382,7 +383,7 @@ phase 가 `implementing`/`review` 인데 `tasks-gate.sh` 가 아직 실패면, �
 - ADR — spec.md §7.5 의 진입 ADR 경로들
 - diff 범위 — 브랜치면 `git diff <base>...HEAD`, 아니면 spec 시작 이후 (`current-task.json` 의
   `started_at` 부터 `git log --since`) + 워킹 트리 (`git diff HEAD`)
-- 산출물 — `$SPEC_DIR/review.md` 에 직접 쓰고, **첫 줄은 `verdict: 진행 | 보강 필요 | 재논의 필요`**
+- 산출물 — `$SPEC_DIR/review.md` 에 직접 쓰고, **첫 줄은 `verdict: 진행 | 보강 필요 | 재논의 필요`**, 둘째 줄은 `model: <모델>` (브리프에 `모델: <넘긴 값 또는 에이전트 기본값>` 을 적어요)
 
 띄우기 전에 phase 를 `review` 로 적어요 — HUD 체인의 `review ●` 가 여기서 켜져요:
 
@@ -392,7 +393,7 @@ bash .ax/scripts/bash/update-task.sh --phase review ${WORK_ID:+--task "$WORK_ID"
 
 evaluator 가 파일을 직접 써요. 코디네이터는 결과를 받아 적지 않아요 — 받아 적는 순간 검사받는
 쪽이 검사 기록을 쓰게 돼요. 돌아오면 `tasks-gate.sh` 를 다시 돌려요. G6 이 review.md 의 첫 줄을
-읽어 판정해요. `보강 필요` 로 §3 에 돌아갈 땐 phase 를 다시 `implementing` 으로 되돌려요.
+읽어 판정해요. `보강 필요` 로 §3 에 돌아갈 땐 phase 를 다시 `implementing` 으로 되돌려요. 지적을 사용자에게 올릴 때는 "직접 확인함" 과 "리뷰어 주장" 을 나눠요 (`references/phase-review.md`).
 
 ### 8.1.5 룰 대조 — rules-auditor, 새 컨텍스트로 (G7)
 
@@ -406,7 +407,7 @@ printf '%s\n' "$SCOPE" | jq -r '.next_step'
 
 `Agent` 도구로 `goax:rules-auditor` 를 띄워요 (vendor 설치면 `rules-auditor`) — evaluator 와 **한 메시지에 같이**, 서로의
 파일은 브리프에 넣지 않아요. 브리프는 `SCOPE` 의 result(JSON 그대로) · diff 범위(§8.1 과 같은 base) · 산출물 경로
-(`result.review_file`, 첫 줄 `verdict: 진행 | 보강 필요`) 뿐이에요. 이 대화는 넘기지 않아요. 파일은 rules-auditor 가 직접
+(`result.review_file`, 첫 줄 `verdict: 진행 | 보강 필요`, 둘째 줄 `model:`) 뿐이에요. 이 대화는 넘기지 않아요. 파일은 rules-auditor 가 직접
 써요 — 코디네이터가 받아 적지 않아요. 돌아오면 `tasks-gate.sh` 를 다시 돌려요. `SCOPE` 가 skipped(변경 0)면 브리프 대신
 `review-rules.md` 를 rules-auditor 에게 "변경 0 — 진행" 으로 쓰게 해요.
 

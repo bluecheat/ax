@@ -21,7 +21,7 @@
 # 파일 (스크립트가 쓰는 것 / 리뷰어가 쓰는 것):
 #   <spec>/.review-round              라운드|스냅샷sha|시각|spec.md sha|tasks.md sha|단계|fixup sha  ← --snapshot · --fixup 이 씀
 #   <spec>/.review-snapshot/          reviewed/ (리뷰어가 본 본문) · current/ (마지막 스냅샷 본문) · delta.diff  ← --snapshot · --delta 가 씀
-#   <spec>/review-spec.architect.md   architect 가 직접 씀 — 1줄 `verdict: 진행|보강 필요|재논의 필요` · 2줄 `sha: <12자>`
+#   <spec>/review-spec.architect.md   architect 가 직접 씀 — 1줄 `verdict: 진행|보강 필요|재논의 필요` · 2줄 `sha: <12자>` · 3줄 `model: <모델>`
 #   <spec>/review-spec.evaluator.md   evaluator 가 직접 씀 — 같은 형식
 #   <spec>/review-spec.md             --merge 가 생성 (합본)
 #   <spec>/review-override.md         --override 가 씀 — sha · by · at · stage/round · 두 verdict · reason (커밋해요 — 사용자 결정의 기록)
@@ -240,18 +240,20 @@ CHANGED_FILES=""
 [ -z "$SNAP_TASKS_SHA" ] && [ -n "$SNAP_SHA" ] && [ -n "$TASKS_SHA" ] && CHANGED_FILES="${CHANGED_FILES}tasks.md "
 CHANGED_FILES="${CHANGED_FILES% }"
 
-# 리뷰 파일 파싱 → "present|verdict|sha" (verdict 는 첫 줄, sha 는 둘째 줄이 계약)
+# 리뷰 파일 파싱 → "present|verdict|sha|model" (verdict 는 첫 줄, sha 는 둘째 줄, model 은 셋째 줄이 계약)
+# model 은 리뷰를 쓴 모델이에요. 어떤 모델이 봤는지 남아야 리뷰 품질 차이가 모델 때문인지 가릴 수 있어요
 parse_review() {
-    local f="$1" v="" s=""
-    [ -f "$f" ] || { printf 'false||'; return; }
+    local f="$1" v="" s="" m=""
+    [ -f "$f" ] || { printf 'false|||'; return; }
     v=$(head -1 "$f" 2>/dev/null | sed -n 's/^verdict:[[:space:]]*//p' | sed -E 's/[[:space:]]+$//' || true)
     s=$(head -3 "$f" 2>/dev/null | sed -n 's/^sha:[[:space:]]*//p' | head -1 | sed -E 's/[[:space:]]+$//' || true)
-    printf 'true|%s|%s' "$v" "$s"
+    m=$(head -4 "$f" 2>/dev/null | sed -n 's/^model:[[:space:]]*//p' | head -1 | sed -E 's/[[:space:]]+$//' | tr -d '|' || true)
+    printf 'true|%s|%s|%s' "$v" "$s" "$m"
 }
-IFS='|' read -r A_P A_V A_S <<EOF
+IFS='|' read -r A_P A_V A_S A_MODEL <<EOF
 $(parse_review "$A_FILE")
 EOF
-IFS='|' read -r E_P E_V E_S <<EOF
+IFS='|' read -r E_P E_V E_S E_MODEL <<EOF
 $(parse_review "$E_FILE")
 EOF
 
@@ -356,11 +358,11 @@ case "$MODE" in
               reused:$reused, replaced:$replaced, stage_reset:$sreset, extended:$ext,
               round_exceeded:$over, dry_run:$dry, spec_file:$s,
               architect_file:$a, evaluator_file:$e, note:(if $note=="" then null else $note end),
-              header:["verdict: 진행 | 보강 필요 | 재논의 필요", ("sha: " + $sha)]}')
+              header:["verdict: 진행 | 보강 필요 | 재논의 필요", ("sha: " + $sha), "model: <이 리뷰를 쓴 모델>"]}')
         NEXT="architect 와 evaluator 를 한 메시지에 같이 띄우세요 — 각자 자기 파일에만 쓰고, 상대 파일은 브리프에 넣지 않아요. 재리뷰면 --delta 를 브리프에 붙여요"
         json_output "ok" "$RESULT" "$NEXT" "$WARN"
     else
-        printf 'spec %s — %s 단계 round %s/%s · sha %s · %s (%s)\n  architect → %s\n  evaluator → %s\n  첫 줄: verdict: 진행 | 보강 필요 | 재논의 필요\n  둘째 줄: sha: %s\n' \
+        printf 'spec %s — %s 단계 round %s/%s · sha %s · %s (%s)\n  architect → %s\n  evaluator → %s\n  첫 줄: verdict: 진행 | 보강 필요 | 재논의 필요\n  둘째 줄: sha: %s\n  셋째 줄: model: <이 리뷰를 쓴 모델>\n' \
             "$SPEC" "$NEW_STAGE" "$ROUND" "$MAX_ROUNDS" "$SHA" "$REQUIRED" "$REQ_SRC" "$A_FILE" "$E_FILE" "$SHA"
         [ -n "$NOTE" ] && printf '  %s\n' "$NOTE"
         [ "$DRY_RUN" = true ] && printf '  (dry-run — .review-round 는 그대로예요)\n'
@@ -551,8 +553,8 @@ case "$MODE" in
         RESULT=$(jq -nc --arg spec "$SPEC" --arg sha "$SHA" --arg ssha "$SPEC_SHA" --arg tsha "$TASKS_SHA" \
             --arg snap "$SNAP_SHA" --arg stage "$STAGE" --argjson fx "$FIXUP_APPLIED" --arg fxs "$FIXUP_SHA" \
             --arg req "$REQUIRED" --arg reqsrc "$REQ_SRC" --argjson round "$ROUND" --argjson ch "$CH_J" \
-            --argjson ap "$A_P" --arg av "$A_V" --arg as "$A_S" --argjson am "$A_M" --arg af "$A_FILE" \
-            --argjson ep "$E_P" --arg ev "$E_V" --arg es "$E_S" --argjson em "$E_M" --arg ef "$E_FILE" \
+            --argjson ap "$A_P" --arg av "$A_V" --arg as "$A_S" --argjson am "$A_M" --arg af "$A_FILE" --arg amd "$A_MODEL" \
+            --argjson ep "$E_P" --arg ev "$E_V" --arg es "$E_S" --argjson em "$E_M" --arg ef "$E_FILE" --arg emd "$E_MODEL" \
             --argjson pass "$PASS" --arg reason "$REASON" --arg mode "$MODE" --argjson dry "$DRY_RUN" \
             --arg merged "${OUT:-}" \
             --argjson oa "$OVR_APPLIED" --arg os "$O_SHA" --arg ob "$O_BY" --arg oat "$O_AT" --arg orz "$O_REASON" \
@@ -562,8 +564,8 @@ case "$MODE" in
               required:$req, required_source:$reqsrc, round:$round, mode:$mode, dry_run:$dry,
               merged_file:(if $merged=="" then null else $merged end),
               changed_files:$ch,
-              architect:{present:$ap, verdict:(if $av=="" then null else $av end), sha:(if $as=="" then null else $as end), sha_match:$am, file:$af},
-              evaluator:{present:$ep, verdict:(if $ev=="" then null else $ev end), sha:(if $es=="" then null else $es end), sha_match:$em, file:$ef},
+              architect:{present:$ap, verdict:(if $av=="" then null else $av end), sha:(if $as=="" then null else $as end), sha_match:$am, file:$af, model:(if $amd=="" then null else $amd end)},
+              evaluator:{present:$ep, verdict:(if $ev=="" then null else $ev end), sha:(if $es=="" then null else $es end), sha_match:$em, file:$ef, model:(if $emd=="" then null else $emd end)},
               override:{applied:$oa, sha:(if $os=="" then null else $os end), by:(if $ob=="" then null else $ob end),
                         at:(if $oat=="" then null else $oat end), reason:(if $orz=="" then null else $orz end)},
               pass:$pass, reason:$reason}')

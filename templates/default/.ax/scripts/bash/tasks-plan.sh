@@ -2,12 +2,16 @@
 # .ax/scripts/bash/tasks-plan.sh — tasks.md 를 실행 그래프로 읽기
 #
 # Usage:
-#   bash tasks-plan.sh [--spec <id-slug>] [--json] [--help]
+#   bash tasks-plan.sh [--spec <id-slug>] [--lint] [--json] [--help]
 #
 # 하는 일:
 #   ready       지금 바로 시작 가능한 task (미완료 + 의존이 전부 완료 [x] 또는 보류 [~])
 #   parallel    그중 `[P]` 가 붙었고 서로 파일이 안 겹치는 것
 #   violations  `[P]` 인데 다른 `[P]` 와 파일이 겹치는 것 — 주장 검증
+#   lint        (--lint) 입력을 거르는 task — 설명에 파서 · 파싱 · parse · upsert · 조건부 · 멱등 · idempot ·
+#               검증 로직 · validat · 역직렬화 · deserial 이 있는 미완료 task — 의 `검증:` 줄에 거부 경로
+#               (거부 · 실패 · 예외 · 오류 · 에러 · 잘못된 · invalid · reject · fail · error · throw · 없으면 · 빈 값 · 누락 · 중복)가 없으면
+#               {task, line, reason} 로 알려요. 성공 경로만 테스트하면 잘못된 입력이 그대로 저장돼요.
 #
 # ``` 코드펜스 안의 줄은 건너뛰어요 — 형식 설명용 예시 task 가 실 task 로 세면 같은 ID 가
 # ready 와 blocked 양쪽에 나와요. `files:` 경로는 비교 전에 정규화해요 (`./` 제거 · 중복 `/` ·
@@ -31,13 +35,14 @@ SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 source "$SCRIPT_DIR/common.sh"
 
-JSON_MODE=false; SHOW_HELP=false; SPEC=""
+JSON_MODE=false; SHOW_HELP=false; SPEC=""; LINT=false
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --json)    JSON_MODE=true ;;
         --dry-run) : ;;                       # 읽기 전용
         --spec)    shift; SPEC="${1:-}" ;;
+        --lint)    LINT=true ;;
         --help|-h) SHOW_HELP=true ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;
     esac
@@ -131,6 +136,33 @@ done <<EOF3
 $PCAND
 EOF3
 
+# --lint — 입력을 거르는 task 의 검증에 거부 경로가 있는지 (task 줄 다음의 `검증:` 줄을 봐요)
+LINT_TSV=""
+if [ "$LINT" = true ]; then
+    LINT_TSV=$(LC_ALL=C awk '
+        function check() {
+            if (id == "" || st != "open" || !filt) return
+            if (verify == "") { printf "%s\t%d\t%s\n", id, ln, "입력을 거르는 task 인데 검증: 줄이 없어요"; return }
+            v = tolower(verify)
+            if (v !~ /거부|실패|예외|오류|에러|잘못된|invalid|reject|fail|error|throw|없으면|빈 값|누락|중복/)
+                printf "%s\t%d\t%s\n", id, ln, "검증에 거부 경로가 없어요: " verify
+        }
+        /^[[:space:]]*```/ { fence = !fence; next }
+        fence { next }
+        /^- \[[ x~X]\] / {
+            check()
+            id = ""; verify = ""; ln = NR; st = ($0 ~ /^- \[ \]/) ? "open" : "closed"
+            if (match($0, /T[0-9][0-9][0-9]+/)) id = substr($0, RSTART, RLENGTH)
+            d = $0; sub(/[[:space:]]+—[[:space:]]+files:.*$/, "", d); d = tolower(d)
+            filt = (d ~ /파서|파싱|parse|upsert|조건부|멱등|idempot|검증 로직|validat|역직렬화|deserial/)
+            next
+        }
+        id != "" && /^[ \t]+검증:/ { verify = $0; sub(/^[ \t]*검증:[ ]*/, "", verify); next }
+        END { check() }
+    ' "$TASKS")
+fi
+LINT_N=$(printf '%s' "$LINT_TSV" | grep -c . || true); LINT_N=${LINT_N:-0}
+
 PARALLEL=$(printf '%s' "$PCAND" | awk -F: 'NF{print $1}' | tr '\n' ' ')
 VIOL_N=$(printf '%s' "$VIOL" | grep -c . || true); VIOL_N=${VIOL_N:-0}
 
@@ -142,7 +174,13 @@ if [ "$JSON_MODE" = true ]; then
     fi
     RESULT=$(printf '{"spec":"%s","ready":%s,"parallel":%s,"blocked":%s,"violations":%s}' \
         "$SPEC" "$(arr "$READY")" "$(arr "$PARALLEL")" "$(arr "$BLOCKED")" "$V_J")
-    if [ "$VIOL_N" -gt 0 ]; then
+    if [ "$LINT" = true ] && command -v jq >/dev/null 2>&1; then
+        L_J=$(printf '%s\n' "$LINT_TSV" | jq -Rn '[inputs|select(length>0)|split("\t")|{task:.[0], line:(.[1]|tonumber), reason:.[2]}]')
+        RESULT=$(printf '%s' "$RESULT" | jq -c --argjson l "$L_J" '. + {lint:$l}')
+    fi
+    if [ "$LINT_N" -gt 0 ] && [ "$VIOL_N" -eq 0 ]; then
+        json_output "warning" "$RESULT" "입력을 거르는 task ${LINT_N}개의 검증에 거부 경로가 없어요. 잘못된 입력이 거부되는 테스트를 검증: 줄에 더해요"
+    elif [ "$VIOL_N" -gt 0 ]; then
         json_output "warning" "$RESULT" "[P] 인데 파일이 겹치는 task 가 ${VIOL_N}쌍 — 겹치는 쪽의 [P] 를 떼거나 의존을 명시하세요"
     else
         json_output "ok" "$RESULT" "ready 한 task 부터 진행하세요. 몇 개를 동시에 돌릴지는 판단해서 결정하세요"
@@ -150,5 +188,6 @@ if [ "$JSON_MODE" = true ]; then
 else
     printf 'ready: %s\nparallel: %s\nblocked: %s\n' "${READY:-없음}" "${PARALLEL:-없음}" "${BLOCKED:-없음}"
     [ "$VIOL_N" -gt 0 ] && printf 'violations:\n%s' "$VIOL"
+    [ "$LINT_N" -gt 0 ] && printf 'lint:\n%s\n' "$LINT_TSV"
 fi
 exit "$EXIT_OK"

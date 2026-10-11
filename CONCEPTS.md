@@ -277,6 +277,8 @@ Spirit:        SP-<CATEGORY>-<id>       (예: SP-SEC-001)
 상한은 스크립트가 막아요 — 경고만 하던 때 실제 tasks 단계가 라운드 18 까지 갔어요. "이번 delta 는 작으니 한 번만 더" 는 매번 그럴듯해서,
 넘을지는 모델이 아니라 사용자가 정해요 (`--override` 로 지금 본문 수용 · `--extend-round` 로 라운드 하나 더). 상한이 품질이 수렴하는
 지점이라는 뜻은 아니에요 — 리뷰어는 돌릴 때마다 뭔가를 찾아요 (Anthropic, 2026-03 하네스 글). 비용과 과잉설계를 막는 선이에요.
+
+리뷰가 늘 놓치던 축은 따로 채워요. 계획 단계에서 evaluator 는 task 가 만들 파일에 걸리는 룰(`rules-audit-scope.sh --from-tasks`)과, 입력을 거르는 task 의 거부 경로(`tasks-plan.sh --lint`)를 봐요. architect 는 spec §2.3 의 원칙, 결정 동인, 대안 2개 이상을 봐요. 비교 기준 없이 고른 대안은 나중에 왜 이 길인지 설명되지 않아요. 구현 중에는 결함이 다음 Phase 로 번지기 전에 Phase 리뷰를 선택으로 띄워요. 리뷰 결과를 사용자에게 올릴 때는 세션이 직접 확인한 지적과 리뷰어의 주장을 나눠요.
 OMC ralplan 의 구조에 파일 verdict 와 결정적 사전 게이트를 얹은 거예요.
 
 ### 5.4 SDD — Spec-Driven Development
