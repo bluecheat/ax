@@ -11,7 +11,7 @@ section "50. goax_shell_scan · block-hook-bypass — 에이전트가 git 훅을
 if command -v jq >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
     HB=$(mktemp -d)
     mkdir -p "$HB/.ax/scripts/bash" "$HB/.ax/hooks/pre-bash"
-    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$HB/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$HB/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$HB/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/pre-bash/block-hook-bypass.sh" "$HB/.ax/hooks/pre-bash/"
     hb_rc() { jq -nc --arg c "$1" --arg d "$HB" '{tool_input:{command:$c},session_id:"s",cwd:$d}' \
         | CLAUDE_PROJECT_DIR="$HB" bash "$HB/.ax/hooks/pre-bash/block-hook-bypass.sh" >/dev/null 2>&1; echo $?; }
@@ -53,7 +53,7 @@ section "51. destructive-facts — 프로젝트 안 되돌리기 어려운 명�
 if command -v jq >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
     DF=$(mktemp -d)
     mkdir -p "$DF/.ax/scripts/bash" "$DF/.ax/hooks/pre-bash" "$DF/src"
-    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$DF/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$DF/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$DF/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/pre-bash/destructive-facts.sh" "$DF/.ax/hooks/pre-bash/"
     df_rc() { jq -nc --arg c "$1" --arg s "${2:-s1}" --arg d "$DF" '{tool_input:{command:$c},session_id:$s,cwd:$d}' \
         | CLAUDE_PROJECT_DIR="$DF" bash "$DF/.ax/hooks/pre-bash/destructive-facts.sh" >/dev/null 2>&1; echo $?; }
@@ -107,7 +107,7 @@ section "52. rule-read-gate — 이 파일에 걸린 룰을 이번 세션에 Rea
 if command -v jq >/dev/null 2>&1; then
     RG=$(mktemp -d)
     mkdir -p "$RG/.ax/scripts/bash" "$RG/.ax/hooks/pre-edit" "$RG/.ax/spirit/rules" "$RG/.ax/modules/pay" "$RG/.ax/modules/rev" "$RG/src/pay"
-    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$RG/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$RG/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$RG/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/pre-edit/rule-read-gate.sh" "$RG/.ax/hooks/pre-edit/"
     printf -- '---\npaths:\n  - "src/**/*.kt"\n---\n## SP-APP-001: x\n' > "$RG/.ax/spirit/rules/app.md"
     printf -- '---\npaths: ["**/*.kt"]\n---\n## SP-UNI-001: x\n' > "$RG/.ax/spirit/rules/universal.md"
@@ -126,6 +126,16 @@ if command -v jq >/dev/null 2>&1; then
     printf '%s' "$RG_ERR" | grep -q 'modules/rev' \
         && fail "rule-read-gate — applies_to 에 code 가 없는 모듈 룰까지 요구해요" \
         || pass "rule-read-gate — applies_to: [pr] 모듈 룰은 편집 게이트 대상이 아니에요"
+    printf 'l2\nl3\nl4\n' >> "$RG/.ax/spirit/rules/app.md"
+    rg_part() { printf '{"tool_name":"Read","tool_input":{"file_path":"%s","offset":%s,"limit":%s},"session_id":"s1"}' "$1" "$2" "$3" \
+        | CLAUDE_PROJECT_DIR="$RG" bash "$RG/.ax/hooks/pre-edit/rule-read-gate.sh"; }
+    rg_part "$RG/.ax/spirit/rules/app.md" 1 2 >/dev/null 2>&1; rg_part "$RG/.ax/spirit/rules/app.md" 3 50 >/dev/null 2>&1
+    rg_run Read "$RG/.ax/modules/pay/rules.md" >/dev/null 2>&1
+    rg_run Edit "$RG/src/pay/A.kt" >/dev/null 2>&1 && fail "rule-read-gate — offset·limit 로 일부만 읽어도 통과해요" \
+        || pass "rule-read-gate — offset·limit 로 일부만 읽은 Read 는 안 세요"
+    rg_part "$RG/.ax/spirit/rules/app.md" 0 2000 >/dev/null 2>&1
+    rg_run Edit "$RG/src/pay/A.kt" >/dev/null 2>&1 && pass "rule-read-gate — 끝까지 덮는 limit 은 읽음으로 세요" \
+        || fail "rule-read-gate — limit 이 파일보다 큰데도 안 세요"
     rg_run Read "$RG/.ax/spirit/rules/app.md" >/dev/null 2>&1
     rg_run Read "$RG/.ax/modules/pay/rules.md" >/dev/null 2>&1
     rg_run Edit "$RG/src/pay/A.kt" >/dev/null 2>&1 && pass "rule-read-gate — 둘 다 Read 하면 통과" \
@@ -161,12 +171,42 @@ grep -q 'goax_module_rules_matching' "$REPO/templates/default/.ax/hooks/pre-edit
     || fail "module 룰 매칭이 주입 훅과 게이트에서 갈라졌어요"
 
 # ───────────────────────────────────────────────────────────
+section "51b. delegate-gate — 구현 단계에 goax 밖 실행 에이전트로 맡기면 한 번 물어요"
+# ───────────────────────────────────────────────────────────
+# 실측(commerce): 단일 레인 위임을 다른 플러그인 훅이 권하는 executor 로 띄워 lane-worker 의 소유 파일·커밋 금지 규율이 빠졌어요.
+if command -v jq >/dev/null 2>&1; then
+    fx_install DG
+    dg_phase() { jq --arg p "$1" '.phase=$p' "$DG/.ax/current-task.json" > "$DG/ct.tmp" && mv "$DG/ct.tmp" "$DG/.ax/current-task.json"; }
+    dg_rc() { jq -nc --arg a "$1" --arg s "${2:-s1}" '{tool_name:"Agent",tool_input:{subagent_type:$a,prompt:"x"},session_id:$s}' \
+        | CLAUDE_PROJECT_DIR="$DG" bash "$DG/.ax/hooks/pre-agent/delegate-gate.sh" >/dev/null 2>&1; echo $?; }
+    dg_phase implementing
+    DG1=$(dg_rc oh-my-claudecode:executor a); DG2=$(dg_rc oh-my-claudecode:executor a); DG3=$(dg_rc "" b)
+    DG4=$(dg_rc goax:lane-worker c); DG5=$(dg_rc Explore c); DG6=$(dg_rc lane-worker c)
+    [ "$DG1$DG2$DG3$DG4$DG5$DG6" = "202000" ] \
+        && pass "delegate-gate — implementing 에서 executor 첫 호출 차단·재시도 통과 · 빈 이름(general-purpose) 차단 · goax·조사 에이전트 통과" \
+        || fail "delegate-gate — 기대 202000, 실제 $DG1$DG2$DG3$DG4$DG5$DG6"
+    dg_phase idle
+    [ "$(dg_rc executor d)" = 0 ] && pass "delegate-gate — 구현 단계가 아니면 조용해요" || fail "delegate-gate — idle 에서 막아요"
+    dg_phase review
+    printf 'sensors:\n  foreign_executors: [code-simplifier]\n' >> "$DG/.ax/config.yml"
+    [ "$(dg_rc executor e)" = 0 ] && [ "$(dg_rc some:code-simplifier e)" = 2 ] \
+        && pass "delegate-gate — sensors.foreign_executors 가 기본 목록을 바꿔요" || fail "delegate-gate — foreign_executors 미적용"
+    jq -e '.hooks.PreToolUse[]|select(.matcher|test("Agent"))|.hooks[]|select(.command|test("pre-agent/delegate-gate.sh"))' \
+        "$REPO/templates/default/.claude/settings.json.template" >/dev/null 2>&1 && grep -q 'goax:lane-worker' "$REPO/skills/spec-implement/SKILL.md" \
+        && ! grep -q '(executor 등)' "$REPO/skills/spec-implement/SKILL.md" \
+        && pass "delegate-gate — settings 템플릿 등록 · spec-implement §3.3 이 lane-worker 로 고정" || fail "delegate-gate — 등록 또는 §3.3 문구가 빠졌어요"
+    rm -rf "$DG"
+else
+    pass "§51b — jq 없음, skip"
+fi
+
+# ───────────────────────────────────────────────────────────
 section "53. 훅 프로필 · 끄기 — 모든 등록 훅이 goax_hook_enabled 를 거쳐요"
 # ───────────────────────────────────────────────────────────
 # 게이트를 켜는 순간 탈출구가 필요해요. 훅마다 ID(파일 이름) 로 끌 수 있어야 하고,
 # minimal 프로필은 안전망만 남겨요. CATASTROPHIC 은 이 스위치 앞에서 끝나야 해요.
 HP_MISS=0
-for h in "$REPO"/templates/default/.ax/hooks/{session-start,pre-compact,user-prompt,pre-bash,pre-edit,post-edit,subagent-start,stop}/*.sh; do
+for h in "$REPO"/templates/default/.ax/hooks/{session-start,pre-compact,user-prompt,pre-bash,pre-edit,pre-agent,post-edit,subagent-start,stop}/*.sh; do
     [ -f "$h" ] || continue
     id=$(basename "$h" .sh)
     grep -qE "goax_hook_enabled $id (minimal|standard)" "$h" || { fail "$(basename "$(dirname "$h")")/$id.sh — goax_hook_enabled $id 가 없어요"; HP_MISS=1; }
@@ -191,7 +231,7 @@ section "54. session-brief — 세션 첫머리 알림은 스크립트가 정하
 if command -v jq >/dev/null 2>&1; then
     SB=$(mktemp -d)
     mkdir -p "$SB/.ax/scripts/bash" "$SB/.ax/hooks/session-start" "$SB/.ax/mistakes" "$SB/home/plugins"
-    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$REPO/templates/default/.ax/scripts/bash/session-brief.sh" "$SB/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/common.sh" "$REPO/templates/default/.ax/scripts/bash/session-brief.sh" "$SB/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$SB/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/session-start/session-brief.sh" "$SB/.ax/hooks/session-start/"
     cp "$REPO/templates/default/.ax/current-task.json.template" "$SB/.ax/current-task.json"
     sb_brief() { CLAUDE_CONFIG_DIR="$SB/home" GOAX_PROJECT_DIR="$SB" bash "$SB/.ax/scripts/bash/session-brief.sh" "$@"; }

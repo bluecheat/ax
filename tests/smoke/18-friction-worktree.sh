@@ -9,7 +9,7 @@ section "65. 실사용 마찰 다섯 — --next 의존 · 관례 위치 · 룰 �
 SB="$REPO/templates/default/.ax/scripts/bash"
 # (1) mark-task --next 는 `의존:` 을 봐요 — tasks-plan 과 같은 파서(goax_tasks_parse)
 NX=$(mktemp -d); mkdir -p "$NX/.ax/scripts/bash" "$NX/.ax/docs/spec/2026-09-25-ab12-x"
-cp "$SB/"{common,mark-task,tasks-plan}.sh "$NX/.ax/scripts/bash/"
+cp "$SB/"{common,mark-task,tasks-plan}.sh "$NX/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$NX/.ax/scripts/bash/"
 NXF="$NX/.ax/docs/spec/2026-09-25-ab12-x/tasks.md"
 cat > "$NXF" <<'NXE'
 ```
@@ -53,7 +53,7 @@ rm -rf "$NX"
 
 # (3) 룰 대조 — rules-audit-scope 는 편집 훅과 같은 매칭, G7 은 G6 과 같은 필수 여부
 RA=$(mktemp -d); mkdir -p "$RA/.ax/scripts/bash" "$RA/.ax/spirit/rules" "$RA/.ax/docs/spec/2026-09-25-cd34-y" "$RA/src/domain"
-cp "$SB/"{common,rules-audit-scope,tasks-gate,tier-from-state}.sh "$RA/.ax/scripts/bash/"
+cp "$SB/"{common,rules-audit-scope,tasks-gate,tier-from-state}.sh "$RA/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$RA/.ax/scripts/bash/"
 printf -- '---\npaths:\n  - "**/*.kt"\n---\n## SP-NAME-001: 이름\n' > "$RA/.ax/spirit/rules/naming.md"
 printf -- '---\npaths:\n  - "**/domain/**"\n---\n## SP-DOM-001: 도메인\n' > "$RA/.ax/spirit/rules/domain.md"
 printf -- '---\ncategory: ops\n---\n## SP-OPS-001: 상시\n' > "$RA/.ax/spirit/rules/ops.md"
@@ -95,7 +95,7 @@ rm -rf "$RA"
 
 # (4) 끝난 spec 의 후속 작업 — --start --follow-up 이 spec_* 를 이어받아요
 FU=$(mktemp -d); mkdir -p "$FU/.ax/scripts/bash" "$FU/.ax/docs/spec/2026-09-25-ef56-pay"
-cp "$SB/"{common,update-task,tier-from-state,reset-task}.sh "$FU/.ax/scripts/bash/"
+cp "$SB/"{common,update-task,tier-from-state,reset-task}.sh "$FU/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$FU/.ax/scripts/bash/"
 cp "$REPO/templates/default/.ax/current-task.json.template" "$FU/.ax/current-task.json"
 echo s > "$FU/.ax/docs/spec/2026-09-25-ef56-pay/spec.md"; printf 'tier: full\n' > "$FU/.ax/docs/spec/2026-09-25-ef56-pay/.tier"
 fu() { GOAX_PROJECT_DIR="$FU" bash "$FU/.ax/scripts/bash/update-task.sh" "$@" --json 2>/dev/null; }
@@ -115,7 +115,7 @@ rm -rf "$FU"
 
 # (5) 합의 리뷰 상한 도달 뒤 사용자 승인 — --override 는 지금 sha 에 기록, --status 가 인정
 OV=$(mktemp -d); mkdir -p "$OV/.ax/scripts/bash" "$OV/.ax/docs/spec/2026-09-25-aa11-z"
-cp "$SB/"{common,spec-review,tier-from-state}.sh "$OV/.ax/scripts/bash/"
+cp "$SB/"{common,spec-review,tier-from-state}.sh "$OV/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$OV/.ax/scripts/bash/"
 OD="$OV/.ax/docs/spec/2026-09-25-aa11-z"; echo 'v1' > "$OD/spec.md"; printf 'tier: full\n' > "$OD/.tier"
 git -C "$OV" init -q 2>/dev/null; git -C "$OV" config user.name tester65
 ov() { GOAX_PROJECT_DIR="$OV" bash "$OV/.ax/scripts/bash/spec-review.sh" --spec aa11 "$@" --json 2>/dev/null; }
@@ -137,7 +137,8 @@ echo v4 > "$OD/spec.md"; OVS2=$(ov --status | jq -c '[.result.pass, .result.over
   && grep -q '^reason: 남은 지적은 오타' "$OD/review-override.md" && grep -q '^at: ' "$OD/review-override.md"; } \
     && pass "spec-review --override — 상한 전·사유 없음은 거부, dry-run 무기록, 지금 sha 에만 pass (누가·언제·사유), 본문이 바뀌면 풀려요" \
     || fail "spec-review --override: 상한전=$OVE 사유없음=$OVN dry=$OVDRY status=$OVS 변경후=$OVS2"
-grep -q -- '--override --reason' "$REPO/skills/spec-validate/SKILL.md" && pass "spec-validate — 상한 절에 --override 사용법" || fail "spec-validate 상한 절에 --override 없음"
+grep -q -- '--override --reason' "$REPO/skills/spec-validate/SKILL.md" && grep -q -- '--extend-round --reason' "$REPO/skills/spec-validate/SKILL.md" \
+    && pass "spec-validate — 상한 절에 --override · --extend-round 사용법" || fail "spec-validate 상한 절에 --override/--extend-round 없음"
 rm -rf "$OV"
 
 section "66. 새 워크트리 — 실제 설치본에서 런타임 상태 파일 없이 흐름이 이어지고, --json 은 zsh echo 로 받아도 깨지지 않아요"

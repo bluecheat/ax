@@ -10,7 +10,7 @@
 | 핵심 spec workflow | `spec`, `spec-validate`, `spec-tasks`, `lane`, `spec-implement` |
 | 진단·관리 | `doctor`, `hud`, `vendor` |
 | 도입 | `up`, `onboarding` (brownfield), `zero` (greenfield 0→1) |
-| Mistake Loop | `mistake` (캡처), `audit` (회고·승격) |
+| Mistake Loop | `mistake` (캡처), `audit` (회고·승격 후보), `rule` (룰 작성·압축) |
 | 진입점 | `triage` |
 | 결정 기록 | `adr` |
 
@@ -84,18 +84,19 @@ idle → triaged → spec → spec_checked → tasks → implementing → review
 |---|---|---|
 | 캡처 | `mistake` | "실수 기록해줘", "mistake 박아줘", "/mistake" — 사용자가 명시적으로 1건 capture 의도를 표현할 때만. hook 자동 capture 는 폐기됨 |
 | 심사 | `audit` | "goax audit", "실수 회고", "재발", "룰 승격 후보" — `promote-mistake.sh --json --threshold N` 으로 카테고리 분포·후보 계산 |
-| 승격 | `audit` (4단계) | 마킹 → 룰 본문 작성 → archive, 3단계 모두 완료해야 종료 |
+| 승격 | `rule` | audit 이 고른 카테고리의 mistake 를 받아 고정 틀로 룰을 쓰고 검사(rule-lint, 프로브, 신입 테스트)한 뒤 마킹 → archive 해요. "이거 룰로 만들어" 처럼 세션에서 바로 불러도 같아요 |
+| 압축 | `rule` | "룰 압축", "룰이 길어" — `rules-budget.sh` 로 재고 `rules-compress.sh --snapshot/--verify` 로 지켜야 할 것을 확인해요 |
 
-승격 3단계와 `promote-mistake.sh` 실제 플래그:
+승격 단계와 `promote-mistake.sh` 실제 플래그 (`rule` skill §8 이 불러요):
 
 ```bash
 # 1. 후보 조회 (dry-run 기본 — threshold 는 config.yml promotion_threshold, 기본 3)
 bash .ax/scripts/bash/promote-mistake.sh --json
 
-# 2. mistake 에 promoted_to 마킹 (룰 본문은 LLM 이 spirit/rules 에 직접 Edit)
-bash .ax/scripts/bash/promote-mistake.sh --apply --json --token SP-SEC-001 --category security
+# 2. 룰을 쓴 mistake 에만 promoted_to 마킹 (--file 을 빼면 카테고리 전체예요)
+bash .ax/scripts/bash/promote-mistake.sh --apply --json --token SP-SEC-001 --category security --file .ax/mistakes/<파일>.md
 
-# 3. 룰 본문 작성·검증 후 archive 로 이동
+# 3. 룰 헤더가 파일에 있으면 archive 로 이동
 bash .ax/scripts/bash/promote-mistake.sh --archive --json --token SP-SEC-001
 ```
 

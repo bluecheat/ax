@@ -624,7 +624,7 @@
 
 ## 출처
 
-조사일 2026-10-04 — 버전은 각 링크에 적힌 것(shadcn/ui registry new-york-v4 · material-web 토큰 v0_192 · Chakra UI v3 main)이에요. 값이 바뀌었을 수 있으니 숫자를 옮기기 전에 링크를 다시 확인해요.
+조사일 2026-10-04 — 버전은 각 링크에 적힌 것(shadcn/ui registry new-york-v4 · material-web 토큰 v0_192 · Chakra UI v3 main)이에요. 값이 바뀌었을 수 있으니 숫자를 옮기기 전에 링크를 다시 확인해요. <!-- rule-lint: 예시 -->
 
 shadcn/ui (registry new-york-v4)
 - [SH-button] https://ui.shadcn.com/r/styles/new-york-v4/button.json

@@ -4,6 +4,7 @@
 # Usage:
 #   bash zero-verify.sh [--json] [--only build,test,lint,typecheck] [--dry-run] [--help]
 #   bash zero-verify.sh --cmd "pnpm test" [--cmd "pnpm lint"] [--json]
+#   bash zero-verify.sh --record <spec> [--json] [--dry-run]   # config 명령 전부를 돌리고 <spec>/verify.json 에 남겨요 (tasks-gate G8)
 #
 # 무엇을 푸는가:
 #   "주장에는 명령과 출력이 붙는다"·"파이프가 exit code 를 덮는다" 는 산문 룰이었어요.
@@ -16,6 +17,11 @@
 #
 # 명령 출처: 인자 --cmd 가 있으면 그것만. 없으면 .ax/config.yml 의 commands.{build,test,lint,typecheck}
 #            (빈 값은 건너뛰고 skipped 로 보고해요 — "안 돌렸다" 를 숨기지 않아요)
+#
+# --record: tasks-gate G8 이 읽는 완료 증거를 <spec>/verify.json 에 남겨요. --cmd, --only 와 함께 쓰면 거부해요.
+#            이유: 일부만 고른 명령의 통과는 전체 통과가 아니에요.
+#            verify.json = {fingerprint, at, checks[{name,cmd,exit}], passed, failed, skipped, ok}
+#            fingerprint 는 goax_tree_fingerprint 값이에요. 커밋해도 그대로이고, 코드를 고치면 바뀌어요.
 #
 # 출력 꼬리(tail_lines): 실패한 명령만 마지막 20줄을 실어요. 통과한 명령은 안 실어요
 #            (통과 로그는 컨텍스트만 먹어요).
@@ -42,6 +48,7 @@ DRY_RUN=false
 SHOW_HELP=false
 ONLY=""
 CMDS=()
+RECORD=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -49,6 +56,7 @@ while [ $# -gt 0 ]; do
         --dry-run) DRY_RUN=true ;;
         --only)    shift; ONLY="${1:-}" ;;
         --cmd)     shift; [ -n "${1:-}" ] && CMDS+=("$1") ;;
+        --record)  shift; RECORD="${1:-}"; [ -n "$RECORD" ] || { goax_error "--record <spec> 이 필요해요"; exit "$EXIT_ERROR"; } ;;
         --help|-h) SHOW_HELP=true ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;
     esac
@@ -63,6 +71,21 @@ fi
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
 cd "$PROJECT_ROOT" || exit "$EXIT_ERROR"
 CONFIG="$PROJECT_ROOT/.ax/config.yml"
+
+REC_DIR=""
+if [ -n "$RECORD" ]; then
+    rec_fail() {
+        if [ "$JSON_MODE" = true ]; then json_error "$1"; fi
+        goax_error "$1"; exit "$EXIT_ERROR"
+    }
+    { [ "${#CMDS[@]}" -eq 0 ] && [ -z "$ONLY" ]; } \
+        || rec_fail "--record 는 --cmd, --only 와 함께 쓸 수 없어요. --record <spec> 만 주면 config.yml commands 를 전부 실행해요"
+    RESOLVED=$(goax_resolve_spec "$RECORD" "$PROJECT_ROOT/.ax/docs/spec") && RC=0 || RC=$?
+    [ "$RC" -eq 0 ] || rec_fail "spec 을 못 찾았어요: '${RECORD}'${GOAX_SPEC_CANDIDATES:+ (후보: ${GOAX_SPEC_CANDIDATES})}"
+    REC_DIR="$PROJECT_ROOT/.ax/docs/spec/$RESOLVED"
+    [ -d "$REC_DIR" ] || rec_fail "spec 디렉토리가 없어요: .ax/docs/spec/${RESOLVED}"
+    REC_FP=$(goax_tree_fingerprint "$PROJECT_ROOT")
+fi
 
 # ── 돌릴 명령 모으기 ─────────────────────────────────────────────
 NAMES=()
@@ -81,21 +104,7 @@ else
             *",$key,"*) ;;                          # 지정됨
             *) continue ;;
         esac
-        val=""
-        if [ -f "$CONFIG" ]; then
-            # YAML 규칙 그대로: 값이 "/' 로 시작하면 짝 닫는 따옴표까지가 값(안의 # 은 안 건드려요),
-            # #로 시작하면 값 전체가 주석(빈 값), 그 외엔 공백 뒤 첫 # 앞까지가 값이에요.
-            # 예전엔 `tr -d` 로 따옴표를 전부 지워서 `test "a b" = "a b"` 가 깨졌고,
-            # 그다음엔 따옴표 안의 `#` 도 주석으로 봐서 `grep -c "#" README.md` 를 읽다가 잘랐어요 —
-            # 둘 다 게이트가 실패한 게 아니라 게이트를 읽다가 깨진 건데 실패로 보고했어요.
-            val=$(grep -E "^[[:space:]]+${key}:" "$CONFIG" 2>/dev/null | head -1 \
-                  | sed -E "s/^[[:space:]]+${key}:[[:space:]]*//" \
-                  | sed -E -e 's/^"([^"]*)".*$/\1/' -e t \
-                           -e "s/^'([^']*)'.*\$/\1/" -e t \
-                           -e 's/^#.*$//'            -e t \
-                           -e 's/[[:space:]]+#.*$//' \
-                           -e 's/[[:space:]]+$//')
-        fi
+        val=$(goax_config_cmd "$CONFIG" "$key")
         NAMES+=("$key"); RUNS+=("$val")
     done
 fi
@@ -183,12 +192,24 @@ else
     fi
 fi
 
+REC_FILE=""
+if [ -n "$REC_DIR" ] && [ "$DRY_RUN" != true ] && command -v jq >/dev/null 2>&1; then
+    REC_FILE="$REC_DIR/verify.json"
+    REC_OK=false; [ "$FAILED" -eq 0 ] && [ "$PASSED" -gt 0 ] && REC_OK=true
+    jq -n --arg fp "$REC_FP" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson checks "[${CHECKS_JSON}]" \
+          --argjson p "$PASSED" --argjson f "$FAILED" --argjson s "$SKIPPED" --argjson ok "$REC_OK" \
+          '{fingerprint:$fp, at:$at, checks:($checks|map({name,cmd,exit})), passed:$p, failed:$f, skipped:$s, ok:$ok}' \
+          > "$REC_FILE.tmp.$$" && mv "$REC_FILE.tmp.$$" "$REC_FILE"
+    NEXT="${NEXT} — 증거를 ${REC_FILE#"$PROJECT_ROOT"/} 에 남겼어요 (tasks-gate G8)"
+fi
+
 if [ "$JSON_MODE" = true ]; then
     if command -v jq >/dev/null 2>&1; then
         RESULT=$(jq -nc --argjson checks "[${CHECKS_JSON}]" \
                        --argjson p "$PASSED" --argjson f "$FAILED" --argjson s "$SKIPPED" \
-                       --arg ev "$EVIDENCE" \
-                       '{checks:$checks,passed:$p,failed:$f,skipped:$s,evidence:$ev}')
+                       --arg ev "$EVIDENCE" --arg rf "$REC_FILE" \
+                       '{checks:$checks,passed:$p,failed:$f,skipped:$s,evidence:$ev,
+                         record_file:(if $rf=="" then null else $rf end)}')
     else
         RESULT=$(printf '{"checks":[%s],"passed":%s,"failed":%s,"skipped":%s,"evidence":""}' \
                         "$CHECKS_JSON" "$PASSED" "$FAILED" "$SKIPPED")

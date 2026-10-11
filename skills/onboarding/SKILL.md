@@ -153,6 +153,8 @@ bash .ax/scripts/bash/zero-domain-risk.sh --show --json    # result.before.keys 
    # paths: 를 채우면 spirit-rules-inject.sh 가 그 경로 편집 때만 주입해요 (path-scoped). 비우면 universal — @import 로 매 turn
    ---
    ```
+   룰 본문은 `rule` skill 의 고정 틀(`.ax/_templates/spirit/rule.md` 주석, `skills/rule/SKILL.md` §4)로 써요. 제목은 규범 한 줄, 본문 1–3줄과 `이유:` 한 줄, ❌/✅ 한 쌍이에요.
+   기존 Constitution 에서 옮긴 룰에 날짜나 경위가 붙어 있으면, onboarding 은 그 부분을 빼고 옮겨요. 다 쓴 뒤 `bash .ax/scripts/bash/rule-lint.sh --json` 지적이 0건인지 봐요.
 5. **Layer 2 stub** — Q2 의 **L2/L3 도메인이면서 모듈로 식별된 것만** `.ax/modules/<name>/rules.md` (`_templates/module/rules.md` cp, `keywords:` frontmatter만 채움 — 도메인명 + 한글 동의어, 본문은 빈 템플릿). L0/L1 은 stub X. 보고: "L3/L2 도메인 N개에 stub. keywords 만 채웠으니 triage 매칭은 되고 본문은 필요할 때."
 6. **Layer 3 첫 ADR** — `DEST=$(bash .ax/scripts/bash/next-spec-num.sh --kind adr --reserve --slug goax-adoption --json | jq -r '.result.path')` 로 ID 를 받아 `cp .ax/_templates/adr/0000-template.md "$DEST"` (파일 이름을 손으로 `0001-…` 로 정하면 기존 ADR 번호와 겹쳐요 — 실측 commerce 에 `0001` 이 둘). 메타(받은 ID · 오늘 · 승인) · 컨텍스트(도입 이유) · 대안(A 도입 안 함 / B PRD-first / C 4-Layer 채택) · 결정(hooks=Q3 · domain_risk=Q2 · 외부 spec=Q4) · 결과(단기 spirit 주입·triage 게이팅 / 장기 mistakes 루프 / 후속 1주 doctor+audit / 측정 mistakes 주 5건↓ · 1개월 검토).
 7. **정리** — `rm -f .ax/CLAUDE.md.suggested .ax/adoption-plan.md .ax/.onboarding-pending`

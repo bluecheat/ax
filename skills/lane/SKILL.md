@@ -47,7 +47,7 @@ description: "작업을 여러 에이전트로 나눠 돌릴 수 있을지, 어�
 
 > "Most coding tasks involve fewer truly parallelizable tasks than research…
 > LLM agents are not yet great at coordinating and delegating to other agents in
-> real time." — Anthropic, *How we built our multi-agent research system* (2025-06-13)
+> real time." — Anthropic, *How we built our multi-agent research system* (2025-06-13) <!-- rule-lint: 예시 -->
 
 같은 글이 멀티에이전트를 단일 챗 대비 **약 15배 토큰**으로 보고해요. 실측도 양극이에요
 — 암묵적 조율에 맡긴 병렬은 **21% 가속 / 39% 감속** 사이에서 갈려요. 그래서 값을
@@ -137,6 +137,13 @@ description: "작업을 여러 에이전트로 나눠 돌릴 수 있을지, 어�
 이 한 줄이 이 skill 의 전부예요. Phase 2 와 Phase 4 에 흩어져 있어도 같은 파일을
 쓰면 한 레인이어야 하고, 같은 Phase 안에 있어도 파일이 안 겹치면 다른 레인이어도 돼요.
 
+정리 레인(스타일 일괄 변경, 이름 바꾸기, 주석 정리)의 소유 파일은 이번 스택에서 바뀐 파일 중에서만 골라요.
+이유: 패키지 글롭으로 뽑으면 이번 작업이 만들지 않은 레거시 파일이 섞여요.
+
+```bash
+bash .ax/scripts/bash/lanes-dispatch.sh --stack-files --path <디렉토리> --json | jq -r '.result.files[]'   # base...HEAD + 워킹 트리 + 새 파일
+```
+
 ---
 
 ## 6. 핫 파일 표 — 독점이냐, 떼어내기냐
@@ -208,10 +215,8 @@ bash .ax/scripts/bash/tasks-plan.sh --spec "$SPEC" --json
 먼저 고쳐요. 해소법은 §6 의 셋 — 독점 / 떼어내기 / 순서 — 이고, `[P]` 를 떼는 것도
 언제나 유효한 답이에요 (순차는 느릴 뿐, 잘못된 병렬은 되돌리는 비용이 더 커요).
 
-오늘 실측: 표면 컴포넌트 5개가 전부 배럴을 건드리면서 `[P]` 로 표시돼 있었고,
-`tasks-plan.sh` 가 10쌍 violation 으로 잡았어요. 떼어내기(B)로 해소했어요.
-**사람이 눈으로 못 본 것을 스크립트가 잡았어요** — 그래서 이 게이트는 형식이 아니라
-실효가 있어요.
+이 게이트는 사람이 눈으로 놓친 겹침을 잡아요. 예: 컴포넌트 5개가 같은 배럴 파일을 건드리는데 `[P]` 로 표시돼
+있으면, `tasks-plan.sh` 가 violation 으로 알려요. 그러면 이 세션은 떼어내기(B)로 해소해요.
 
 ❗ 이 게이트는 **§2 의 탐색이 끝난 뒤에만** 의미가 있어요. `files:` 가 비어 있으면
 빈 데이터를 검사하고 통과시켜요.

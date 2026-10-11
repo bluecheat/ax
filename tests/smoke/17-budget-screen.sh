@@ -12,7 +12,7 @@ section "62. 훅 출력 예산 — 모델에게 주는 글은 10,000자 상한 �
 if command -v jq >/dev/null 2>&1; then
     OB=$(mktemp -d)
     mkdir -p "$OB/.ax/scripts/bash" "$OB/.ax/hooks" "$OB/src" "$OB/.ax/spirit/rules" "$OB/.ax/modules"
-    cp "$REPO/templates/default/.ax/scripts/bash/"*.sh "$OB/.ax/scripts/bash/"; cp -R "$REPO/templates/default/.ax/hooks/"* "$OB/.ax/hooks/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"*.sh "$OB/.ax/scripts/bash/"; cp -R "$GOAX_LIB_SRC" "$OB/.ax/scripts/bash/"; cp -R "$REPO/templates/default/.ax/hooks/"* "$OB/.ax/hooks/"
     cp "$REPO/templates/default/.ax/config.yml" "$OB/.ax/config.yml"; cp "$REPO/templates/default/.ax/current-task.json.template" "$OB/.ax/current-task.json"
     : > "$OB/src/a.ts"
     # 상한 검사 — 유효 JSON · 문자 수 < 10000 · 바이트 수 ≤ 8000 · 깨진 글자(U+FFFD) 없음 · 생략 꼬리 있음
@@ -119,7 +119,7 @@ grep -q '시작 전 필수' "$REPO/agents/screen-designer.md" && grep -q '시작
 
 DC=$(mktemp -d)
 mkdir -p "$DC/.ax/scripts/bash" "$DC/src/theme" "$DC/.storybook"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,design-caps,screen-measure}.sh "$DC/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,design-caps,screen-measure}.sh "$DC/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$DC/.ax/scripts/bash/"
 echo '{"dependencies":{"react":"18","next":"14"}}' > "$DC/package.json"
 echo ':root{--brand:#f60}' > "$DC/src/theme/tokens.css"; echo '{}' > "$DC/components.json"
 echo '{"mcpServers":{"figma":{"type":"http","url":"https://x","headers":{"Authorization":"Bearer SECRET-SHOULD-NOT-LEAK"}},"mobbin":{"type":"http"},"shadcn":{"command":"npx"}}}' > "$DC/.mcp.json"

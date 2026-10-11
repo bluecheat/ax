@@ -4,6 +4,7 @@
 # 왜: 주입 훅은 룰 **경로**만 알려주고 읽을지는 모델이 정해요 — 건너뛸 수 있어요 (CONCEPTS §5.6.1).
 #   모델의 "확인했어요" 가 아니라 Read 도구 기록을 봐요.
 # Read     `.ax/spirit/rules/*.md` · `.ax/modules/*/rules.md` → `.ax/.session/<sid>/rules-read.log` 에 `<epoch>\t<상대경로>`.
+#          파일 끝까지 읽은 Read 만 적어요. offset 이 1 보다 크거나 limit 이 파일 줄 수보다 작으면 적지 않아요.
 # Edit·Write·MultiEdit
 #          대상에 걸린 룰(spirit `paths:` · module `paths:`+`applies_to: code` — 주입 훅과 같은 매칭 함수) 중
 #          안 읽은 게 있으면 exit 2 + 목록. `@` import 된 룰 · `.ax/` · sensors.rule_gate_exempt 는 빼요.
@@ -17,8 +18,10 @@ INPUT="$(cat 2>/dev/null || true)"
 [ -n "$INPUT" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 # jq 한 번 — 모든 Edit·Read 에 걸리는 훅이라 프로세스 수가 곧 지연이에요
-IFS="$(printf '\t')" read -r TOOL TARGET_PATH SID < <(printf '%s' "$INPUT" \
-    | jq -r '[(.tool_name // ""), (.tool_input.file_path // .tool_input.notebook_path // ""), (.session_id // "")] | @tsv' 2>/dev/null) || true
+# 구분자는 \x1f 예요. 이유: 탭은 IFS 공백 문자라 빈 필드(세션 id 없음)가 있으면 뒤 필드가 한 칸씩 앞으로 밀려요
+IFS="$(printf '\037')" read -r TOOL TARGET_PATH SID R_OFF R_LIM < <(printf '%s' "$INPUT" \
+    | jq -r '[(.tool_name // ""), (.tool_input.file_path // .tool_input.notebook_path // ""), (.session_id // ""),
+              (.tool_input.offset // 0 | tostring), (.tool_input.limit // 0 | tostring)] | join("\u001f")' 2>/dev/null) || true
 [ -n "$TARGET_PATH" ] && [ -n "$SID" ] || exit 0
 
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
@@ -48,6 +51,14 @@ TARGET_REL="${TARGET_ABS#"$ROOT_ABS"/}"
 if [ "$TOOL" = "Read" ]; then
     case "$TARGET_REL" in
         .ax/spirit/rules/*.md|.ax/modules/*/rules.md)
+            # 끝까지 읽었나 — offset 은 1 이하, limit 은 없거나 파일 줄 수 이상
+            case "${R_OFF:-0}" in ''|*[!0-9]*) R_OFF=0 ;; esac
+            case "${R_LIM:-0}" in ''|*[!0-9]*) R_LIM=0 ;; esac
+            [ "$R_OFF" -le 1 ] || exit 0
+            if [ "$R_LIM" -gt 0 ]; then
+                R_N=$(wc -l < "$TARGET_ABS" 2>/dev/null | tr -d ' '); R_N=${R_N:-0}
+                [ "$R_LIM" -ge "$R_N" ] || exit 0
+            fi
             mkdir -p "$SDIR" 2>/dev/null && printf '%s\t%s\n' "$(date +%s)" "$TARGET_REL" >> "$SDIR/rules-read.log" ;;
     esac
     exit 0
@@ -91,6 +102,6 @@ fi
     printf '\033[33m[goax hook]\033[0m 📖 %s 에 걸린 룰을 이번 세션에 아직 안 읽었어요. 편집 전에 Read 하세요:\n' "$TARGET_REL"
     printf '  - %s\n' "${UNREAD[@]}"
     printf '  읽은 뒤 이 파일에 해당하는 SP-ID 를 한 줄로 짚고 같은 편집을 다시 하면 통과해요.\n'
-    printf '  (Read 도구로 읽어야 기록돼요. 끄기: .ax/config.yml sensors.disabled_hooks 에 rule-read-gate · 경로 예외: sensors.rule_gate_exempt)\n'
+    printf '  (Read 도구로 파일 끝까지 읽어야 기록돼요. offset 이나 limit 으로 일부만 읽으면 기록되지 않아요. 끄기: .ax/config.yml sensors.disabled_hooks 에 rule-read-gate · 경로 예외: sensors.rule_gate_exempt)\n'
 } >&2
 exit 2

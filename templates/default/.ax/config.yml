@@ -87,6 +87,11 @@ sensors:
   # quality-config-gate 가 "고치기 전에 이유를 적게" 할 품질 설정 글롭 — 기본값(.eslintrc* · .editorconfig · detekt*.yml ·
   # ruff.toml · .golangci.yml · tsconfig*.json · .husky/ …) 밖에서 프로젝트가 쓰는 것. 새 파일 생성은 안 막아요.
   quality_configs: []      # 예: ["config/lint/**", "build-logic/**/quality*.gradle.kts"]
+  # delegate-gate 가 구현 단계(implementing, review)에서 한 번 막는 실행 에이전트 이름이에요.
+  # 비우면 기본값 executor, deep-executor, general-purpose 를 써요. `플러그인:이름` 은 `:` 뒤 이름으로 비교해요.
+  foreign_executors: []    # 예: [executor, deep-executor, general-purpose, code-simplifier]
+  # rule-lint.sh 가 지적하지 않을 ERE 예요. 줄이 이 중 하나에 맞으면 그 줄은 건너뛰어요.
+  rule_lint_allow: []      # 예: ["Phase [0-9]", "라운드 [0-9]+px"]
   # 사용자가 직접 편집하면 안 되는 파일/디렉토리. onboarding과 일상 작업이 합법적으로
   # 쓰는 경로(.ax/modules/, .ax/docs/, .ax/spirit/rules/, .ax/adoption-plan.md, .ax/mistakes/)는
   # 의도적으로 제외 — 통째 .ax/ prefix는 자기충돌(mistake 누적) 유발.

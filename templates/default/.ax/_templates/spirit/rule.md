@@ -25,28 +25,33 @@ enforced_kind: human                # block | warn | grep | arch | human | missi
 
 # __Category Title__
 
-> 이 카테고리에 우리 팀의 룰을 추가하세요.
-> 룰 작성법: `.ax/docs/reference/rules-tokens.md`
+> 이 카테고리의 룰을 이 파일에 모아요. 새 룰은 `rule` skill 로 써요 ("이거 룰로 만들어").
+> 글쓰기 기준: `.ax/docs/reference/writing-for-agents.md`
 
 <!--
-파일 사용법:
-  1. 새 룰 = `## SP-<PREFIX>-<NNN>: <한 줄 제목>` 헤더로 시작
-  2. ID는 카테고리 안에서 sequential (001, 002, ...)
-  3. PREFIX는 카테고리 prefix 4자 이내 (예: SEC, NAMING, ERR)
-  4. grep 으로 잡히는 룰이면 아래 `검출 패턴: <regex>` 주석 줄에 ERE 를 채우세요 — **실제로 돌아요.**
-     pre-commit 의 critical-rule-grep.sh 가 위 `paths:` 에 맞는 staged 파일을 이 정규식으로
-     검사하고, severity 가 critical 이면 (mode=fail 에서) 커밋을 막아요. `paths:` 가 비면 안 돌아요.
-     ❌/✅ 예시는 프로브가 써요 — zero-probe.sh 가 "❌ 는 걸리고 ✅ 는 안 걸린다" 를 재요
-  5. 결정 근거 있으면 `<!-- adr: .ax/docs/adr/<id>-*.md -->` 코멘트
-  6. doctor §3.7 spirit lint 로 검증 (헤더 형식 + SP-* 토큰 중복)
+룰 하나의 틀:
+  1. 헤더 `## SP-<PREFIX>-<NNN>: <규범 한 줄>` — 제목은 "무엇을 해요" 한 문장이에요. 사건 이름이나 경위를 제목에 쓰지 않아요.
+  2. 본문 1–3줄 — `<조건>에서, <주어>는 <행동>해요.` 다음 줄에 `이유: <한 줄>`. 본문은 8줄을 넘기지 않아요.
+  3. ❌/✅ 한 쌍 — 백틱 안에 실제 코드 한 줄씩. 예시가 더 필요하면 `.ax/spirit/references/<category>.md` 로 옮기고 링크 한 줄을 남겨요.
+  4. grep 으로 잡히는 룰이면 `검출 패턴` 주석에 ERE 를 채워요. pre-commit 의 critical-rule-grep.sh 가 `paths:` 에 맞는 staged 파일을
+     이 정규식으로 검사하고, zero-probe.sh 가 ❌ 는 걸리고 ✅ 는 안 걸리는지 재요. 잡히지 않는 룰이면 주석 줄을 지우고
+     frontmatter 를 `enforced_kind: human` 으로 둬요. rules-auditor 가 완료 직전에 대조해요.
+  5. 결정 근거가 ADR 에 있으면 `adr` 주석 한 줄만 둬요.
+
+넣지 않는 것:
+  - 날짜, 커밋 해시, PR·이슈 번호, "이번 세션"·"실측" 같은 사건 경위 — mistake 파일이나 ADR 에 남겨요.
+  - ADR 의 결정 서술 문단 — ADR 파일에 두고 여기엔 링크 한 줄만 둬요.
+  - goax 에이전트·skill·게이트에 대한 지시 (lane-worker, evaluator, spec-validate …) — goax 가 고칠 일이라 이슈로 올려요.
+rule-lint.sh 가 이 기준을 검사해요. 룰 파일을 고치면 post-edit 훅이 지적을 알려줘요.
 -->
 
-## SP-__PREFIX__-001: <첫 번째 룰 제목>
+## SP-__PREFIX__-001: <규범 한 줄 — 예: 금액은 Long 으로 다뤄요>
 
-<룰 본문을 동사 형태로 작성하세요 — "X는 Y한다", "X 금지" 등>
+<조건>에서, <주어>는 <행동>해요.
+이유: <한 줄>
 
-✅ <좋은 예>
-❌ <나쁜 예>
+❌ `<나쁜 예 한 줄>`
+✅ `<좋은 예 한 줄>`
 
 <!-- 검출 패턴: <regex> -->
 <!-- adr: .ax/docs/adr/<id>-*.md -->

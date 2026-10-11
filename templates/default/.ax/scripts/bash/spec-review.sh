@@ -10,6 +10,8 @@
 #   bash spec-review.sh [--spec <id-slug>] --merge   [--dry-run] [--json] # review-spec.md 합본 생성 (사람이 읽는 용)
 #   bash spec-review.sh [--spec <id-slug>] --override --reason "<사용자 결정>" [--dry-run] [--json]
 #                                                                   # 상한에 닿은 뒤 사용자가 "이대로 진행" 을 정했을 때 — 지금 sha 에 승인 기록
+#   bash spec-review.sh [--spec <id-slug>] --extend-round [--stage spec] --reason "<사용자 결정>" [--dry-run] [--json]
+#                                                                   # 상한에 닿은 뒤 사용자가 "한 번 더 리뷰" 를 정했을 때 — 다음 라운드 하나를 열어요
 #
 # 왜 필요한가 — 계획의 품질은 diff 시점이 아니라 계획 시점에 리뷰해야 올라가요. 그런데 리뷰어
 # 둘(architect · evaluator)이 한 파일에 쓰면 (a) 첫 줄 verdict 하나로 "둘 다 진행" 을 표현할 수
@@ -19,10 +21,11 @@
 # 파일 (스크립트가 쓰는 것 / 리뷰어가 쓰는 것):
 #   <spec>/.review-round              라운드|스냅샷sha|시각|spec.md sha|tasks.md sha|단계|fixup sha  ← --snapshot · --fixup 이 씀
 #   <spec>/.review-snapshot/          reviewed/ (리뷰어가 본 본문) · current/ (마지막 스냅샷 본문) · delta.diff  ← --snapshot · --delta 가 씀
-#   <spec>/review-spec.architect.md   architect 가 직접 씀 — 1줄 `verdict: 진행|보강 필요|재논의 필요` · 2줄 `sha: <12자>`
+#   <spec>/review-spec.architect.md   architect 가 직접 씀 — 1줄 `verdict: 진행|보강 필요|재논의 필요` · 2줄 `sha: <12자>` · 3줄 `model: <모델>`
 #   <spec>/review-spec.evaluator.md   evaluator 가 직접 씀 — 같은 형식
 #   <spec>/review-spec.md             --merge 가 생성 (합본)
 #   <spec>/review-override.md         --override 가 씀 — sha · by · at · stage/round · 두 verdict · reason (커밋해요 — 사용자 결정의 기록)
+#   <spec>/review-extend.md           --extend-round 가 덧붙임 — after_sha · grant · by · at · reason 블록 (커밋해요)
 #
 # sha 는 **spec.md + tasks.md 합산**이에요. spec.md 만 보면 리뷰 뒤에 tasks.md 를 통째로
 # 갈아끼워도 pass 가 유지돼서, "L/XL 은 evaluator 가 tasks.md 까지 본다" 가 no-op 이 돼요.
@@ -33,7 +36,13 @@
 #   같은 sha 를 다시 찍으면          → 그대로 (reused)
 #   직전 스냅샷을 아무도 안 봤으면   → 그 자리를 바꿔 끼워요 (replaced) — 리뷰어 띄우기 전 고친 오타로 라운드를 태우지 않아요
 #   직전 스냅샷을 누가 봤으면        → +1
-#   --stage 가 바뀌면 (spec → tasks) → 1 부터 다시. 상한도 단계별이에요 (spec 3 · tasks 2 · --max-rounds 로 덮어써요)
+#   --stage 가 바뀌면 (spec → tasks) → 1 부터 다시. 상한도 단계별이에요 (spec 3 · tasks 2 · --max-rounds 는 낮추기만)
+#
+# 상한 — 새 라운드가 상한을 넘으면 --snapshot 은 아무것도 쓰지 않고 exit 1 이에요. 이유: 경고만으로는 라운드가 계속 늘어요.
+# 상한을 넘는 방법은 사용자 결정 두 가지예요.
+#   --override     지금 본문을 받아들이고 리뷰를 끝내요
+#   --extend-round 라운드 하나를 더 열어요. 직전 스냅샷 sha 에 묶여 있어서 다음 --snapshot 한 번에만 쓰여요
+# tasks 단계에서 spec 단계로 되돌리는 --snapshot 도 막아요. 이유: 라운드가 1 로 돌아가요. --extend-round --stage spec 이 먼저예요.
 #
 # --fixup 은 **통과한 뒤**에만 돼요 (둘 다 `진행` · 둘 다 스냅샷 sha). 그 뒤 오타·문구를 고쳐 sha 가
 # 어긋났을 때, 지금 본문의 sha 를 "리뷰된 것과 같다" 고 원장에 적어요. 설계가 바뀌었으면 쓰지 않아요 —
@@ -57,9 +66,8 @@
 # 예전엔 intent_notes 에 손으로 적었고 --status 는 그걸 몰라 pass=false 가 남았어요. 기록 뒤 본문이 바뀌면(sha 불일치)
 # 승인은 더 이상 안 먹혀요 — 사용자가 본 본문이 아니니까요. 누가(git user.name · 없으면 $USER) · 언제 · 왜 를 적어요.
 #
-# --dry-run 은 아무 파일도 안 써요 (--snapshot 의 .review-round · .review-snapshot, --fixup 의 .review-round, --merge 의 review-spec.md).
-# 라운드가 상한을 넘으면 status: warning 으로 알려요. 차단은 안 해요 —
-# 계속할지 멈출지는 skill 의 판단이라 exit 는 0 이에요.
+# --dry-run 은 아무 파일도 안 써요 (--snapshot 의 .review-round · .review-snapshot, --fixup 의 .review-round, --merge 의 review-spec.md,
+# --override · --extend-round 의 기록 파일).
 #
 # Output (--json):
 #   --snapshot  {"status":"ok|warning","result":{"spec":"014-x","sha":"…","stage":"spec","round":2,"max_rounds":3,
@@ -75,9 +83,10 @@
 #                (재리뷰 브리프에 붙일 것은 reviewed 쪽이에요 — snapshot 대비는 "리뷰 전에 더 고쳤다" 는 뜻)
 #   --fixup     {"status":"ok","result":{"reviewed_sha":"…","accepted_sha":"…","changed_lines":3,…}}
 #   --override  {"status":"ok","result":{"sha":"…","by":"…","at":"…","reason":"…","stage":"spec","round":4,"max_rounds":3,"file":"…"}}
+#   --extend-round {"status":"ok","result":{"after_sha":"…","grant":{"stage":"tasks","round":3},"by":"…","at":"…","reason":"…","file":"…"}}
 #   --status 의 result 엔 "override":{"applied":bool,"sha":…,"by":…,"at":…,"reason":…} 가 붙어요
 #
-# Exit: 0 ok (pass 여부와 무관 — 판단은 caller) · 1 error (spec.md 없음 · --spec 모호 · --fixup/--override 조건 미달) · 2 skipped (jq 없음)
+# Exit: 0 ok (pass 여부와 무관 — 판단은 caller) · 1 error (spec.md 없음 · --spec 모호 · 상한 초과 · --fixup/--override/--extend-round 조건 미달) · 2 skipped (jq 없음)
 
 set -euo pipefail
 SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -96,6 +105,7 @@ while [ $# -gt 0 ]; do
         --delta)    MODE="delta" ;;
         --fixup)    MODE="fixup" ;;
         --override) MODE="override" ;;
+        --extend-round) MODE="extend" ;;
         --reason)   shift; REASON_ARG="${1:-}" ;;
         --spec)     shift; SPEC="${1:-}" ;;
         --stage)    shift; STAGE_ARG="${1:-}" ;;
@@ -152,6 +162,28 @@ ROUND_FILE="$SPEC_DIR/.review-round"
 SNAP_DIR="$SPEC_DIR/.review-snapshot"
 DELTA_FILE="$SNAP_DIR/delta.diff"
 OVR_FILE="$SPEC_DIR/review-override.md"
+EXT_FILE="$SPEC_DIR/review-extend.md"
+
+# 단계 상한을 CAP 에 넣어요. --max-rounds 는 상한을 낮출 때만 받아요. 올리는 방법은 --extend-round 예요.
+# 값을 $(…) 로 받지 않고 전역 변수로 돌려줘요. 이유: 서브셸 안의 fail 은 스크립트를 끝내지 못해요
+set_cap() {
+    local def=3
+    [ "$1" = tasks ] && def=2
+    CAP="$def"
+    if [ -n "$MAX_ROUNDS" ]; then
+        [ "$MAX_ROUNDS" -le "$def" ] || fail "--max-rounds ${MAX_ROUNDS} 은 ${1} 단계 기본 상한 ${def} 보다 커요. 상한은 낮출 수만 있어요. 리뷰를 더 받으려면 사용자 결정을 받아 --extend-round --reason \"<결정>\" 를 실행해요"
+        CAP="$MAX_ROUNDS"
+    fi
+}
+# review-extend.md 에 "after_sha 뒤에 grant(<단계> <라운드>) 를 연다" 기록이 있나
+has_grant() {
+    [ -f "$EXT_FILE" ] && [ -n "$1" ] || return 1
+    awk -v a="$1" -v g="$2" '
+        /^[[:space:]]*$/ { if (s==a && r==g) f=1; s=""; r=""; next }
+        /^after_sha:/    { sub(/^after_sha:[[:space:]]*/, ""); sub(/[[:space:]]+$/, ""); s=$0 }
+        /^grant:/        { sub(/^grant:[[:space:]]*/, "");     sub(/[[:space:]]+$/, ""); r=$0 }
+        END { if (s==a && r==g) f=1; exit(f ? 0 : 1) }' "$EXT_FILE"
+}
 
 sha_file() {
     [ -f "$1" ] || { printf ''; return 0; }
@@ -208,18 +240,20 @@ CHANGED_FILES=""
 [ -z "$SNAP_TASKS_SHA" ] && [ -n "$SNAP_SHA" ] && [ -n "$TASKS_SHA" ] && CHANGED_FILES="${CHANGED_FILES}tasks.md "
 CHANGED_FILES="${CHANGED_FILES% }"
 
-# 리뷰 파일 파싱 → "present|verdict|sha" (verdict 는 첫 줄, sha 는 둘째 줄이 계약)
+# 리뷰 파일 파싱 → "present|verdict|sha|model" (verdict 는 첫 줄, sha 는 둘째 줄, model 은 셋째 줄이 계약)
+# model 은 리뷰를 쓴 모델이에요. 어떤 모델이 봤는지 남아야 리뷰 품질 차이가 모델 때문인지 가릴 수 있어요
 parse_review() {
-    local f="$1" v="" s=""
-    [ -f "$f" ] || { printf 'false||'; return; }
+    local f="$1" v="" s="" m=""
+    [ -f "$f" ] || { printf 'false|||'; return; }
     v=$(head -1 "$f" 2>/dev/null | sed -n 's/^verdict:[[:space:]]*//p' | sed -E 's/[[:space:]]+$//' || true)
     s=$(head -3 "$f" 2>/dev/null | sed -n 's/^sha:[[:space:]]*//p' | head -1 | sed -E 's/[[:space:]]+$//' || true)
-    printf 'true|%s|%s' "$v" "$s"
+    m=$(head -4 "$f" 2>/dev/null | sed -n 's/^model:[[:space:]]*//p' | head -1 | sed -E 's/[[:space:]]+$//' | tr -d '|' || true)
+    printf 'true|%s|%s|%s' "$v" "$s" "$m"
 }
-IFS='|' read -r A_P A_V A_S <<EOF
+IFS='|' read -r A_P A_V A_S A_MODEL <<EOF
 $(parse_review "$A_FILE")
 EOF
-IFS='|' read -r E_P E_V E_S <<EOF
+IFS='|' read -r E_P E_V E_S E_MODEL <<EOF
 $(parse_review "$E_FILE")
 EOF
 
@@ -269,10 +303,8 @@ save_snapshot_copy() {
 case "$MODE" in
   snapshot)
     NEW_STAGE="${STAGE_ARG:-$STAGE}"
-    if [ -z "$MAX_ROUNDS" ]; then
-        if [ "$NEW_STAGE" = tasks ]; then MAX_ROUNDS=2; else MAX_ROUNDS=3; fi
-    fi
-    REUSED=false; REPLACED=false; STAGE_RESET=false; PREV_REVIEWED=false
+    set_cap "$NEW_STAGE"; MAX_ROUNDS="$CAP"
+    REUSED=false; REPLACED=false; STAGE_RESET=false; PREV_REVIEWED=false; EXTENDED=false
     reviewed_by_anyone "$SNAP_SHA" && PREV_REVIEWED=true
     if [ "$ROUND" -gt 0 ] && [ "$NEW_STAGE" != "$STAGE" ]; then
         STAGE_RESET=true; ROUND=1
@@ -284,6 +316,22 @@ case "$MODE" in
     else
         ROUND=$((ROUND + 1))
     fi
+    # 상한 — 쓰기 전에 판정해요. 넘으면 원장·사본을 그대로 두고 멈춰요
+    NEED_GRANT=""
+    if [ "$STAGE_RESET" = true ] && [ "$STAGE" = tasks ] && [ "$NEW_STAGE" = spec ]; then
+        NEED_GRANT="spec 1"
+    elif [ "$REUSED" = false ] && [ "$REPLACED" = false ] && [ "$STAGE_RESET" = false ] && [ "$ROUND" -gt "$MAX_ROUNDS" ]; then
+        NEED_GRANT="${NEW_STAGE} ${ROUND}"
+    fi
+    if [ -n "$NEED_GRANT" ]; then
+        if has_grant "$SNAP_SHA" "$NEED_GRANT"; then
+            EXTENDED=true
+        elif [ "$NEED_GRANT" = "spec 1" ]; then
+            fail "tasks 단계에서 spec 단계로 되돌리지 않았어요 (라운드가 1 로 돌아가요). 사용자에게 설계를 다시 열지 물어요. 사용자가 정하면 --extend-round --stage spec --reason \"<결정>\" 를 실행한 뒤 --snapshot --stage spec 을 다시 실행해요"
+        else
+            fail "${NEW_STAGE} 단계 라운드 ${ROUND} 은 상한 ${MAX_ROUNDS} 을 넘어서 열지 않았어요 (원장은 그대로예요). 리뷰어를 띄우지 말고 사용자에게 물어요. 지금 본문으로 진행이면 --override --reason \"<결정>\", 리뷰 한 번 더면 --extend-round --reason \"<결정>\" 를 실행해요"
+        fi
+    fi
     if [ "$DRY_RUN" != true ] && [ "$REUSED" = false ]; then
         # 직전 스냅샷을 누가 봤으면 그 본문이 "리뷰된 것" — reviewed/ 로 옮기고 지금 본문을 current/ 에
         if [ -d "$SNAP_DIR/current" ] && [ "$PREV_REVIEWED" = true ]; then
@@ -292,13 +340,10 @@ case "$MODE" in
         save_snapshot_copy "$SNAP_DIR/current"
         printf '%s|%s|%s|%s|%s|%s|\n' "$ROUND" "$SHA" "$(date -u +%Y-%m-%dT%H:%MZ)" "$SPEC_SHA" "$TASKS_SHA" "$NEW_STAGE" > "$ROUND_FILE"
     fi
-    OVER=false; WARN='[]'; WARN_MSG=""
-    if [ "$ROUND" -gt "$MAX_ROUNDS" ]; then
-        OVER=true
-        WARN_MSG="${NEW_STAGE} 단계 라운드 ${ROUND} — 상한 ${MAX_ROUNDS} 을 넘었어요. 리뷰를 더 돌리기보다 spec 을 다시 정의하거나 사용자 결정을 받으세요 (사용자가 이대로 진행을 정하면 --override --reason \"<결정>\")"
-        command -v jq >/dev/null 2>&1 && WARN=$(_goax_json_array "$WARN_MSG")
-    fi
+    OVER=false; WARN='[]'
+    [ "$ROUND" -gt "$MAX_ROUNDS" ] && OVER=true
     NOTE=""
+    [ "$EXTENDED" = true ]    && NOTE="사용자 결정(--extend-round)으로 연 ${NEW_STAGE} 단계 라운드 ${ROUND} 이에요. 다음 라운드를 열려면 사용자 결정이 다시 필요해요"
     [ "$REUSED" = true ]      && NOTE="같은 sha — 라운드 ${ROUND} 그대로예요"
     [ "$REPLACED" = true ]    && NOTE="직전 스냅샷을 아무도 안 봤어요 — 라운드 ${ROUND} 를 이 본문으로 바꿔 끼웠어요"
     [ "$STAGE_RESET" = true ] && NOTE="${NEW_STAGE} 단계로 넘어와 라운드를 1 부터 다시 세요 (상한 ${MAX_ROUNDS})"
@@ -307,24 +352,19 @@ case "$MODE" in
             --arg req "$REQUIRED" --arg reqsrc "$REQ_SRC" --argjson round "$ROUND" --arg stage "$NEW_STAGE" \
             --argjson maxr "$MAX_ROUNDS" --argjson over "$OVER" --argjson dry "$DRY_RUN" \
             --argjson reused "$REUSED" --argjson replaced "$REPLACED" --argjson sreset "$STAGE_RESET" \
-            --arg a "$A_FILE" --arg e "$E_FILE" --arg s "$SPEC_DIR/spec.md" --arg note "$NOTE" \
+            --argjson ext "$EXTENDED" --arg a "$A_FILE" --arg e "$E_FILE" --arg s "$SPEC_DIR/spec.md" --arg note "$NOTE" \
             '{spec:$spec, sha:$sha, spec_sha:$ssha, tasks_sha:(if $tsha=="" then null else $tsha end),
               required:$req, required_source:$reqsrc, stage:$stage, round:$round, max_rounds:$maxr,
-              reused:$reused, replaced:$replaced, stage_reset:$sreset,
+              reused:$reused, replaced:$replaced, stage_reset:$sreset, extended:$ext,
               round_exceeded:$over, dry_run:$dry, spec_file:$s,
               architect_file:$a, evaluator_file:$e, note:(if $note=="" then null else $note end),
-              header:["verdict: 진행 | 보강 필요 | 재논의 필요", ("sha: " + $sha)]}')
+              header:["verdict: 진행 | 보강 필요 | 재논의 필요", ("sha: " + $sha), "model: <이 리뷰를 쓴 모델>"]}')
         NEXT="architect 와 evaluator 를 한 메시지에 같이 띄우세요 — 각자 자기 파일에만 쓰고, 상대 파일은 브리프에 넣지 않아요. 재리뷰면 --delta 를 브리프에 붙여요"
-        if [ "$OVER" = true ]; then
-            json_output "warning" "$RESULT" "$WARN_MSG" "$WARN"
-        else
-            json_output "ok" "$RESULT" "$NEXT" "$WARN"
-        fi
+        json_output "ok" "$RESULT" "$NEXT" "$WARN"
     else
-        printf 'spec %s — %s 단계 round %s/%s · sha %s · %s (%s)\n  architect → %s\n  evaluator → %s\n  첫 줄: verdict: 진행 | 보강 필요 | 재논의 필요\n  둘째 줄: sha: %s\n' \
+        printf 'spec %s — %s 단계 round %s/%s · sha %s · %s (%s)\n  architect → %s\n  evaluator → %s\n  첫 줄: verdict: 진행 | 보강 필요 | 재논의 필요\n  둘째 줄: sha: %s\n  셋째 줄: model: <이 리뷰를 쓴 모델>\n' \
             "$SPEC" "$NEW_STAGE" "$ROUND" "$MAX_ROUNDS" "$SHA" "$REQUIRED" "$REQ_SRC" "$A_FILE" "$E_FILE" "$SHA"
         [ -n "$NOTE" ] && printf '  %s\n' "$NOTE"
-        [ "$OVER" = true ] && printf '  ⚠ %s\n' "$WARN_MSG"
         [ "$DRY_RUN" = true ] && printf '  (dry-run — .review-round 는 그대로예요)\n'
     fi
     ;;
@@ -389,7 +429,7 @@ case "$MODE" in
     REASON_ONE=$(printf '%s' "$REASON_ARG" | tr '\n\r' '  ' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
     [ -n "$REASON_ONE" ] || fail "--reason \"<사용자 결정>\" 이 필요해요 — 무엇을 왜 받아들였는지 한 줄 (예: \"남은 차단 2건은 오타·링크 — 사용자가 진행 결정\")"
     [ "$ROUND" -gt 0 ] || fail "스냅샷이 없어요 — 리뷰를 한 번도 안 받았으면 승인할 게 없어요 (--snapshot 부터)"
-    OMAX="$MAX_ROUNDS"; if [ -z "$OMAX" ]; then if [ "$STAGE" = tasks ]; then OMAX=2; else OMAX=3; fi; fi
+    set_cap "$STAGE"; OMAX="$CAP"
     [ "$ROUND" -ge "$OMAX" ] || fail "${STAGE} 단계 라운드 ${ROUND}/${OMAX} — 상한 전에는 승인으로 넘기지 않아요. 지적을 반영하고 --snapshot 으로 다음 라운드를 받으세요"
     BY=$(git -C "$PROJECT_ROOT" config user.name 2>/dev/null || true); BY="${BY:-${USER:-unknown}}"
     AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -415,6 +455,46 @@ case "$MODE" in
     else
         printf 'spec %s — override: sha %s · %s · %s\n  reason: %s\n' "$SPEC" "$SHA" "$BY" "$AT" "$REASON_ONE"
         [ "$DRY_RUN" = true ] && printf '  (dry-run — %s 를 쓰지 않았어요)\n' "$OVR_FILE"
+    fi
+    ;;
+  extend)
+    if [ "$REQUIRED" = none ]; then fail "합의 리뷰 대상이 아니에요 (${REQ_SRC}) — 연장할 리뷰가 없어요"; fi
+    REASON_ONE=$(printf '%s' "$REASON_ARG" | tr '\n\r' '  ' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
+    [ -n "$REASON_ONE" ] || fail "--reason \"<사용자 결정>\" 이 필요해요. 사용자가 리뷰를 한 번 더 받기로 한 이유를 한 줄로 적어요 (예: \"구현 리뷰로 경계 문장이 바뀌어 사용자가 재리뷰를 정함\")"
+    [ "$ROUND" -gt 0 ] || fail "스냅샷이 없어요. 아직 리뷰를 받지 않았으니 --snapshot 부터 실행해요"
+    NEW_STAGE="${STAGE_ARG:-$STAGE}"
+    if [ "$NEW_STAGE" != "$STAGE" ]; then
+        [ "$STAGE" = tasks ] && [ "$NEW_STAGE" = spec ] || fail "spec 단계에서 tasks 단계로 갈 때는 연장이 필요 없어요. --snapshot --stage tasks 를 실행해요"
+        G_STAGE=spec; G_ROUND=1
+    else
+        set_cap "$STAGE"
+        reviewed_by_anyone "$SNAP_SHA" || fail "직전 스냅샷(${SNAP_SHA})을 아직 리뷰어가 보지 않았어요. 지금 --snapshot 은 같은 라운드를 바꿔 끼우니 연장이 필요 없어요"
+        G_STAGE="$STAGE"; G_ROUND=$((ROUND + 1))
+        [ "$G_ROUND" -gt "$CAP" ] || fail "${STAGE} 단계 라운드 ${ROUND}/${CAP} 이에요. 다음 라운드 ${G_ROUND} 은 상한 안이니 연장 없이 --snapshot 을 실행해요"
+    fi
+    BY=$(git -C "$PROJECT_ROOT" config user.name 2>/dev/null || true); BY="${BY:-${USER:-unknown}}"
+    AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    if [ "$DRY_RUN" != true ]; then
+        {
+            if [ -s "$EXT_FILE" ]; then printf '\n'; fi
+            printf 'after_sha: %s\n' "$SNAP_SHA"
+            printf 'grant: %s %s\n' "$G_STAGE" "$G_ROUND"
+            printf 'by: %s\n' "$BY"
+            printf 'at: %s\n' "$AT"
+            printf 'reason: %s\n' "$REASON_ONE"
+        } >> "$EXT_FILE"
+    fi
+    STAGE_FLAG=""; [ "$G_STAGE" != "$STAGE" ] && STAGE_FLAG=" --stage $G_STAGE"
+    NEXT="${G_STAGE} 단계 라운드 ${G_ROUND} 하나를 열었어요. spec 을 고친 뒤 --snapshot${STAGE_FLAG} 을 실행해요. 그다음 라운드를 열려면 사용자 결정이 다시 필요해요"
+    if [ "$JSON_MODE" = true ]; then
+        RESULT=$(jq -nc --arg spec "$SPEC" --arg as "$SNAP_SHA" --arg gs "$G_STAGE" --argjson gr "$G_ROUND" \
+            --arg by "$BY" --arg at "$AT" --arg r "$REASON_ONE" --arg f "$EXT_FILE" --argjson dry "$DRY_RUN" \
+            '{spec:$spec, after_sha:$as, grant:{stage:$gs, round:$gr}, by:$by, at:$at, reason:$r,
+              file:(if $dry then null else $f end), dry_run:$dry}')
+        json_output "ok" "$RESULT" "$NEXT"
+    else
+        printf 'spec %s — extend: %s 단계 라운드 %s 허용 (스냅샷 %s 뒤) · %s · %s\n  reason: %s\n' "$SPEC" "$G_STAGE" "$G_ROUND" "$SNAP_SHA" "$BY" "$AT" "$REASON_ONE"
+        [ "$DRY_RUN" = true ] && printf '  (dry-run — %s 를 쓰지 않았어요)\n' "$EXT_FILE"
     fi
     ;;
   status|merge)
@@ -473,8 +553,8 @@ case "$MODE" in
         RESULT=$(jq -nc --arg spec "$SPEC" --arg sha "$SHA" --arg ssha "$SPEC_SHA" --arg tsha "$TASKS_SHA" \
             --arg snap "$SNAP_SHA" --arg stage "$STAGE" --argjson fx "$FIXUP_APPLIED" --arg fxs "$FIXUP_SHA" \
             --arg req "$REQUIRED" --arg reqsrc "$REQ_SRC" --argjson round "$ROUND" --argjson ch "$CH_J" \
-            --argjson ap "$A_P" --arg av "$A_V" --arg as "$A_S" --argjson am "$A_M" --arg af "$A_FILE" \
-            --argjson ep "$E_P" --arg ev "$E_V" --arg es "$E_S" --argjson em "$E_M" --arg ef "$E_FILE" \
+            --argjson ap "$A_P" --arg av "$A_V" --arg as "$A_S" --argjson am "$A_M" --arg af "$A_FILE" --arg amd "$A_MODEL" \
+            --argjson ep "$E_P" --arg ev "$E_V" --arg es "$E_S" --argjson em "$E_M" --arg ef "$E_FILE" --arg emd "$E_MODEL" \
             --argjson pass "$PASS" --arg reason "$REASON" --arg mode "$MODE" --argjson dry "$DRY_RUN" \
             --arg merged "${OUT:-}" \
             --argjson oa "$OVR_APPLIED" --arg os "$O_SHA" --arg ob "$O_BY" --arg oat "$O_AT" --arg orz "$O_REASON" \
@@ -484,8 +564,8 @@ case "$MODE" in
               required:$req, required_source:$reqsrc, round:$round, mode:$mode, dry_run:$dry,
               merged_file:(if $merged=="" then null else $merged end),
               changed_files:$ch,
-              architect:{present:$ap, verdict:(if $av=="" then null else $av end), sha:(if $as=="" then null else $as end), sha_match:$am, file:$af},
-              evaluator:{present:$ep, verdict:(if $ev=="" then null else $ev end), sha:(if $es=="" then null else $es end), sha_match:$em, file:$ef},
+              architect:{present:$ap, verdict:(if $av=="" then null else $av end), sha:(if $as=="" then null else $as end), sha_match:$am, file:$af, model:(if $amd=="" then null else $amd end)},
+              evaluator:{present:$ep, verdict:(if $ev=="" then null else $ev end), sha:(if $es=="" then null else $es end), sha_match:$em, file:$ef, model:(if $emd=="" then null else $emd end)},
               override:{applied:$oa, sha:(if $os=="" then null else $os end), by:(if $ob=="" then null else $ob end),
                         at:(if $oat=="" then null else $oat end), reason:(if $orz=="" then null else $orz end)},
               pass:$pass, reason:$reason}')

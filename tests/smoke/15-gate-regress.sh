@@ -12,7 +12,7 @@ if command -v jq >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1 && python
     RV=$(mktemp -d)
     mkdir -p "$RV/.ax/scripts/bash" "$RV/.ax/hooks/pre-bash" "$RV/.ax/hooks/pre-edit" "$RV/.ax/hooks/session-start" \
              "$RV/.ax/spirit/rules" "$RV/src/pay" "$RV/fakebin"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,session-brief}.sh "$RV/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,session-brief}.sh "$RV/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$RV/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/pre-bash/"{block-hook-bypass,destructive-facts}.sh "$RV/.ax/hooks/pre-bash/"
     cp "$REPO/templates/default/.ax/hooks/pre-edit/rule-read-gate.sh" "$RV/.ax/hooks/pre-edit/"
     cp "$REPO/templates/default/.ax/hooks/session-start/session-brief.sh" "$RV/.ax/hooks/session-start/"
@@ -89,7 +89,7 @@ fi
 SA=$(mktemp -d)
 mkdir -p "$SA/.ax/scripts/bash" "$SA/.ax/docs/spec/2026-09-25-aaaa-one" "$SA/.ax/docs/spec/2026-09-25-bbbb-two"
 cp -R "$REPO/templates/default/.ax/_templates" "$SA/.ax/_templates"
-cp "$REPO/templates/default/.ax/scripts/bash/"{common,add-spec-files,check-spec-clarity}.sh "$SA/.ax/scripts/bash/"
+cp "$REPO/templates/default/.ax/scripts/bash/"{common,add-spec-files,check-spec-clarity}.sh "$SA/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$SA/.ax/scripts/bash/"
 : > "$SA/.ax/docs/spec/2026-09-25-aaaa-one/spec.md"; : > "$SA/.ax/docs/spec/2026-09-25-bbbb-two/spec.md"
 CLAUDE_PROJECT_DIR="$SA" bash "$SA/.ax/scripts/bash/add-spec-files.sh" --spec 2026-09-25 --add research --json >/dev/null 2>&1; SA1=$?
 CLAUDE_PROJECT_DIR="$SA" bash "$SA/.ax/scripts/bash/check-spec-clarity.sh" --spec 2026-09-25 --json >/dev/null 2>&1; SA2=$?
@@ -109,7 +109,7 @@ if command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
     AD=$(mktemp -d)
     mkdir -p "$AD/.claude" "$AD/projects/app/.ax/scripts/bash" "$AD/projects/web/.ax/scripts/bash"
     git -C "$AD" init -q 2>/dev/null
-    for p in app web; do cp "$REPO/templates/default/.ax/scripts/bash/"{common,ade-settings}.sh "$AD/projects/$p/.ax/scripts/bash/"; done
+    for p in app web; do cp "$REPO/templates/default/.ax/scripts/bash/"{common,ade-settings}.sh "$AD/projects/$p/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$AD/projects/$p/.ax/scripts/bash/"; done
     # 손으로 쓴 옛 배선 (훅 1개) + 사용자 자체 훅 + permissions
     cat > "$AD/.claude/settings.json" <<'ADJ'
 {"permissions":{"allow":["Bash(ls:*)"]},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[
@@ -142,7 +142,7 @@ ADJ
         && pass "ade-settings — 한 저장소의 goax 프로젝트 둘이 각자 자기 몫만 (서로 안 지워요)" \
         || fail "ade-settings — 프로젝트 둘 공존 실패"
     SG=$(mktemp -d); mkdir -p "$SG/.ax/scripts/bash"; git -C "$SG" init -q 2>/dev/null
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,ade-settings}.sh "$SG/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,ade-settings}.sh "$SG/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$SG/.ax/scripts/bash/"
     # 단일 저장소 — `jq -s '.[0] * .[1]'` 머지는 배열을 통째로 바꿔 사용자 훅을 지웠어요. 손으로 쓴 옛 형태
     # ("$CLAUDE_PROJECT_DIR"/.ax/hooks/…, 맨 .ax/hooks/…)도 goax 몫으로 알아보고 바꿔요. 백업 파일은 안 만들어요.
     mkdir -p "$SG/.claude"

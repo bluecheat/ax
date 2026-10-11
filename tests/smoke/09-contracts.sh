@@ -14,7 +14,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     LDG=$(mktemp -d)
     mkdir -p "$LDG"/.ax/scripts/bash "$LDG"/.ax/docs/spec/040-x
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,lanes-dispatch}.sh "$LDG/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,lanes-dispatch}.sh "$LDG/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$LDG/.ax/scripts/bash/"
     LT="$LDG/.ax/docs/spec/040-x/tasks.md"
     cat > "$LT" <<'LGEOF'
 - [ ] T001 [AC1] a — files: ./src/a.ts
@@ -100,7 +100,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     SRV=$(mktemp -d)
     mkdir -p "$SRV"/.ax/scripts/bash "$SRV"/.ax/docs/spec/020-a "$SRV"/.ax/docs/spec/021-b
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,spec-review,tasks-gate,tier-from-state}.sh "$SRV/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,spec-review,tasks-gate,tier-from-state}.sh "$SRV/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$SRV/.ax/scripts/bash/"
     printf '# S\n## 3.\n- [ ] **AC1** a\n' > "$SRV/.ax/docs/spec/020-a/spec.md"
     printf -- '- [ ] T001 [AC1] a — files: a.kt\n' > "$SRV/.ax/docs/spec/020-a/tasks.md"
     printf '# S\n## 3.\n- [ ] **AC1** b\n' > "$SRV/.ax/docs/spec/021-b/spec.md"
@@ -128,15 +128,15 @@ else
         && pass "spec-review — tasks.md 만 바뀌어도 sha 불일치 + changed_files 로 어디가 바뀌었는지" \
         || fail "spec-review — sha 가 spec.md 만 봐서 tasks.md 재작성을 못 잡음"
 
-    # 라운드 상한 — 리뷰어가 본 라운드만 세요. 3 번 보고 4 번째 스냅샷이면 warning (차단은 아니에요, exit 0 유지)
+    # 라운드 상한 — 리뷰어가 본 라운드만 세요. 3 번 보고 4 번째 스냅샷이면 막아요 (exit 1, 원장 round 3 그대로)
     srv_seen() { local sha; sha=$(srv --status --json | jq -r '.result.sha'); printf 'verdict: 보강 필요\nsha: %s\n' "$sha" | tee "$SRV/.ax/docs/spec/020-a/review-spec.architect.md" > "$SRV/.ax/docs/spec/020-a/review-spec.evaluator.md"; }
     srv --snapshot --json >/dev/null 2>&1          # 안 본 SHA_1 자리를 교체 → round 1
     srv_seen; printf 'r2\n' >> "$SRV/.ax/docs/spec/020-a/spec.md"; srv --snapshot --json >/dev/null 2>&1   # round 2
     srv_seen; printf 'r3\n' >> "$SRV/.ax/docs/spec/020-a/spec.md"; srv --snapshot --json >/dev/null 2>&1   # round 3
     srv_seen; printf 'r4\n' >> "$SRV/.ax/docs/spec/020-a/spec.md"
     SRV_OUT=$(srv --snapshot --json); SRV_RC=$?
-    echo "$SRV_OUT" | jq -e '.status=="warning" and .result.round==4 and .result.round_exceeded==true and (.warnings|length)==1' >/dev/null 2>&1 && [ "$SRV_RC" -eq 0 ] \
-        && pass "spec-review --snapshot — 리뷰된 3 라운드 뒤 4 번째는 warning (exit 0 유지)" || fail "spec-review — 라운드 상한이 침묵 또는 오산: $(echo "$SRV_OUT" | jq -c '{status,round:.result.round}')"
+    echo "$SRV_OUT" | jq -e '.status=="error"' >/dev/null 2>&1 && [ "$SRV_RC" -eq 1 ] && [ "$(cut -d'|' -f1 "$SRV/.ax/docs/spec/020-a/.review-round")" = 3 ] \
+        && pass "spec-review --snapshot — 리뷰된 3 라운드 뒤 4 번째는 exit 1 (원장 round 3 그대로)" || fail "spec-review — 라운드 상한이 안 막힘: rc=$SRV_RC $(echo "$SRV_OUT" | jq -c '{status,round:.result.round}')"
 
     # --dry-run 은 어떤 파일도 안 만들어요
     cp "$SRV/.ax/docs/spec/020-a/.review-round" "$SRV/round.before"
@@ -177,6 +177,7 @@ else
     mkdir -p "$ISD/.ax/scripts/bash" "$ISD/.ax/_templates/spec" "$ISD/.ax/docs/spec"
     cp "$REPO/templates/default/.ax/scripts/bash/"{common,next-spec-num,init-spec-dir,slug-from-text}.sh \
        "$ISD/.ax/scripts/bash/" 2>/dev/null
+    cp -R "$GOAX_LIB_SRC" "$ISD/.ax/scripts/bash/"
     cp -R "$REPO/templates/default/.ax/_templates/spec/." "$ISD/.ax/_templates/spec/" 2>/dev/null
     CLAUDE_PROJECT_DIR="$ISD" bash "$ISD/.ax/scripts/bash/init-spec-dir.sh" \
         --slug ghost --tier standard --dry-run --json >/dev/null 2>&1
@@ -212,7 +213,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     RE=$(mktemp -d)
     mkdir -p "$RE/.ax/scripts/bash" "$RE/.ax/spirit/rules"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$RE/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$RE/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$RE/.ax/scripts/bash/"
     printf '# X\n' > "$RE/AGENTS.md"
     printf -- '---\ncategory: sec\nseverity: critical\nenforced_by: human:code-review\n---\n## SP-SEC-001: 시크릿 금지\n' > "$RE/.ax/spirit/rules/sec.md"
     GOAX_PROJECT_DIR="$RE" bash "$RE/.ax/scripts/bash/check-rule-enforcement.sh" --json 2>/dev/null \
@@ -241,7 +242,7 @@ else
     git -C "$I5T" init -q >/dev/null 2>&1
     mkdir -p "$I5T/.ax/scripts/bash" "$I5T/.ax/spirit/rules" "$I5T/.ax/hooks/pre-commit" \
              "$I5T/.ax/hooks/pre-edit" "$I5T/.claude"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$I5T/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$I5T/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$I5T/.ax/scripts/bash/"
     printf '# X\n' > "$I5T/AGENTS.md"
     printf '#!/usr/bin/env bash\n' > "$I5T/.ax/hooks/pre-commit/team-rules.sh"
     i5_rule "$I5T" ".ax/hooks/pre-commit/team-rules.sh"

@@ -7,7 +7,7 @@
 
 | 스크립트 | 용도 | 호출하는 skill |
 |---|---|---|
-| `common.sh` | 공통 함수 (find_project_root, json_output, [goax] log, `goax_inject_fresh` 세션 내 중복 주입 제거, `goax_lock`/`goax_unlock`/`goax_unlock_all` 원장 락, `goax_mktemp` 폴백 임시 파일, `goax_git_hook_path` git 없이도 도는 훅 경로, `goax_resolve_spec` `--spec` 축약 해석, `goax_tasks_parse` tasks.md 실행 그래프(`의존:` 포함 — tasks-plan·mark-task --next 공용), `goax_secret_rules`/`goax_secret_patterns`/`goax_secret_scan_file`/`redact_secrets` 시크릿 패턴 SSOT — 검출과 마스킹이 같은 표에서 나와요 (검출은 kv-detect 전에 TS·Kotlin·Swift 타입 자리를 지워요), `goax_hook_enabled`/`goax_hook_profile` 훅 끄기·프로필, `goax_session_mark`/`goax_session_marked`/`goax_session_count` 세션 마커, `goax_shell_scan` 따옴표·heredoc 을 셸처럼 읽는 명령 판정(bypass·destructive), `goax_module_rules_matching`·`goax_imported_paths` 주입 훅과 게이트가 공유하는 룰 매칭, `goax_doc_id`/`goax_doc_key`/`goax_doc_sort` spec·ADR ID, `goax_runtime_seed`/`goax_runtime_template` 런타임 상태 파일이 없으면(새 워크트리·클론) 설치본 템플릿으로 만들기) | (sourced by all) |
+| `common.sh` | 공통 함수의 입구예요. 출력·세션·훅 프로필·프로젝트 루트 함수를 두고, 나머지는 `lib/` 에서 불러와요 — `secrets` · `shellscan` · `paths` · `rules` · `state` · `lock` · `ids`. 스크립트는 `common.sh` 하나만 source 해요. 함수 목록 (find_project_root, json_output, [goax] log, `goax_inject_fresh` 세션 내 중복 주입 제거, `goax_lock`/`goax_unlock`/`goax_unlock_all` 원장 락, `goax_mktemp` 폴백 임시 파일, `goax_git_hook_path` git 없이도 도는 훅 경로, `goax_resolve_spec` `--spec` 축약 해석, `goax_tasks_parse` tasks.md 실행 그래프(`의존:` 포함 — tasks-plan·mark-task --next 공용), `goax_secret_rules`/`goax_secret_patterns`/`goax_secret_scan_file`/`redact_secrets` 시크릿 패턴 SSOT — 검출과 마스킹이 같은 표에서 나와요 (검출은 kv-detect 전에 TS·Kotlin·Swift 타입 자리를 지워요), `goax_hook_enabled`/`goax_hook_profile` 훅 끄기·프로필, `goax_session_mark`/`goax_session_marked`/`goax_session_count` 세션 마커, `goax_shell_scan` 따옴표·heredoc 을 셸처럼 읽는 명령 판정(bypass·destructive), `goax_module_rules_matching`·`goax_imported_paths` 주입 훅과 게이트가 공유하는 룰 매칭, `goax_doc_id`/`goax_doc_key`/`goax_doc_sort` spec·ADR ID, `goax_runtime_seed`/`goax_runtime_template` 런타임 상태 파일이 없으면(새 워크트리·클론) 설치본 템플릿으로 만들기) | (sourced by all) |
 | `detect-model.sh` | 지금 돌고 있는 모델 식별 — override → `$GOAX_MODEL` → transcript 스캔 → unknown | (진단·로깅용) |
 | `agent-model.sh` | goax 서브에이전트를 띄울 때 넘길 `model` — `config.yml` 의 `agent_models` 를 읽어 값이 있으면 그 모델, 없으면 null(넘기지 않음 → 에이전트 정의 기본값). 모를 값(`inherit` 포함)·모를 이름·한 줄 `{…}` 형식은 경고 후 무시 | `spec-validate`, `spec-implement`, `screen` |
 | `next-spec-num.sh` | 새 spec/ADR ID 발급 — `YYYY-MM-DD-<4hex>` (`--kind spec\|adr`, `--reserve --slug` 로 실물까지 O_EXCL 생성). 순번이 아니라 브랜치끼리 안 겹쳐요. `--check-duplicates` 는 옛 순번(`NNN`/`NNNN`) 중복 진단 | `spec`, `adr`, `doctor` |
@@ -21,7 +21,11 @@
 | `check-rule-enforcement.sh` | 룰의 `enforced_by`/`enforced_kind` invariant(I1~I6) 검증 | `doctor` |
 | `check-sensor-liveness.sh` | Sensors 장치 생사 검증 (C1 grep 스캐폴드 · C2 git hook · C3 차단 능력 0 · C4 세션 루트 이탈) | `doctor` |
 | `check-spec-clarity.sh` | spec.md 명료성 게이팅(NEEDS CLARIFICATION/placeholder/빈 섹션) + tasks·AC 진행률 visibility | `spec-validate` |
-| `promote-mistake.sh` | mistake → spirit rule 승격 (후보·적용·archive) | `audit` |
+| `promote-mistake.sh` | mistake → spirit rule 승격 (후보·적용·archive). `--apply --file <mistake>` 는 그 파일만 마킹 | `audit`, `rule` |
+| `rule-lint.sh` | 룰 작성 기준 검사 — rule 모드(룰 블록마다 세션 흔적·비유·`·` 나열·길이·예시 수·ADR 문단·산문 검출 패턴·goax 지시)와 prose 모드(skill·agent 문서). `--changed` 는 git diff 범위만. 판정 없이 줄 번호 지적만, 예외는 `sensors.rule_lint_allow` | `rule`, `doctor`, `post-edit/rule-lint.sh` |
+| `rule-draft.sh` | 새 룰에 필요한 사실 — 대상 파일·다음 SP 번호·제목이 겹치는 기존 룰·mistake 의 경로와 패턴 초안·grep/human 판정. 파일을 쓰지 않음 | `rule` |
+| `rules-budget.sh` | 룰 분량 — 상시 로드(`goax_always_loaded`)·파일별 줄/바이트/펜스 비율·편집당 Read 바이트 p50/p90/max, 기준 초과는 `over_budget[]` | `rule`(압축), `doctor` |
+| `rules-compress.sh` | 압축 가드 — `--snapshot`(`.ax/.rules-snapshot/` 사본) · `--verify`(SP ID·순서, frontmatter, 검출 패턴, 패턴 룰 예시, 프로브 ok, adr 링크가 그대로인지. 위반이면 exit 1) · `--clear` | `rule`(압축) |
 | `init-mistake-file.sh` | mistake 파일 skeleton 생성 (template cp + frontmatter 치환) | `mistake`, `audit` |
 | `install-git-hooks.sh` | `.ax/hooks/pre-commit/*.sh` chain 을 git pre-commit wrapper 로 설치 (모든 환경 기본 — 사람 터미널 커밋 커버) | `up`, `onboarding` |
 | `register-spirit-hook.sh` | `.claude/settings.json` 에 spirit-rules-inject hook idempotent 등록 | `doctor` |
@@ -35,17 +39,17 @@
 | `rules-index.sh` | 룰 통합 인덱스 — Constitution(🔴/🟡/🔵 시그널 라인) + Spirit + Module 의 `SP-*` 를 한 목록으로. `--level/--source/--category/--find` | `doctor` ("rules 보여줘"), `/goax` |
 | `doctor-scan.sh` | doctor 의 인라인 진단 셋 — 마이그레이션 잔재(`.ax/docs/STATUS.md` 잔재 통지 포함) · template 기준 hook 등록(파일 + **이벤트 키**) · 문서↔실제 메커니즘 · **도달 지도**(룰 소스별 배관 생사) · **인계 노트 기한**(`current-task.json` `handoff` `- [ ] YYYY-MM-DD`, I3 규칙) | `doctor` |
 | `constitution-apply.sh` | onboarding Q5 의 Constitution 블록 적용 — `--block` prepend(기존 본문 `---` 아래 보존) · `--scan-duplicates` · `--drop-exact`(사용자 [a] 뒤에만) · `--append-index` | `onboarding` |
-| `tasks-plan.sh` | tasks.md → ready / blocked / parallel + `[P]` 파일 겹침 violations. 항목별 승격 — wave(배리어) 없음, 자동 실행 없음 | `lane`, `spec-implement` |
-| `tasks-gate.sh` | spec 완료 게이트 G1~G7 — 미완료 · AC 커버리지 · orphan · 유실 · 레인 원장 · evaluator verdict(`review.md`) · 룰 대조 verdict(`review-rules.md`) | `spec-implement`, `lane`, pre-commit hook |
+| `tasks-plan.sh` | tasks.md → ready / blocked / parallel + `[P]` 파일 겹침 violations. 항목별 승격 — wave(배리어) 없음, 자동 실행 없음. `--lint` 는 입력을 거르는 미완료 task(파서 · upsert · 조건부 갱신 · 검증 로직)의 `검증:` 에 거부 경로가 없으면 `lint[]` 로 알려요 | `lane`, `spec-implement`, `spec-tasks`, `spec-validate` |
+| `tasks-gate.sh` | spec 완료 게이트 G1~G8 — 미완료 · AC 커버리지 · orphan · 유실 · 레인 원장 · evaluator verdict(`review.md`) · 룰 대조 verdict(`review-rules.md`) · 전체 검증 기록(`verify.json`) | `spec-implement`, `lane`, pre-commit hook |
 | `lanes-hotfiles.sh` | tasks.md 에서 핫 파일(여러 미완료 task 가 쓰는 파일) + `files:` 누락 task 추출 | `lane` |
-| `spec-review.sh` | spec 합의 리뷰 원장 — `--snapshot`(sha 고정·라운드) / `--status`(리뷰어별 `review-spec.{architect,evaluator}.md` 의 verdict·sha 집계 → pass) / `--merge`(합본) / `--override --reason`(상한 도달 뒤 사용자 승인을 지금 sha 에 기록 — `review-override.md`). 필수 여부는 Size 축만 | `spec-validate` |
-| `rules-audit-scope.sh` | 룰 대조(G7) 범위 — 변경 파일마다 걸린 spirit·모듈 룰(편집 훅과 같은 매칭 함수) · 상시 룰(Constitution · `paths:` 없는 spirit 룰) · 새 파일. rules-auditor 브리프의 입력 | `spec-implement` |
-| `lanes-dispatch.sh` | 레인 디스패치 원장 — `--assign / --dispatch <레인 \| T010,T011> / --report <레인 \| T010,T011> / --status`. tasks.md 의 `레인:`·`디스패치:`·`보고:` 필드를 쓰고, 파일 소유 충돌이면 dispatch 거부 | `lane`, `spec-implement` |
+| `spec-review.sh` | spec 합의 리뷰 원장 — `--snapshot`(sha 고정·라운드) / `--status`(리뷰어별 `review-spec.{architect,evaluator}.md` 의 verdict·sha 집계 → pass) / `--merge`(합본) / `--override --reason`(상한 도달 뒤 사용자 승인을 지금 sha 에 기록 — `review-override.md`) / `--extend-round --reason`(상한 뒤 라운드 하나를 사용자 결정으로 열기 — `review-extend.md`). 상한을 넘는 `--snapshot` 은 exit 1. 필수 여부는 Size 축만. 리뷰 파일 셋째 줄 `model:` 을 `--status` 가 리뷰어별로 읽어요 | `spec-validate` |
+| `rules-audit-scope.sh` | 룰 대조(G7) 범위 — 변경 파일마다 걸린 spirit·모듈 룰(편집 훅과 같은 매칭 함수) · 상시 룰(Constitution · `paths:` 없는 spirit 룰) · 새 파일. rules-auditor 브리프의 입력. `--from-tasks` 는 구현 전 spec 리뷰용 — 미완료 task 의 `files:` 로 룰을 매칭해 evaluator(spec 모드) 브리프에 넣어요 | `spec-implement`, `spec-validate` |
+| `lanes-dispatch.sh` | 레인 디스패치 원장 — `--assign / --dispatch <레인 \| T010,T011> / --report <레인 \| T010,T011> / --status`. tasks.md 의 `레인:`·`디스패치:`·`보고:` 필드를 쓰고, 파일 소유 충돌이면 dispatch 거부. `--stack-files [--path]` 는 이번 스택에서 바뀐 파일만, `--dispatch` 는 스택 밖 기존 파일을 `outside_stack` 로 | `lane`, `spec-implement` |
 | `mark-task.sh` | tasks.md 체크박스를 켜요 — `--task T013[,T014] [--state x\|~]` · `--next`(펜스 밖에서 `의존:` 이 전부 `[x]`·`[~]` 인 첫 미완료 — 전부 막혔으면 warning + `blocked_tasks`). 줄 **앞** ID 만 매칭(본문 언급 무시), 코드 펜스 건너뜀, `tasks.md.lock`, 쓰기 전후 `[x]` 개수 검증. 여러 ID 는 트랜잭션(하나라도 없으면 무변경) | `spec-implement` |
 | `zero-init.sh` | 0→1 첫날 팩 설치 (룰은 라이브 `spirit/rules/`, 템플릿은 `_templates/zero/`) — 덮어쓰지 않고 SP 토큰 충돌만 경고 | `zero` |
 | `zero-domain-risk.sh` | `config.yml` 의 `domain_risk` 블록 통째 교체 (`--show/--set/--default`) — 출고 예시 키가 남으면 triage 가 영원히 default_risk 로 흘러요 | `zero` |
 | `zero-probe.sh` | 네거티브 프로브 — 일부러 위반을 만들어 차단이 실제로 도는지 확인 | `zero` |
-| `zero-verify.sh` | `config.yml commands` 를 파이프 없이 실행하고 증거 블록 생성 — 안 돌린 게이트도 보고 (하나도 안 돌면 exit 2) | `zero` |
+| `zero-verify.sh` | `config.yml commands` 를 파이프 없이 실행하고 증거 블록 생성 — 안 돌린 게이트도 보고 (하나도 안 돌면 exit 2). `--record <spec>` 은 `<spec>/verify.json`(작업 트리 지문 포함)에 남겨 G8 이 읽어요 | `zero`, `spec-implement` |
 | `zero-ablation.sh` | 산문 룰 전체를 끄고 무엇이 깨지는지 재는 ablation (`--off/--on/--status`) — `--on` 이 회차를 기록하고 다음 기한(+180일)을 인계 노트 `next` 에 체크박스로 (doctor 가 추적) | `zero`, `doctor` |
 | `zero-guard-bash.sh` | **(`.ax/hooks/pre-bash/` 에 설치 — 이 디렉터리 밖)** pre-bash 가드: `git add -A` 차단(exit 2) · 검증 명령 파이프 경고. hook 규약이라 `--json` 표준 밖이에요 | (hook) |
 | `ade-settings.sh` | `.claude/settings.json` 의 goax 훅을 템플릿에서 생성 — 모노레포면 ADE 루트(저장소 루트)에 `env CLAUDE_PROJECT_DIR=…/<rel>` 형식으로, 단일 저장소면 프로젝트 settings 에 템플릿 그대로. `--check`(누락·잔재) · `--apply`(goax 훅 명령만 교체, 사용자 훅·permissions·statusLine 보존, 락, 백업 파일 없음). `.ax/settings.json.suggested` 머지도 이걸로 — `jq '*'` 는 배열을 통째로 바꿔요 | `doctor`, `vendor`, `up`, `onboarding` |
@@ -74,7 +78,7 @@
 오작동해요. 각 자리에서 `|| true` 로 개별 guard 하는 대신 스크립트 전체에서 `-e` 를 뺀 선택:
 
 - `set -u` 만: `build-memory.sh`, `update-state.sh`
-- `set -uo pipefail`: `check-rule-enforcement.sh`, `check-sensor-liveness.sh`, `detect-model.sh`, `doctor-scan.sh`, `init-mistake-file.sh`, `install-git-hooks.sh`, `rules-index.sh`, `spirit-lint.sh`, `tasks-gate.sh`, `vendor-skills.sh`, `zero-probe.sh`, `zero-verify.sh`
+- `set -uo pipefail`: `check-rule-enforcement.sh`, `check-sensor-liveness.sh`, `detect-model.sh`, `doctor-scan.sh`, `init-mistake-file.sh`, `install-git-hooks.sh`, `rule-draft.sh`, `rule-lint.sh`, `rules-budget.sh`, `rules-compress.sh`, `rules-index.sh`, `spirit-lint.sh`, `tasks-gate.sh`, `tasks-plan.sh`, `vendor-skills.sh`, `zero-probe.sh`
 
 나머지 스크립트는 모두 `set -euo pipefail`. (목록이 실제와 갈리면 신뢰할 수 없으니, 바뀔 때마다
 `grep -l '^set -[a-z]*$' *.sh` 로 재확인하고 이 목록을 갱신해요.)
@@ -92,7 +96,7 @@
 ```
 
 `warning` — 대상은 정상 처리됐지만 사용자가 봐야 할 게 있을 때(예: `check-rule-enforcement.sh`
-위반 존재, `spec-review.sh` 라운드 상한 초과, `lanes-dispatch.sh` 원장 불일치). `error`/`skipped` 와
+위반 존재, `lanes-dispatch.sh` 원장 불일치). `error`/`skipped` 와
 달리 **exit code 는 `0`** 이에요 — caller 가 exit 만 보고 넘어가면 이 신호를 놓쳐요, `status` 를
 같이 봐야 해요. `warning` 을 emit 하는 스크립트: `check-manifest-install.sh`, `check-rule-enforcement.sh`,
 `check-sensor-liveness.sh`, `constitution-apply.sh`, `doctor-scan.sh`, `lanes-dispatch.sh`,

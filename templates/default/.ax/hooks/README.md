@@ -9,7 +9,7 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 | user-prompt/ | 사용자 메시지 도착 직후 | Triage 미실행(phase=idle) + 구현 의도 감지 시 reminder 주입 |
 | pre-bash/ | bash 도구 호출 직전 | 파괴적 명령 차단 · git 훅 우회(`--no-verify` 등) 차단 · 프로젝트 안 되돌리기 어려운 명령은 사실 확인 · `git commit` 감지 시 pre-commit 체인 위임 |
 | pre-edit/ | Edit/Write 직전 | 보호 경로 변경 확인 + spirit 룰 점검 · 룰 경로 주입 · 이 파일에 걸린 룰을 안 읽었으면 편집 차단(`rule-read-gate`) · 품질 설정 수정은 이유 먼저(`quality-config-gate`) |
-| post-edit/ | Edit/Write 직후 | `commands.lint_file` 로 편집한 파일 하나를 검사, 실패하면 출력을 모델에게 (막지 않음 · 비어 있으면 아무것도 안 함) |
+| post-edit/ | Edit/Write 직후 | `lint-changed.sh`: `commands.lint_file` 로 편집한 파일 하나를 검사, 실패하면 출력을 모델에게 (막지 않음, 비어 있으면 아무것도 안 함). `rule-lint.sh`: 룰 파일을 고치면 바뀐 룰 블록을 `rule-lint.sh --changed` 로 검사해 지적을 모델에게 (막지 않음) |
 | pre-commit/ | git commit 직전 | CRITICAL 룰 정적 검출 (위반 시 차단/경고만 — 자동 캡처는 폐기, §"Mistake 캡처" 참고) · 진행 중 작업들(current-task.json + `.ax/tasks/*.json`)의 spec 완료 게이트 (스테이지 파일이 그 spec 디렉토리나 tasks.md `files:` 에 걸릴 때만 자세히 · 아니면 한 줄) |
 | subagent-start/ | 서브에이전트가 뜨는 순간 | Constitution·Spirit·현재 spec·인계 노트 **경로**를 additionalContext 로 — 하네스가 메인 세션 밖으로 닿게 (goax 자기 에이전트는 제외) |
 | stop/ | 턴이 끝나려는 순간 | 활성 spec(implementing·review)이 완료 게이트 미통과면 **한 번** 멈춰 세우고 "마저 하기 · 보류 표기 · 인계 노트" 셋 중 하나를 시켜요 |
@@ -29,7 +29,7 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 (ECC GateGuard 의 fact-forcing 방식). 모두 `sensors.mode` 가 `warning` 이어도 막아요 — 통과하는 데 드는 수고가 작아서예요.
 
 - `pre-edit/rule-read-gate.sh` — 편집 대상에 걸린 룰 파일(spirit `paths:` · module `paths:`+`applies_to: code`)을 이번 세션에
-  **Read 도구로** 읽었는지 `.ax/.session/<sid>/rules-read.log` 로 확인해요 (compaction 이 일어나면 SessionStart 훅이 이 기록을 지워서 다시 읽게 해요). 안 읽었으면 목록을 주고 막아요. CLAUDE.md·AGENTS.md 가
+  **Read 도구로 끝까지** 읽었는지 (offset·limit 로 일부만 읽은 Read 는 안 세요) `.ax/.session/<sid>/rules-read.log` 로 확인해요 (compaction 이 일어나면 SessionStart 훅이 이 기록을 지워서 다시 읽게 해요). 안 읽었으면 목록을 주고 막아요. CLAUDE.md·AGENTS.md 가
   `@` 로 import 한 룰은 이미 컨텍스트에 있어서 빼요. 경로 예외는 `sensors.rule_gate_exempt`. 매칭 함수는 주입 훅과 같아요
   (`goax_rules_matching` · `goax_module_rules_matching`) — 둘이 어긋나면 "주입은 했는데 게이트는 안 거는" 룰이 생겨요.
   실측(commerce): mistakes 22건 중 20건을 사용자가 잡았고 절반이 "고치기 전에 조사 안 함" — 그중 하나는 "hook 이 읽으라 지시한 룰 파일을 건너뛰고".
@@ -44,6 +44,10 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
   세션에서 처음 고칠 때 한 번 막고 "완화인지 강화인지 · 사용자 지시 원문" 을 요구해요. 같은 파일을 다시 고치면 통과, 새로 만드는 건 안 막아요.
   다른 설정이 섞인 파일(`package.json` · `pyproject.toml` · `build.gradle`)은 기본값이 아니에요 — 필요하면 `sensors.quality_configs` 글롭으로.
   검사가 실패할 때 코드 대신 규칙을 끄는 쪽으로 가는 걸 막으려고요 (ECC config-protection).
+- `pre-agent/delegate-gate.sh` — spec 구현 중(phase `implementing`·`review`)에 goax 밖 실행 에이전트(기본 `executor` ·
+  `deep-executor` · `general-purpose`, 프로젝트는 `sensors.foreign_executors`)로 일을 맡기려 하면 한 번 막고 "lane-worker 로 맡기거나,
+  그 에이전트여야 하는 이유" 를 요구해요. 같은 에이전트를 다시 부르면 통과. goax 에이전트와 조사 에이전트는 안 봐요.
+  실측(commerce): 다른 플러그인 훅이 권하는 executor 로 단일 레인 위임을 해서 lane-worker 의 소유 파일·커밋 금지 규율이 빠졌어요.
 - 모두 세션당 3번까지 전체 안내, 그 뒤는 한 줄이에요 — 같은 긴 문구가 컨텍스트에 쌓이면 반복 루프를 부른다는 ECC 실측(#2142)을 따라요.
   세션 id 가 없으면(수동 실행) 추적할 수 없어서 rule-read-gate 는 통과, destructive-facts · quality-config-gate 는 경고로 강등해요.
 - 명령 판정은 `goax_shell_scan`(python3 shlex — 따옴표·주석·heredoc·here-string 을 셸처럼)이 해요. python3 가 없거나 **있는데 실패하면**
@@ -165,6 +169,7 @@ jq 가 PATH 에 없으면 인자를 못 뽑아 그냥 통과(fail-open)하는데
 
 ## 프로젝트별 커스터마이즈
 
+- `post-edit/rule-lint.sh` — 예외 단어·패턴은 `.ax/config.yml` `sensors.rule_lint_allow` 에 적어요. 한 줄만 빼려면 그 줄에 `<!-- rule-lint: <이유> -->` 를 붙여요
 - `post-edit/lint-changed.sh` — 훅을 고치지 말고 `.ax/config.yml` `commands.lint_file` 에 `"<글롭> => <명령 {file}>"` 를 적어요 (후보: `detect-stack.sh`, 쓰기: `config-set.sh --add commands.lint_file …`)
 - `pre-commit/critical-rule-grep.sh` — 자기 CRITICAL 룰의 grep 패턴 추가 (또는 룰별 sensor 신설)
 - `user-prompt/triage-nudge.sh` — intent regex가 자기 프로젝트 어휘에 맞지 않으면 조정

@@ -134,6 +134,10 @@ task 가 있으면 그건 spec 에 없는 일을 하고 있다는 신호예요.
   별도 하위 디렉토리에 따로 두면 새 파일 경로도 거기로 정해요. `files:` 는 구현자에겐
   "이 밖은 손대지 마" 라서, 관례 위치가 빠진 목록을 받은 구현자는 새 타입을 목록 안 파일에 끼워 넣어요.
   예: `ls $(dirname <비슷한 기존 파일>)/` · `grep -rl "<같은 종류의 이름 꼴>" <모듈>/` 으로 이웃 2개 이상을 확인
+- **task 설명이나 메모로 "기존 패턴대로" 를 지시하면, 선례 파일 경로를 하나 같이 적어요** (예: `— 선례: order/adapter/OrderAdapter.kt`).
+  이유: 경로 없는 "기존 패턴" 은 구현자가 가장 가까운 파일을 선례로 고르고, 그 파일이 잔재일 수 있어요.
+- **입력을 거르는 task (파서, upsert, 조건부 갱신, 검증 로직)는 `검증:` 에 거부 경로를 적어요** (예: `검증: ParserTest — 빈 줄, 잘못된 금액은 거부`).
+  다 쓴 뒤 `bash .ax/scripts/bash/tasks-plan.sh --lint --json` 의 `result.lint` 가 비었는지 봐요.
 - Phase 순서: setup → foundational → user stories(priority순) → polish
 - TaskID는 sortable (T001, T010, T100)
 - `[P]` 는 기본값이 아니라 증명될 때만 — 판단이 서지 않으면 붙이지 않아요

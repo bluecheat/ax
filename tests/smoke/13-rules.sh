@@ -163,6 +163,7 @@ if command -v jq >/dev/null 2>&1; then
     for sc in common.sh zero-probe.sh check-rule-enforcement.sh check-sensor-liveness.sh rules-index.sh; do
         cp "$REPO/templates/default/.ax/scripts/bash/$sc" .ax/scripts/bash/
     done
+    cp -R "$GOAX_LIB_SRC" .ax/scripts/bash/
     cp "$REPO/templates/default/.ax/hooks/pre-commit/critical-rule-grep.sh" .ax/hooks/pre-commit/
     printf '# C\n' > CLAUDE.md; printf '# A\n' > AGENTS.md; printf 'sensors:\n  mode: fail\n' > .ax/config.yml
     # 디스패처 등록 — I5(미등록) 가 같이 잡히면 아래 --strict 검증이 I7 과 무관하게 exit 1 이라 허위 통과예요
@@ -397,7 +398,7 @@ fi
 if command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
     I6T=$(mktemp -d)
     mkdir -p "$I6T/.ax/scripts/bash" "$I6T/.ax/hooks/pre-commit" "$I6T/.claude"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$I6T/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$I6T/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$I6T/.ax/scripts/bash/"
     cp "$REPO/templates/default/.ax/hooks/pre-commit/"*.sh "$I6T/.ax/hooks/pre-commit/"
     git -C "$I6T" init -q
     printf '#!/usr/bin/env bash\n#goax-pre-commit-chain\nexit 0\n' > "$I6T/.git/hooks/pre-commit"; chmod +x "$I6T/.git/hooks/pre-commit"
@@ -433,7 +434,7 @@ if command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
     trap 'chmod -R u+w "$MT" 2>/dev/null; rm -rf "$MT"' EXIT   # chmod a-w 뒤 중단돼도 /tmp 에 못 지우는 트리를 안 남겨요
     mkdir -p "$MT/.ax/scripts/bash" "$MT/fakebin"
     printf '#!/bin/sh\nexit 1\n' > "$MT/fakebin/mktemp"; chmod +x "$MT/fakebin/mktemp"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$MT/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-rule-enforcement}.sh "$MT/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$MT/.ax/scripts/bash/"
     git -C "$MT" init -q
     printf '# X\n\n## CRITICAL\n\n🔴 **`EVL:CRITICAL:001`** 카피\n- enforced_by: external:vitest\n- enforced_kind: test\n' > "$MT/AGENTS.md"
     MTR=$(GOAX_PROJECT_DIR="$MT" PATH="$MT/fakebin:$PATH" bash "$MT/.ax/scripts/bash/check-rule-enforcement.sh" --json 2>/dev/null)
@@ -475,7 +476,7 @@ if command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
     GT=$(cd "$(mktemp -d)" && pwd -P)   # realpath — git 이 worktree 포인터에 realpath 를 써요 (macOS /var → /private/var)
     mkdir -p "$GT/.ax/scripts/bash" "$GT/fakebin"
     printf '#!/bin/sh\nexit 128\n' > "$GT/fakebin/git"; chmod +x "$GT/fakebin/git"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-sensor-liveness}.sh "$GT/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,check-sensor-liveness}.sh "$GT/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$GT/.ax/scripts/bash/"
     git -C "$GT" init -q
     printf '#!/usr/bin/env bash\nexit 0\n' > "$GT/.git/hooks/pre-commit"; chmod +x "$GT/.git/hooks/pre-commit"
     GTR=$(GOAX_PROJECT_DIR="$GT" PATH="$GT/fakebin:$PATH" bash "$GT/.ax/scripts/bash/check-sensor-liveness.sh" --json 2>/dev/null)

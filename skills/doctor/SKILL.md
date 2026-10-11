@@ -59,7 +59,7 @@ Spirit 카테고리 수를 `spirit-lint.sh` 로, mistake 카테고리 집계를 
 | **번호 무결성** | spec/ADR 중복 번호 | `next-spec-num.sh --check-duplicates` (§3.11) |
 | **동봉본** | vendored skills 신선도 | `vendor-skills.sh --check` (§3.12) |
 | **모노레포 훅 배선** | ADE 루트(저장소 루트) settings 에 이 프로젝트의 goax 훅이 템플릿대로 있나 | `ade-settings.sh --check` (§3.14) |
-| **상시 로드 예산** | CLAUDE.md 가 @import 로 매 세션 싣는 글의 양 | `doctor-scan.sh budget` (§3.15) |
+| **룰 분량·글쓰기** | 매 세션·편집마다 싣는 룰의 양, 룰 작성 기준 지적 | `rules-budget.sh`, `rule-lint.sh` (§3.15) |
 | **인계 노트** | current-task.json `handoff` 기한(`- [ ] YYYY-MM-DD`) 임박·초과 — zero 의 가정 검증 · ablation 재검토 | `doctor-scan.sh handoff` (§3.6~) |
 
 각 항목 ✅ / ❗ / ❌. 규칙은 §4.
@@ -148,7 +148,7 @@ D_BAD=$(printf '%s\n' "$SCAN" | jq -r '.result.handoff.deadlines[] | select(.sta
 ```
 다음 단계 `[m] ✅ 마이그레이션 잔재 처리 — .gitignore 보강 + 잔재 제거 (STATUS.md 는 남길 줄을 status-note.sh --add 로 옮긴 뒤 rm · 사용자 동의 후, git 영향)`.
 
-**3.7 hook 등록** (`H_CHK=false` 면 통째로 skip — plugin 경로 미도출. `H_MISS` 비었으면 본 표의 ✅ 만):
+**3.7 hook 등록** (`H_CHK=false` 면 이 절 전체를 건너뛰어요 — plugin 경로를 못 찾았어요. `H_MISS` 비었으면 본 표의 ✅ 만):
 ```
 ◆  Sensors — settings.json hook 등록
    ❗  template hook <H_REG>/<H_TOT> 등록 — 미등록: <H_MISS 한 줄씩>
@@ -156,7 +156,7 @@ D_BAD=$(printf '%s\n' "$SCAN" | jq -r '.result.handoff.deadlines[] | select(.sta
    ❗  이벤트 키 미등록: <E_MISS>   ← settings.json 에 그 이벤트가 아예 없어요. Stop·SubagentStart 는 나중 판에 생긴 hook —
        파일은 /up 이 깔았는데 키가 없으면 안 돌아요. ade-settings.sh --apply 가 goax 훅만 템플릿대로 맞춰요
 ```
-다음 단계 `[s] ✅ template hook 등록 — 1순위 bash .ax/scripts/bash/register-spirit-hook.sh (path-scoped inject, idempotent) → 나머지는 bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" (goax 훅 명령만 빼고 다시 넣어요 — 사용자 훅·permissions 보존) 후 .ax/settings.json.suggested 삭제. 파일 자체가 없으면 /up`. `jq -s '.[0] * .[1]'` 로 합치지 않아요 — `*` 가 PreToolUse 배열을 통째로 바꿔 사용자 훅이 사라져요. hook 셋은 template 이 정해요 — doctor 는 이름을 hardcode 하지 않아요.
+다음 단계 `[s] ✅ template hook 등록 — 1순위 bash .ax/scripts/bash/register-spirit-hook.sh (path-scoped inject, idempotent) → 나머지는 bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" (goax 훅 명령만 빼고 다시 넣어요 — 사용자 훅·permissions 보존) 후 .ax/settings.json.suggested 삭제. 파일 자체가 없으면 /up`. `jq -s '.[0] * .[1]'` 로 합치지 않아요 — `*` 가 PreToolUse 배열 전체를 바꿔서 사용자 훅이 사라져요. hook 셋은 template 이 정해요 — doctor 는 이름을 hardcode 하지 않아요.
 
 **3.8 문서 ↔ 실제** (`D_MM` 비었으면 생략):
 ```
@@ -289,12 +289,29 @@ ADE_MISS=$(printf '%s\n' "$ADE" | jq -r '.result.missing // [] | length'); ADE_S
 등록돼요 — 여기서 빠진 훅은 프로젝트 settings 에 있어도 발화하지 않아요. `◆ 모노레포 훅 — ✅ 템플릿과 일치 · ❗ 누락 N · 잔재 M:
 ade-settings.sh --apply (다른 훅·permissions 는 보존)`. 누락 목록은 `.result.missing` 그대로 보여줘요. 자동 적용은 안 해요 — 사용자 [a] 뒤에만.
 
-### 3.15 상시 로드 예산 — `doctor-scan.sh` `.result.budget`
+### 3.15 룰 분량과 글쓰기 — `rules-budget.sh` · `rule-lint.sh`
 
-`over=false` 면 본 표에 `✅ 상시 로드 <bytes>바이트 (≈<est_tokens>토큰)` 한 줄만. `over=true` 면
-`◆ 상시 로드 — ❗ <bytes>바이트 (≈<est_tokens>토큰, 경고 선 <warn_at>)` + 큰 파일 3개(`.files[:3]`)를 보여주고,
-`paths:` 가 있을 수 있는 룰(특정 디렉토리에만 해당)을 @import 에서 빼 path-scoped 주입으로 옮기는 걸 제안해요.
-토큰은 바이트/3 어림이에요 — 정확한 값처럼 말하지 않아요. 자동 수정 X.
+```bash
+RB=$(bash "$ROOT/.ax/scripts/bash/rules-budget.sh" --json 2>/dev/null)
+RB_OVER=$(printf '%s\n' "$RB" | jq -r '.result.over_budget | length')
+RB_LIST=$(printf '%s\n' "$RB" | jq -r '.result.over_budget[] | "\(.kind) \(.target) — \(.value) / 기준 \(.limit)"')
+RB_EDIT=$(printf '%s\n' "$RB" | jq -r '.result.edit // {} | "p90 \(.p90 // "-")B · max \(.max // "-")B"')
+RL=$(bash "$ROOT/.ax/scripts/bash/rule-lint.sh" --json 2>/dev/null)
+RL_N=$(printf '%s\n' "$RL" | jq -r '.result.total // 0')
+RL_KINDS=$(printf '%s\n' "$RL" | jq -r '.result.counts // {} | to_entries | map("\(.key) \(.value)") | join(", ")')
+RL_MARKER=$(printf '%s\n' "$RL" | jq -r '[.result.findings[]? | select(.kind == "marker") | .id] | unique | join(", ")')
+```
+
+`always` 바이트는 doctor-scan `.result.budget` 과 같은 파일 목록이에요 (goax_always_loaded). 둘 다 0건이면 본 표에 `✅ 룰 분량 · 글쓰기` 한 줄만 둬요. 아니면:
+```
+◆  룰 분량 · 글쓰기
+   ❗ 기준 초과 <RB_OVER>건 — <RB_LIST 한 줄씩, 최대 5줄>
+   📍 편집 한 번에 Read 하는 룰 — <RB_EDIT>
+   ❗ 작성 기준 지적 <RL_N>건 — <RL_KINDS>
+   ❗ 산문 검출 패턴 — <RL_MARKER> (한글 문장이 든 패턴은 코드에 걸리지 않아요)
+```
+다음 단계 `[n] 룰 압축 — "룰 압축" 으로 rule skill 압축 모드를 불러요`. 산문 검출 패턴은 압축 모드가 고치지 않아요. `[n] 산문 패턴 고치기 — rule skill 새로 쓰기 모드` 를 따로 둬요.
+`harness` 지적(룰이 goax 에이전트·게이트를 지시함)은 goax 이슈 후보로 따로 적어요. 자동 수정은 하지 않아요.
 
 ## 4. 출력
 

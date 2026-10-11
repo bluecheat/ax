@@ -19,7 +19,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     LK=$(mktemp -d)
     mkdir -p "$LK/.ax/scripts/bash" "$LK/.ax/docs" "$LK/.claude"
-    cp "$REPO/templates/default/.ax/scripts/bash/"{common,status-note,update-task,tier-from-state,register-spirit-hook,build-memory,zero-init,constitution-apply,zero-domain-risk}.sh "$LK/.ax/scripts/bash/"
+    cp "$REPO/templates/default/.ax/scripts/bash/"{common,status-note,update-task,tier-from-state,register-spirit-hook,build-memory,zero-init,constitution-apply,zero-domain-risk}.sh "$LK/.ax/scripts/bash/" && cp -R "$GOAX_LIB_SRC" "$LK/.ax/scripts/bash/"
     LKB="$LK/.ax/scripts/bash"
     # 최소 대상 — 출고 AGENTS.md 는 이미 `## 4계층 인덱스` 와 AX 토큰을 담고 있어서
     # prepend·index 두 모드가 전부 skip(exit 2) 로 빠져요. 경합을 재려면 둘 다 없어야 해요.

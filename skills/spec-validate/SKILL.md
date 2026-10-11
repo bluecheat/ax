@@ -86,7 +86,7 @@ SNAP=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --snapshot --json)   
 SHA=$(printf '%s\n' "$SNAP" | jq -r '.result.sha')
 A_FILE=$(printf '%s\n' "$SNAP" | jq -r '.result.architect_file')
 E_FILE=$(printf '%s\n' "$SNAP" | jq -r '.result.evaluator_file')
-printf '%s\n' "$SNAP" | jq -r '.result.note // empty, .warnings[]?'          # 라운드 재사용·교체 안내 · 상한 경고
+printf '%s\n' "$SNAP" | jq -r '.result.note // empty, .errors[]?'           # 라운드 재사용·교체 안내 · 상한 차단 사유
 # 재리뷰일 때만 delta 를 브리프에 붙여요 — base 가 reviewed 이고 바뀐 줄이 있을 때예요.
 # 1 라운드(base=snapshot)나 0줄이면 빈 diff 를 주게 돼서, 리뷰어가 "볼 게 없다" 로 읽어요.
 DELTA=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --delta --json \
@@ -97,14 +97,19 @@ DELTA=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --delta --json \
 안 봤으면(리뷰어 띄우기 전에 고친 오타) 그 자리를 바꿔 끼워요. 라운드는 리뷰어가 **실제로 본
 횟수**예요.
 
+새 라운드가 상한을 넘으면 `--snapshot` 은 아무것도 쓰지 않고 exit 1(`status: error`)로 끝나요.
+그러면 이 세션은 리뷰어를 띄우지 않고 아래 4번의 "상한에 닿으면" 으로 가요.
+
 1. **architect 와 evaluator 를 한 메시지에 같이 띄워요** (`goax:architect` · `goax:evaluator` spec 모드,
    vendor 설치면 접두사 없이). 둘은 서로의 파일을 못 보니 동시에 띄워도 독립이에요 — 순차로 띄우면
    벽시계만 두 배예요. 브리프에 넣는 건 각자 이것뿐이에요:
    - 공통: `$SPEC_DIR/spec.md` 경로 · `$SHA` · §7.5 진입 ADR 경로들 · tasks.md 가 있으면 그 경로 ·
-     "첫 줄 `verdict:` 둘째 줄 `sha: $SHA`" · **재리뷰면 `$DELTA` 경로와 "바뀐 곳만 보세요"**
+     "첫 줄 `verdict:` 둘째 줄 `sha: $SHA` 셋째 줄 `model: <모델>`" · **재리뷰면 `$DELTA` 경로와 "바뀐 곳만 보세요"**
    - architect 에는 **출력 파일 `$A_FILE`** 만, evaluator 에는 **출력 파일 `$E_FILE`** 만. 상대 파일은
      넣지 않아요. 이 대화도 넣지 않아요.
    - **모델** — 띄우기 전에 `bash .ax/scripts/bash/agent-model.sh architect evaluator --json` 을 돌려 `result.models.<이름>` 이 null 이 아니면 그 값을 Agent 호출의 `model` 로 넘겨요. null 이면 넘기지 않아요 (에이전트 정의의 기본값 — 팀은 `.ax/config.yml` 의 `agent_models` 로 바꿔요).
+     브리프에도 같은 값을 `모델: <값>` 으로 적어요. null 이면 `모델: 에이전트 기본값` 이라고 적고, 리뷰어가 시스템 프롬프트의 자기 모델 이름을 써요.
+     이유: 리뷰 파일의 `model:` 줄로 어떤 모델이 이 리뷰를 썼는지 남겨요.
    - **검증 예산**: spec 단계 리뷰어는 grep·read 로만 봐요. 빌드·테스트를 돌리지 않아요 — 그건 구현
      리뷰(`tasks-gate.sh` G6)가 맡고, 여기서 돌리면 리뷰 한 번이 구현 한 번만큼 비싸져요.
 2. 검토 범위가 달라요 — 같은 걸 두 번 지적받지 않게 각 agent 의 "하지 않는 것" 절로 나눠 뒀어요:
@@ -123,19 +128,35 @@ printf '%s\n' "$REVIEW" | jq -r '"architect \(.result.architect.verdict // "없�
 4. `pass=false` 면 두 파일을 **이 세션이** 읽고 종합해 spec.md 를 고쳐요. 고치면 sha 가 바뀌니
    `--snapshot` 부터 다시예요 — 재리뷰 브리프엔 `--delta` 를 붙여 바뀐 곳만 보게 해요 (한쪽만 sha 가
    어긋나면 그쪽만 다시 띄워요). `재논의 필요` 가 하나라도 있으면 spec 자체가 틀렸다는 뜻이라
-   사용자 결정으로 halt. **라운드가 상한을 넘으면 지적을 더 반영하려 하지 말고 그 자체로 halt** —
-   라운드를 더 돌리는 건 리뷰가 아니라 spec 정의가 문제라는 신호예요. `--snapshot` 응답의
-   `warnings[]` 가 상한 경고를 줘요.
-   상한에 닿은 뒤 남은 차단이 기계적 수정(오타·링크·이름 맞춤)뿐이라 사용자가 **이대로 진행**을 정하면, 고친 뒤
-   그 결정을 지금 sha 에 기록해요 — intent_notes 에 손으로 적지 않아요 (`--status` 가 못 읽어요):
+   사용자 결정으로 halt.
+
+   **상한에 닿으면** — `--snapshot` 이 exit 1 이거나 마지막 라운드에서 `pass=false` 일 때예요. 이 세션은 지적을 더 반영하지
+   않고 멈춘 뒤 `AskUserQuestion` 으로 사용자에게 물어요. 이유: 상한까지 합의가 안 되면 리뷰 횟수가 아니라 spec 정의가 문제예요.
+   질문에는 이것들을 같이 보여줘요.
+   - 남은 차단 목록
+   - 차단마다 성격 (기계적 수정인지, 설계 변경인지)
+   - 지금까지의 라운드 수
+
+   선택지는 셋이에요.
+
+   | 선택 | 명령 | 언제 |
+   |---|---|---|
+   | 이대로 진행 | 고친 뒤 `--override --reason "<사용자 결정>"` | 남은 차단이 오타, 링크, 이름 맞춤 같은 기계적 수정뿐일 때 |
+   | 한 번 더 리뷰 | `--extend-round --reason "<사용자 결정>"` 뒤 `--snapshot` | 설계가 바뀌어 다시 봐야 할 때. 라운드가 **하나만** 열려요 |
+   | spec 다시 정의 | 없음 (halt) | 라운드마다 새 지적이 나올 때. spec 의 범위나 결정을 다시 정해요 |
 
 ```bash
 bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --override --reason "<사용자 결정 한 줄 — 무엇을 왜 받아들였나>" --json
+bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --extend-round --reason "<사용자 결정 한 줄 — 왜 한 번 더 보나>" --json
 ```
 
-   `review-override.md`(커밋해요)에 sha · 누가(git user.name) · 언제 · 두 verdict · 사유가 남고, `--status` 는 그 sha 일
-   때만 pass 로 봐요. 상한 전(라운드 < 상한)에는 거부돼요. 사용자에게 묻지 않고 이 세션이 정해서 쓰지 않아요 —
-   `--reason` 은 사용자가 한 말이에요. 기록 뒤 본문을 또 고치면 승인이 풀려요.
+   두 명령은 sha, 실행한 사람(git user.name), 시각, 사유를 파일에 남겨요. `review-override.md` 와 `review-extend.md` 는 커밋해요.
+   - `--override` — `--status` 는 기록된 sha 가 지금 sha 와 같을 때만 pass 로 봐요. 본문을 또 고치면 승인이 풀려요.
+   - `--extend-round` — 직전 스냅샷 다음 라운드 하나만 열어요.
+   - 둘 다 상한 전에는 거부돼요.
+
+   `--reason` 에는 사용자가 한 말을 적어요. 이 세션은 사용자에게 묻지 않고 두 명령을 실행하지 않아요. 바뀐 줄이 적어도
+   마찬가지예요. 이유: 상한을 넘을지는 사용자가 정하는 일이에요.
 5. `pass=true` 면 합본을 남기고 §3 으로:
 
 ```bash
@@ -161,9 +182,27 @@ bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --fixup --json | jq -r '.res
 
 sha 는 spec.md + tasks.md 합산이라 `/spec-tasks` 뒤엔 반드시 어긋나요. 그건 spec 을 다시 보는 게 아니라
 **분해를 보는** 라운드예요 — `--snapshot --stage tasks` 로 찍으면 라운드가 1 부터 다시 시작하고 상한은
-2 예요. 둘 다 띄우되 브리프가 짧아요: 공통으로 "spec.md 는 통과한 그대로예요 — `--delta` 는 tasks.md 뿐이니
+2 예요.
+
+tasks 단계에서 spec 단계로 되돌리는 `--snapshot --stage spec` 은 막혀 있어요. 이유: 라운드가 1 로 돌아가 상한이 무력해져요.
+구현 중에 설계가 바뀌었으면, 이 세션은 위 질문으로 사용자의 결정을 받고 `--extend-round --stage spec --reason "<결정>"` 을
+먼저 실행해요.
+
+tasks 단계 리뷰도 둘 다 띄우되 브리프가 짧아요: 공통으로 "spec.md 는 통과한 그대로예요 — `--delta` 는 tasks.md 뿐이니
 분해만 보세요". evaluator 는 컨텍스트 기준 분해인가 · `files:` 가 실제인가 · `[P]` 근거를, architect 는
 task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비싼 task 가 앞에 있는가만 봐요.
+
+evaluator 를 띄우기 전에, 이 세션은 두 스크립트를 돌려 결과를 evaluator 브리프에 넣어요:
+
+```bash
+SCOPE=$(bash .ax/scripts/bash/rules-audit-scope.sh --spec "$SPEC" --from-tasks --json)
+printf '%s\n' "$SCOPE" | jq -r '.result.rule_files[]?'          # 브리프: "룰·선례 대조 — 이 룰 파일을 읽어요"
+LINT=$(bash .ax/scripts/bash/tasks-plan.sh --spec "$SPEC" --lint --json)
+printf '%s\n' "$LINT" | jq -r '.result.lint[]? | "\(.task) — \(.reason)"'   # 브리프: "거부 경로가 없는 task"
+```
+
+이유: 계획 단계에서 task 가 만들 파일에 걸리는 룰을 아무도 대조하지 않으면, 구현이 끝난 뒤 G7 에서야 위반이 나와요.
+`SCOPE` 가 skipped(미완료 task 에 `files:` 없음)면 브리프에 "files: 가 없어 룰 대조 생략" 이라고 적어요.
 
 ### 왜 이 규칙인가
 
@@ -173,7 +212,8 @@ task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비�
   더해요
 - **검토 범위 분리** — 같은 spec 을 같은 범위로 두 번 보면 같은 지적이 두 번 와요. 범위가 달라야 합의가 뜻이 있어요
 - **sha 고정** — 리뷰 뒤에 spec 이 바뀌면 그 리뷰는 다른 문서에 대한 리뷰예요. 단 오타는 `--fixup` 으로
-- **상한** — 넘으면 리뷰가 아니라 spec 정의가 문제예요. 라운드를 더 돌리지 말고 사용자와 다시 정해요
+- **상한** — 상한은 비용과 과잉설계를 막는 선이에요. 품질이 수렴하는 지점은 아니에요. 리뷰어는 돌릴 때마다 지적을
+  찾아요. 그래서 스크립트가 막고, 넘을지는 사용자가 정해요
 
 ## 3. 출력
 
@@ -238,6 +278,16 @@ task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비�
 
  ▸ 답해주세요 [a] / [b] / [c]
 ```
+
+### 리뷰 지적을 사용자에게 올릴 때
+
+이 세션은 리뷰어 파일의 지적을 두 묶음으로 나눠 보여줘요.
+
+- **직접 확인함** — 이 세션이 grep, read, 명령으로 다시 확인한 지적. 확인한 명령이나 `파일:줄` 을 같이 적어요.
+- **리뷰어 주장** — 아직 확인하지 않은 지적. 리뷰어 이름을 붙여요.
+
+설정값이나 정책을 권고할 때는 그 값이 어느 호출처(온라인 요청, 배치, 관리자 화면 …)에 적용되는지 같이 적어요.
+이유: 리뷰어 주장을 확인 없이 사실처럼 옮기면 사용자는 어느 것을 믿을지 가릴 수 없어요. 호출처가 빠진 권고는 배치에 맞는 값이 온라인에 들어가요.
 
 ## 4. Triage 자동 게이팅 (참고)
 

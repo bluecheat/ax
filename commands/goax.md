@@ -29,6 +29,7 @@ goax 의 모든 기능은 **자연어 트리거** 로 호출돼요 (thin wrapper
   "ADR 작성" / "결정 기록"           — ADR 새 파일
   "실수 기록해줘" / "mistake 박아줘" — mistake 1건 capture
   "실수 회고" / "audit"              — Mistake Loop 심사·룰 승격 후보
+  "룰로 만들어" / "룰 압축"          — rule (고정 틀로 룰 쓰기 · mistake → 룰 · 길어진 룰 줄이기)
 
 ▸ Spirit / HUD
   "spirit 점검"                      — doctor → spirit-lint.sh (헤더 형식 · 토큰 중복 · placeholder)

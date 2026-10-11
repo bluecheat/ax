@@ -9,6 +9,7 @@
 
 set -u
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+GOAX_LIB_SRC="$REPO/templates/default/.ax/scripts/bash/lib"   # common.sh 가 source 하는 lib/ — 손 fixture 가 common.sh 와 같이 복사해요
 SCRIPTS_DIR="$REPO/templates/default/.ax/scripts/bash"   # 출고 스크립트 원본
 fail_count=0
 pass() { printf '\033[32m✓\033[0m %s\n' "$1"; }
