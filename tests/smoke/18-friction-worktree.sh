@@ -137,7 +137,8 @@ echo v4 > "$OD/spec.md"; OVS2=$(ov --status | jq -c '[.result.pass, .result.over
   && grep -q '^reason: 남은 지적은 오타' "$OD/review-override.md" && grep -q '^at: ' "$OD/review-override.md"; } \
     && pass "spec-review --override — 상한 전·사유 없음은 거부, dry-run 무기록, 지금 sha 에만 pass (누가·언제·사유), 본문이 바뀌면 풀려요" \
     || fail "spec-review --override: 상한전=$OVE 사유없음=$OVN dry=$OVDRY status=$OVS 변경후=$OVS2"
-grep -q -- '--override --reason' "$REPO/skills/spec-validate/SKILL.md" && pass "spec-validate — 상한 절에 --override 사용법" || fail "spec-validate 상한 절에 --override 없음"
+grep -q -- '--override --reason' "$REPO/skills/spec-validate/SKILL.md" && grep -q -- '--extend-round --reason' "$REPO/skills/spec-validate/SKILL.md" \
+    && pass "spec-validate — 상한 절에 --override · --extend-round 사용법" || fail "spec-validate 상한 절에 --override/--extend-round 없음"
 rm -rf "$OV"
 
 section "66. 새 워크트리 — 실제 설치본에서 런타임 상태 파일 없이 흐름이 이어지고, --json 은 zsh echo 로 받아도 깨지지 않아요"

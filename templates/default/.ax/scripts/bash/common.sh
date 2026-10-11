@@ -925,6 +925,72 @@ goax_git_hook_path() {
 #   렉시컬 정규화 — `.`·`..`·중복 슬래시 해소 후 절대경로 출력.
 #   파일시스템을 건드리지 않아요 (아직 없는 파일도 처리 — Write 는 새 파일을 만듦).
 #   realpath 비의존 = macOS/Linux 동일 동작. bash 3.2 호환.
+# 이번 스택의 기준점 — base 인자(브랜치·커밋)와 HEAD 의 merge-base. 인자가 없으면 origin/HEAD → main → master 순서.
+# 못 찾으면 빈 출력 + return 1 (git 이 아니거나 이을 브랜치가 없어요).
+goax_stack_base() {
+    local root="${1:-}" arg="${2:-}" cand b
+    git -C "$root" rev-parse --verify -q HEAD >/dev/null 2>&1 || return 1
+    if [ -n "$arg" ]; then
+        git -C "$root" merge-base HEAD "$arg" 2>/dev/null || return 1
+        return 0
+    fi
+    for cand in origin/HEAD main master; do
+        git -C "$root" rev-parse --verify -q "$cand" >/dev/null 2>&1 || continue
+        b=$(git -C "$root" merge-base HEAD "$cand" 2>/dev/null || true)
+        [ -n "$b" ] && { printf '%s\n' "$b"; return 0; }
+    done
+    return 1
+}
+
+# 이번 스택에서 바뀐 파일 — base...HEAD + 워킹 트리(스테이징 포함) + 추적 안 되는 새 파일. 프로젝트 기준 상대 경로,
+# `.ax/` 는 빼요 (rules-audit-scope · lanes-dispatch --stack-files 가 같이 써요). $3 = 새 파일만(A)이면 "A"
+goax_stack_files() {
+    local root="${1:-}" base="${2:-}" filt="${3:-ACMR}"
+    { [ -n "$base" ] && git -C "$root" diff --relative --name-only --diff-filter="$filt" "$base" HEAD 2>/dev/null
+      git -C "$root" diff --relative --name-only --diff-filter="$filt" HEAD 2>/dev/null
+      git -C "$root" ls-files --others --exclude-standard 2>/dev/null; } | grep -v '^\.ax/' | awk 'NF && !s[$0]++' | LC_ALL=C sort || true
+}
+
+# config.yml commands.<key> 의 명령 문자열 (zero-verify.sh · tasks-gate.sh G8 이 같이 읽어요).
+# YAML 규칙 그대로: 값이 "/' 로 시작하면 짝 닫는 따옴표까지가 값(안의 # 은 안 건드려요),
+# #로 시작하면 값 전체가 주석(빈 값), 그 외엔 공백 뒤 첫 # 앞까지가 값이에요.
+# 예전엔 `tr -d` 로 따옴표를 전부 지워서 `test "a b" = "a b"` 가 깨졌고, 그다음엔 따옴표 안의 `#` 도
+# 주석으로 봐서 `grep -c "#" README.md` 를 읽다가 잘랐어요.
+goax_config_cmd() {
+    local cfg="${1:-}" key="${2:-}"
+    [ -f "$cfg" ] || return 0
+    grep -E "^[[:space:]]+${key}:" "$cfg" 2>/dev/null | head -1 \
+        | sed -E "s/^[[:space:]]+${key}:[[:space:]]*//" \
+        | sed -E -e 's/^"([^"]*)".*$/\1/' -e t \
+                 -e "s/^'([^']*)'.*\$/\1/" -e t \
+                 -e 's/^#.*$//'            -e t \
+                 -e 's/[[:space:]]+#.*$//' \
+                 -e 's/[[:space:]]+$//'
+}
+
+# 작업 트리 내용 지문 — `.ax/` 를 뺀 프로젝트 파일 내용의 sha (12자). 커밋해도 안 바뀌고 파일을 고치면 바뀌어요.
+# HEAD 트리 위에 HEAD 와 다른 파일 · 추적 안 되는 파일(ignore 제외)의 지금 내용을 덮어 계산해요 — 읽기만 해요.
+# git 이 아니거나 HEAD 가 없으면 `nogit` 을 돌려줘요 (비교 생략 신호).
+goax_tree_fingerprint() {
+    local root="${1:-}" f
+    git -C "$root" rev-parse --verify -q HEAD >/dev/null 2>&1 || { printf 'nogit\n'; return 0; }
+    {
+        git -C "$root" ls-tree -r HEAD -- . 2>/dev/null | awk -F'\t' '{ n = split($1, a, " "); printf "%s\t0\t%s\n", $2, a[3] }'
+        { git -C "$root" diff --name-only --relative HEAD -- . 2>/dev/null
+          git -C "$root" ls-files --others --exclude-standard -- . 2>/dev/null; } | LC_ALL=C sort -u | while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            if [ -f "$root/$f" ]; then
+                printf '%s\t1\t%s\n' "$f" "$(git -C "$root" hash-object -- "$f" 2>/dev/null || echo '?')"
+            else
+                printf '%s\t1\t-\n' "$f"
+            fi
+        done
+    } | awk -F'\t' '$1 !~ /^\.ax\// && $1 != ".ax"' | LC_ALL=C sort -t "$(printf '\t')" -k1,1 -k2,2n \
+      | awk -F'\t' '{ v[$1] = $3; if (!($1 in seen)) { seen[$1] = 1; o[++n] = $1 } }
+                     END { for (i = 1; i <= n; i++) if (v[o[i]] != "-") printf "%s\t%s\n", o[i], v[o[i]] }' \
+      | { if command -v shasum >/dev/null 2>&1; then shasum -a 256; else sha256sum; fi; } | cut -c1-12
+}
+
 goax_normalize_path() {
     local p="${1:-}" base="${2:-$PWD}" out="" seg oldIFS
     [ -z "$p" ] && return 0

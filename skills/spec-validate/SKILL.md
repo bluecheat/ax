@@ -86,7 +86,7 @@ SNAP=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --snapshot --json)   
 SHA=$(printf '%s\n' "$SNAP" | jq -r '.result.sha')
 A_FILE=$(printf '%s\n' "$SNAP" | jq -r '.result.architect_file')
 E_FILE=$(printf '%s\n' "$SNAP" | jq -r '.result.evaluator_file')
-printf '%s\n' "$SNAP" | jq -r '.result.note // empty, .warnings[]?'          # 라운드 재사용·교체 안내 · 상한 경고
+printf '%s\n' "$SNAP" | jq -r '.result.note // empty, .errors[]?'           # 라운드 재사용·교체 안내 · 상한 차단 사유
 # 재리뷰일 때만 delta 를 브리프에 붙여요 — base 가 reviewed 이고 바뀐 줄이 있을 때예요.
 # 1 라운드(base=snapshot)나 0줄이면 빈 diff 를 주게 돼서, 리뷰어가 "볼 게 없다" 로 읽어요.
 DELTA=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --delta --json \
@@ -96,6 +96,9 @@ DELTA=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --delta --json \
 `--snapshot` 은 부를 때마다 라운드를 올리지 않아요 — 같은 sha 면 그대로고, 직전 스냅샷을 아무도
 안 봤으면(리뷰어 띄우기 전에 고친 오타) 그 자리를 바꿔 끼워요. 라운드는 리뷰어가 **실제로 본
 횟수**예요.
+
+**상한을 넘는 새 라운드는 열리지 않아요** — `--snapshot` 이 `status: error`·exit 1 로 끝나고 원장은 그대로예요.
+그때는 리뷰어를 띄우지 말고 아래 4번의 "상한에 닿으면" 으로 가요.
 
 1. **architect 와 evaluator 를 한 메시지에 같이 띄워요** (`goax:architect` · `goax:evaluator` spec 모드,
    vendor 설치면 접두사 없이). 둘은 서로의 파일을 못 보니 동시에 띄워도 독립이에요 — 순차로 띄우면
@@ -123,19 +126,27 @@ printf '%s\n' "$REVIEW" | jq -r '"architect \(.result.architect.verdict // "없�
 4. `pass=false` 면 두 파일을 **이 세션이** 읽고 종합해 spec.md 를 고쳐요. 고치면 sha 가 바뀌니
    `--snapshot` 부터 다시예요 — 재리뷰 브리프엔 `--delta` 를 붙여 바뀐 곳만 보게 해요 (한쪽만 sha 가
    어긋나면 그쪽만 다시 띄워요). `재논의 필요` 가 하나라도 있으면 spec 자체가 틀렸다는 뜻이라
-   사용자 결정으로 halt. **라운드가 상한을 넘으면 지적을 더 반영하려 하지 말고 그 자체로 halt** —
-   라운드를 더 돌리는 건 리뷰가 아니라 spec 정의가 문제라는 신호예요. `--snapshot` 응답의
-   `warnings[]` 가 상한 경고를 줘요.
-   상한에 닿은 뒤 남은 차단이 기계적 수정(오타·링크·이름 맞춤)뿐이라 사용자가 **이대로 진행**을 정하면, 고친 뒤
-   그 결정을 지금 sha 에 기록해요 — intent_notes 에 손으로 적지 않아요 (`--status` 가 못 읽어요):
+   사용자 결정으로 halt.
+
+   **상한에 닿으면** (`--snapshot` 이 exit 1 이거나, 마지막 라운드에서 `pass=false`) 지적을 더 반영하지 말고
+   멈춰서 `AskUserQuestion` 으로 물어요. 라운드를 더 돌리는 건 리뷰가 아니라 spec 정의가 문제라는 신호예요.
+   질문에는 남은 차단 목록 · 차단마다 성격(기계적 수정 / 설계 변경) · 지금까지의 라운드를 같이 보여줘요. 선택지는 셋이에요:
+
+   | 선택 | 명령 | 언제 |
+   |---|---|---|
+   | 이대로 진행 | `--override --reason "<사용자 결정>"` | 남은 차단이 오타·링크·이름 맞춤 같은 기계적 수정뿐일 때 — 고친 뒤 기록해요 |
+   | 한 번 더 리뷰 | `--extend-round --reason "<사용자 결정>"` 뒤 `--snapshot` | 설계가 실제로 바뀌어 다시 봐야 할 때 — 라운드 **하나만** 열려요 |
+   | spec 다시 정의 | (없음 — halt) | 지적이 계속 새로 나오면 spec 범위·결정이 문제예요 |
 
 ```bash
 bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --override --reason "<사용자 결정 한 줄 — 무엇을 왜 받아들였나>" --json
+bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --extend-round --reason "<사용자 결정 한 줄 — 왜 한 번 더 보나>" --json
 ```
 
-   `review-override.md`(커밋해요)에 sha · 누가(git user.name) · 언제 · 두 verdict · 사유가 남고, `--status` 는 그 sha 일
-   때만 pass 로 봐요. 상한 전(라운드 < 상한)에는 거부돼요. 사용자에게 묻지 않고 이 세션이 정해서 쓰지 않아요 —
-   `--reason` 은 사용자가 한 말이에요. 기록 뒤 본문을 또 고치면 승인이 풀려요.
+   `review-override.md`·`review-extend.md`(둘 다 커밋해요)에 sha · 누가(git user.name) · 언제 · 사유가 남아요.
+   override 는 `--status` 가 그 sha 일 때만 pass 로 보고, extend 는 직전 스냅샷 뒤의 라운드 하나만 열어요. 둘 다
+   상한 전에는 거부돼요. 사용자에게 묻지 않고 이 세션이 정해서 쓰지 않아요 — `--reason` 은 사용자가 한 말이에요.
+   "delta 가 작으니 한 번만 더" 도 이 세션의 판단이 아니라 질문이에요.
 5. `pass=true` 면 합본을 남기고 §3 으로:
 
 ```bash
@@ -161,7 +172,8 @@ bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --fixup --json | jq -r '.res
 
 sha 는 spec.md + tasks.md 합산이라 `/spec-tasks` 뒤엔 반드시 어긋나요. 그건 spec 을 다시 보는 게 아니라
 **분해를 보는** 라운드예요 — `--snapshot --stage tasks` 로 찍으면 라운드가 1 부터 다시 시작하고 상한은
-2 예요. 둘 다 띄우되 브리프가 짧아요: 공통으로 "spec.md 는 통과한 그대로예요 — `--delta` 는 tasks.md 뿐이니
+2 예요. 반대로 tasks 단계에서 spec 단계로 되돌리는 건 상한을 1 로 되돌리는 길이라 막혀 있어요 — 구현 중에 설계가
+바뀌었으면 위 질문으로 사용자가 정하고 `--extend-round --stage spec` 을 먼저 남겨요. 둘 다 띄우되 브리프가 짧아요: 공통으로 "spec.md 는 통과한 그대로예요 — `--delta` 는 tasks.md 뿐이니
 분해만 보세요". evaluator 는 컨텍스트 기준 분해인가 · `files:` 가 실제인가 · `[P]` 근거를, architect 는
 task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비싼 task 가 앞에 있는가만 봐요.
 
@@ -173,7 +185,8 @@ task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비�
   더해요
 - **검토 범위 분리** — 같은 spec 을 같은 범위로 두 번 보면 같은 지적이 두 번 와요. 범위가 달라야 합의가 뜻이 있어요
 - **sha 고정** — 리뷰 뒤에 spec 이 바뀌면 그 리뷰는 다른 문서에 대한 리뷰예요. 단 오타는 `--fixup` 으로
-- **상한** — 넘으면 리뷰가 아니라 spec 정의가 문제예요. 라운드를 더 돌리지 말고 사용자와 다시 정해요
+- **상한** — 넘으면 리뷰가 아니라 spec 정의가 문제예요. 상한이 품질이 수렴하는 지점이라는 뜻은 아니에요 — 리뷰어는
+  돌릴 때마다 뭔가를 찾아요. 비용과 과잉설계를 막는 선이라 스크립트가 막고, 넘을지는 사용자가 정해요
 
 ## 3. 출력
 

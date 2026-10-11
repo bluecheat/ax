@@ -261,6 +261,9 @@ Spirit:        SP-<CATEGORY>-<id>       (예: SP-SEC-001)
 새 파일이 이웃 관례(위치·이름·분리)를 따랐는지는 아무도 대조하지 않았어요. `rules-auditor` 가 새 컨텍스트로
 `rules-audit-scope.sh` 가 뽑은 범위(변경 파일마다 걸린 룰 · 상시 룰 · 새 파일)를 대조해 `review-rules.md` 첫 줄에
 `verdict:` 를 쓰고, G7 이 G6 과 같은 필수 여부로 읽어요. evaluator 는 이름·패키지 관례를 보지 않아요 — 범위가 겹치면 같은 지적이 두 번 와요.
+리뷰가 다 통과해도 "무엇을 돌려 봤나" 는 따로예요. 레인이나 코디네이터가 돌린 검증 명령이 패키지 필터면, 다른 모듈의 테스트나
+빈 이름 충돌은 그 명령으로 안 보여요 (실측: CI 가 처음 잡음). 그래서 G8 은 `zero-verify.sh --record` 가 config 의 명령 **전부**를
+돌린 기록(`verify.json`)을 요구하고, 그 뒤 코드가 바뀌면 다시 요구해요 — 커밋은 바뀐 게 아니에요(작업 트리 내용 지문).
 
 같은 분리가 **계획 시점**에도 있어요 — `spec-validate` 가 명료성 게이트를 통과한 spec 에 대해 architect 와 evaluator 를
 새 컨텍스트로 **병렬·독립**(서로 파일을 안 봄 — 독립은 순서가 아니라 격리에서 와요)으로 띄우고, 각자 `review-spec.<역할>.md`
@@ -268,6 +271,9 @@ Spirit:        SP-<CATEGORY>-<id>       (예: SP-SEC-001)
 누락 엣지·tasks 분해. 둘 다 `## 비차단` 절은 verdict 에 안 세요. `spec-review.sh` 가 둘을 집계해요 — size L/XL 필수, M 선택.
 라운드는 리뷰어가 실제로 본 횟수만 세고(같은 sha 재사용 · 안 본 스냅샷 교체), 재리뷰는 `--delta` 로 바뀐 곳만 브리프에 붙이고,
 통과 뒤 오타는 `--fixup` 으로 받아들이고, tasks.md 가 생기면 `--stage tasks` 로 분해만 보는 짧은 라운드(상한 2)를 따로 세요.
+상한은 스크립트가 막아요 — 경고만 하던 때 실제 tasks 단계가 라운드 18 까지 갔어요. "이번 delta 는 작으니 한 번만 더" 는 매번 그럴듯해서,
+넘을지는 모델이 아니라 사용자가 정해요 (`--override` 로 지금 본문 수용 · `--extend-round` 로 라운드 하나 더). 상한이 품질이 수렴하는
+지점이라는 뜻은 아니에요 — 리뷰어는 돌릴 때마다 뭔가를 찾아요 (Anthropic, 2026-03 하네스 글). 비용과 과잉설계를 막는 선이에요.
 OMC ralplan 의 구조에 파일 verdict 와 결정적 사전 게이트를 얹은 거예요.
 
 ### 5.4 SDD — Spec-Driven Development
@@ -331,7 +337,8 @@ RES=$(bash .ax/scripts/bash/next-spec-num.sh --reserve --slug "$SLUG" --json)
 Read 도구 기록을 봐요 (`rule-read-gate`). 파괴 명령은 "지워질 파일 · 되돌리는 절차 · 사용자 지시 원문" 을 적게 한 뒤
 같은 명령의 재시도를 통과시켜요 (`destructive-facts`) — 적는 과정에서 모르던 파일이 보여요. 품질 설정(lint·format·타입 검사·
 커버리지·git 훅 설정)을 고칠 땐 "완화인지 강화인지 · 사용자 지시 원문" 을 적게 해요 (`quality-config-gate`) — 검사가 실패하면
-코드 대신 규칙을 끄는 쪽이 가장 싼 길이라서요.
+코드 대신 규칙을 끄는 쪽이 가장 싼 길이라서요. 구현 중에 goax 밖 실행 에이전트로 일을 넘기려 하면 "lane-worker 로 맡기거나 그
+에이전트여야 하는 이유" 를 적게 해요 (`delegate-gate`) — 다른 플러그인 훅이 자기 executor 를 권하면 모델은 그쪽으로 기울어요.
 
 압축(compaction)도 같은 태도로 다뤄요. 요약은 Claude Code 가 하고, goax 는 요약이 흘리기 쉬운 **사실**(브랜치·바뀐 파일·tasks
 진행률)만 압축 직전에 적었다가 직후에 한 번 돌려줘요 (`pre-compact/snapshot.sh`). 훅 안에서 LLM 으로 요약하지 않아요.

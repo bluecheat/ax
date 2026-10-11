@@ -128,15 +128,15 @@ else
         && pass "spec-review — tasks.md 만 바뀌어도 sha 불일치 + changed_files 로 어디가 바뀌었는지" \
         || fail "spec-review — sha 가 spec.md 만 봐서 tasks.md 재작성을 못 잡음"
 
-    # 라운드 상한 — 리뷰어가 본 라운드만 세요. 3 번 보고 4 번째 스냅샷이면 warning (차단은 아니에요, exit 0 유지)
+    # 라운드 상한 — 리뷰어가 본 라운드만 세요. 3 번 보고 4 번째 스냅샷이면 막아요 (exit 1, 원장 round 3 그대로)
     srv_seen() { local sha; sha=$(srv --status --json | jq -r '.result.sha'); printf 'verdict: 보강 필요\nsha: %s\n' "$sha" | tee "$SRV/.ax/docs/spec/020-a/review-spec.architect.md" > "$SRV/.ax/docs/spec/020-a/review-spec.evaluator.md"; }
     srv --snapshot --json >/dev/null 2>&1          # 안 본 SHA_1 자리를 교체 → round 1
     srv_seen; printf 'r2\n' >> "$SRV/.ax/docs/spec/020-a/spec.md"; srv --snapshot --json >/dev/null 2>&1   # round 2
     srv_seen; printf 'r3\n' >> "$SRV/.ax/docs/spec/020-a/spec.md"; srv --snapshot --json >/dev/null 2>&1   # round 3
     srv_seen; printf 'r4\n' >> "$SRV/.ax/docs/spec/020-a/spec.md"
     SRV_OUT=$(srv --snapshot --json); SRV_RC=$?
-    echo "$SRV_OUT" | jq -e '.status=="warning" and .result.round==4 and .result.round_exceeded==true and (.warnings|length)==1' >/dev/null 2>&1 && [ "$SRV_RC" -eq 0 ] \
-        && pass "spec-review --snapshot — 리뷰된 3 라운드 뒤 4 번째는 warning (exit 0 유지)" || fail "spec-review — 라운드 상한이 침묵 또는 오산: $(echo "$SRV_OUT" | jq -c '{status,round:.result.round}')"
+    echo "$SRV_OUT" | jq -e '.status=="error"' >/dev/null 2>&1 && [ "$SRV_RC" -eq 1 ] && [ "$(cut -d'|' -f1 "$SRV/.ax/docs/spec/020-a/.review-round")" = 3 ] \
+        && pass "spec-review --snapshot — 리뷰된 3 라운드 뒤 4 번째는 exit 1 (원장 round 3 그대로)" || fail "spec-review — 라운드 상한이 안 막힘: rc=$SRV_RC $(echo "$SRV_OUT" | jq -c '{status,round:.result.round}')"
 
     # --dry-run 은 어떤 파일도 안 만들어요
     cp "$SRV/.ax/docs/spec/020-a/.review-round" "$SRV/round.before"

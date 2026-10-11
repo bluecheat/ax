@@ -6,6 +6,7 @@
 #   bash lanes-dispatch.sh [--spec <id-slug>] --assign "T010=A,T011=A,T020=B" [--force] [--dry-run] [--json]
 #   bash lanes-dispatch.sh [--spec <id-slug>] --dispatch <lane | T010,T011> [--force] [--dry-run] [--json]
 #   bash lanes-dispatch.sh [--spec <id-slug>] --report <lane | T010,T011> [--dry-run] [--json]
+#   bash lanes-dispatch.sh --stack-files [--path <디렉토리>] [--base <ref>] [--json]   # 이번 스택에서 바뀐 파일만
 #
 # 왜 필요한가 — 코디네이터의 기억은 컨텍스트 창 안에만 있어요. 어떤 task 를 어느 레인에
 # 넘겼고 무엇이 돌아왔는지가 전부 창 안에 있는데, 그 창은 썩고 압축되고 세션이 죽으면
@@ -38,6 +39,12 @@
 # 시각을 갱신하고 `보고:` 를 지운 뒤 warnings 에 적어요 — 이름을 직접 댄 것 자체가 재전송 의사예요.
 # 소유자는 정하지 않아요 — 배정은 판단이고 lane skill 이 사람과 해요. 여기선 기록과 검사만.
 #
+# 스택 판정 — 정리·스윕 레인의 소유 파일을 패키지 글롭으로 뽑으면 main 에 이미 있던 레거시 파일이 섞여요 (실측: 스타일
+# 정리 레인에 레거시 4파일이 섞여 PR diff 에 옛 raw SQL 이 드러남). --stack-files 는 base(merge-base)...HEAD + 워킹
+# 트리 + 새 파일만 줘요 — 브리프 목록을 거기서 뽑으면 레거시가 들어갈 길이 없어요. --dispatch 는 보내는 task 의
+# `files:` 중 base 에 이미 있고 이번 스택에서 아직 안 바뀐 파일을 `outside_stack` 에 적어요 (막지는 않아요 — 기존
+# 파일을 처음 고치는 task 도 여기 걸려요. 스윕·정리 task 면 범위 밖이라는 신호예요).
+#
 # `files:` 경로는 비교 전에 정규화해요 (`./` 제거 · 중복 `/` · 끝 `/`) — `src/a.ts` 와
 # `./src/a.ts` 는 같은 파일이고, 표기 차이로 소유 충돌을 빠져나갈 수 없어요.
 # ``` 코드펜스 안의 줄은 전부 건너뛰어요 — 형식 설명용 예시 task 가 실 task 로 세지 않도록.
@@ -48,7 +55,7 @@
 #     "lanes":[{"lane":"A","tasks":["T010","T011"],"open":2,"dispatched":1,"reported":0,"done":0}],
 #     "unassigned_open":["T009"],"dispatched_unreported":["T010"],"done_without_report":[],
 #     "lane_file_conflicts":[{"file":"a.ts","lanes":["A","B"],"tasks":["T010","T020"]}],
-#     "applied":["T010=A"],"rejected":[{"task":"T999","reason":"…"}],
+#     "applied":["T010=A"],"rejected":[{"task":"T999","reason":"…"}],"outside_stack":["src/legacy/a.kt"],
 #     "changed":0,"dry_run":false},...}
 #
 # Exit: 0 ok · 1 error (대상 없음 · 충돌로 dispatch 거부 · --assign 거부 · 락 실패) · 2 skipped (--json 인데 jq 없음)
@@ -59,7 +66,7 @@ SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 JSON_MODE=false; DRY_RUN=false; SHOW_HELP=false; FORCE=false
-SPEC=""; MODE="status"; ASSIGN=""; LANE=""; REPORT=""
+SPEC=""; MODE="status"; ASSIGN=""; LANE=""; REPORT=""; PATH_ARG=""; BASE_ARG=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -71,6 +78,9 @@ while [ $# -gt 0 ]; do
         --dispatch) shift; MODE="dispatch"; LANE="${1:-}" ;;
         --report)   shift; MODE="report";   REPORT="${1:-}" ;;
         --spec)     shift; SPEC="${1:-}" ;;
+        --stack-files) MODE="stack" ;;
+        --path)     shift; PATH_ARG="${1:-}" ;;
+        --base)     shift; BASE_ARG="${1:-}" ;;
         --help|-h)  SHOW_HELP=true ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;
     esac
@@ -93,6 +103,33 @@ fail() {
     if [ "$JSON_MODE" = true ]; then json_error "$1"; fi
     goax_error "$1"; exit "$EXIT_ERROR"
 }
+
+STACK_BASE=""
+if [ "$MODE" = stack ] || [ "$MODE" = dispatch ]; then
+    if [ -n "$BASE_ARG" ]; then
+        STACK_BASE=$(goax_stack_base "$PROJECT_ROOT" "$BASE_ARG") || fail "--base '$BASE_ARG' 를 HEAD 와 이을 수 없어요"
+    else
+        STACK_BASE=$(goax_stack_base "$PROJECT_ROOT" || true)
+    fi
+fi
+
+if [ "$MODE" = stack ]; then
+    git -C "$PROJECT_ROOT" rev-parse --verify -q HEAD >/dev/null 2>&1 || fail "git 저장소가 아니에요 — 스택을 판정할 수 없어요"
+    P=$(printf '%s' "$PATH_ARG" | sed -E 's#^\./##; s#/+$##')
+    FILES=$(goax_stack_files "$PROJECT_ROOT" "$STACK_BASE" | awk -v p="$P" 'p == "" || $0 == p || index($0, p "/") == 1')
+    N=$(printf '%s' "$FILES" | grep -c . || true); N=${N:-0}
+    NOTE="이번 스택에서 바뀐 파일 ${N}개 — 정리·스윕 레인의 소유 목록은 여기서 골라요"
+    [ -z "$STACK_BASE" ] && NOTE="${NOTE} (base 를 못 찾아 워킹 트리 변경만 봤어요 — --base <브랜치> 로 주세요)"
+    if [ "$JSON_MODE" = true ]; then
+        RESULT=$(jq -nc --arg base "$STACK_BASE" --arg path "$P" --argjson files "$(printf '%s\n' "$FILES" | jq -Rn '[inputs|select(length>0)]')" \
+            '{mode:"stack", base:(if $base=="" then null else $base end), path:(if $path=="" then null else $path end), files:$files}')
+        json_output "ok" "$RESULT" "$NOTE"
+    else
+        [ -n "$FILES" ] && printf '%s\n' "$FILES"
+        goax_log "$NOTE"
+    fi
+    exit "$EXIT_OK"
+fi
 
 if [ -z "$SPEC" ] && command -v jq >/dev/null 2>&1; then
     TF="$PROJECT_ROOT/.ax/current-task.json"
@@ -359,6 +396,21 @@ if [ "$MODE" = "dispatch" ]; then
        && printf '%s\n' "$CONFLICTS" | awk -F'|' -v l="$LANE" 'BEGIN{f=0} { n=split($2,a,","); for(i=1;i<=n;i++) if(a[i]==l) f=1 } END{exit f?0:1}'; then
         fail "레인 '$LANE' 이 다른 레인과 파일을 공유해요 — 소유권부터 정리하세요 (--status 로 lane_file_conflicts 확인). 그래도 보내려면 --force"
     fi
+    # 스택 밖 — 보내는 task 의 files: 중 base 에 이미 있고 이번 스택에서 아직 안 바뀐 파일
+    if [ -n "$STACK_BASE" ]; then
+        STACK_NOW=$(goax_stack_files "$PROJECT_ROOT" "$STACK_BASE")
+        OUTSIDE=$(printf '%s\n' "$LEDGER" | awk -F'|' -v t="$TARGETS" '
+            BEGIN { n = split(t, a, ","); for (i = 1; i <= n; i++) want[a[i]] = 1 }
+            ($1 in want) && $3 != "" { m = split($3, fs, ","); for (j = 1; j <= m; j++) if (fs[j] != "") print fs[j] }' \
+            | awk 'NF && !s[$0]++' | while IFS= read -r f; do
+                printf '%s\n' "$STACK_NOW" | grep -qxF -- "$f" && continue
+                git -C "$PROJECT_ROOT" cat-file -e "$STACK_BASE:./$f" 2>/dev/null && printf '%s\n' "$f"
+            done)
+        if [ -n "$OUTSIDE" ]; then
+            OW="스택 밖 기존 파일 $(printf '%s' "$OUTSIDE" | grep -c .)개를 보내요 ($(printf '%s' "$OUTSIDE" | head -3 | paste -sd, -)…) — 기존 파일을 고치는 task 면 정상이고, 정리·스윕이면 범위 밖이에요. 소유 목록은 --stack-files 로 뽑아요"
+            WARN="${WARN:+$WARN · }$OW"
+        fi
+    fi
     apply_edit "$TARGETS" "디스패치" "$NOW" set
     apply_edit "$TARGETS" "보고" "" del
     CHANGED=$(printf '%s' "$TARGETS" | awk -F, '{print NF}')
@@ -409,10 +461,10 @@ if [ "$JSON_MODE" = true ]; then
     RESULT=$(jq -nc --arg spec "$SPEC" --arg mode "$MODE" --argjson lanes "$LANES_J" \
         --argjson un "$(arr "$UNASSIGNED")" --argjson dr "$(arr "$UNREPORTED")" \
         --argjson dn "$(arr "$NOREPORT")" --argjson cf "$CONF_J" --argjson app "$APP_J" \
-        --argjson changed "${CHANGED:-0}" --argjson dry "$DRY_RUN" \
+        --argjson changed "${CHANGED:-0}" --argjson dry "$DRY_RUN" --argjson outs "$(arr "${OUTSIDE:-}")" \
         '{spec:$spec, mode:$mode, lanes:$lanes, unassigned_open:$un, dispatched_unreported:$dr,
           done_without_report:$dn, lane_file_conflicts:$cf, applied:$app, rejected:[],
-          changed:$changed, dry_run:$dry}')
+          outside_stack:$outs, changed:$changed, dry_run:$dry}')
     WARN_J='[]'; [ -n "$WARN" ] && WARN_J=$(_goax_json_array "$WARN")
     if [ "$CONF_N" -gt 0 ]; then
         json_output "warning" "$RESULT" "같은 파일을 두 레인이 소유해요 (${CONF_N}개) — 핫 파일은 한 레인이 독점하거나 별도 task 로 떼세요" "$WARN_J"

@@ -113,8 +113,30 @@ sy --delta --json | jq -e '.result.base=="reviewed" and ([.result.files[]|select
     && pass "spec-review --delta — 리뷰 뒤 생긴 tasks.md 는 전부 바뀐 줄로" || fail "spec-review --delta — 새 tasks.md 를 못 셈"
 sy_review "진행" "진행"; printf 'y\n' >> "$SY/tasks.md"; sy --snapshot --json >/dev/null 2>&1
 sy_review "진행" "보강 필요"; printf 'z\n' >> "$SY/tasks.md"
-sy --snapshot --json | jq -e '.status=="warning" and .result.round==3 and .result.round_exceeded==true and (.warnings[0]|test("tasks 단계"))' >/dev/null 2>&1 \
-    && pass "spec-review --snapshot — tasks 단계는 3 라운드째에 상한 경고" || fail "spec-review — tasks 단계 상한 2 가 안 걸림: $(cat "$SY/.review-round")"
+# 상한은 막아요 — 경고만 내던 때 실제로 tasks 단계(상한 2)가 라운드 18 까지 갔어요
+cp "$SY/.review-round" "$SR/round.cap"
+CAPO=$(sy --snapshot --json); CAPRC=$?
+[ "$CAPRC" -eq 1 ] && printf '%s' "$CAPO" | jq -e '.status=="error" and (.errors[0]|test("--extend-round"))' >/dev/null 2>&1 \
+  && cmp -s "$SY/.review-round" "$SR/round.cap" && ! grep -q '^z$' "$SY/.review-snapshot/current/tasks.md" \
+    && pass "spec-review --snapshot — tasks 단계 3 라운드째는 exit 1, 원장·사본 그대로 (--override/--extend-round 안내)" \
+    || fail "spec-review — tasks 단계 상한 2 가 안 막힘: rc=$CAPRC $(cat "$SY/.review-round")"
+sy --snapshot --max-rounds 5 --json >/dev/null 2>&1; [ $? -eq 1 ] \
+    && pass "spec-review --max-rounds — 기본 상한보다 높이면 거부 (올리는 건 사용자 결정)" || fail "spec-review --max-rounds 로 상한을 올림"
+EXN=$(sy --extend-round --json | jq -r .status)                                # 사유 없음
+sy --extend-round --reason "재리뷰 결정" --dry-run --json >/dev/null 2>&1; EXDRY=$([ -f "$SY/review-extend.md" ] && echo wrote || echo none)
+EXO=$(sy --extend-round --reason "구현 리뷰로 경계 문장이 바뀜 — 사용자 재리뷰 결정" --json)
+EXS=$(sy --snapshot --json)
+sy_review "진행" "보강 필요"; printf 'w\n' >> "$SY/tasks.md"
+sy --snapshot --json >/dev/null 2>&1; EXRC2=$?
+{ [ "$EXN" = error ] && [ "$EXDRY" = none ] \
+  && printf '%s' "$EXO" | jq -e '.status=="ok" and .result.grant=={"stage":"tasks","round":3}' >/dev/null 2>&1 \
+  && printf '%s' "$EXS" | jq -e '.status=="ok" and .result.round==3 and .result.extended==true' >/dev/null 2>&1 \
+  && [ "$EXRC2" -eq 1 ] && grep -q '^reason: 구현 리뷰로' "$SY/review-extend.md"; } \
+    && pass "spec-review --extend-round — 사유 필수·dry-run 무기록, 라운드 하나만 열고 그다음은 다시 막혀요" \
+    || fail "spec-review --extend-round: 사유없음=$EXN dry=$EXDRY ext=$(printf '%s' "$EXO" | jq -c .result.grant) snap=$(printf '%s' "$EXS" | jq -c '.result|{round,extended}') 다음=$EXRC2"
+sy --snapshot --stage spec --json >/dev/null 2>&1; [ $? -eq 1 ] \
+    && pass "spec-review — tasks → spec 되돌리기는 연장 없이 막혀요 (상한을 1 로 되돌리는 길이라)" || fail "spec-review — tasks→spec 로 상한 초기화"
+rm -f "$SR/round.cap"
 sy --snapshot --stage bogus --json >/dev/null 2>&1; [ $? -eq 1 ] \
     && pass "spec-review --stage — spec|tasks 외 값은 exit 1" || fail "spec-review --stage — 아무 값이나 받음"
 printf '2|abc|2026-01-01T00:00Z|def||\n' > "$SY/.review-round"

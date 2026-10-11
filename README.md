@@ -71,7 +71,7 @@
        │ → shared attitude across sub-agents   │ → /audit review → promote to rule
        │                                       │   (grep rules carry a `검출 패턴:` marker the pre-commit hook enforces)
 
-Sensors (deterministic):  .ax/hooks/{session-start, pre-compact, user-prompt, pre-bash, pre-edit, post-edit, pre-commit, subagent-start, stop}/*.sh
+Sensors (deterministic):  .ax/hooks/{session-start, pre-compact, user-prompt, pre-bash, pre-edit, pre-agent, post-edit, pre-commit, subagent-start, stop}/*.sh
 Scripts (deterministic):  .ax/scripts/bash/*.sh — --json standard
 ```
 
@@ -121,7 +121,7 @@ The `spec` skill doesn't generate every artifact upfront. The triage result deci
 "break into tasks"              → tasks breakdown ([P] parallel marker); L/XL re-reviews with --stage tasks (cap 2)
 "start implementation"          → run tasks.md: sequential, or as lane coordinator when
                                   tasks carry lane assignments (lanes-dispatch.sh ledger)
-                                  → completion gate G1–G7 (+ fresh-context evaluator and rules-auditor for L / M×L3)
+                                  → completion gate G1–G8 (+ fresh-context evaluator and rules-auditor, and a recorded full verify run, for L / M×L3)
 "split into lanes"              → lane — first asks whether the work can be split at all
 "build this screen"             → screen — spec tables first → screen-designer (fresh context) builds,
                                   renders, measures (screen-measure.sh) and fixes before showing
@@ -194,6 +194,7 @@ your-project/
 │   │   ├── pre-edit/{check-protected-paths,module-rules-inject,rule-read-gate,spirit-check,spirit-rules-inject}.sh
 │   │   ├── post-edit/lint-changed.sh
 │   │   ├── pre-commit/{critical-rule-grep,check-mistake-secrets,spec-completion-gate}.sh
+│   │   ├── pre-agent/delegate-gate.sh          # asks once before implementation goes to a non-goax executor
 │   │   ├── subagent-start/harness-pointer.sh   # hands Constitution/Spirit/spec paths to sub-agents
 │   │   └── stop/spec-gate.sh              # blocks turn end once if an active spec fails its gate
 │   ├── scripts/bash/*.sh                  # deterministic tools (--json standard)
@@ -301,7 +302,7 @@ goax installs **shell scripts into your repository** and registers them as Claud
 
 The hooks (`block-destructive.sh`, `check-protected-paths.sh`, the pre-commit chain) are bash pattern matching. They are designed to catch *accidents* — an agent or a person doing something destructive by mistake. They are **not** designed to stop someone who is trying to get around them, and they cannot be: a shell command string can express the same action in unlimited ways, and any hook can be sidestepped by using a tool path it does not watch (`sed -i` instead of `Edit`, `git commit --no-verify`, editing in an IDE).
 
-Three hooks are *fact-forcing gates* rather than pattern blocks: an edit is denied until the rule files that apply to that path have actually been Read this session (`rule-read-gate`), an in-project destructive command (`rm -r`, `git reset --hard`, `git clean -f` …) is denied once until the agent lists what it will delete and how to undo it (`destructive-facts`), and the agent's `--no-verify` / `core.hooksPath` / `HUSKY=0` is denied outright (`block-hook-bypass`). Asking "are you sure?" always gets a yes; asking for facts surfaces what the agent had not looked at. Every hook can be switched off by id (`sensors.disabled_hooks`) or dropped to the safety-net set with `sensors.hook_profile: minimal`.
+Five hooks are *fact-forcing gates* rather than pattern blocks: an edit is denied until the rule files that apply to that path have actually been Read to the end this session (`rule-read-gate`), an existing lint/format/type-check config edit is denied once until the agent says whether it loosens or tightens and who asked (`quality-config-gate`), handing implementation to a non-goax executor agent while a spec is being implemented is denied once until the agent gives a reason (`delegate-gate`), an in-project destructive command (`rm -r`, `git reset --hard`, `git clean -f` …) is denied once until the agent lists what it will delete and how to undo it (`destructive-facts`), and the agent's `--no-verify` / `core.hooksPath` / `HUSKY=0` is denied outright (`block-hook-bypass`). Asking "are you sure?" always gets a yes; asking for facts surfaces what the agent had not looked at. Every hook can be switched off by id (`sensors.disabled_hooks`) or dropped to the safety-net set with `sensors.hook_profile: minimal`.
 
 So read 🔴 CRITICAL as *"you will not pass this by accident"*, not *"this cannot be bypassed"*. If you need a real trust boundary — running untrusted code, isolating credentials — use a sandbox, permission separation, or a CI gate. goax does not replace those. See [`docs/reference/rule-enforcement.md`](docs/reference/rule-enforcement.md) for the full contract.
 

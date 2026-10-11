@@ -192,7 +192,12 @@ RECURRENCE=$(grep -lE "^category:.*\\b${TASK_DOMAIN}\\b" .ax/mistakes/*.md 2>/de
 
 ### 3.3 단일 레인에서 task 를 위임할 때 — 브리프에 넣을 것
 
-이 세션이 task 하나를 서브에이전트(executor 등)에게 맡기면, 브리프에 그 task 의 `files:` 목록과 함께 이 줄을 넣어요:
+task 를 맡길 서브에이전트는 **`goax:lane-worker`** 예요 (vendor 설치면 `lane-worker`). 소유 파일 밖 편집 금지 · 커밋 금지 ·
+명령 인용 보고가 그 에이전트에 들어 있어서, 다른 실행 에이전트(다른 플러그인 훅이 권하는 executor 등)로 맡기면 그 규율이 빠져요.
+구현 단계에 다른 실행 에이전트를 부르면 `pre-agent/delegate-gate.sh` 가 한 번 물어요. 띄우기 전에
+`bash .ax/scripts/bash/agent-model.sh lane-worker --json` 의 `result.models.lane-worker` 가 null 이 아니면 그 값을 `model` 로 넘겨요.
+
+브리프에는 그 task 의 `files:` 목록과 함께 이 줄을 넣어요:
 
 ```
 files: 목록과 레포 관례(새 파일 위치·분리)가 충돌하면 — 예: 새 타입의 이웃 관례는 같은 레이어의 별도
@@ -330,7 +335,18 @@ if [ "$OPEN" != "0" ] || [ "$(printf '%s\n' "$GATE" | jq -r '.result.task_count_
 fi
 ```
 
-여기까지 왔으면 task 는 끝났어요. 이제 verdict 에 따라 나눠요:
+여기까지 왔으면 task 는 끝났어요. 리뷰어를 띄우기 전에 **전체 검증을 기록해요** (G8) — 레인이나 이 세션이 돌린 검증 명령은
+패키지 필터일 수 있어서, CI 범위의 실패(다른 모듈의 테스트 · 빈 이름 충돌)는 그 명령으로 안 보여요:
+
+```bash
+bash .ax/scripts/bash/zero-verify.sh --record "$SPEC" --json | jq -r '.next_step, (.result.checks[]|select(.ok==false)|.tail_lines[])'
+```
+
+`.ax/config.yml` 의 `commands.*` 전부를 파이프 없이 돌리고 `$SPEC_DIR/verify.json` 에 남겨요 (`--cmd`·`--only` 로는 기록하지
+않아요). 실패면 고치고 다시예요. 리뷰 지적을 반영하느라 코드를 또 고치면 기록이 낡아서 `tasks-gate.sh` 가 `verify_state: stale`
+로 다시 요구해요 — 커밋만 한 건 낡은 게 아니에요. `commands.test` 가 비어 있으면 G8 은 요구하지 않아요 (`unconfigured`).
+
+이제 verdict 에 따라 나눠요:
 
 | `REVIEW_REQ` | `VERDICT` | 할 것 |
 |---|---|---|
@@ -339,6 +355,8 @@ fi
 | * | `진행` | §8.2 완료 |
 | * | `보강 필요` | review.md 의 지적 하나하나를 task 로 옮겨요 (`- [ ] T1NN [ACn] <지적> — files: …`), §3 으로 돌아가요. 끝나면 evaluator 를 **다시** 띄워요 — review.md 는 evaluator 가 덮어써요 |
 | * | `재논의 필요` | halt. 사용자 결정 — spec 자체를 다시 봐야 한다는 뜻이에요 |
+
+`VERIFY=$(printf '%s\n' "$GATE" | jq -r '.result.verify_state')` 가 `missing`·`stale`·`mismatch`·`fail` 이면 위 `--record` 부터예요.
 
 룰 대조(G7 — `review-rules.md`)도 같은 표예요: 필수 여부는 `REVIEW_REQ` 와 같고, `RULES_VERDICT=$(printf '%s\n' "$GATE" | jq -r
 '.result.rules_review_verdict // ""')` 가 없으면 §8.1.5, `보강 필요` 면 위반을 task 로 옮겨 §3 으로 갔다가 rules-auditor 를 다시 띄워요.

@@ -10,7 +10,7 @@
 # 구분하지 못했어요. 실사용 리포에서 spec 21개 중 14개가 미완료 task 를 남긴 채
 # 끝나 있었는데, 아무도 그걸 알려주지 않았어요.
 #
-# 검사 7종:
+# 검사 8종:
 #   G1 미완료  `- [ ]` 가 남아 있나 (`- [~]` 보류는 제외 — 의도적 보류는 정상)
 #   G2 커버리지 spec.md §3 의 AC 중 대응 task 가 없는 것 (spec-kit /analyze 의 coverage gap)
 #   G3 orphan  어떤 AC 도 참조하지 않는 task
@@ -19,6 +19,9 @@
 #   G6 검증자  review.md **첫 줄**의 `verdict:` — 필수(size L 이상 · M×L3)인데 없거나 `진행` 이 아니면 미완료
 #   G7 룰 대조 review-rules.md **첫 줄**의 `verdict:` — 필수 여부는 G6 과 같아요. rules-auditor 가 새 컨텍스트로
 #             변경 파일마다 걸린 룰(rules-audit-scope.sh)과 새 심볼의 이웃 관례를 대조해 써요
+#   G8 전체 검증 verify.json — `zero-verify.sh --record <spec>` 이 config.yml commands 전부를 돌려 남겨요. 필수 여부는
+#             G6 과 같고 commands.test 가 있을 때만이에요. 없거나 · 실패했거나 · 기록 뒤 코드가 바뀌었거나(지문) ·
+#             기록한 test 명령이 지금 commands.test 와 다르면 미완료. 필수가 아니어도 실패 기록은 막아요
 #
 # G2/G3 는 spec.md 에 `AC<n>` ID 가 있을 때만 검사해요 (없는 기존 spec 은 생략).
 # G4 는 `.ax/state.json` 의 spec별 봉인값과 비교해요. 봉인값이 없으면 현재 수를 기록만
@@ -36,12 +39,15 @@
 # G5 는 "보고를 받았는가" 를, G6 은 "다른 컨텍스트가 봤는가" 를 파일에서 확인해요.
 # 왜 G7 인가 — 편집 훅은 룰 경로를 알려주고 rule-read-gate.sh 는 읽었는지만 봐요. 읽은 룰을 지켰는지, 새 파일이
 # 이웃 관례를 따랐는지는 G6(evaluator — spec·ADR 적합성)의 범위가 아니라 아무도 안 봤어요. 그래서 따로 받아요.
+# 왜 G8 인가 — 레인 보고의 검증 명령을 코디네이터가 다시 돌려도, 그 명령이 패키지 필터면 CI 범위의 실패(빈 이름 충돌 ·
+# 다른 모듈의 슬라이스 테스트)는 아무도 못 봐요. "전체를 돌렸다" 를 기록으로 확인해요.
 #
 # Output (--json):
 #   {"status":"ok|warning","result":{"spec":"012-x","total":12,"done":9,"open":2,
 #     "paused":1,"ac_total":3,"ac_uncovered":["AC3"],"orphan_tasks":["T007"],
 #     "task_count_drop":0,"dispatched_unreported":["T011"],"done_without_report":[],
 #     "review_required":true,"review_verdict":"진행","rules_review_required":true,"rules_review_verdict":null,
+#     "verify_required":true,"verify_state":"ok|missing|fail|stale|mismatch|unconfigured|none",
 #     "complete":false},...}
 #   --all 이면 result 는 {"specs":[위 객체 …],"spec_count":3,"total":…,"done":…,"open":…,
 #     "complete":false,"violations":5} — 첫 spec 의 숫자에 전체 합계를 섞지 않아요.
@@ -102,11 +108,11 @@ fi
 # 펜스 밖 본문만 — 형식 설명 블록의 예시 task 를 실 task 로 세지 않도록
 strip_fences() { awk '/^[[:space:]]*```/{f=!f; next} f{next} {print}' "$1" 2>/dev/null || true; }
 
-# ── 한 spec 검사 → "spec|total|done|open|paused|ac_total|uncovered|orphans|drop|unreported|noreport|verdict|required|rverdict" ──
+# ── 한 spec 검사 → "spec|total|done|open|paused|ac_total|uncovered|orphans|drop|unreported|noreport|verdict|required|rverdict|vstate" ──
 check_spec() {
     local dir="$1" name; name=$(basename "$dir")
     local tasks="$dir/tasks.md" spec="$dir/spec.md"
-    [ -f "$tasks" ] || { printf '%s|0|0|0|0|0|||0|||%s|false|\n' "$name" ""; return 0; }
+    [ -f "$tasks" ] || { printf '%s|0|0|0|0|0|||0|||%s|false||none\n' "$name" ""; return 0; }
 
     local total done_n open_n paused
     IFS='|' read -r total done_n open_n paused <<EOF
@@ -224,9 +230,31 @@ EOF
         fi
     fi
 
-    printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+    # G8 전체 검증 — zero-verify.sh --record 가 남긴 verify.json. 필수면 지금 코드(지문)·지금 commands.test 와 맞아야 해요
+    local vstate="none" test_cmd vf="$dir/verify.json"
+    test_cmd=$(goax_config_cmd "$PROJECT_ROOT/.ax/config.yml" test)
+    if [ -f "$vf" ] && command -v jq >/dev/null 2>&1; then
+        local v_ok v_fp v_test cur_fp
+        v_ok=$(jq -r '.ok // false' "$vf" 2>/dev/null || echo false)
+        v_fp=$(jq -r '.fingerprint // empty' "$vf" 2>/dev/null || true)
+        v_test=$(jq -r '[.checks[]? | select(.name=="test") | .cmd][0] // empty' "$vf" 2>/dev/null || true)
+        if [ "$v_ok" != true ]; then
+            vstate="fail"
+        elif [ "$required" = true ] && [ -n "$test_cmd" ] && [ "$v_test" != "$test_cmd" ]; then
+            vstate="mismatch"
+        elif [ "$required" = true ] && [ -n "$v_fp" ] && [ "$v_fp" != nogit ] \
+             && cur_fp=$(goax_tree_fingerprint "$PROJECT_ROOT") && [ "$cur_fp" != nogit ] && [ "$cur_fp" != "$v_fp" ]; then
+            vstate="stale"
+        else
+            vstate="ok"
+        fi
+    elif [ "$required" = true ]; then
+        if [ -n "$test_cmd" ]; then vstate="missing"; else vstate="unconfigured"; fi
+    fi
+
+    printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
         "$name" "$total" "$done_n" "$open_n" "$paused" "$ac_total" \
-        "${uncovered% }" "${orphans% }" "$drop" "${unreported% }" "${noreport% }" "$verdict" "$required" "$rverdict"
+        "${uncovered% }" "${orphans% }" "$drop" "${unreported% }" "${noreport% }" "$verdict" "$required" "$rverdict" "$vstate"
 }
 
 TARGETS=""
@@ -262,12 +290,26 @@ review_blocks() {   # $1 verdict · $2 required
     [ -n "$1" ] && [ "$1" != "진행" ] && return 0
     return 1
 }
+# G8 이 막는가 — 필수면 ok(또는 commands.test 미설정) 말고는 막아요. 필수가 아니어도 실패 기록은 막아요
+verify_blocks() {   # $1 vstate · $2 required
+    case "$1" in ok|none|unconfigured) return 1 ;; fail) return 0 ;; esac
+    [ "$2" = "true" ] && return 0
+    return 1
+}
+verify_msg() {
+    case "$1" in
+        missing)  printf '전체 검증 기록이 없어요 — bash .ax/scripts/bash/zero-verify.sh --record <spec> 으로 config.yml commands 전부를 돌려 남기세요' ;;
+        fail)     printf '전체 검증 기록이 실패예요 — verify.json 의 checks 를 보고 고친 뒤 zero-verify.sh --record 를 다시' ;;
+        stale)    printf '전체 검증 뒤에 코드가 바뀌었어요 — zero-verify.sh --record 를 다시 돌리세요' ;;
+        mismatch) printf '기록한 test 명령이 지금 commands.test 와 달라요 (필터 명령은 완료 증거가 아니에요) — zero-verify.sh --record 를 다시' ;;
+    esac
+}
 
 FIRST=""; ROWS_X=""; SPEC_N=0
 SUM_TOTAL=0; SUM_DONE=0; SUM_OPEN=0; SUM_PAUSED=0; ALL_COMPLETE=true
-while IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans drop unreported noreport verdict required rverdict; do
+while IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans drop unreported noreport verdict required rverdict vstate; do
     [ -z "$name" ] && continue
-    [ -z "$FIRST" ] && FIRST="$name|$total|$done_n|$open_n|$paused|$ac_total|$uncovered|$orphans|$drop|$unreported|$noreport|$verdict|$required|$rverdict"
+    [ -z "$FIRST" ] && FIRST="$name|$total|$done_n|$open_n|$paused|$ac_total|$uncovered|$orphans|$drop|$unreported|$noreport|$verdict|$required|$rverdict|$vstate"
     SPEC_N=$((SPEC_N + 1))
     SUM_TOTAL=$((SUM_TOTAL + total)); SUM_DONE=$((SUM_DONE + done_n))
     SUM_OPEN=$((SUM_OPEN + open_n));  SUM_PAUSED=$((SUM_PAUSED + paused))
@@ -280,9 +322,10 @@ while IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans
     [ -n "$noreport" ] && V=$((V + 1))
     review_blocks "$verdict" "$required" && V=$((V + 1))
     review_blocks "$rverdict" "$required" && V=$((V + 1))
+    verify_blocks "$vstate" "$required" && V=$((V + 1))
     VIOLATIONS=$((VIOLATIONS + V))
     C=true; [ "$V" -gt 0 ] && { C=false; ALL_COMPLETE=false; }
-    ROWS_X="${ROWS_X}${name}|${total}|${done_n}|${open_n}|${paused}|${ac_total}|${uncovered}|${orphans}|${drop}|${unreported}|${noreport}|${verdict}|${required}|${V}|${C}|${rverdict}"$'\n'
+    ROWS_X="${ROWS_X}${name}|${total}|${done_n}|${open_n}|${paused}|${ac_total}|${uncovered}|${orphans}|${drop}|${unreported}|${noreport}|${verdict}|${required}|${V}|${C}|${rverdict}|${vstate}"$'\n'
 
     if [ "$JSON_MODE" != true ]; then
         printf '%s: %s/%s 완료' "$name" "$done_n" "$total"
@@ -301,6 +344,7 @@ while IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans
             [ -z "$rverdict" ] && printf '  ⚠ 룰 대조 필수 — review-rules.md 첫 줄에 verdict 없음' \
                                || printf '  ⚠ 룰 대조 verdict: %s' "$rverdict"
         fi
+        verify_blocks "$vstate" "$required" && printf '  ⚠ 전체 검증 %s' "$vstate"
         printf '\n'
     fi
 done <<EOF
@@ -320,7 +364,8 @@ row_to_json() {   # stdin: 확장 row(|구분) → JSON 객체 배열
         review_required: (.[12]=="true"),
         violations: (.[13]|tonumber), complete: (.[14]=="true"),
         rules_review_verdict: (if (.[15] // "")=="" then null else .[15] end),
-        rules_review_required: (.[12]=="true") }]'
+        rules_review_required: (.[12]=="true"),
+        verify_state: (.[16] // "none"), verify_required: (.[12]=="true") }]'
 }
 
 if [ "$JSON_MODE" = true ]; then
@@ -336,7 +381,7 @@ if [ "$JSON_MODE" = true ]; then
             json_output "ok" "$RESULT" "spec ${SPEC_N}개 전부 완료 조건 충족"
         fi
     else
-        IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans drop unreported noreport verdict required rverdict <<EOF
+        IFS='|' read -r name total done_n open_n paused ac_total uncovered orphans drop unreported noreport verdict required rverdict vstate <<EOF
 $FIRST
 EOF
         UNC_J="[]"; ORP_J="[]"; UNR_J="[]"; NOR_J="[]"; VER_J="null"; RVER_J="null"
@@ -350,9 +395,9 @@ EOF
         fi
         COMPLETE=false
         [ "$VIOLATIONS" -eq 0 ] && COMPLETE=true
-        RESULT=$(printf '{"spec":"%s","total":%s,"done":%s,"open":%s,"paused":%s,"ac_total":%s,"ac_uncovered":%s,"orphan_tasks":%s,"task_count_drop":%s,"dispatched_unreported":%s,"done_without_report":%s,"review_required":%s,"review_verdict":%s,"rules_review_required":%s,"rules_review_verdict":%s,"complete":%s,"violations":%s}' \
+        RESULT=$(printf '{"spec":"%s","total":%s,"done":%s,"open":%s,"paused":%s,"ac_total":%s,"ac_uncovered":%s,"orphan_tasks":%s,"task_count_drop":%s,"dispatched_unreported":%s,"done_without_report":%s,"review_required":%s,"review_verdict":%s,"rules_review_required":%s,"rules_review_verdict":%s,"verify_required":%s,"verify_state":"%s","complete":%s,"violations":%s}' \
             "${name:-}" "${total:-0}" "${done_n:-0}" "${open_n:-0}" "${paused:-0}" "${ac_total:-0}" \
-            "$UNC_J" "$ORP_J" "${drop:-0}" "$UNR_J" "$NOR_J" "${required:-false}" "$VER_J" "${required:-false}" "$RVER_J" "$COMPLETE" "$VIOLATIONS")
+            "$UNC_J" "$ORP_J" "${drop:-0}" "$UNR_J" "$NOR_J" "${required:-false}" "$VER_J" "${required:-false}" "$RVER_J" "${required:-false}" "${vstate:-none}" "$COMPLETE" "$VIOLATIONS")
         if [ "$VIOLATIONS" -gt 0 ]; then
             if review_blocks "$verdict" "$required" && [ "${open_n:-0}" -eq 0 ]; then
                 [ -z "$verdict" ] \
@@ -362,6 +407,8 @@ EOF
                 [ -z "$rverdict" ] \
                     && json_output "warning" "$RESULT" "task 는 끝났지만 룰 대조가 필수예요 — rules-audit-scope.sh 로 범위를 뽑고 새 컨텍스트로 rules-auditor 를 띄워 review-rules.md 첫 줄에 verdict 를 받으세요" \
                     || json_output "warning" "$RESULT" "룰 대조 verdict '${rverdict}' — review-rules.md 의 위반을 task 로 옮겨 고치고 rules-auditor 를 다시 띄우세요"
+            elif verify_blocks "$vstate" "$required" && [ "${open_n:-0}" -eq 0 ]; then
+                json_output "warning" "$RESULT" "$(verify_msg "$vstate")"
             elif [ -n "$unreported" ] || [ -n "$noreport" ]; then
                 json_output "warning" "$RESULT" "레인 원장 불일치 — 산출물을 받고 lanes-dispatch.sh --report 로 기록한 뒤에만 체크박스를 켜세요"
             else

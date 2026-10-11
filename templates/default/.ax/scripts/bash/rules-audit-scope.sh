@@ -80,22 +80,13 @@ else
     git -C "$PROJECT_ROOT" rev-parse --git-dir >/dev/null 2>&1 \
         || fail "git 저장소가 아니에요 — --files a,b 로 변경 파일을 주세요"
     if [ -n "$BASE_ARG" ]; then
-        BASE=$(git -C "$PROJECT_ROOT" merge-base HEAD "$BASE_ARG" 2>/dev/null) || fail "--base '$BASE_ARG' 를 HEAD 와 이을 수 없어요"
+        BASE=$(goax_stack_base "$PROJECT_ROOT" "$BASE_ARG") || fail "--base '$BASE_ARG' 를 HEAD 와 이을 수 없어요"
     else
-        for cand in origin/HEAD main master; do
-            git -C "$PROJECT_ROOT" rev-parse --verify -q "$cand" >/dev/null 2>&1 || continue
-            BASE=$(git -C "$PROJECT_ROOT" merge-base HEAD "$cand" 2>/dev/null || true)
-            [ -n "$BASE" ] && break
-        done
+        BASE=$(goax_stack_base "$PROJECT_ROOT" || true)
     fi
     # 프로젝트 기준 상대 경로로 — 모노레포에선 git 루트와 프로젝트 루트가 달라요 (--relative)
-    G() { git -C "$PROJECT_ROOT" "$@" 2>/dev/null || true; }
-    CHANGED=$( { [ -n "$BASE" ] && G diff --relative --name-only --diff-filter=ACMR "$BASE" HEAD
-                 G diff --relative --name-only --diff-filter=ACMR HEAD
-                 G ls-files --others --exclude-standard; } | sort -u)
-    NEW=$( { [ -n "$BASE" ] && G diff --relative --name-only --diff-filter=A "$BASE" HEAD
-             G diff --relative --name-only --diff-filter=A HEAD
-             G ls-files --others --exclude-standard; } | sort -u)
+    CHANGED=$(goax_stack_files "$PROJECT_ROOT" "$BASE")
+    NEW=$(goax_stack_files "$PROJECT_ROOT" "$BASE" A)
 fi
 CHANGED=$(printf '%s\n' "$CHANGED" | grep -v '^\.ax/' | awk 'NF && !s[$0]++' || true)
 

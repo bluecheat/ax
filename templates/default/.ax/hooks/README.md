@@ -29,7 +29,7 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 (ECC GateGuard 의 fact-forcing 방식). 모두 `sensors.mode` 가 `warning` 이어도 막아요 — 통과하는 데 드는 수고가 작아서예요.
 
 - `pre-edit/rule-read-gate.sh` — 편집 대상에 걸린 룰 파일(spirit `paths:` · module `paths:`+`applies_to: code`)을 이번 세션에
-  **Read 도구로** 읽었는지 `.ax/.session/<sid>/rules-read.log` 로 확인해요 (compaction 이 일어나면 SessionStart 훅이 이 기록을 지워서 다시 읽게 해요). 안 읽었으면 목록을 주고 막아요. CLAUDE.md·AGENTS.md 가
+  **Read 도구로 끝까지** 읽었는지 (offset·limit 로 일부만 읽은 Read 는 안 세요) `.ax/.session/<sid>/rules-read.log` 로 확인해요 (compaction 이 일어나면 SessionStart 훅이 이 기록을 지워서 다시 읽게 해요). 안 읽었으면 목록을 주고 막아요. CLAUDE.md·AGENTS.md 가
   `@` 로 import 한 룰은 이미 컨텍스트에 있어서 빼요. 경로 예외는 `sensors.rule_gate_exempt`. 매칭 함수는 주입 훅과 같아요
   (`goax_rules_matching` · `goax_module_rules_matching`) — 둘이 어긋나면 "주입은 했는데 게이트는 안 거는" 룰이 생겨요.
   실측(commerce): mistakes 22건 중 20건을 사용자가 잡았고 절반이 "고치기 전에 조사 안 함" — 그중 하나는 "hook 이 읽으라 지시한 룰 파일을 건너뛰고".
@@ -44,6 +44,10 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
   세션에서 처음 고칠 때 한 번 막고 "완화인지 강화인지 · 사용자 지시 원문" 을 요구해요. 같은 파일을 다시 고치면 통과, 새로 만드는 건 안 막아요.
   다른 설정이 섞인 파일(`package.json` · `pyproject.toml` · `build.gradle`)은 기본값이 아니에요 — 필요하면 `sensors.quality_configs` 글롭으로.
   검사가 실패할 때 코드 대신 규칙을 끄는 쪽으로 가는 걸 막으려고요 (ECC config-protection).
+- `pre-agent/delegate-gate.sh` — spec 구현 중(phase `implementing`·`review`)에 goax 밖 실행 에이전트(기본 `executor` ·
+  `deep-executor` · `general-purpose`, 프로젝트는 `sensors.foreign_executors`)로 일을 맡기려 하면 한 번 막고 "lane-worker 로 맡기거나,
+  그 에이전트여야 하는 이유" 를 요구해요. 같은 에이전트를 다시 부르면 통과. goax 에이전트와 조사 에이전트는 안 봐요.
+  실측(commerce): 다른 플러그인 훅이 권하는 executor 로 단일 레인 위임을 해서 lane-worker 의 소유 파일·커밋 금지 규율이 빠졌어요.
 - 모두 세션당 3번까지 전체 안내, 그 뒤는 한 줄이에요 — 같은 긴 문구가 컨텍스트에 쌓이면 반복 루프를 부른다는 ECC 실측(#2142)을 따라요.
   세션 id 가 없으면(수동 실행) 추적할 수 없어서 rule-read-gate 는 통과, destructive-facts · quality-config-gate 는 경고로 강등해요.
 - 명령 판정은 `goax_shell_scan`(python3 shlex — 따옴표·주석·heredoc·here-string 을 셸처럼)이 해요. python3 가 없거나 **있는데 실패하면**

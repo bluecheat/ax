@@ -49,6 +49,12 @@
           { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-edit/module-rules-inject.sh\"" },
           { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-edit/rule-read-gate.sh\"" }
         ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/pre-agent/delegate-gate.sh\"" }
+        ]
       }
     ],
     "PostToolUse": [

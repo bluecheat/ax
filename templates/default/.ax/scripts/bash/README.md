@@ -36,16 +36,16 @@
 | `doctor-scan.sh` | doctor 의 인라인 진단 셋 — 마이그레이션 잔재(`.ax/docs/STATUS.md` 잔재 통지 포함) · template 기준 hook 등록(파일 + **이벤트 키**) · 문서↔실제 메커니즘 · **도달 지도**(룰 소스별 배관 생사) · **인계 노트 기한**(`current-task.json` `handoff` `- [ ] YYYY-MM-DD`, I3 규칙) | `doctor` |
 | `constitution-apply.sh` | onboarding Q5 의 Constitution 블록 적용 — `--block` prepend(기존 본문 `---` 아래 보존) · `--scan-duplicates` · `--drop-exact`(사용자 [a] 뒤에만) · `--append-index` | `onboarding` |
 | `tasks-plan.sh` | tasks.md → ready / blocked / parallel + `[P]` 파일 겹침 violations. 항목별 승격 — wave(배리어) 없음, 자동 실행 없음 | `lane`, `spec-implement` |
-| `tasks-gate.sh` | spec 완료 게이트 G1~G7 — 미완료 · AC 커버리지 · orphan · 유실 · 레인 원장 · evaluator verdict(`review.md`) · 룰 대조 verdict(`review-rules.md`) | `spec-implement`, `lane`, pre-commit hook |
+| `tasks-gate.sh` | spec 완료 게이트 G1~G8 — 미완료 · AC 커버리지 · orphan · 유실 · 레인 원장 · evaluator verdict(`review.md`) · 룰 대조 verdict(`review-rules.md`) · 전체 검증 기록(`verify.json`) | `spec-implement`, `lane`, pre-commit hook |
 | `lanes-hotfiles.sh` | tasks.md 에서 핫 파일(여러 미완료 task 가 쓰는 파일) + `files:` 누락 task 추출 | `lane` |
-| `spec-review.sh` | spec 합의 리뷰 원장 — `--snapshot`(sha 고정·라운드) / `--status`(리뷰어별 `review-spec.{architect,evaluator}.md` 의 verdict·sha 집계 → pass) / `--merge`(합본) / `--override --reason`(상한 도달 뒤 사용자 승인을 지금 sha 에 기록 — `review-override.md`). 필수 여부는 Size 축만 | `spec-validate` |
+| `spec-review.sh` | spec 합의 리뷰 원장 — `--snapshot`(sha 고정·라운드) / `--status`(리뷰어별 `review-spec.{architect,evaluator}.md` 의 verdict·sha 집계 → pass) / `--merge`(합본) / `--override --reason`(상한 도달 뒤 사용자 승인을 지금 sha 에 기록 — `review-override.md`) / `--extend-round --reason`(상한 뒤 라운드 하나를 사용자 결정으로 열기 — `review-extend.md`). 상한을 넘는 `--snapshot` 은 exit 1. 필수 여부는 Size 축만 | `spec-validate` |
 | `rules-audit-scope.sh` | 룰 대조(G7) 범위 — 변경 파일마다 걸린 spirit·모듈 룰(편집 훅과 같은 매칭 함수) · 상시 룰(Constitution · `paths:` 없는 spirit 룰) · 새 파일. rules-auditor 브리프의 입력 | `spec-implement` |
-| `lanes-dispatch.sh` | 레인 디스패치 원장 — `--assign / --dispatch <레인 \| T010,T011> / --report <레인 \| T010,T011> / --status`. tasks.md 의 `레인:`·`디스패치:`·`보고:` 필드를 쓰고, 파일 소유 충돌이면 dispatch 거부 | `lane`, `spec-implement` |
+| `lanes-dispatch.sh` | 레인 디스패치 원장 — `--assign / --dispatch <레인 \| T010,T011> / --report <레인 \| T010,T011> / --status`. tasks.md 의 `레인:`·`디스패치:`·`보고:` 필드를 쓰고, 파일 소유 충돌이면 dispatch 거부. `--stack-files [--path]` 는 이번 스택에서 바뀐 파일만, `--dispatch` 는 스택 밖 기존 파일을 `outside_stack` 로 | `lane`, `spec-implement` |
 | `mark-task.sh` | tasks.md 체크박스를 켜요 — `--task T013[,T014] [--state x\|~]` · `--next`(펜스 밖에서 `의존:` 이 전부 `[x]`·`[~]` 인 첫 미완료 — 전부 막혔으면 warning + `blocked_tasks`). 줄 **앞** ID 만 매칭(본문 언급 무시), 코드 펜스 건너뜀, `tasks.md.lock`, 쓰기 전후 `[x]` 개수 검증. 여러 ID 는 트랜잭션(하나라도 없으면 무변경) | `spec-implement` |
 | `zero-init.sh` | 0→1 첫날 팩 설치 (룰은 라이브 `spirit/rules/`, 템플릿은 `_templates/zero/`) — 덮어쓰지 않고 SP 토큰 충돌만 경고 | `zero` |
 | `zero-domain-risk.sh` | `config.yml` 의 `domain_risk` 블록 통째 교체 (`--show/--set/--default`) — 출고 예시 키가 남으면 triage 가 영원히 default_risk 로 흘러요 | `zero` |
 | `zero-probe.sh` | 네거티브 프로브 — 일부러 위반을 만들어 차단이 실제로 도는지 확인 | `zero` |
-| `zero-verify.sh` | `config.yml commands` 를 파이프 없이 실행하고 증거 블록 생성 — 안 돌린 게이트도 보고 (하나도 안 돌면 exit 2) | `zero` |
+| `zero-verify.sh` | `config.yml commands` 를 파이프 없이 실행하고 증거 블록 생성 — 안 돌린 게이트도 보고 (하나도 안 돌면 exit 2). `--record <spec>` 은 `<spec>/verify.json`(작업 트리 지문 포함)에 남겨 G8 이 읽어요 | `zero`, `spec-implement` |
 | `zero-ablation.sh` | 산문 룰 전체를 끄고 무엇이 깨지는지 재는 ablation (`--off/--on/--status`) — `--on` 이 회차를 기록하고 다음 기한(+180일)을 인계 노트 `next` 에 체크박스로 (doctor 가 추적) | `zero`, `doctor` |
 | `zero-guard-bash.sh` | **(`.ax/hooks/pre-bash/` 에 설치 — 이 디렉터리 밖)** pre-bash 가드: `git add -A` 차단(exit 2) · 검증 명령 파이프 경고. hook 규약이라 `--json` 표준 밖이에요 | (hook) |
 | `ade-settings.sh` | `.claude/settings.json` 의 goax 훅을 템플릿에서 생성 — 모노레포면 ADE 루트(저장소 루트)에 `env CLAUDE_PROJECT_DIR=…/<rel>` 형식으로, 단일 저장소면 프로젝트 settings 에 템플릿 그대로. `--check`(누락·잔재) · `--apply`(goax 훅 명령만 교체, 사용자 훅·permissions·statusLine 보존, 락, 백업 파일 없음). `.ax/settings.json.suggested` 머지도 이걸로 — `jq '*'` 는 배열을 통째로 바꿔요 | `doctor`, `vendor`, `up`, `onboarding` |
@@ -92,7 +92,7 @@
 ```
 
 `warning` — 대상은 정상 처리됐지만 사용자가 봐야 할 게 있을 때(예: `check-rule-enforcement.sh`
-위반 존재, `spec-review.sh` 라운드 상한 초과, `lanes-dispatch.sh` 원장 불일치). `error`/`skipped` 와
+위반 존재, `lanes-dispatch.sh` 원장 불일치). `error`/`skipped` 와
 달리 **exit code 는 `0`** 이에요 — caller 가 exit 만 보고 넘어가면 이 신호를 놓쳐요, `status` 를
 같이 봐야 해요. `warning` 을 emit 하는 스크립트: `check-manifest-install.sh`, `check-rule-enforcement.sh`,
 `check-sensor-liveness.sh`, `constitution-apply.sh`, `doctor-scan.sh`, `lanes-dispatch.sh`,
