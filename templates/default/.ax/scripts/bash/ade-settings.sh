@@ -9,7 +9,7 @@
 #   bash ade-settings.sh --check [--ade-root <dir>] [--plugin-dir <dir>] [--json]
 #   bash ade-settings.sh --apply [--ade-root <dir>] [--plugin-dir <dir>] [--json] [--dry-run]
 #
-#   ADE 루트 기본값 = 프로젝트의 git 최상위 (git 이 아니면 프로젝트 루트). 프로젝트 루트와 같으면 단일 저장소 모드 —
+#   ADE 루트 = goax_ade_root (--ade-root → .ax/config.yml 의 ade_root → git 최상위 → 프로젝트 루트). 프로젝트 루트와 같으면 단일 저장소 모드 —
 #   템플릿 명령을 그대로(`bash "${CLAUDE_PROJECT_DIR}/.ax/hooks/…"`) 프로젝트의 .claude/settings.json 에 맞춰요.
 #   템플릿: --plugin-dir > ${CLAUDE_SKILL_DIR}/../.. > ${CLAUDE_PLUGIN_ROOT} 의 templates/default/.claude/settings.json.template
 #
@@ -50,12 +50,9 @@ command -v jq >/dev/null 2>&1 || skip "jq 가 없어요"
 PROJECT_ROOT=$(find_project_root) || exit "$EXIT_ERROR"
 RAW_ROOT="$PROJECT_ROOT"      # 락 문자열용 — register-spirit-hook.sh · zero-init.sh 가 find_project_root 그대로 써요
 PROJECT_ROOT=$(CDPATH="" cd -P "$PROJECT_ROOT" && pwd -P)
-if [ -z "$ADE_ROOT" ]; then
-    ADE_ROOT=$(git -C "$PROJECT_ROOT" rev-parse --show-toplevel 2>/dev/null || true)
-    [ -n "$ADE_ROOT" ] || ADE_ROOT="$PROJECT_ROOT"
-fi
-[ -d "$ADE_ROOT" ] || { goax_error "ADE 루트가 디렉토리가 아니에요: $ADE_ROOT"; exit "$EXIT_ERROR"; }
-ADE_ROOT=$(CDPATH="" cd -P "$ADE_ROOT" && pwd -P)
+# 판정은 vendor-skills.sh 와 같은 함수예요: --ade-root → config.yml ade_root → git 최상위 → 프로젝트 루트
+ADE_ROOT=$(goax_ade_root "$PROJECT_ROOT" "$ADE_ROOT") \
+    || { goax_error "ADE 루트가 디렉토리가 아니에요 — --ade-root 나 .ax/config.yml 의 ade_root 를 확인해요"; exit "$EXIT_ERROR"; }
 REL=""
 if [ "$ADE_ROOT" != "$PROJECT_ROOT" ]; then
     case "$PROJECT_ROOT" in "$ADE_ROOT"/*) ;; *) goax_error "프로젝트($PROJECT_ROOT)가 ADE 루트($ADE_ROOT) 아래에 없어요"; exit "$EXIT_ERROR" ;; esac

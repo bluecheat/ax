@@ -132,7 +132,11 @@ printf '%s\n' "$RESULT" | jq -r '"✅ 복사 \(.result.copied)건 · seed 유지
 printf '%s\n' "$RESULT" | jq -r '.warnings[]? | "❗ \(.)"'
 printf '%s\n' "$RESULT" | jq -r '.result.suggested[]? | "  · \(.) — 기존 파일 보존, plugin 최신본은 .suggested 로 옆에"'
 printf '%s\n' "$RESULT" | jq -r '.result.preserved[]? | "  · _templates/\(.) 수정본 보존"'
+printf '%s\n' "$RESULT" | jq -r '.result.config_added[]? | "  · config.yml 새 키 \(.) — 기본값으로 더했어요"'
 ```
+
+이미 있던 `.ax/config.yml` 에는 새 버전 템플릿에만 있는 키를 기본값과 주석까지 더해요 (`config-merge.sh`). 팀이 바꾼 값과 `domain_risk` 는 건드리지 않아요.
+`config_added` 가 있으면, 이 skill 은 더한 키를 보여주고 바꿀 값이 있는지 사용자에게 물어요. 바꿀 때는 `config-set.sh` 를 써요.
 
 설치 규칙은 3층이고 스크립트가 강제해요:
 
@@ -140,7 +144,7 @@ printf '%s\n' "$RESULT" | jq -r '.result.preserved[]? | "  · _templates/\(.) �
 |---|---|---|
 | MANIFEST 무조건 | `.ax/scripts/`, `.ax/hooks/`, `_templates/` … | 덮어써요 (사용자 spec·ADR·mistake 은 `cp -R` merge 라 보존) |
 | MANIFEST `src -> dst` | `state.json`, `current-task.json` | **안 건드려요** — 진행 중인 phase 를 idle 로 되돌리면 그 spec 이 추적에서 조용히 빠져요 |
-| MANIFEST 외 조건부 | `CLAUDE.md`, `AGENTS.md`, `config.yml`, `spirit/*`, `settings.json` … | 내용이 다를 때만 `.suggested` 로 옆에. 같으면 아무것도 안 해요 |
+| MANIFEST 외 조건부 | `CLAUDE.md`, `AGENTS.md`, `config.yml`, `spirit/*`, `settings.json` … | 내용이 다를 때만 `.suggested` 로 옆에. 같으면 아무것도 안 해요. `config.yml` 은 빠진 키만 기본값으로 더해요 |
 
 `suggested` 가 비어있지 않으면 §7 마이그레이션 안내로 이어가세요.
 

@@ -287,6 +287,37 @@ goax_module_rules_matching() {
         | goax_glob_owners "$rel"
 }
 
+# goax_ade_root <project-root> [override]
+#   ADE 루트(에이전트 세션을 여는 곳 — .claude/skills 동봉본과 루트 settings 훅이 놓이는 곳)를 출력해요.
+#   순서: override(--ade-root) → .ax/config.yml 의 `ade_root:`(프로젝트 루트 기준 상대 경로) → git 최상위
+#   → (git 이 아니면) 위로 올라가며 가장 가까운 .claude/ → 프로젝트 루트.
+#   vendor-skills.sh 와 ade-settings.sh 가 같이 써요. 이유: 두 스크립트가 다르게 판정하면 동봉본과 훅이 다른 곳에 놓여요.
+#   override · config 값이 디렉토리가 아니면 출력하지 않고 1 을 돌려줘요 (호출자가 오류로 알려요). 경로는 심볼릭 링크를 푼 절대 경로예요.
+goax_ade_root() {
+    local root="${1:-$(pwd)}" override="${2:-}" cfg="" out
+    if [ -n "$override" ]; then
+        out=$(CDPATH="" cd -P "$override" 2>/dev/null && pwd -P) || return 1
+        printf '%s\n' "$out"; return 0
+    fi
+    if [ -f "$root/.ax/config.yml" ]; then
+        cfg=$(awk '/^ade_root:/ { v = $0; sub(/^ade_root:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v)
+                    gsub(/^["\047]|["\047]$/, "", v); print v; exit }' "$root/.ax/config.yml")
+    fi
+    if [ -n "$cfg" ]; then
+        out=$(CDPATH="" cd -P "$root/$cfg" 2>/dev/null && pwd -P) || return 1
+        printf '%s\n' "$out"; return 0
+    fi
+    out=$(git -C "$root" rev-parse --show-toplevel 2>/dev/null) && [ -n "$out" ] && { (CDPATH="" cd -P "$out" && pwd -P); return 0; }
+    # git 이 아니면 위로 올라가며 가장 가까운 .claude/ 가 있는 곳, 없으면 프로젝트 루트예요
+    out=$(CDPATH="" cd -P "$root" 2>/dev/null && pwd -P) || { printf '%s\n' "$root"; return 0; }
+    local scan="$out"
+    while [ "$scan" != "/" ]; do
+        [ -d "$scan/.claude" ] && { printf '%s\n' "$scan"; return 0; }
+        scan=$(dirname "$scan")
+    done
+    printf '%s\n' "$out"
+}
+
 # goax_always_loaded <project-root>
 #   세션 시작부터 컨텍스트에 실리는 파일의 프로젝트 기준 상대 경로를 실린 순서대로 출력해요.
 #   CLAUDE.md · CLAUDE.local.md 에서 시작해 `@경로` import 를 5단계까지 따라가요 (포함한 파일 기준 상대경로).
