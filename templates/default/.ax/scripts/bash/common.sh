@@ -925,8 +925,8 @@ goax_git_hook_path() {
 #   렉시컬 정규화 — `.`·`..`·중복 슬래시 해소 후 절대경로 출력.
 #   파일시스템을 건드리지 않아요 (아직 없는 파일도 처리 — Write 는 새 파일을 만듦).
 #   realpath 비의존 = macOS/Linux 동일 동작. bash 3.2 호환.
-# 이번 스택의 기준점 — base 인자(브랜치·커밋)와 HEAD 의 merge-base. 인자가 없으면 origin/HEAD → main → master 순서.
-# 못 찾으면 빈 출력 + return 1 (git 이 아니거나 이을 브랜치가 없어요).
+# 이번 스택의 기준 커밋을 내요 — base 인자(브랜치나 커밋)와 HEAD 의 merge-base 예요.
+# 인자가 없으면 origin/HEAD, main, master 순서로 찾아요. 못 찾으면 아무것도 내지 않고 return 1 이에요.
 goax_stack_base() {
     local root="${1:-}" arg="${2:-}" cand b
     git -C "$root" rev-parse --verify -q HEAD >/dev/null 2>&1 || return 1
@@ -942,8 +942,8 @@ goax_stack_base() {
     return 1
 }
 
-# 이번 스택에서 바뀐 파일 — base...HEAD + 워킹 트리(스테이징 포함) + 추적 안 되는 새 파일. 프로젝트 기준 상대 경로,
-# `.ax/` 는 빼요 (rules-audit-scope · lanes-dispatch --stack-files 가 같이 써요). $3 = 새 파일만(A)이면 "A"
+# 이번 스택에서 바뀐 파일을 프로젝트 기준 상대 경로로 내요. `.ax/` 는 빼요. rules-audit-scope 와 lanes-dispatch 가 함께 써요.
+# 범위: base...HEAD, 워킹 트리 변경(스테이징 포함), 추적 안 되는 새 파일. $3 에 "A" 를 주면 새로 생긴 파일만 내요
 goax_stack_files() {
     local root="${1:-}" base="${2:-}" filt="${3:-ACMR}"
     { [ -n "$base" ] && git -C "$root" diff --relative --name-only --diff-filter="$filt" "$base" HEAD 2>/dev/null
@@ -951,11 +951,11 @@ goax_stack_files() {
       git -C "$root" ls-files --others --exclude-standard 2>/dev/null; } | grep -v '^\.ax/' | awk 'NF && !s[$0]++' | LC_ALL=C sort || true
 }
 
-# config.yml commands.<key> 의 명령 문자열 (zero-verify.sh · tasks-gate.sh G8 이 같이 읽어요).
-# YAML 규칙 그대로: 값이 "/' 로 시작하면 짝 닫는 따옴표까지가 값(안의 # 은 안 건드려요),
-# #로 시작하면 값 전체가 주석(빈 값), 그 외엔 공백 뒤 첫 # 앞까지가 값이에요.
-# 예전엔 `tr -d` 로 따옴표를 전부 지워서 `test "a b" = "a b"` 가 깨졌고, 그다음엔 따옴표 안의 `#` 도
-# 주석으로 봐서 `grep -c "#" README.md` 를 읽다가 잘랐어요.
+# config.yml commands.<key> 의 명령 문자열을 내요. zero-verify.sh 와 tasks-gate.sh G8 이 함께 써요.
+# 규칙은 YAML 과 같아요.
+#   - 값이 " 나 ' 로 시작하면 짝이 되는 따옴표까지가 값이에요. 따옴표 안의 # 은 값의 일부예요.
+#   - 값이 # 로 시작하면 빈 값이에요.
+#   - 그 밖에는 공백 다음 첫 # 앞까지가 값이에요.
 goax_config_cmd() {
     local cfg="${1:-}" key="${2:-}"
     [ -f "$cfg" ] || return 0
@@ -968,9 +968,9 @@ goax_config_cmd() {
                  -e 's/[[:space:]]+$//'
 }
 
-# 작업 트리 내용 지문 — `.ax/` 를 뺀 프로젝트 파일 내용의 sha (12자). 커밋해도 안 바뀌고 파일을 고치면 바뀌어요.
-# HEAD 트리 위에 HEAD 와 다른 파일 · 추적 안 되는 파일(ignore 제외)의 지금 내용을 덮어 계산해요 — 읽기만 해요.
-# git 이 아니거나 HEAD 가 없으면 `nogit` 을 돌려줘요 (비교 생략 신호).
+# 작업 트리 내용 지문 — `.ax/` 를 뺀 프로젝트 파일 내용의 sha 앞 12자를 내요. 커밋해도 같고, 파일을 고치면 달라져요.
+# 계산: HEAD 트리 목록에서 HEAD 와 다른 파일과 추적 안 되는 새 파일(ignore 제외)을 지금 내용으로 바꿔요. 파일을 쓰지 않아요.
+# git 저장소가 아니거나 HEAD 가 없으면 `nogit` 을 내요. 호출하는 쪽은 이때 비교를 건너뛰어요.
 goax_tree_fingerprint() {
     local root="${1:-}" f
     git -C "$root" rev-parse --verify -q HEAD >/dev/null 2>&1 || { printf 'nogit\n'; return 0; }

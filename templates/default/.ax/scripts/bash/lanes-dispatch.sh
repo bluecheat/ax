@@ -39,11 +39,11 @@
 # 시각을 갱신하고 `보고:` 를 지운 뒤 warnings 에 적어요 — 이름을 직접 댄 것 자체가 재전송 의사예요.
 # 소유자는 정하지 않아요 — 배정은 판단이고 lane skill 이 사람과 해요. 여기선 기록과 검사만.
 #
-# 스택 판정 — 정리·스윕 레인의 소유 파일을 패키지 글롭으로 뽑으면 main 에 이미 있던 레거시 파일이 섞여요 (실측: 스타일
-# 정리 레인에 레거시 4파일이 섞여 PR diff 에 옛 raw SQL 이 드러남). --stack-files 는 base(merge-base)...HEAD + 워킹
-# 트리 + 새 파일만 줘요 — 브리프 목록을 거기서 뽑으면 레거시가 들어갈 길이 없어요. --dispatch 는 보내는 task 의
-# `files:` 중 base 에 이미 있고 이번 스택에서 아직 안 바뀐 파일을 `outside_stack` 에 적어요 (막지는 않아요 — 기존
-# 파일을 처음 고치는 task 도 여기 걸려요. 스윕·정리 task 면 범위 밖이라는 신호예요).
+# 스택 판정
+#   --stack-files 는 이번 스택에서 바뀐 파일을 내요: base(merge-base)...HEAD, 워킹 트리 변경, 추적 안 되는 새 파일.
+#   이유: 정리 레인의 소유 파일을 패키지 글롭으로 뽑으면 이번 작업이 만들지 않은 레거시 파일이 섞여요.
+#   --dispatch 는 보내는 task 의 `files:` 중 base 에 이미 있고 이번 스택에서 아직 안 바뀐 파일을 `outside_stack` 에 적어요.
+#   막지는 않아요. 기존 파일을 처음 고치는 task 도 여기에 들어가요.
 #
 # `files:` 경로는 비교 전에 정규화해요 (`./` 제거 · 중복 `/` · 끝 `/`) — `src/a.ts` 와
 # `./src/a.ts` 는 같은 파일이고, 표기 차이로 소유 충돌을 빠져나갈 수 없어요.
@@ -118,8 +118,8 @@ if [ "$MODE" = stack ]; then
     P=$(printf '%s' "$PATH_ARG" | sed -E 's#^\./##; s#/+$##')
     FILES=$(goax_stack_files "$PROJECT_ROOT" "$STACK_BASE" | awk -v p="$P" 'p == "" || $0 == p || index($0, p "/") == 1')
     N=$(printf '%s' "$FILES" | grep -c . || true); N=${N:-0}
-    NOTE="이번 스택에서 바뀐 파일 ${N}개 — 정리·스윕 레인의 소유 목록은 여기서 골라요"
-    [ -z "$STACK_BASE" ] && NOTE="${NOTE} (base 를 못 찾아 워킹 트리 변경만 봤어요 — --base <브랜치> 로 주세요)"
+    NOTE="이번 스택에서 바뀐 파일 ${N}개예요. 정리 레인의 소유 파일은 이 목록에서 골라요"
+    [ -z "$STACK_BASE" ] && NOTE="${NOTE}. base 를 찾지 못해 워킹 트리 변경만 봤어요. --base <브랜치> 를 주면 커밋된 변경도 봐요"
     if [ "$JSON_MODE" = true ]; then
         RESULT=$(jq -nc --arg base "$STACK_BASE" --arg path "$P" --argjson files "$(printf '%s\n' "$FILES" | jq -Rn '[inputs|select(length>0)]')" \
             '{mode:"stack", base:(if $base=="" then null else $base end), path:(if $path=="" then null else $path end), files:$files}')
@@ -407,7 +407,7 @@ if [ "$MODE" = "dispatch" ]; then
                 git -C "$PROJECT_ROOT" cat-file -e "$STACK_BASE:./$f" 2>/dev/null && printf '%s\n' "$f"
             done)
         if [ -n "$OUTSIDE" ]; then
-            OW="스택 밖 기존 파일 $(printf '%s' "$OUTSIDE" | grep -c .)개를 보내요 ($(printf '%s' "$OUTSIDE" | head -3 | paste -sd, -)…) — 기존 파일을 고치는 task 면 정상이고, 정리·스윕이면 범위 밖이에요. 소유 목록은 --stack-files 로 뽑아요"
+            OW="스택 밖 기존 파일 $(printf '%s' "$OUTSIDE" | grep -c .)개를 보냈어요 ($(printf '%s' "$OUTSIDE" | head -3 | paste -sd, -)…). 기존 파일을 고치는 task 면 그대로 진행해요. 정리 task 면 그 파일을 브리프에서 빼고 --stack-files 목록으로 다시 보내요"
             WARN="${WARN:+$WARN · }$OW"
         fi
     fi

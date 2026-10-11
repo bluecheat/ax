@@ -11,7 +11,7 @@
 #   bash spec-review.sh [--spec <id-slug>] --override --reason "<사용자 결정>" [--dry-run] [--json]
 #                                                                   # 상한에 닿은 뒤 사용자가 "이대로 진행" 을 정했을 때 — 지금 sha 에 승인 기록
 #   bash spec-review.sh [--spec <id-slug>] --extend-round [--stage spec] --reason "<사용자 결정>" [--dry-run] [--json]
-#                                                                   # 상한에 닿은 뒤 사용자가 "한 번 더 리뷰" 를 정했을 때 — 다음 라운드 하나를 열어줘요
+#                                                                   # 상한에 닿은 뒤 사용자가 "한 번 더 리뷰" 를 정했을 때 — 다음 라운드 하나를 열어요
 #
 # 왜 필요한가 — 계획의 품질은 diff 시점이 아니라 계획 시점에 리뷰해야 올라가요. 그런데 리뷰어
 # 둘(architect · evaluator)이 한 파일에 쓰면 (a) 첫 줄 verdict 하나로 "둘 다 진행" 을 표현할 수
@@ -38,11 +38,11 @@
 #   직전 스냅샷을 누가 봤으면        → +1
 #   --stage 가 바뀌면 (spec → tasks) → 1 부터 다시. 상한도 단계별이에요 (spec 3 · tasks 2 · --max-rounds 는 낮추기만)
 #
-# 상한은 막아요 — 새 라운드가 상한을 넘으면 --snapshot 은 아무것도 쓰지 않고 exit 1 이에요. 경고만 내던 때
-# 실제 프로젝트에서 tasks 단계(상한 2)가 라운드 18 까지 갔어요. 넘어가는 길은 둘 다 사용자 결정이에요:
-#   --override     지금 본문을 그대로 받아들여요 (리뷰 종료)
-#   --extend-round 리뷰를 한 번 더 받아요. 직전 스냅샷 sha 에 묶인 라운드 하나만 열려요 — 다음 스냅샷이 쓰면 끝이에요
-# tasks → spec 으로 단계를 되돌리는 것도 상한을 1 로 되돌리니 --extend-round --stage spec 이 있어야 해요.
+# 상한 — 새 라운드가 상한을 넘으면 --snapshot 은 아무것도 쓰지 않고 exit 1 이에요. 이유: 경고만으로는 라운드가 계속 늘어요.
+# 상한을 넘는 방법은 사용자 결정 두 가지예요.
+#   --override     지금 본문을 받아들이고 리뷰를 끝내요
+#   --extend-round 라운드 하나를 더 열어요. 직전 스냅샷 sha 에 묶여 있어서 다음 --snapshot 한 번에만 쓰여요
+# tasks 단계에서 spec 단계로 되돌리는 --snapshot 도 막아요. 이유: 라운드가 1 로 돌아가요. --extend-round --stage spec 이 먼저예요.
 #
 # --fixup 은 **통과한 뒤**에만 돼요 (둘 다 `진행` · 둘 다 스냅샷 sha). 그 뒤 오타·문구를 고쳐 sha 가
 # 어긋났을 때, 지금 본문의 sha 를 "리뷰된 것과 같다" 고 원장에 적어요. 설계가 바뀌었으면 쓰지 않아요 —
@@ -164,14 +164,14 @@ DELTA_FILE="$SNAP_DIR/delta.diff"
 OVR_FILE="$SPEC_DIR/review-override.md"
 EXT_FILE="$SPEC_DIR/review-extend.md"
 
-# 단계 상한을 CAP 에 넣어요. --max-rounds 는 낮추기만 해요 — 올리는 건 사용자 결정(--extend-round)이에요.
-# fail 이 서브셸에 갇히지 않게 $(…) 대신 전역 변수로 돌려줘요
+# 단계 상한을 CAP 에 넣어요. --max-rounds 는 상한을 낮출 때만 받아요. 올리는 방법은 --extend-round 예요.
+# 값을 $(…) 로 받지 않고 전역 변수로 돌려줘요. 이유: 서브셸 안의 fail 은 스크립트를 끝내지 못해요
 set_cap() {
     local def=3
     [ "$1" = tasks ] && def=2
     CAP="$def"
     if [ -n "$MAX_ROUNDS" ]; then
-        [ "$MAX_ROUNDS" -le "$def" ] || fail "--max-rounds ${MAX_ROUNDS} — ${1} 단계 기본 상한 ${def} 보다 높일 수 없어요. 리뷰를 더 받으려면 사용자 결정으로 --extend-round --reason \"<결정>\""
+        [ "$MAX_ROUNDS" -le "$def" ] || fail "--max-rounds ${MAX_ROUNDS} 은 ${1} 단계 기본 상한 ${def} 보다 커요. 상한은 낮출 수만 있어요. 리뷰를 더 받으려면 사용자 결정을 받아 --extend-round --reason \"<결정>\" 를 실행해요"
         CAP="$MAX_ROUNDS"
     fi
 }
@@ -325,9 +325,9 @@ case "$MODE" in
         if has_grant "$SNAP_SHA" "$NEED_GRANT"; then
             EXTENDED=true
         elif [ "$NEED_GRANT" = "spec 1" ]; then
-            fail "tasks 단계에서 spec 단계로 되돌리면 라운드가 1 로 돌아가요 — 설계를 다시 열지는 사용자가 정해요. 정했으면 --extend-round --stage spec --reason \"<결정>\" 뒤에 다시 --snapshot"
+            fail "tasks 단계에서 spec 단계로 되돌리지 않았어요 (라운드가 1 로 돌아가요). 사용자에게 설계를 다시 열지 물어요. 사용자가 정하면 --extend-round --stage spec --reason \"<결정>\" 를 실행한 뒤 --snapshot --stage spec 을 다시 실행해요"
         else
-            fail "${NEW_STAGE} 단계 라운드 ${ROUND} — 상한 ${MAX_ROUNDS} 을 넘어 새 라운드를 열지 않았어요 (원장 그대로). 리뷰를 더 돌리기 전에 사용자에게 물어요: 지금 본문으로 진행이면 --override --reason \"<결정>\", 한 번 더 리뷰면 --extend-round --reason \"<결정>\""
+            fail "${NEW_STAGE} 단계 라운드 ${ROUND} 은 상한 ${MAX_ROUNDS} 을 넘어서 열지 않았어요 (원장은 그대로예요). 리뷰어를 띄우지 말고 사용자에게 물어요. 지금 본문으로 진행이면 --override --reason \"<결정>\", 리뷰 한 번 더면 --extend-round --reason \"<결정>\" 를 실행해요"
         fi
     fi
     if [ "$DRY_RUN" != true ] && [ "$REUSED" = false ]; then
@@ -341,7 +341,7 @@ case "$MODE" in
     OVER=false; WARN='[]'
     [ "$ROUND" -gt "$MAX_ROUNDS" ] && OVER=true
     NOTE=""
-    [ "$EXTENDED" = true ]    && NOTE="사용자 결정(--extend-round)으로 연 라운드예요 — ${NEW_STAGE} 단계 라운드 ${ROUND}. 다음 라운드는 또 결정이 있어야 열려요"
+    [ "$EXTENDED" = true ]    && NOTE="사용자 결정(--extend-round)으로 연 ${NEW_STAGE} 단계 라운드 ${ROUND} 이에요. 다음 라운드를 열려면 사용자 결정이 다시 필요해요"
     [ "$REUSED" = true ]      && NOTE="같은 sha — 라운드 ${ROUND} 그대로예요"
     [ "$REPLACED" = true ]    && NOTE="직전 스냅샷을 아무도 안 봤어요 — 라운드 ${ROUND} 를 이 본문으로 바꿔 끼웠어요"
     [ "$STAGE_RESET" = true ] && NOTE="${NEW_STAGE} 단계로 넘어와 라운드를 1 부터 다시 세요 (상한 ${MAX_ROUNDS})"
@@ -458,17 +458,17 @@ case "$MODE" in
   extend)
     if [ "$REQUIRED" = none ]; then fail "합의 리뷰 대상이 아니에요 (${REQ_SRC}) — 연장할 리뷰가 없어요"; fi
     REASON_ONE=$(printf '%s' "$REASON_ARG" | tr '\n\r' '  ' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
-    [ -n "$REASON_ONE" ] || fail "--reason \"<사용자 결정>\" 이 필요해요 — 왜 리뷰를 한 번 더 받는지 한 줄 (예: \"구현 리뷰로 spec 의 경계 문장이 바뀜 — 사용자가 재리뷰 결정\")"
-    [ "$ROUND" -gt 0 ] || fail "스냅샷이 없어요 — 리뷰를 한 번도 안 받았으면 연장할 게 없어요 (--snapshot 부터)"
+    [ -n "$REASON_ONE" ] || fail "--reason \"<사용자 결정>\" 이 필요해요. 사용자가 리뷰를 한 번 더 받기로 한 이유를 한 줄로 적어요 (예: \"구현 리뷰로 경계 문장이 바뀌어 사용자가 재리뷰를 정함\")"
+    [ "$ROUND" -gt 0 ] || fail "스냅샷이 없어요. 아직 리뷰를 받지 않았으니 --snapshot 부터 실행해요"
     NEW_STAGE="${STAGE_ARG:-$STAGE}"
     if [ "$NEW_STAGE" != "$STAGE" ]; then
-        [ "$STAGE" = tasks ] && [ "$NEW_STAGE" = spec ] || fail "spec → tasks 는 연장 없이 --snapshot --stage tasks 로 넘어가요"
+        [ "$STAGE" = tasks ] && [ "$NEW_STAGE" = spec ] || fail "spec 단계에서 tasks 단계로 갈 때는 연장이 필요 없어요. --snapshot --stage tasks 를 실행해요"
         G_STAGE=spec; G_ROUND=1
     else
         set_cap "$STAGE"
-        reviewed_by_anyone "$SNAP_SHA" || fail "직전 스냅샷(${SNAP_SHA})을 아직 아무도 안 봤어요 — 지금 --snapshot 은 새 라운드가 아니라 그 자리 교체라 연장이 필요 없어요"
+        reviewed_by_anyone "$SNAP_SHA" || fail "직전 스냅샷(${SNAP_SHA})을 아직 리뷰어가 보지 않았어요. 지금 --snapshot 은 같은 라운드를 바꿔 끼우니 연장이 필요 없어요"
         G_STAGE="$STAGE"; G_ROUND=$((ROUND + 1))
-        [ "$G_ROUND" -gt "$CAP" ] || fail "${STAGE} 단계 라운드 ${ROUND}/${CAP} — 다음 라운드 ${G_ROUND} 은 상한 안이라 연장 없이 --snapshot 하면 돼요"
+        [ "$G_ROUND" -gt "$CAP" ] || fail "${STAGE} 단계 라운드 ${ROUND}/${CAP} 이에요. 다음 라운드 ${G_ROUND} 은 상한 안이니 연장 없이 --snapshot 을 실행해요"
     fi
     BY=$(git -C "$PROJECT_ROOT" config user.name 2>/dev/null || true); BY="${BY:-${USER:-unknown}}"
     AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -483,7 +483,7 @@ case "$MODE" in
         } >> "$EXT_FILE"
     fi
     STAGE_FLAG=""; [ "$G_STAGE" != "$STAGE" ] && STAGE_FLAG=" --stage $G_STAGE"
-    NEXT="${G_STAGE} 단계 라운드 ${G_ROUND} 하나를 열었어요 — 고친 뒤 --snapshot${STAGE_FLAG} 으로 받으세요. 그다음 라운드는 또 사용자 결정이에요"
+    NEXT="${G_STAGE} 단계 라운드 ${G_ROUND} 하나를 열었어요. spec 을 고친 뒤 --snapshot${STAGE_FLAG} 을 실행해요. 그다음 라운드를 열려면 사용자 결정이 다시 필요해요"
     if [ "$JSON_MODE" = true ]; then
         RESULT=$(jq -nc --arg spec "$SPEC" --arg as "$SNAP_SHA" --arg gs "$G_STAGE" --argjson gr "$G_ROUND" \
             --arg by "$BY" --arg at "$AT" --arg r "$REASON_ONE" --arg f "$EXT_FILE" --argjson dry "$DRY_RUN" \

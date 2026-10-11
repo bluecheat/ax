@@ -19,9 +19,12 @@
 #   G6 검증자  review.md **첫 줄**의 `verdict:` — 필수(size L 이상 · M×L3)인데 없거나 `진행` 이 아니면 미완료
 #   G7 룰 대조 review-rules.md **첫 줄**의 `verdict:` — 필수 여부는 G6 과 같아요. rules-auditor 가 새 컨텍스트로
 #             변경 파일마다 걸린 룰(rules-audit-scope.sh)과 새 심볼의 이웃 관례를 대조해 써요
-#   G8 전체 검증 verify.json — `zero-verify.sh --record <spec>` 이 config.yml commands 전부를 돌려 남겨요. 필수 여부는
-#             G6 과 같고 commands.test 가 있을 때만이에요. 없거나 · 실패했거나 · 기록 뒤 코드가 바뀌었거나(지문) ·
-#             기록한 test 명령이 지금 commands.test 와 다르면 미완료. 필수가 아니어도 실패 기록은 막아요
+#   G8 전체 검증 `<spec>/verify.json` — `zero-verify.sh --record <spec>` 이 써요. 필수 조건은 G6 필수이면서 commands.test 가
+#             있을 때예요. 필수면 아래 경우에 미완료예요. 필수가 아니어도 실패 기록은 미완료예요.
+#             - 기록이 없어요 (missing)
+#             - 기록이 실패예요 (fail)
+#             - 기록 뒤 코드가 바뀌었어요 (stale — goax_tree_fingerprint 비교)
+#             - 기록한 test 명령이 지금 commands.test 와 달라요 (mismatch)
 #
 # G2/G3 는 spec.md 에 `AC<n>` ID 가 있을 때만 검사해요 (없는 기존 spec 은 생략).
 # G4 는 `.ax/state.json` 의 spec별 봉인값과 비교해요. 봉인값이 없으면 현재 수를 기록만
@@ -39,8 +42,7 @@
 # G5 는 "보고를 받았는가" 를, G6 은 "다른 컨텍스트가 봤는가" 를 파일에서 확인해요.
 # 왜 G7 인가 — 편집 훅은 룰 경로를 알려주고 rule-read-gate.sh 는 읽었는지만 봐요. 읽은 룰을 지켰는지, 새 파일이
 # 이웃 관례를 따랐는지는 G6(evaluator — spec·ADR 적합성)의 범위가 아니라 아무도 안 봤어요. 그래서 따로 받아요.
-# 왜 G8 인가 — 레인 보고의 검증 명령을 코디네이터가 다시 돌려도, 그 명령이 패키지 필터면 CI 범위의 실패(빈 이름 충돌 ·
-# 다른 모듈의 슬라이스 테스트)는 아무도 못 봐요. "전체를 돌렸다" 를 기록으로 확인해요.
+# 왜 G8 인가 — task 마다 돌린 검증 명령은 일부 테스트만 고른 명령일 수 있어요. 전체 명령을 실행한 기록으로 확인해요.
 #
 # Output (--json):
 #   {"status":"ok|warning","result":{"spec":"012-x","total":12,"done":9,"open":2,
@@ -230,7 +232,7 @@ EOF
         fi
     fi
 
-    # G8 전체 검증 — zero-verify.sh --record 가 남긴 verify.json. 필수면 지금 코드(지문)·지금 commands.test 와 맞아야 해요
+    # G8 전체 검증 — zero-verify.sh --record 가 남긴 verify.json. 필수면 지문과 test 명령이 지금과 같아야 해요
     local vstate="none" test_cmd vf="$dir/verify.json"
     test_cmd=$(goax_config_cmd "$PROJECT_ROOT/.ax/config.yml" test)
     if [ -f "$vf" ] && command -v jq >/dev/null 2>&1; then
@@ -290,7 +292,7 @@ review_blocks() {   # $1 verdict · $2 required
     [ -n "$1" ] && [ "$1" != "진행" ] && return 0
     return 1
 }
-# G8 이 막는가 — 필수면 ok(또는 commands.test 미설정) 말고는 막아요. 필수가 아니어도 실패 기록은 막아요
+# G8 이 막는가 — 필수면 ok 와 unconfigured 만 통과해요. 필수가 아니어도 fail 은 막아요
 verify_blocks() {   # $1 vstate · $2 required
     case "$1" in ok|none|unconfigured) return 1 ;; fail) return 0 ;; esac
     [ "$2" = "true" ] && return 0
@@ -298,10 +300,10 @@ verify_blocks() {   # $1 vstate · $2 required
 }
 verify_msg() {
     case "$1" in
-        missing)  printf '전체 검증 기록이 없어요 — bash .ax/scripts/bash/zero-verify.sh --record <spec> 으로 config.yml commands 전부를 돌려 남기세요' ;;
-        fail)     printf '전체 검증 기록이 실패예요 — verify.json 의 checks 를 보고 고친 뒤 zero-verify.sh --record 를 다시' ;;
-        stale)    printf '전체 검증 뒤에 코드가 바뀌었어요 — zero-verify.sh --record 를 다시 돌리세요' ;;
-        mismatch) printf '기록한 test 명령이 지금 commands.test 와 달라요 (필터 명령은 완료 증거가 아니에요) — zero-verify.sh --record 를 다시' ;;
+        missing)  printf '전체 검증 기록이 없어요. bash .ax/scripts/bash/zero-verify.sh --record <spec> --json 을 실행해요' ;;
+        fail)     printf '전체 검증 기록이 실패예요. verify.json 의 checks 에서 실패한 명령을 고친 뒤 zero-verify.sh --record <spec> 을 다시 실행해요' ;;
+        stale)    printf '전체 검증 뒤에 코드가 바뀌었어요. zero-verify.sh --record <spec> 을 다시 실행해요' ;;
+        mismatch) printf '기록한 test 명령이 지금 commands.test 와 달라요. zero-verify.sh --record <spec> 을 다시 실행해요' ;;
     esac
 }
 

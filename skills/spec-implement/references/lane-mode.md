@@ -37,8 +37,9 @@ bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --dispatch A --json      
 - 목록은 전부 미완료 · 같은 레인이어야 해요. 아니면 exit 1 이고 원장은 그대로예요
 - 이미 디스패치된 task 를 다시 적으면 시각을 갱신하고 `보고:` 를 지운 뒤 `warnings` 에 알려요 — 재전송이에요
 - 파일 소유 충돌이면 둘 다 여기서 거부돼요 (그 task 들이 속한 레인 기준)
-- `result.outside_stack` 이 비어 있지 않으면 — base 에 이미 있고 이번 스택에서 아직 안 바뀐 파일을 보내는 거예요. 기존 파일을
-  고치는 task 면 정상이고, 정리·스윕 task 면 범위 밖이에요. 브리프에서 빼고(목록은 `--stack-files`) 다시 보내요
+- `result.outside_stack` 은 base 에 이미 있고 이번 스택에서 아직 안 바뀐 파일 목록이에요.
+  - 기존 파일을 고치는 task 면, 그대로 진행해요.
+  - 정리 task 면, 이 세션은 그 파일을 브리프에서 빼고 `--stack-files` 목록으로 다시 보내요.
 
 **exit 1 이 항상 에러는 아니에요** — 레인 이름으로 보냈는데 그 레인의 미완료 task 가 전부 이미 디스패치·보고까지
 끝났으면 (더 보낼 게 없으면) `--dispatch` 가 exit 1 로 끝나요 (`status: error` + "전부 보고까지

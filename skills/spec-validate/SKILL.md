@@ -97,8 +97,8 @@ DELTA=$(bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --delta --json \
 안 봤으면(리뷰어 띄우기 전에 고친 오타) 그 자리를 바꿔 끼워요. 라운드는 리뷰어가 **실제로 본
 횟수**예요.
 
-**상한을 넘는 새 라운드는 열리지 않아요** — `--snapshot` 이 `status: error`·exit 1 로 끝나고 원장은 그대로예요.
-그때는 리뷰어를 띄우지 말고 아래 4번의 "상한에 닿으면" 으로 가요.
+새 라운드가 상한을 넘으면 `--snapshot` 은 아무것도 쓰지 않고 exit 1(`status: error`)로 끝나요.
+그러면 이 세션은 리뷰어를 띄우지 않고 아래 4번의 "상한에 닿으면" 으로 가요.
 
 1. **architect 와 evaluator 를 한 메시지에 같이 띄워요** (`goax:architect` · `goax:evaluator` spec 모드,
    vendor 설치면 접두사 없이). 둘은 서로의 파일을 못 보니 동시에 띄워도 독립이에요 — 순차로 띄우면
@@ -128,25 +128,33 @@ printf '%s\n' "$REVIEW" | jq -r '"architect \(.result.architect.verdict // "없�
    어긋나면 그쪽만 다시 띄워요). `재논의 필요` 가 하나라도 있으면 spec 자체가 틀렸다는 뜻이라
    사용자 결정으로 halt.
 
-   **상한에 닿으면** (`--snapshot` 이 exit 1 이거나, 마지막 라운드에서 `pass=false`) 지적을 더 반영하지 말고
-   멈춰서 `AskUserQuestion` 으로 물어요. 라운드를 더 돌리는 건 리뷰가 아니라 spec 정의가 문제라는 신호예요.
-   질문에는 남은 차단 목록 · 차단마다 성격(기계적 수정 / 설계 변경) · 지금까지의 라운드를 같이 보여줘요. 선택지는 셋이에요:
+   **상한에 닿으면** — `--snapshot` 이 exit 1 이거나 마지막 라운드에서 `pass=false` 일 때예요. 이 세션은 지적을 더 반영하지
+   않고 멈춘 뒤 `AskUserQuestion` 으로 사용자에게 물어요. 이유: 상한까지 합의가 안 되면 리뷰 횟수가 아니라 spec 정의가 문제예요.
+   질문에는 이것들을 같이 보여줘요.
+   - 남은 차단 목록
+   - 차단마다 성격 (기계적 수정인지, 설계 변경인지)
+   - 지금까지의 라운드 수
+
+   선택지는 셋이에요.
 
    | 선택 | 명령 | 언제 |
    |---|---|---|
-   | 이대로 진행 | `--override --reason "<사용자 결정>"` | 남은 차단이 오타·링크·이름 맞춤 같은 기계적 수정뿐일 때 — 고친 뒤 기록해요 |
-   | 한 번 더 리뷰 | `--extend-round --reason "<사용자 결정>"` 뒤 `--snapshot` | 설계가 실제로 바뀌어 다시 봐야 할 때 — 라운드 **하나만** 열려요 |
-   | spec 다시 정의 | (없음 — halt) | 지적이 계속 새로 나오면 spec 범위·결정이 문제예요 |
+   | 이대로 진행 | 고친 뒤 `--override --reason "<사용자 결정>"` | 남은 차단이 오타, 링크, 이름 맞춤 같은 기계적 수정뿐일 때 |
+   | 한 번 더 리뷰 | `--extend-round --reason "<사용자 결정>"` 뒤 `--snapshot` | 설계가 바뀌어 다시 봐야 할 때. 라운드가 **하나만** 열려요 |
+   | spec 다시 정의 | 없음 (halt) | 라운드마다 새 지적이 나올 때. spec 의 범위나 결정을 다시 정해요 |
 
 ```bash
 bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --override --reason "<사용자 결정 한 줄 — 무엇을 왜 받아들였나>" --json
 bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --extend-round --reason "<사용자 결정 한 줄 — 왜 한 번 더 보나>" --json
 ```
 
-   `review-override.md`·`review-extend.md`(둘 다 커밋해요)에 sha · 누가(git user.name) · 언제 · 사유가 남아요.
-   override 는 `--status` 가 그 sha 일 때만 pass 로 보고, extend 는 직전 스냅샷 뒤의 라운드 하나만 열어요. 둘 다
-   상한 전에는 거부돼요. 사용자에게 묻지 않고 이 세션이 정해서 쓰지 않아요 — `--reason` 은 사용자가 한 말이에요.
-   "delta 가 작으니 한 번만 더" 도 이 세션의 판단이 아니라 질문이에요.
+   두 명령은 sha, 실행한 사람(git user.name), 시각, 사유를 파일에 남겨요. `review-override.md` 와 `review-extend.md` 는 커밋해요.
+   - `--override` — `--status` 는 기록된 sha 가 지금 sha 와 같을 때만 pass 로 봐요. 본문을 또 고치면 승인이 풀려요.
+   - `--extend-round` — 직전 스냅샷 다음 라운드 하나만 열어요.
+   - 둘 다 상한 전에는 거부돼요.
+
+   `--reason` 에는 사용자가 한 말을 적어요. 이 세션은 사용자에게 묻지 않고 두 명령을 실행하지 않아요. 바뀐 줄이 적어도
+   마찬가지예요. 이유: 상한을 넘을지는 사용자가 정하는 일이에요.
 5. `pass=true` 면 합본을 남기고 §3 으로:
 
 ```bash
@@ -172,8 +180,13 @@ bash .ax/scripts/bash/spec-review.sh --spec "$SPEC" --fixup --json | jq -r '.res
 
 sha 는 spec.md + tasks.md 합산이라 `/spec-tasks` 뒤엔 반드시 어긋나요. 그건 spec 을 다시 보는 게 아니라
 **분해를 보는** 라운드예요 — `--snapshot --stage tasks` 로 찍으면 라운드가 1 부터 다시 시작하고 상한은
-2 예요. 반대로 tasks 단계에서 spec 단계로 되돌리는 건 상한을 1 로 되돌리는 길이라 막혀 있어요 — 구현 중에 설계가
-바뀌었으면 위 질문으로 사용자가 정하고 `--extend-round --stage spec` 을 먼저 남겨요. 둘 다 띄우되 브리프가 짧아요: 공통으로 "spec.md 는 통과한 그대로예요 — `--delta` 는 tasks.md 뿐이니
+2 예요.
+
+tasks 단계에서 spec 단계로 되돌리는 `--snapshot --stage spec` 은 막혀 있어요. 이유: 라운드가 1 로 돌아가 상한이 무력해져요.
+구현 중에 설계가 바뀌었으면, 이 세션은 위 질문으로 사용자의 결정을 받고 `--extend-round --stage spec --reason "<결정>"` 을
+먼저 실행해요.
+
+tasks 단계 리뷰도 둘 다 띄우되 브리프가 짧아요: 공통으로 "spec.md 는 통과한 그대로예요 — `--delta` 는 tasks.md 뿐이니
 분해만 보세요". evaluator 는 컨텍스트 기준 분해인가 · `files:` 가 실제인가 · `[P]` 근거를, architect 는
 task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비싼 task 가 앞에 있는가만 봐요.
 
@@ -185,8 +198,8 @@ task 순서가 의존 방향(빌드 그래프)과 맞는가 · 되돌리기 비�
   더해요
 - **검토 범위 분리** — 같은 spec 을 같은 범위로 두 번 보면 같은 지적이 두 번 와요. 범위가 달라야 합의가 뜻이 있어요
 - **sha 고정** — 리뷰 뒤에 spec 이 바뀌면 그 리뷰는 다른 문서에 대한 리뷰예요. 단 오타는 `--fixup` 으로
-- **상한** — 넘으면 리뷰가 아니라 spec 정의가 문제예요. 상한이 품질이 수렴하는 지점이라는 뜻은 아니에요 — 리뷰어는
-  돌릴 때마다 뭔가를 찾아요. 비용과 과잉설계를 막는 선이라 스크립트가 막고, 넘을지는 사용자가 정해요
+- **상한** — 상한은 비용과 과잉설계를 막는 선이에요. 품질이 수렴하는 지점은 아니에요. 리뷰어는 돌릴 때마다 지적을
+  찾아요. 그래서 스크립트가 막고, 넘을지는 사용자가 정해요
 
 ## 3. 출력
 

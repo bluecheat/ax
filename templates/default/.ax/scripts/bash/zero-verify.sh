@@ -18,10 +18,10 @@
 # 명령 출처: 인자 --cmd 가 있으면 그것만. 없으면 .ax/config.yml 의 commands.{build,test,lint,typecheck}
 #            (빈 값은 건너뛰고 skipped 로 보고해요 — "안 돌렸다" 를 숨기지 않아요)
 #
-# --record: 완료 판정(tasks-gate G8)이 읽는 증거를 남겨요. --cmd·--only 와 같이 쓰지 못해요 — 필터를 건 명령
-#            (`--tests "…ranking.*"`)만 돌리고 완료로 넘어간 뒤 CI 전체 테스트에서 처음 깨진 일이 있었어요.
-#            verify.json = {fingerprint, at, checks[{name,cmd,exit}], passed, failed, skipped, ok}. fingerprint 는
-#            goax_tree_fingerprint (.ax/ 를 뺀 작업 트리 내용) 라 커밋해도 그대로고, 코드를 고치면 낡아요.
+# --record: tasks-gate G8 이 읽는 완료 증거를 <spec>/verify.json 에 남겨요. --cmd, --only 와 함께 쓰면 거부해요.
+#            이유: 일부만 고른 명령의 통과는 전체 통과가 아니에요.
+#            verify.json = {fingerprint, at, checks[{name,cmd,exit}], passed, failed, skipped, ok}
+#            fingerprint 는 goax_tree_fingerprint 값이에요. 커밋해도 그대로이고, 코드를 고치면 바뀌어요.
 #
 # 출력 꼬리(tail_lines): 실패한 명령만 마지막 20줄을 실어요. 통과한 명령은 안 실어요
 #            (통과 로그는 컨텍스트만 먹어요).
@@ -79,7 +79,7 @@ if [ -n "$RECORD" ]; then
         goax_error "$1"; exit "$EXIT_ERROR"
     }
     { [ "${#CMDS[@]}" -eq 0 ] && [ -z "$ONLY" ]; } \
-        || rec_fail "--record 는 config.yml commands 전부를 돌려요 — --cmd·--only 로 고른 명령은 완료 증거가 아니에요"
+        || rec_fail "--record 는 --cmd, --only 와 함께 쓸 수 없어요. --record <spec> 만 주면 config.yml commands 를 전부 실행해요"
     RESOLVED=$(goax_resolve_spec "$RECORD" "$PROJECT_ROOT/.ax/docs/spec") && RC=0 || RC=$?
     [ "$RC" -eq 0 ] || rec_fail "spec 을 못 찾았어요: '${RECORD}'${GOAX_SPEC_CANDIDATES:+ (후보: ${GOAX_SPEC_CANDIDATES})}"
     REC_DIR="$PROJECT_ROOT/.ax/docs/spec/$RESOLVED"

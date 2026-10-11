@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# pre-agent hook — 구현 중에 goax 밖 실행 에이전트로 코드를 맡기려 하면 한 번 물어요 (fact-forcing)
+# pre-agent hook — 구현 단계에서 goax 밖 실행 에이전트를 띄우려 하면 한 번 막고 이유를 물어요.
 #
-# 대상: current-task.json 의 phase 가 implementing·review 일 때의 Agent(옛 이름 Task) 호출 가운데,
-#   subagent_type 이 실행 에이전트 목록에 있는 것 — 기본 executor · deep-executor · general-purpose
-#   (비우면 general-purpose 로 떠요), 프로젝트는 sensors.foreign_executors 로 바꿔요. `oh-my-claudecode:executor`
-#   처럼 접두사가 붙어도 `:` 뒤 이름으로 봐요. goax 에이전트(lane-worker 등)와 읽기 전용 조사 에이전트는 안 막아요.
-# 이유: 구현 위임은 lane-worker 예요 — 소유 파일 밖 편집 금지 · 커밋 금지 · 명령 인용 보고가 에이전트에 들어 있어요.
-#   다른 플러그인 훅의 "executor 로 위임" 권고를 따라가면 그 규율이 통째로 빠져요.
-# 동작: 세션에서 처음 보는 에이전트 이름이면 exit 2 로 막고 이유를 적게 해요. 같은 이름으로 다시 부르면 통과.
+# 대상: phase 가 implementing 또는 review 일 때의 Agent(옛 이름 Task) 호출이에요. subagent_type 의 `:` 뒤 이름이
+#   실행 에이전트 목록에 있으면 걸려요. 목록 기본값은 executor, deep-executor, general-purpose 예요 (이름을 비우면
+#   general-purpose). 프로젝트는 sensors.foreign_executors 로 바꿔요.
+# 이유: lane-worker 에만 소유 파일 제한, 커밋 금지, 명령 인용 보고가 들어 있어요.
+# 동작: 세션에서 처음 보는 이름이면 exit 2 로 막아요. 같은 이름을 다시 부르면 통과해요. 세션 id 가 없으면 경고만 해요.
 # 끄기: sensors.disabled_hooks 에 delegate-gate.
 set -uo pipefail
 
@@ -39,18 +37,19 @@ LIST=$(goax_yaml_list "$PROJECT_ROOT/.ax/config.yml" foreign_executors 2>/dev/nu
 printf '%s\n' "$LIST" | sed 's/.*://' | grep -qxF "$BASE" || exit 0
 
 if [ -z "$SID" ]; then
-    printf '\033[33m[goax hook]\033[0m ⚠ 구현 중 %s 위임 (세션 추적 불가 — 경고만): 코드 편집은 lane-worker 로 맡겨요\n' "$AGENT" >&2
+    printf '\033[33m[goax hook]\033[0m ⚠ 구현 단계에서 %s 를 띄워요. 세션 id 가 없어 막지 않아요. 코드를 고치는 task 는 lane-worker 로 맡겨요.\n' "$AGENT" >&2
     exit 0
 fi
 goax_session_marked "$SID" delegate "$BASE" && exit 0
 goax_session_mark "$SID" delegate "$BASE"
 
 {
-    printf '\033[33m[goax hook]\033[0m ✋ 지금은 구현 단계(%s)예요 — %s 에게 맡기기 전에 확인해요.\n' "$PHASE" "$AGENT"
-    printf '  코드를 고치는 일이면 goax:lane-worker 로 맡겨요 (vendor 설치면 lane-worker). 브리프는 spec-implement §3.3 그대로예요.\n'
-    printf '  모델은 bash .ax/scripts/bash/agent-model.sh lane-worker --json 의 result.models.lane-worker 를 넘겨요.\n'
-    printf '  읽기만 하는 조사면 lane-scout 도 있어요.\n'
-    printf '  그래도 %s 여야 하면 이유 한 줄(예: 사용자가 지정함 · 편집 없는 조사)을 적고 같은 호출을 다시 하세요 — 통과해요.\n' "$AGENT"
-    printf '  (끄기: .ax/config.yml sensors.disabled_hooks 에 delegate-gate · 대상 바꾸기: sensors.foreign_executors)\n'
+    printf '\033[33m[goax hook]\033[0m ✋ 구현 단계(%s)에서 %s 를 띄우려고 해요.\n' "$PHASE" "$AGENT"
+    printf '  코드를 고치는 task 면, 이 세션은 goax:lane-worker 를 띄워요 (vendor 설치면 lane-worker). 브리프는 spec-implement §3.3 을 따라요.\n'
+    printf '  모델은 bash .ax/scripts/bash/agent-model.sh lane-worker --json 의 result.models.lane-worker 값을 넘겨요.\n'
+    printf '  읽기만 하는 조사면, 이 세션은 lane-scout 를 띄워요.\n'
+    printf '  %s 를 써야 하면, 이유를 한 줄 적고 같은 호출을 다시 해요. 두 번째 호출은 통과해요.\n' "$AGENT"
+    printf '  이유: 소유 파일 제한과 커밋 금지가 lane-worker 에만 있어요.\n'
+    printf '  (끄기: .ax/config.yml sensors.disabled_hooks 에 delegate-gate · 대상 목록: sensors.foreign_executors)\n'
 } >&2
 exit 2
