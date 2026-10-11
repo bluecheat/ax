@@ -403,7 +403,7 @@ universal 룰(secrets·파괴 명령·보호 경로)은 이미 hook 이 있어 �
 │
 └  ▸  답해주세요   [a] / [b]
 ```
-→ [a] 시 `bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" --json` 후 `rm -f .ax/settings.json.suggested`. `jq -s '.[0] * .[1]'` 는 쓰지 않아요 — 배열을 통째로 바꿔 사용자 훅이 사라져요. [b] 시 suggested 그대로 + 다음 단계 안내.
+→ [a] 시 `bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" --json` 후 `rm -f .ax/settings.json.suggested`. `jq -s '.[0] * .[1]'` 는 쓰지 않아요 — 배열 전체를 바꿔서 사용자 훅이 사라져요. [b] 시 suggested 그대로 + 다음 단계 안내.
 
 ## 완료 안내 (§5)
 

@@ -47,7 +47,7 @@ description: "작업을 여러 에이전트로 나눠 돌릴 수 있을지, 어�
 
 > "Most coding tasks involve fewer truly parallelizable tasks than research…
 > LLM agents are not yet great at coordinating and delegating to other agents in
-> real time." — Anthropic, *How we built our multi-agent research system* (2025-06-13)
+> real time." — Anthropic, *How we built our multi-agent research system* (2025-06-13) <!-- rule-lint: 예시 -->
 
 같은 글이 멀티에이전트를 단일 챗 대비 **약 15배 토큰**으로 보고해요. 실측도 양극이에요
 — 암묵적 조율에 맡긴 병렬은 **21% 가속 / 39% 감속** 사이에서 갈려요. 그래서 값을
@@ -215,10 +215,8 @@ bash .ax/scripts/bash/tasks-plan.sh --spec "$SPEC" --json
 먼저 고쳐요. 해소법은 §6 의 셋 — 독점 / 떼어내기 / 순서 — 이고, `[P]` 를 떼는 것도
 언제나 유효한 답이에요 (순차는 느릴 뿐, 잘못된 병렬은 되돌리는 비용이 더 커요).
 
-오늘 실측: 표면 컴포넌트 5개가 전부 배럴을 건드리면서 `[P]` 로 표시돼 있었고,
-`tasks-plan.sh` 가 10쌍 violation 으로 잡았어요. 떼어내기(B)로 해소했어요.
-**사람이 눈으로 못 본 것을 스크립트가 잡았어요** — 그래서 이 게이트는 형식이 아니라
-실효가 있어요.
+이 게이트는 사람이 눈으로 놓친 겹침을 잡아요. 예: 컴포넌트 5개가 같은 배럴 파일을 건드리는데 `[P]` 로 표시돼
+있으면, `tasks-plan.sh` 가 violation 으로 알려요. 그러면 이 세션은 떼어내기(B)로 해소해요.
 
 ❗ 이 게이트는 **§2 의 탐색이 끝난 뒤에만** 의미가 있어요. `files:` 가 비어 있으면
 빈 데이터를 검사하고 통과시켜요.

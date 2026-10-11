@@ -116,6 +116,7 @@ frontmatter + `# 무엇이 일어났나` 는 이미 채워진 상태. **나머�
 📍 다음 단계
    1. 본문 검토 후 추가/수정 — `<filename>` 직접 편집
    2. 같은 카테고리 N건 누적되면 `goax audit` 로 룰 승격 후보 검토
+      "어떻게 막을 수 있나" 가 ③(grep 패턴)이나 분명한 규칙이면 1건이라도 "이거 룰로 만들어" (rule skill) 로 바로 룰을 써요
    3. context_link (PR URL) 늦게 알게 되면 frontmatter 직접 갱신
 ```
 

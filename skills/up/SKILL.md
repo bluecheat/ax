@@ -252,7 +252,7 @@ bash .ax/scripts/bash/ade-settings.sh --check --plugin-dir "$PLUGIN_ROOT" --json
 bash .ax/scripts/bash/ade-settings.sh --apply --plugin-dir "$PLUGIN_ROOT" --json   # 사용자 [a] 뒤에만
 rm -f .ax/settings.json.suggested
 ```
-사용자 자신의 훅·permissions·statusLine 은 그대로예요. `jq -s '.[0] * .[1]'` 로 합치지 않아요 — `*` 는 배열을 통째로 바꿔서
+사용자 자신의 훅·permissions·statusLine 은 그대로예요. `jq -s '.[0] * .[1]'` 로 합치지 않아요 — `*` 는 배열 전체를 바꿔서
 사용자 PreToolUse 훅이 사라져요.
 
 ## 절대 금지

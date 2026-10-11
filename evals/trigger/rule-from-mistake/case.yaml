@@ -1,0 +1,24 @@
+schema_version: "1.1"
+name: trigger-rule-from-mistake
+description: "mistake 파일 하나를 룰로 — 1건 기록(mistake)과 구분"
+tags: [trigger, rule]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: ".ax/mistakes/2026-10-01-001-data-cursor.md 이 mistake 를 룰로 바꿔줘"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: fires-rule
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?rule"'
+    min: 1
+  - name: not-mistake
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?mistake"'
+    min: 0
+    max: 0
+    arm: both

@@ -32,8 +32,7 @@ bash .ax/scripts/bash/lanes-dispatch.sh --spec "$SPEC" --dispatch A --json      
 
 - **task 목록이 기본이에요.** §1 의 "ready ∩ 레인 A" 는 보통 레인 A 의 일부라서, `--dispatch A` 로 적으면
   아무도 안 맡은 task 까지 시각이 찍혀요. 그러면 `dispatched_unreported` 와 완료 게이트의 "보고 안 받은
-  디스패치" 에 안 보낸 task 가 섞여 신호가 흐려져요 (실측: 레인 하나의 8 task 가 실제 기동보다 77분 먼저
-  찍혔고, 아무도 안 맡은 4 task 가 경보에 들어갔어요)
+  디스패치" 에 안 보낸 task 가 섞여서, 진짜 미보고 task 를 구분하기 어려워져요
 - 목록은 전부 미완료 · 같은 레인이어야 해요. 아니면 exit 1 이고 원장은 그대로예요
 - 이미 디스패치된 task 를 다시 적으면 시각을 갱신하고 `보고:` 를 지운 뒤 `warnings` 에 알려요 — 재전송이에요
 - 파일 소유 충돌이면 둘 다 여기서 거부돼요 (그 task 들이 속한 레인 기준)

@@ -124,129 +124,25 @@ find .ax/mistakes -name "*.md" -mtime -7 2>/dev/null | sort # 최근 7일
 - 옵션은 카테고리 단위 — 사용자가 복수 선택 가능 (예: `a, b`)
 - 항상 마지막에 `[e]` 모두 보류 옵션
 
-## 4. 적용 — 3단계 강제 (마킹 → 룰 본문 → archive)
+## 4. 적용 — `rule` skill 에 넘겨요
 
-**3단계 모두 완료해야 audit 종료.** 1·2단계만 하고 보고하면 mistake 가 `.ax/mistakes/` root 에 promoted_to 마킹된 채 누적됨 (시각적 잔재 + 후속 audit 노이즈). 3단계 archive 까지 강제.
+사용자가 고른 카테고리마다, audit 은 그 카테고리의 mistake 파일 목록을 들고 `rule` skill 의 "mistake → 룰" 모드로 넘어가요.
+룰 본문 작성, 검사(rule-lint, 프로브, 신입 테스트), mistake 마킹(`promote-mistake.sh --apply --file`), archive 는 모두 `rule` skill 이 해요.
+이유: 룰을 쓰는 길이 audit, onboarding, 세션 요청으로 갈라져 있으면, 형식 기준이 한 곳에서만 지켜져요.
 
-사용자 승낙 후, 카테고리당:
+넘길 때 audit 이 정해 둔 값:
 
-### 4.1 mistake 마킹 — `promote-mistake.sh --apply`
+| 값 | 어디서 |
+|---|---|
+| mistake 파일 목록 | §2 스캔 결과에서 그 카테고리 파일 |
+| severity 제안 | §3 의 🔴/🟡/🔵 |
+| 막는 방법 | §3 의 ①–④ 판정. ③ 이면 결정형, ④ 면 비결정형으로 `rule` §3 에 넘겨요 |
 
-```bash
-RESULT=$(bash .ax/scripts/bash/promote-mistake.sh --apply --json \
-   --token SP-SEC-001 \
-   --category security)
-MARKED=$(printf '%s\n' "$RESULT" | jq -r '.result.marked_count')
-```
+카테고리가 여럿이면 하나씩 차례로 넘겨요. 한 카테고리의 `rule` 이 끝나야(archive 까지) 다음 카테고리로 가요.
 
-스크립트가 하는 일 — **mistake 파일 frontmatter 에 `promoted_to: <token>` 추가만**.
-CLAUDE.md / spirit/rules 는 안 건드림 (룰 본문 작성은 LLM 책임).
-
-### 4.2 룰 본문 — LLM 이 spirit/rules 에 직접 Edit (필수, 스킵 금지)
-
-`.ax/spirit/rules/<project>-<category>.md` 에 SP-<CAT>-NNN 추가:
-
-```markdown
----
-category: security
-applies_to: [code, pr, review]
-keywords: [secret, api-key, password, ...]
-paths:
-  - "**/*.kt"
-  - "**/*.properties"
-  - "**/*.yaml"
-severity: critical
-enforced_by:
-  - hook:.ax/hooks/pre-commit/critical-rule-grep.sh
-enforced_kind: grep
----
-
-## SP-SEC-001: 시크릿·API 키·비번 hardcode 금지
-- 위반 예: `password = "<plain-value>"`, `api_key: "<plain-value>"`, `private val pgKey = "<plain-value>"`
-- 대안: `password = System.getenv("DB_PASSWORD")` (Secrets Manager / Vault / 환경변수)
-<!-- 검출 패턴: (password|secret|api[_-]?key|token|pgKey)[[:space:]]*[=:][[:space:]]*["'][^"']{6,} -->
-```
-
-**`검출 패턴:` 마커가 집행이에요** — `critical-rule-grep.sh` 가 이 줄을 읽어 frontmatter `paths:` 에
-맞는 staged 파일을 검사하고, `severity: critical` 이면 (mode=fail 에서) 커밋을 막아요. 산문 bullet
-(`- 검증: pre-commit grep …`) 은 아무도 안 읽어요 — 마커로 쓰세요. `- 위반 예:` 의 백틱 항목은
-실제로 패턴에 걸리는 문자열이어야 해요 (`"..."` 같은 자리표시자 X) — `zero-probe.sh` 가 그걸로
-패턴을 검증해요. 단 **시크릿 류 룰의 예시 값은 `"<plain-value>"` 처럼 `<…>` 로 감싸요** — 룰 패턴(`"[^"]{6,}`)엔
-걸리면서, 룰 파일을 커밋할 때 secrets 스캐너(값이 `<`·`$`·`{` 로 시작하면 참조 표기로 보고 건너뜀)엔 안 걸려요.
-`hunter2xyz`·`ghp_…` 같은 진짜 모양을 쓰면 룰 파일 자체가 시크릿으로 차단돼요. `paths:` 가 비면 패턴이 안 돌아요 (doctor I7).
-
-**압축·탈맥락 원칙 (룰 본문·CLAUDE.md 공통)**
-
-룰은 매 turn hook 으로 inject 돼요. verbose 하면 매 작업마다 토큰 낭비. 그리고 매번 새 세션에서 읽히는 evergreen 문서 — 이전 세션 흔적 (시간 부사·발견 경위·일회성 ref) 이 본문에 박히면 6개월 뒤엔 노이즈.
-
-**압축**
-- **3줄 골격 권장** — `대안`(어떻게 해야 하나 — 빠지면 안 되는 줄) / `위반 예` / `검증`(grep 이면 `<!-- 검출 패턴: -->` 마커, 아니면 external 도구·사람 게이트 한 줄). 헤더 1줄 + 본문 3줄 = 4줄로 끝나면 베스트. 이름·위치 규약은 `대안` 을 위치·이름·예시로 여러 줄 풀어도 돼요.
-- **한 줄 한 사실** — 한 bullet 에 사실 1개. "A 이고 B 이며 C" 는 3 bullet 으로 쪼개기.
-- **의례적 표현 제거** — "다음과 같이", "~할 수 있어요", "참고로", "필요시", "일반적으로" 다 삭제. `~해요` 체 자체는 유지 (tone).
-- **단정·명령형** — "~하면 좋습니다" → "~해요" / "~금지". 완곡 어법 X.
-- **약어 OK** — PR, DB, API, CI, regex 같은 표준 약어는 그대로. 처음 등장 풀네임 X.
-- **보존 필수 (절대 압축 X)** — 코드블록(백틱), URL, SP 토큰 (`SP-SEC-001`), 파일경로, 정규식, frontmatter 스키마, `<!-- 검출 패턴: -->` 마커. 식별자·기술용어는 원본 유지.
-- **목표 길이** — CRITICAL/MANDATORY 룰: 헤더 포함 5~8줄. CONVENTION 룰: 3~5줄. 10줄 넘으면 압축 부족.
-
-**탈맥락 (세션·시간 흔적 금지)**
-- **시간 부사 X** — "이번 세션에서", "방금 전", "최근", "어제", "지난 주", "현재 audit 에서" 모두 삭제. 룰은 시간 불변.
-- **일회성 ref X** — 특정 PR 번호 (`PR #1234`), 이슈 ID, 절대 날짜 (`2026-05-17`), 커밋 SHA 본문에 박지 말기. 식별자는 SP 토큰 하나로 충분.
-- **발견 경위 X** — "이번 audit 에서 발견", "OO 가 제보", "사건 X 로 추가" 같은 출처는 mistake 파일 (archive 후 보존) 의 책임. 룰 본문은 패턴·대안·검증만.
-- **세션 자아 X** — "내가 분석한 결과", "조사해보니" 같은 1인칭/조사 표현 삭제. 룰은 사실의 진술.
-
-before / after 예시:
-
-```diff
-- ## SP-SEC-001: 이번 audit (2026-05-17) 에서 PR #1234 통해 발견된 시크릿 노출 패턴 — 절대 금지합니다
-- - 일반적으로 다음과 같은 패턴이 위반 예시가 될 수 있어요: `password = "..."`, `apiKey: "ghp_..."`
-- - 최근 사건들을 보면 AWS Secrets Manager 나 Vault 같은 시크릿 매니저, 혹은 환경변수를 사용하시면 됩니다
-- - 제가 조사해보니 pre-commit hook 에서 정규식 `(password|secret|api[_-]?key|token).*=.*["']` 로 grep 하면 좋아요
-+ ## SP-SEC-001: 시크릿·API 키·비번 hardcode 금지
-+ - 위반 예: `password = "<plain-value>"`, `api_key: "<plain-value>"`, `private val pgKey = "<plain-value>"`
-+ - 대안: `password = System.getenv("DB_PASSWORD")` (Secrets Manager / Vault / 환경변수)
-+ <!-- 검출 패턴: (password|secret|api[_-]?key|token|pgKey)[[:space:]]*[=:][[:space:]]*["'][^"']{6,} -->
-```
-
-**왜 spirit/rules 만?**: path-scoped hook (`spirit-rules-inject.sh`) 이 매 작업마다 frontmatter `paths:` 매칭해서 자동 inject — 매 turn CLAUDE.md 에 누적할 필요 없음. Constitution(AGENTS.md) 은 META(Triage First)·핵심 가드만 유지 (heavy 회피).
-
-**plugin shipped 파일 append 금지**: `security.md`, `ops.md` 같은 plugin 출고본에 직접 append X. project-specific 별도 파일 (`<project>-<category>.md`) 로 만들고, 같은 카테고리 룰이 누적되면 그 파일에 SP-<CAT>-NNN 만 추가.
-
-**완료 검증 (다음 단계 진입 전 필수)** — `grep '^## SP-SEC-001' .ax/spirit/rules/*.md` 가 1줄 이상 hit 해야 함. 0 hit 면 룰 본문 안 쓰인 것 — 추가 Edit 후 재검증. 0 hit 인 채로 4.3 시도하면 archive 스크립트가 `SP token not found` 에러로 거부.
-
-③ grep 검사로 승격했으면 하나 더 — 패턴이 자기 예시를 실제로 잡는지:
-
-```bash
-PROBE=$(bash .ax/scripts/bash/zero-probe.sh --only pattern-rules --json)
-printf '%s\n' "$PROBE" | jq -r '.result.probes[] | select(.name=="pattern-rules") | .tail_lines[]'
-```
-
-`FAIL SP-SEC-001 — ❌ 예시가 패턴에 안 걸려요` 가 나오면 패턴이나 예시를 고친 뒤 재실행. `skip … ❌ 예시가 없어` 면
-`- 위반 예:` 에 실제 문자열을 적어요. 통과 전엔 4.3 으로 못 가요 — 안 잰 패턴은 집행이 아니에요.
-
-### 4.3 archive — `promote-mistake.sh --archive` (필수)
-
-룰 본문 작성·검증 완료 후 마킹된 mistake 들을 `_archive/<YYYY>/<MM>/` 로 이동:
-
-```bash
-RESULT=$(bash .ax/scripts/bash/promote-mistake.sh --archive --json --token SP-SEC-001)
-ARCHIVED=$(printf '%s\n' "$RESULT" | jq -r '.result.archived_count')
-```
-
-스크립트가 하는 일 — `promoted_to: <token>` 마킹된 mistake 를 `.ax/mistakes/_archive/<YYYY>/<MM>/` 로 mv. 사전 검증 — SP 토큰이 `spirit/rules/*.md` 에 `## <token>` 헤딩으로 존재해야만 진행 (없으면 `SP token not found` 에러).
-
-archived 파일은 maxdepth 1 scan 에서 자동 제외 — 후속 audit candidate · count · HUD state 모두 정확.
-
-**완료 검증 (보고 직전 필수)**:
-- `grep -l "^promoted_to: SP-SEC-001" .ax/mistakes/*.md 2>/dev/null` 결과 0줄 (root 에서 사라짐)
-- `ls .ax/mistakes/_archive/<YEAR>/<MONTH>/` 에 archived 파일 N개
-
-각 단계 ✅ 보고:
-```
-✅ mistake 3건 promoted_to=SP-SEC-001 마킹 (.ax/mistakes/)
-✅ SP-SEC-001 추가 — .ax/spirit/rules/<project>-security.md (frontmatter paths: 명시)
-✅ archive 3건 → .ax/mistakes/_archive/2026/05/ (audit candidate 검색에서 제외됨)
-✅ path-scoped hook 활성 — 매 .kt / .properties / .yaml 편집 시 SP-SEC-001 자동 inject
-```
+**완료 검증 (보고 직전)**:
+- `grep -l "^promoted_to:" .ax/mistakes/*.md 2>/dev/null` 결과가 0줄이에요. 남아 있으면 `rule` §8 의 archive 가 안 끝난 거예요.
+- 고른 카테고리마다 새 SP 헤더가 `.ax/spirit/rules/` 에 1줄씩 있어요.
 
 ## model 분포 — 어느 모델에서 몰리나
 
@@ -271,7 +167,7 @@ grep -h '^model:' .ax/mistakes/*.md .ax/mistakes/_archive/*/*/*.md 2>/dev/null \
 - **커밋을 멈춰야 하는 룰을 패턴 없이 산문으로만 승격 X** — ③ grep 검사로 막는 룰이면 `<!-- 검출 패턴: -->` 이 룰 본문의 일부예요. 산문만 쓰면 다음 audit 에 같은 카테고리가 또 올라와요
 - **가이드 없이 금지·경고만 있는 룰로 승격 X** — `대안` 이 없으면 모델은 가장 가까운 선례(대개 잔재)를 따라 써요. 경고로 끝나는 규약은 ③ grep 검사 대신 가이드 + ② CI 테스트로 가요
 - 캡처만 하고 audit 안 함 → 누적만 됨 (주 1회는 회고)
-- **마킹 (4.1) 만 하고 룰 본문 (4.2) 또는 archive (4.3) 스킵 후 보고 X** — promoted_to 마킹된 mistake 가 `.ax/mistakes/` root 에 남아있으면 미완료. 4.3 archive 까지 끝낸 후 검증 (root 에 promoted_to 마킹 0건) 후 보고.
+- 룰 본문을 audit 안에서 직접 Edit 하지 않아요. `rule` skill 에 넘겨요 (§4). archive 까지 끝나기 전에는 완료로 보고하지 않아요.
 
 ## state.json 갱신
 

@@ -9,7 +9,7 @@ AI 에이전트의 결과를 *작업 후* 자동 검증하는 sensor 4종(Comput
 | user-prompt/ | 사용자 메시지 도착 직후 | Triage 미실행(phase=idle) + 구현 의도 감지 시 reminder 주입 |
 | pre-bash/ | bash 도구 호출 직전 | 파괴적 명령 차단 · git 훅 우회(`--no-verify` 등) 차단 · 프로젝트 안 되돌리기 어려운 명령은 사실 확인 · `git commit` 감지 시 pre-commit 체인 위임 |
 | pre-edit/ | Edit/Write 직전 | 보호 경로 변경 확인 + spirit 룰 점검 · 룰 경로 주입 · 이 파일에 걸린 룰을 안 읽었으면 편집 차단(`rule-read-gate`) · 품질 설정 수정은 이유 먼저(`quality-config-gate`) |
-| post-edit/ | Edit/Write 직후 | `commands.lint_file` 로 편집한 파일 하나를 검사, 실패하면 출력을 모델에게 (막지 않음 · 비어 있으면 아무것도 안 함) |
+| post-edit/ | Edit/Write 직후 | `lint-changed.sh`: `commands.lint_file` 로 편집한 파일 하나를 검사, 실패하면 출력을 모델에게 (막지 않음, 비어 있으면 아무것도 안 함). `rule-lint.sh`: 룰 파일을 고치면 바뀐 룰 블록을 `rule-lint.sh --changed` 로 검사해 지적을 모델에게 (막지 않음) |
 | pre-commit/ | git commit 직전 | CRITICAL 룰 정적 검출 (위반 시 차단/경고만 — 자동 캡처는 폐기, §"Mistake 캡처" 참고) · 진행 중 작업들(current-task.json + `.ax/tasks/*.json`)의 spec 완료 게이트 (스테이지 파일이 그 spec 디렉토리나 tasks.md `files:` 에 걸릴 때만 자세히 · 아니면 한 줄) |
 | subagent-start/ | 서브에이전트가 뜨는 순간 | Constitution·Spirit·현재 spec·인계 노트 **경로**를 additionalContext 로 — 하네스가 메인 세션 밖으로 닿게 (goax 자기 에이전트는 제외) |
 | stop/ | 턴이 끝나려는 순간 | 활성 spec(implementing·review)이 완료 게이트 미통과면 **한 번** 멈춰 세우고 "마저 하기 · 보류 표기 · 인계 노트" 셋 중 하나를 시켜요 |
@@ -169,6 +169,7 @@ jq 가 PATH 에 없으면 인자를 못 뽑아 그냥 통과(fail-open)하는데
 
 ## 프로젝트별 커스터마이즈
 
+- `post-edit/rule-lint.sh` — 예외 단어·패턴은 `.ax/config.yml` `sensors.rule_lint_allow` 에 적어요. 한 줄만 빼려면 그 줄에 `<!-- rule-lint: <이유> -->` 를 붙여요
 - `post-edit/lint-changed.sh` — 훅을 고치지 말고 `.ax/config.yml` `commands.lint_file` 에 `"<글롭> => <명령 {file}>"` 를 적어요 (후보: `detect-stack.sh`, 쓰기: `config-set.sh --add commands.lint_file …`)
 - `pre-commit/critical-rule-grep.sh` — 자기 CRITICAL 룰의 grep 패턴 추가 (또는 룰별 sensor 신설)
 - `user-prompt/triage-nudge.sh` — intent regex가 자기 프로젝트 어휘에 맞지 않으면 조정

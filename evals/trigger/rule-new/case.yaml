@@ -1,0 +1,24 @@
+schema_version: "1.1"
+name: trigger-rule-new
+description: "세션에서 바로 룰 추가 — audit 회고와 구분"
+tags: [trigger, rule]
+# skill 고르기만 재요 — scaffold·hook shim 없이 description 만으로 고르는지 봐요 (README '트리거 스위트')
+plugins: ["../../.."]
+execution:
+  prompt: "금액 필드는 Double 말고 Long 으로 쓰자. 이거 룰로 만들어줘"
+  max_turns: 4
+  timeout_seconds: 180
+  allowed_tools: [Skill]
+graders:
+  - name: fires-rule
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?rule"'
+    min: 1
+  - name: not-audit
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?audit"'
+    min: 0
+    max: 0
+    arm: both

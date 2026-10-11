@@ -154,7 +154,8 @@ Natural-language tier overrides: `"simple"` / `"spec + tasks"` → standard · `
 | "write ADR" / "record decision" | adr — new ADR file |
 | "spirit check" | doctor → `spirit-lint.sh` — header format · token duplicates · placeholders |
 | "log a mistake" / "capture mistake" | mistake — single-event capture |
-| "audit" / "review mistakes" | audit — Mistake Loop review · promotion |
+| "audit" / "review mistakes" | audit — Mistake Loop review · picks promotion candidates |
+| "make this a rule" / "compress rules" | rule — writes one rule in the fixed shape (normative title · 1–3 lines + reason · one ❌/✅ pair · optional pattern), turns mistakes into rules, and shrinks long rule files under `rules-compress.sh --verify` |
 | "/hud setup" / "activate statusline" | hud — Claude Code statusline (OpenCode adapter pending) |
 
 When autorouting fails, fall back to keywords from the `/goax` index, or have the assistant call `Skill goax:<name>` explicitly.

@@ -21,7 +21,11 @@
 | `check-rule-enforcement.sh` | 룰의 `enforced_by`/`enforced_kind` invariant(I1~I6) 검증 | `doctor` |
 | `check-sensor-liveness.sh` | Sensors 장치 생사 검증 (C1 grep 스캐폴드 · C2 git hook · C3 차단 능력 0 · C4 세션 루트 이탈) | `doctor` |
 | `check-spec-clarity.sh` | spec.md 명료성 게이팅(NEEDS CLARIFICATION/placeholder/빈 섹션) + tasks·AC 진행률 visibility | `spec-validate` |
-| `promote-mistake.sh` | mistake → spirit rule 승격 (후보·적용·archive) | `audit` |
+| `promote-mistake.sh` | mistake → spirit rule 승격 (후보·적용·archive). `--apply --file <mistake>` 는 그 파일만 마킹 | `audit`, `rule` |
+| `rule-lint.sh` | 룰 작성 기준 검사 — rule 모드(룰 블록마다 세션 흔적·비유·`·` 나열·길이·예시 수·ADR 문단·산문 검출 패턴·goax 지시)와 prose 모드(skill·agent 문서). `--changed` 는 git diff 범위만. 판정 없이 줄 번호 지적만, 예외는 `sensors.rule_lint_allow` | `rule`, `doctor`, `post-edit/rule-lint.sh` |
+| `rule-draft.sh` | 새 룰에 필요한 사실 — 대상 파일·다음 SP 번호·제목이 겹치는 기존 룰·mistake 의 경로와 패턴 초안·grep/human 판정. 파일을 쓰지 않음 | `rule` |
+| `rules-budget.sh` | 룰 분량 — 상시 로드(`goax_always_loaded`)·파일별 줄/바이트/펜스 비율·편집당 Read 바이트 p50/p90/max, 기준 초과는 `over_budget[]` | `rule`(압축), `doctor` |
+| `rules-compress.sh` | 압축 가드 — `--snapshot`(`.ax/.rules-snapshot/` 사본) · `--verify`(SP ID·순서, frontmatter, 검출 패턴, 패턴 룰 예시, 프로브 ok, adr 링크가 그대로인지. 위반이면 exit 1) · `--clear` | `rule`(압축) |
 | `init-mistake-file.sh` | mistake 파일 skeleton 생성 (template cp + frontmatter 치환) | `mistake`, `audit` |
 | `install-git-hooks.sh` | `.ax/hooks/pre-commit/*.sh` chain 을 git pre-commit wrapper 로 설치 (모든 환경 기본 — 사람 터미널 커밋 커버) | `up`, `onboarding` |
 | `register-spirit-hook.sh` | `.claude/settings.json` 에 spirit-rules-inject hook idempotent 등록 | `doctor` |
@@ -74,7 +78,7 @@
 오작동해요. 각 자리에서 `|| true` 로 개별 guard 하는 대신 스크립트 전체에서 `-e` 를 뺀 선택:
 
 - `set -u` 만: `build-memory.sh`, `update-state.sh`
-- `set -uo pipefail`: `check-rule-enforcement.sh`, `check-sensor-liveness.sh`, `detect-model.sh`, `doctor-scan.sh`, `init-mistake-file.sh`, `install-git-hooks.sh`, `rules-index.sh`, `spirit-lint.sh`, `tasks-gate.sh`, `vendor-skills.sh`, `zero-probe.sh`, `zero-verify.sh`
+- `set -uo pipefail`: `check-rule-enforcement.sh`, `check-sensor-liveness.sh`, `detect-model.sh`, `doctor-scan.sh`, `init-mistake-file.sh`, `install-git-hooks.sh`, `rule-draft.sh`, `rule-lint.sh`, `rules-budget.sh`, `rules-compress.sh`, `rules-index.sh`, `spirit-lint.sh`, `tasks-gate.sh`, `tasks-plan.sh`, `vendor-skills.sh`, `zero-probe.sh`
 
 나머지 스크립트는 모두 `set -euo pipefail`. (목록이 실제와 갈리면 신뢰할 수 없으니, 바뀔 때마다
 `grep -l '^set -[a-z]*$' *.sh` 로 재확인하고 이 목록을 갱신해요.)

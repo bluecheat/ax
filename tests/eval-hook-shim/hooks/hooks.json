@@ -103,6 +103,10 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/post-edit/lint-changed.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.ax/hooks/post-edit/rule-lint.sh\""
           }
         ]
       }

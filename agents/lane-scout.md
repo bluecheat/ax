@@ -75,8 +75,8 @@ disallowedTools: Write, Edit, NotebookEdit
 `type` 이 `shutdown_request` 인 메시지가 오면 아래 셋만 하고 끝내요.
 
 1. 보고를 아직 안 보냈으면 보고부터 보내요. 다른 도구는 부르지 않아요
-2. `SendMessage` 의 `message` 에 **객체**를 넣어 승인해요. JSON 을 문자열로 감싸면 거부돼요 (실측: 4개 레인이
-   세 번씩 거부당하고 끝내 응답을 못 보냈어요)
+2. `SendMessage` 의 `message` 에 **객체**를 넣어 승인해요. JSON 을 문자열로 감싸면 거부돼서,
+   응답을 끝내 보내지 못해요
 
    ```json
    {"to": "<요청을 보낸 이름>", "message": {"type": "shutdown_response", "request_id": "<받은 request_id 그대로>", "approve": true}}

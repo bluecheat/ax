@@ -12,6 +12,9 @@
 .ax/docs/spec/*/review-spec.architect.md
 .ax/docs/spec/*/review-spec.evaluator.md
 
+# 룰 압축 전 사본 (rules-compress.sh) — 되돌리기는 git 이에요
+.ax/.rules-snapshot/
+
 # install/onboarding 시점 머지 임시본 (사용자가 처리 후 rm)
 .ax/*.suggested
 .ax/**/*.suggested

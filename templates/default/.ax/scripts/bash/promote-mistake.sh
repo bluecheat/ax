@@ -6,7 +6,8 @@
 #   bash promote-mistake.sh [--json] [--threshold N]
 #
 #   # 1단계 — mistake 에 promoted_to 마킹
-#   bash promote-mistake.sh --apply --token AX:CRITICAL:003 --category security [--json]
+#   bash promote-mistake.sh --apply --token AX:CRITICAL:003 --category security [--file <mistake>]… [--json]
+#   --file 을 주면 그 파일만 마킹해요 (rule skill 이 고른 mistake). 없으면 카테고리의 모든 mistake 예요.
 #
 #   # 2단계 (LLM 이 spirit/rules 룰 본문 작성한 후) — archive 로 이동
 #   bash promote-mistake.sh --archive --token AX:CRITICAL:003 [--json]
@@ -33,6 +34,7 @@ THRESHOLD=""
 THRESHOLD_SET=false
 TOKEN=""
 CATEGORY=""
+ONLY_FILES=()
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -49,6 +51,7 @@ while [ $# -gt 0 ]; do
             THRESHOLD_SET=true ;;
         --token)     shift; TOKEN="${1:-}" ;;
         --category)  shift; CATEGORY="${1:-}" ;;
+        --file)      shift; ONLY_FILES+=("$(basename "${1:-}")") ;;
         *) goax_error "unknown option: $1"; exit "$EXIT_ERROR" ;;
     esac
     shift
@@ -94,6 +97,9 @@ if [ "$APPLY" = true ]; then
     MARKED=()
     while IFS= read -r f; do
         if grep -q "^promoted_to:" "$f" 2>/dev/null; then
+            continue
+        fi
+        if [ ${#ONLY_FILES[@]} -gt 0 ] && ! printf '%s\n' "${ONLY_FILES[@]}" | grep -qxF "$(basename "$f")"; then
             continue
         fi
         if grep -q "^category: $CATEGORY" "$f" 2>/dev/null; then

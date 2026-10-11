@@ -287,6 +287,35 @@ goax_module_rules_matching() {
         | goax_glob_owners "$rel"
 }
 
+# goax_always_loaded <project-root>
+#   세션 시작부터 컨텍스트에 실리는 파일의 프로젝트 기준 상대 경로를 실린 순서대로 출력해요.
+#   CLAUDE.md · CLAUDE.local.md 에서 시작해 `@경로` import 를 5단계까지 따라가요 (포함한 파일 기준 상대경로).
+#   프로젝트 밖 경로(`/`·`~` 시작)는 세지 않아요. doctor-scan.sh 와 rules-budget.sh 가 같이 써요.
+goax_always_loaded() {
+    local root="${1:-.}"
+    ( cd "$root" 2>/dev/null || exit 0
+      seen=""
+      walk() {
+          local f="$1" d="$2" dir inc
+          [ -f "$f" ] || return 0
+          case "
+$seen" in *"
+$f
+"*) return 0 ;; esac
+          seen="${seen}${f}
+"
+          printf '%s\n' "$f"
+          [ "$d" -ge 5 ] && return 0
+          dir=$(dirname "$f")
+          while IFS= read -r inc; do
+              [ -n "$inc" ] || continue
+              case "$inc" in /*|~*) continue ;; esac
+              if [ "$dir" = "." ]; then walk "$inc" $((d + 1)); else walk "$dir/$inc" $((d + 1)); fi
+          done < <(sed -nE 's#^@(\./)?([^[:space:]]+)[[:space:]]*$#\2#p' "$f" 2>/dev/null)
+      }
+      for c in CLAUDE.md CLAUDE.local.md; do walk "$c" 0; done )
+}
+
 # goax_imported_paths <project-root>
 #   CLAUDE.md · AGENTS.md 가 `@<경로>` 로 import 하는 파일의 프로젝트 기준 상대 경로를 출력해요.
 #   이 파일들은 세션 시작부터 컨텍스트에 있어서 "Read 했나" 를 따질 필요가 없어요 (rule-read-gate).
