@@ -174,7 +174,8 @@ grep -h '^model:' .ax/mistakes/*.md .ax/mistakes/_archive/*/*/*.md 2>/dev/null \
 이 skill이 끝날 때 `.ax/state.json` 갱신 항목:
 - cross_cut.mistakes.last_audit, due_in_days
 
-갱신 방법: jq로 in-place. 실패해도 skill 본 작업은 영향 X (HUD는 부수효과).
+갱신 방법: 아래 한 줄이에요. `--skill audit` 이 `.ax/mistakes/.last-audit` 에 회고 시각을 쓰고, last_audit · due_in_days 를 그 파일에서 계산해요.
+`--json` 을 붙이면 아무것도 쓰지 않으니 붙이지 않아요. 실패해도 skill 본 작업은 영향 X (HUD는 부수효과).
 ```bash
 # canonical 갱신 — derived value + updated_at (mistakes.count, last_audit, due_in_days 포함) + last_skill·skill_calls
 bash .ax/scripts/bash/update-state.sh --skill audit

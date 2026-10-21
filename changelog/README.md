@@ -4,6 +4,7 @@
 
 ## 버전
 
+- [0.7.18](0.7.18.md) — audit 을 마치면 `last_audit` 이 바뀌어요 (`--skill audit` 이 `.last-audit` 기록) · rule skill 마무리의 `--json` 제거
 - [0.7.12](0.7.12.md) — 에이전트 모델을 `config.yml` `agent_models` 로 정해요 · 모든 스크립트의 `--json` 이 한 줄 envelope · `--dry-run` 통일 · smoke 병렬 조각화(188초 → 약 1분) · 실제 설치본 fixture · zsh 검사
 - [0.7.11](0.7.11.md) — 새 워크트리에서 `/up` 없이 이어져요 (런타임 상태 템플릿 seed) · zsh `echo` 로 받아도 `--json` 이 안 깨져요 · 에이전트 기본 모델
 - [0.7.10](0.7.10.md) — `--next` 가 `의존:` 을 봐요 · 완료 전 룰 대조(G7 · `rules-auditor`) · 관례 위치 · 끝난 spec 후속 작업(`--follow-up`) · 합의 리뷰 상한의 사용자 승인(`--override`)
