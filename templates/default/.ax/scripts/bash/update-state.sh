@@ -16,6 +16,7 @@
 # 사용:
 #   bash .ax/scripts/bash/update-state.sh                     # in-place update (기본)
 #   bash .ax/scripts/bash/update-state.sh --skill <name>      # + last_skill=<name> · skill_calls+=1 (skill 마무리)
+#                                                              --skill audit 은 .ax/mistakes/.last-audit 도 지금 시각으로 써요
 #   bash .ax/scripts/bash/update-state.sh --skill mistake --last-mistake <file>   # + last_mistake_file
 #   bash .ax/scripts/bash/update-state.sh --json              # 계산 결과를 envelope 한 줄로 (state.json 은 안 건드림)
 #   bash .ax/scripts/bash/update-state.sh --dry-run           # 계산 결과 미리보기 (stderr) — --dry 도 같아요
@@ -166,6 +167,11 @@ if [ -d "$WS/.ax/mistakes" ]; then
                 ! -name 'README.md' 2>/dev/null | wc -l | tr -d ' ')
 fi
 [ "$MIS_COUNT" -gt 0 ] && ML_ACTIVE=true || ML_ACTIVE=false
+
+# audit skill 마무리 — 회고 시각을 .last-audit 에 남겨요. last_audit · due_in_days 는 이 파일에서 계산해요
+if [ "$MODE" = update ] && [ "$SKILL" = audit ] && [ -d "$WS/.ax/mistakes" ]; then
+    date +%s > "$WS/.ax/mistakes/.last-audit"
+fi
 
 # 다음 audit까지 일수 — .ax/mistakes/.last-audit (epoch sec)
 DUE_DAYS_PIPE=""
