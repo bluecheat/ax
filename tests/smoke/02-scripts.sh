@@ -339,6 +339,15 @@ if command -v jq >/dev/null 2>&1; then
         && pass "update-state --skill 검증 5종 — exit 1 + 파일 불변" || fail "update-state --skill 검증 — 실패 뒤 파일 변동"
     CLAUDE_PROJECT_DIR=$US_FX bash "$US_FX/.ax/scripts/bash/update-state.sh" --json --skill zzz >/dev/null 2>&1
     [ "$(cat "$US_FX/.ax/state.json")" = "$US_B" ] && pass "update-state --json --skill — stdout 만, 파일 불변" || fail "update-state --json --skill 이 파일을 씀"
+    # --skill audit — .last-audit 에 회고 시각을 쓰고 last_audit 를 그 값으로 계산해요 (--json 은 안 써요)
+    mkdir -p "$US_FX/.ax/mistakes"; rm -f "$US_FX/.ax/mistakes/.last-audit"
+    CLAUDE_PROJECT_DIR=$US_FX bash "$US_FX/.ax/scripts/bash/update-state.sh" --json --skill audit >/dev/null 2>&1
+    [ ! -f "$US_FX/.ax/mistakes/.last-audit" ] && pass "update-state --json --skill audit — .last-audit 안 씀" || fail "update-state --json --skill audit 이 .last-audit 를 씀"
+    CLAUDE_PROJECT_DIR=$US_FX bash "$US_FX/.ax/scripts/bash/update-state.sh" --skill audit >/dev/null 2>&1
+    [ -s "$US_FX/.ax/mistakes/.last-audit" ] \
+        && jq -e '.cross_cut.mistakes.last_audit != null and .cross_cut.mistakes.due_in_days >= 6' "$US_FX/.ax/state.json" >/dev/null 2>&1 \
+        && pass "update-state --skill audit — .last-audit 기록 · last_audit · due_in_days 갱신" \
+        || fail "update-state --skill audit — 불일치: $(jq -c '.cross_cut.mistakes' "$US_FX/.ax/state.json" 2>/dev/null)"
 fi
 rm -rf "$US_FX"
 

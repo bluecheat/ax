@@ -104,6 +104,7 @@ KEYWORDS="payment refund settlement" # 예시 (실제는 LLM이 의역)
 예외 — 본문을 **반드시** read 해야 하는 경우:
 - `modules` 매칭(`.ax/modules/<n>/rules.md`): 모듈 도메인 룰은 작업 진입 시 컨텍스트에 들어가야 효력이 있어요. snippet 이 비어 있어도 본문 포함.
 - `mistakes` 매칭: 과거에 같은 함정에 빠진 기록이라 snippet 으로 끝내지 말고 본문 확인.
+- `specs` 매칭 중 `score` 1·2위가 요청과 같은 도메인일 때: snippet 이 비어 있어도 그 `spec.md` 의 "제외 (Out of scope)" 줄과 §8(보류 또는 결정 기록)을 read 해요. 요청이 범위 외 항목을 열면 그 줄을 *Required reading* 에 적어요. 이유: 왜 만들지 않았는지는 코드에 남지 않아서, spec 을 안 읽으면 닫아 둔 범위를 기록 없이 열게 돼요.
 
 ### 1.3 도메인 위험도 매칭
 

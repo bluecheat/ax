@@ -134,7 +134,7 @@ bash .ax/scripts/bash/promote-mistake.sh --archive --json --token "$NEW_ID"
 ## 9. 마무리
 
 ```bash
-bash .ax/scripts/bash/update-state.sh --skill rule --json >/dev/null
+bash .ax/scripts/bash/update-state.sh --skill rule >/dev/null
 ```
 
 보고는 세 줄이에요: 추가·수정한 룰 ID와 파일, 판정(결정형·비결정형)과 검사 결과, mistake 를 정리했으면 archive 건수.
